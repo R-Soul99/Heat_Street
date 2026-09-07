@@ -24,6 +24,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 - [ ] **CAM-01**: Player views the game through a permanent high-angle "helicopter" camera that smoothly follows the car's velocity heading, not chassis yaw
 - [ ] **CAM-02**: Camera altitude and FOV adjust dynamically with vehicle speed to preserve sense of speed
 - [ ] **CAM-03**: Camera is contextually skinned per mode (police/news chopper for Getaway, sports-broadcast chopper for Point-to-Point/Circuit)
+- [ ] **CAM-04**: Buildings between the camera and the car never permanently block the view of the car or road. Exact approach resolved by prototyping during Phase 3, not fixed in advance — candidates are (a) fading occluding buildings to translucent/wireframe, and (b) dynamically steepening the camera toward near-overhead in dense areas (GTA1/2-style) then relaxing in open areas. Decided by human playtest feel, not on paper
 
 ### Navigation & HUD
 
@@ -77,6 +78,7 @@ Deferred to future release. Tracked but not in current roadmap.
 - **AREA-01**: Areas 2-3 plus area-unlock progression (completing a level in the current area unlocks the next area/map)
 - **GET-05**: Heat tiers 4-5 — heavy ram unit (SUV) and helicopter spotlight, defeatable via tunnel/covered geometry
 - **GET-06**: Pursuit breakers (destructible roadside props) and hiding spots/cooldown zones
+- **WORLD-02**: Structural building destruction (marketplaces, outdoor cafes, shopping malls sustain damage or partial collapse) — stretch goal, needs its own research pass (fracture/destruction system, damaged-mesh LOD swapping, rebuild-safe collision). Destroyed state must reset per-run rather than persisting, or a level's route — and therefore its medal times — would change permanently after the first successful smash-through
 
 ### Replay & Content
 
@@ -123,6 +125,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAM-01 | Phase 3 | Pending |
 | CAM-02 | Phase 3 | Pending |
 | CAM-03 | Phase 3 | Pending |
+| CAM-04 | Phase 3 | Pending |
 | NAV-01 | Phase 2 | Pending |
 | NAV-02 | Phase 6 | Pending |
 | NAV-03 | Phase 5 | Pending |
@@ -146,8 +149,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NARR-01 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 30 total (previously miscounted as 29)
-- Mapped to phases: 30
+- v1 requirements: 31 total (CAM-04 added after roadmap creation, mapped directly to Phase 3)
+- Mapped to phases: 31
 - Unmapped: 0 - full coverage
 
 **Phase 4 (Map Pipeline & First Area)** carries no requirement of its own. It is enabling

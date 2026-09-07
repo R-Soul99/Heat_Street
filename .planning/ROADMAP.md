@@ -54,13 +54,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: The world under the tires changes how the car drives, and the game is viewed through its signature camera without losing the sense of speed
 **Mode:** mvp
 **Depends on**: Phase 2
-**Requirements**: SURF-01, SURF-02, CAM-01, CAM-02, CAM-03
+**Requirements**: SURF-01, SURF-02, CAM-01, CAM-02, CAM-03, CAM-04
 **Success Criteria** (what must be TRUE):
   1. Driving from tarmac onto gravel, grass, mud, sand or dirt produces a distinct and measurable grip change (skidpad lateral-G differs per surface), driven by per-wheel friction rather than collider friction
   2. Each surface produces its own visual (tire smoke / dust plume / mud spray / skid decal) and audio (chirp vs. muffled rumble) feedback
   3. Player views the game through a permanent high-angle helicopter camera that tracks velocity heading and stays stable through a full 40-degree drift
   4. Camera altitude and FOV shift with speed such that a human playtester can tell 60mph from 110mph on sight (explicit go/no-go gate; a low chase-cam fallback remains selectable)
   5. The camera skin can be switched between police/news and sports-broadcast presentations, changing presentation only — never distance, damping or targeting
+  6. Buildings between the camera and car never permanently hide the car or the road ahead — both candidate mitigations (fade occluding buildings to translucent; dynamically steepen toward near-overhead in dense areas, relaxing in open areas) are prototyped, and the one that reads best in a human playtest is kept. Not a paper decision
 **Plans**: TBD
 
 ### Phase 4: Map Pipeline & First Area
@@ -161,4 +162,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 - Helicopter camera is prototyped early (Phase 3) with a go/no-go gate, not treated as late polish
 - One mode fully shippable — including medals, HUD and audio — before mode #2 gains AI (the Phase 5/6 gate)
 
-**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay.
+**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay, structural building destruction (WORLD-02 — needs its own research pass; destroyed state must reset per-run to protect medal-time integrity).
