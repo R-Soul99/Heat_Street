@@ -51,7 +51,7 @@ value.
 ## Context
 
 - Solo/hobby project, built entirely through Claude Code with no Unity install — the code-driven stack (Three.js + Rapier + TypeScript/Vite) was chosen specifically to fit this workflow.
-- The player already has a custom-built tool that extracts real-world Google Maps areas into game-map-usable data — the preferred pipeline for map creation. Whether v1 ships as one large mixed-terrain map or several smaller maps is still undecided and deliberately deferred to implementation; the tool works either way.
+- The player already has a custom-built tool ("Map Heightmap & 3D GLTF Generator") that extracts real-world areas into game-map-usable data — the preferred pipeline for map creation. Checked its source directly (2026-09-08): roads and buildings are already sourced from OpenStreetMap via the Overpass API, and elevation gracefully falls back to open data (AWS Terrarium/SRTM tiles, then Open-Meteo) with no Google key required — none of the exported game data is Google-sourced. The tool does proxy Google satellite/Street View imagery for on-screen preview only (never baked into exports), which is a low-risk use but worth re-confirming at export time. One small obligation: OSM's ODbL license requires crediting "Map data © OpenStreetMap contributors" somewhere in the shipped game (e.g. a credits screen). Whether v1 ships as one large mixed-terrain map or several smaller maps is still undecided and deliberately deferred to implementation; the tool works either way.
 - No 3D modelling experience. Research (2026-09) surfaced a workable pipeline: Kenney.nl's free CC0 "Car Kit" for wheel-rig/technical base, plus a muscle-car-styled low-poly source (e.g. T Allen Studios' free itch.io model, AI generation via Meshy/Tripo3D, or a freelance commission) reskinned to match. IP research confirmed stylized/unbranded muscle-car homages (silhouette/proportion only, no logos or exact reproductions) are legally safe — same precedent as GTA's approach for decades.
 - Reference touchstones for tone: Bullitt, Vanishing Point, The French Connection, The Seven-Ups, Gone in 60 Seconds (1974), Mad Max, The Italian Job, The Blues Brothers, Dukes of Hazzard, Starsky & Hutch, Smokey and the Bandit, The Cannonball Run.
 - Handling target is "arcade-realistic hybrid" — not full sim, not arcade-floaty. Open research item: benchmark against Driver/Burnout/The Crew once prototyping starts.
@@ -92,4 +92,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-07 after initialization*
+*Last updated: 2026-09-08 after confirming map data source is clean*
