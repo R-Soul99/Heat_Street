@@ -114,42 +114,46 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VEH-01 | TBD | Pending |
-| VEH-02 | TBD | Pending |
-| VEH-03 | TBD | Pending |
-| VEH-04 | TBD | Pending |
-| SURF-01 | TBD | Pending |
-| SURF-02 | TBD | Pending |
-| CAM-01 | TBD | Pending |
-| CAM-02 | TBD | Pending |
-| CAM-03 | TBD | Pending |
-| NAV-01 | TBD | Pending |
-| NAV-02 | TBD | Pending |
-| NAV-03 | TBD | Pending |
-| NAV-04 | TBD | Pending |
-| NAV-05 | TBD | Pending |
-| NAV-06 | TBD | Pending |
-| NAV-07 | TBD | Pending |
-| P2P-01 | TBD | Pending |
-| CIRC-01 | TBD | Pending |
-| CIRC-02 | TBD | Pending |
-| GET-01 | TBD | Pending |
-| GET-02 | TBD | Pending |
-| GET-03 | TBD | Pending |
-| GET-04 | TBD | Pending |
-| DMG-01 | TBD | Pending |
-| DMG-02 | TBD | Pending |
-| MEDAL-01 | TBD | Pending |
-| MEDAL-02 | TBD | Pending |
-| MEDAL-03 | TBD | Pending |
-| MEDAL-04 | TBD | Pending |
-| NARR-01 | TBD | Pending |
+| VEH-01 | Phase 2 | Pending |
+| VEH-02 | Phase 2 | Pending |
+| VEH-03 | Phase 1 | Pending |
+| VEH-04 | Phase 2 | Pending |
+| SURF-01 | Phase 3 | Pending |
+| SURF-02 | Phase 3 | Pending |
+| CAM-01 | Phase 3 | Pending |
+| CAM-02 | Phase 3 | Pending |
+| CAM-03 | Phase 3 | Pending |
+| NAV-01 | Phase 2 | Pending |
+| NAV-02 | Phase 6 | Pending |
+| NAV-03 | Phase 5 | Pending |
+| NAV-04 | Phase 5 | Pending |
+| NAV-05 | Phase 5 | Pending |
+| NAV-06 | Phase 5 | Pending |
+| NAV-07 | Phase 5 | Pending |
+| P2P-01 | Phase 5 | Pending |
+| CIRC-01 | Phase 5 | Pending |
+| CIRC-02 | Phase 7 | Pending |
+| GET-01 | Phase 8 | Pending |
+| GET-02 | Phase 8 | Pending |
+| GET-03 | Phase 8 | Pending |
+| GET-04 | Phase 8 | Pending |
+| DMG-01 | Phase 8 | Pending |
+| DMG-02 | Phase 8 | Pending |
+| MEDAL-01 | Phase 6 | Pending |
+| MEDAL-02 | Phase 6 | Pending |
+| MEDAL-03 | Phase 6 | Pending |
+| MEDAL-04 | Phase 6 | Pending |
+| NARR-01 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29 ⚠️ (roadmap not yet created)
+- v1 requirements: 30 total (previously miscounted as 29)
+- Mapped to phases: 30
+- Unmapped: 0 - full coverage
+
+**Phase 4 (Map Pipeline & First Area)** carries no requirement of its own. It is enabling
+infrastructure: the road graph it emits is consumed by NAV-03/04/05/06, P2P-01, CIRC-01/02
+and GET-01/03, all of which are verified in later phases.
 
 ---
 *Requirements defined: 2026-09-08*
-*Last updated: 2026-09-08 after initial definition*
+*Last updated: 2026-09-08 after roadmap creation (traceability mapped to 8 phases)*
