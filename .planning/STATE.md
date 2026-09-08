@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-08T13:29:48.378Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-09-08T13:40:50.588Z"
 last_activity: 2026-09-08
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -26,25 +26,25 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 01 (engine-foundation) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-09-08
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 5
 - Average duration: 10 min
-- Total execution time: 0.5 hours
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 engine-foundation | 3 | 30 min | 10 min |
+| 01 engine-foundation | 5 | 49 min | 10 min |
 
 **Per-plan detail:**
 
@@ -53,14 +53,19 @@ Progress: [██████░░░░] 57%
 | Phase 01 P01 | 13 min | 3 | 11 |
 | Phase 01 P02 | 6 min | 3 | 7 |
 | Phase 01 P03 | 11 min | 3 | 11 |
+| Phase 01 P04 | 12 min | 3 | 5 |
+| Phase 01 P05 | 7 min | 3 | 4 |
 
 **Recent Trend:**
 
-- Last 5 plans: 13 min, 6 min, 11 min
-- Trend: → steady (01-03 was docs-heavy; two deliberate-breakage verifications and one generated-file discovery accounted for most of the time)
+- Last 5 plans: 13 min, 6 min, 11 min, 12 min, 7 min
+- Trend: → steady (01-03 was docs-heavy; 01-05 was the fastest so far because 01-04 had already fixed the buffer layout the render layer reads)
 
 *Updated after each plan completion*
-| Phase 01 P04 | 12 min | 3 tasks | 5 files |
+
+> Note: `gsd-sdk query state.record-metric` appends its row AFTER this line rather
+> than into the Per-plan detail table above. Move it up and refresh the velocity
+> rollup by hand after each plan, as was done for P04 and P05.
 
 ## Accumulated Context
 
@@ -89,6 +94,11 @@ Recent decisions affecting current work:
 - [Phase 01-04]: Rapier's Real is f32, so world.timestep reads back as Math.fround(DT) = 0.01666666753590107, not the f64 DT — assert against Math.fround(DT); it is a one-time constant rounding, not an accumulating error, and the run clock stays tick * DT
 - [Phase 01-04]: The SC2 always-moving body is a kinematicPositionBased spinner rotated by an angle that is a pure function of the tick index (PATTERNS.md R2) — the six dynamic boxes all sleep by step 600, measured
 - [Phase 01-04]: TransformCache exposes raw stride-7 Float64Array prev/cur buffers and never applies transforms to meshes, keeping src/physics/ free of three — src/render/interpolator.ts in plan 01-05 owns the lerp/slerp
+- [Phase 01-05]: Interpolation is a free function in src/render/interpolator.ts reading TransformCache's raw buffers, not a TransformCache method — closes the placement question 01-PATTERNS.md left open and keeps src/physics/ free of three
+- [Phase 01-05]: The short-arc slerp guard drives cur from the NEGATED quaternion — a plain 175-degree rotation is short-way under both slerp and a naive lerp, so that test would have been decorative; measured 87.5 vs exactly 92.5 degrees
+- [Phase 01-05]: Never compare quaternions with angleTo when the expected angle is near zero — it is 2*acos(dot) and acos is ill-conditioned there, so one-ULP-apart quaternions report ~3e-8 rad; compare components instead
+- [Phase 01-05]: renderer.info.autoReset stays at its default true, so the 01-06 HUD must read renderer.info AFTER the draw; it must become false with a manual reset() if any later phase draws more than once per frame
+- [Phase 01-05]: The render mesh array order is a contract with DebugScene.bodies and TransformCache — createDebugRenderScene takes bodyCount and spinnerIndex as parameters and range-validates them, and the ground is excluded from meshes (T-01-16)
 
 ### Pending Todos
 
@@ -117,6 +127,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-08T13:27:54.097Z
-Stopped at: Completed 01-04-PLAN.md
-Resume file: .planning/phases/01-engine-foundation/01-05-PLAN.md
+Last session: 2026-09-08T13:40:50.576Z
+Stopped at: Completed 01-05-PLAN.md
+Resume file: .planning/phases/01-engine-foundation/01-06-PLAN.md
