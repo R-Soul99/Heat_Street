@@ -34,7 +34,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Alt-tabbing away for 60 seconds and returning does not teleport, explode, or fast-forward the simulation
   4. A profiler HUD toggled by a single key shows physics ms, draw calls, triangles and body count against a written frame budget
   5. The map-data decision (OpenStreetMap + open DEM, zero Google-sourced bytes) and the road-graph schema are recorded in the repo before any map work starts
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Repo scaffold, exact-pinned install, Vite/Vitest configs, Rapier WASM proven in Node and browser (wave 1)
+- [ ] 01-02-PLAN.md — Pure sim core: absolute-clock SimClock, per-tick InputTape, mirrored frame budget (wave 2)
+- [ ] 01-03-PLAN.md — Map-data ADR, road-graph v1 schema + fixture, Google-pipeline supersession and grep gate (wave 2)
+- [ ] 01-04-PLAN.md — Rapier world, debug scene with never-sleeping spinner, transform cache, VEH-03 determinism harness (wave 3)
+- [ ] 01-05-PLAN.md — WebGL renderer, interpolator, Three.js debug scene index-aligned with physics bodies (wave 4)
+- [ ] 01-06-PLAN.md — ?debug gate, single-key toggle, profiler HUD checked against the written budget (wave 4)
+- [ ] 01-07-PLAN.md — rAF loop with clamp + rebaseline, composition root, layering gate, human SC2/SC3/SC4 sign-off (wave 5)
 
 ### Phase 2: Vehicle Feel Core
 **Goal**: The player can drive one muscle car that feels heavy, momentum-driven and slideable — the core value, provable on a flat plane
@@ -139,7 +148,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 0/TBD | Not started | - |
+| 1. Engine Foundation | 0/7 | Planned | - |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
