@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [ ] 01-01-PLAN.md — Repo scaffold, exact-pinned install, Vite/Vitest configs, Rapier WASM proven in Node and browser (wave 1)
 - [ ] 01-02-PLAN.md — Pure sim core: absolute-clock SimClock, per-tick InputTape, mirrored frame budget (wave 2)
-- [ ] 01-03-PLAN.md — Map-data ADR, road-graph v1 schema + fixture, Google-pipeline supersession and grep gate (wave 2)
+- [ ] 01-03-PLAN.md — Map-data ADR, road-graph v1 schema + fixture, Google-pipeline supersession and grep gate (wave 3)
 - [ ] 01-04-PLAN.md — Rapier world, debug scene with never-sleeping spinner, transform cache, VEH-03 determinism harness (wave 3)
 - [ ] 01-05-PLAN.md — WebGL renderer, interpolator, Three.js debug scene index-aligned with physics bodies (wave 4)
 - [ ] 01-06-PLAN.md — ?debug gate, single-key toggle, profiler HUD checked against the written budget (wave 4)

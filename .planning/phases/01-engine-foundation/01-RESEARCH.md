@@ -955,26 +955,35 @@ All 15 of the OSM values above were confirmed to be documented values of `surfac
 | A5 | US-first area selection makes 3DEP the better DEM choice | Map Data Decision | Low. If the first area is non-US, Copernicus GLO-30 is the documented fallback and the only cost is a mandatory credits line. **Worth asking the user which real-world area Phase 4 targets** — it changes the DEM choice and the resolution available. |
 | A6 | Google Maps Platform ToS §3.2.4 substance as summarised | Map Data Decision | Low for the decision (already locked by the user as P0), but the ADR should link the ToS rather than paraphrase it as fact. Verbatim clause text was not retrievable this session. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All four questions were resolved during Phase 1 planning. Each carries an inline `RESOLVED:`
+> marker naming the decision and the plan/task that implements it. Nothing below is still open
+> for Phase 1; where a question genuinely belongs to a later phase, the resolution says so and
+> names the mechanism that keeps it from blocking Phase 1.
 
 1. **Should the compiled `.map.json` be released under ODbL?**
    - What we know: the `.glb` is almost certainly an ODbL "Produced Work" (attribution only). ODbL's Derivative Database provisions are real and the road graph is a structured extraction of OSM data.
    - What's unclear: whether a game's compiled nav graph legally constitutes a Derivative Database. This is a genuine legal grey area, not something research can settle.
    - Recommendation: take the free safe path — add `LICENSE-MAPDATA` (ODbL 1.0) covering `*.map.json`, note it in the ADR, and surface it to the user as an explicit decision rather than burying it.
+   - **RESOLVED:** Free safe path adopted. Plan **01-03 Task 1** creates `LICENSE-MAPDATA` at the repo root licensing all compiled `*.map.json` road-graph artifacts under ODbL 1.0 (with the `opendatacommons.org/licenses/odbl/1-0/` URL), treats the compiled `.glb` as a Produced Work requiring attribution only, and cross-references `docs/adr/0001-map-data-source.md`. The ADR's Open Questions section records the underlying legal ambiguity as unresolved-but-mitigated rather than pretending it is settled. Enforced by `tests/docs-present.test.ts` (01-03 Task 3), which fails if `LICENSE-MAPDATA` goes missing.
 
 2. **Which real-world area does Phase 4 target?**
    - What we know: STATE.md locks OSM + open DEM; ROADMAP Phase 4 says "one area."
    - What's unclear: geography. This determines whether 3DEP (US, 1m, public domain) or Copernicus GLO-30 (global, 30m, mandatory notice) is used — and 1m vs 30m is a large difference for road surfaces.
    - Recommendation: the ADR should record *both* as approved sources with a selection rule, rather than blocking on the answer. Flag the question to the user.
+   - **RESOLVED (for Phase 1):** Recommendation adopted in full. Plan **01-03 Task 1** records BOTH DEM sources in `docs/adr/0001-map-data-source.md` with an explicit selection rule — USGS 3DEP (1 m / 1/3 arc-second, public domain, no mandatory notice) preferred when the target area is inside the United States, Copernicus DEM GLO-30 (30 m) as the global fallback with its mandatory notice reproduced verbatim. Phase 1 is therefore unblocked. The geography choice itself is **deferred to Phase 4** by design, where it becomes a data-sourcing decision rather than a Phase 1 blocker; the ADR's own Open Questions section carries it forward so it cannot be lost.
 
 3. **Is `MAX_STEPS_PER_FRAME = 5` the right clamp?**
    - What we know: 5 gives a 5× worst-case catch-up rate, and with the rebaseline it only ever applies to short stalls.
    - What's unclear: whether a 30fps player on a weak machine (2 steps/frame steady-state) has enough margin. Not measurable until Phase 2 has a real load.
    - Recommendation: make it a named exported constant, surface "steps this frame" in the HUD, and revisit in Phase 3 profiling. Do not tune it in Phase 1 against a scene of six boxes.
+   - **RESOLVED:** Recommendation adopted in full, split across two plans. Plan **01-02** defines `MAX_STEPS_PER_FRAME` as a named exported constant in `src/core/sim-clock.ts` rather than a magic number, and `tests/sim-clock.test.ts` covers the clamp and rebaseline behaviour. Plan **01-06** surfaces steps-this-frame in the profiler HUD (`src/debug/profiler-hud.ts`) so the value is observable under real load. The value itself is deliberately **not tuned in Phase 1**; revisit during Phase 3 profiling once there is a real scene to measure.
 
 4. **Should the phase also pin a Node version / add an `.nvmrc`?**
    - What we know: verified on Node v24.14.1. Vite 8 and Vitest 5 both have Node engine floors.
    - Recommendation: cheap to add an `engines` field and `.nvmrc`; not required by any success criterion. Planner's call.
+   - **RESOLVED:** Planner's call made — yes, add it. Plan **01-01** creates `.nvmrc` (listed in its `files_modified`) alongside `package.json`, so the toolchain floor is pinned from the first commit rather than discovered by a version-skew failure later.
 
 ## Environment Availability
 

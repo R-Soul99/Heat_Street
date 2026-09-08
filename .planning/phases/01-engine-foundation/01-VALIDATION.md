@@ -1,8 +1,8 @@
 ---
 phase: 01
 slug: engine-foundation
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-08
 ---
@@ -59,6 +59,8 @@ Also required per commit/wave: `npx tsc --noEmit` (typecheck) and `npx biome che
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 *Task IDs are placeholders — the planner assigns real IDs; this table's rows must be satisfied by whatever IDs it produces.*
 
+**Cross-plan note:** `tests/docs-present.test.ts` (plan 01-03) asserts `docs/frame-budget.md`, which is created by plan 01-02. Plan 01-03 therefore declares `depends_on: ["01-01", "01-02"]` and sits in wave 3. Do not run the SC5 doc-presence row before 01-02 has completed.
+
 ---
 
 ## Wave 0 Requirements
@@ -92,11 +94,13 @@ Also required per commit/wave: `npx tsc --noEmit` (typecheck) and `npx biome che
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 5s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-08
+
+**Basis:** All 7 plans (01-01 through 01-07) passed the plan-checker's Dimension 8 (Nyquist compliance) review — every non-checkpoint task carries an `<automated>` verify, no watch-mode flags are present, sampling continuity holds, and Wave 0 covers every MISSING test reference.
