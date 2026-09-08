@@ -1,0 +1,76 @@
+LICENCE FOR COMPILED MAP DATA
+=============================
+
+This file covers the compiled map artifacts distributed with Heat Street. It does
+not cover the game's source code, which is licensed separately.
+
+See docs/adr/0001-map-data-source.md for the decision record this file implements,
+including the source licences, the required attribution strings and the open legal
+question this file exists to close.
+
+
+1. Compiled road graphs (`*.map.json`) — ODbL v1.0
+--------------------------------------------------
+
+All compiled road-graph artifacts distributed with this project — every file
+matching `*.map.json`, conforming to `docs/schemas/road-graph.v1.md` — are
+licensed under the:
+
+    Open Database License (ODbL) v1.0
+    https://opendatacommons.org/licenses/odbl/1-0/
+
+These artifacts are derived from OpenStreetMap data, which is itself licensed
+under ODbL v1.0 (https://www.openstreetmap.org/copyright).
+
+Why ODbL and not "attribution only": ODbL distinguishes a Produced Work
+(attribution only) from a Derivative Database (must itself be released under
+ODbL). A `.map.json` road graph is a structured, machine-readable extraction of
+OpenStreetMap ways and nodes, and is plausibly a Derivative Database. Rather
+than leave that ambiguity open, this project takes the free safe path and
+licenses these artifacts under ODbL v1.0 unconditionally. The project is then
+compliant under either reading. This is recorded as Open Question 1 in
+docs/adr/0001-map-data-source.md — unresolved in law, but mitigated in practice.
+
+
+2. Compiled geometry (`*.glb`) — Produced Work, attribution only
+----------------------------------------------------------------
+
+Compiled map geometry (road ribbons, terrain meshes and other `.glb` artifacts
+generated from the road graph and the elevation model) is treated as an ODbL
+Produced Work. It requires attribution but is not itself released under ODbL.
+
+
+3. Required attribution
+-----------------------
+
+Any distribution of this game or of the artifacts above must credit
+OpenStreetMap. The following forms are acceptable:
+
+    (c) OpenStreetMap contributors
+    (c) OpenStreetMap
+
+together with the licence URL, which must be included where linking is not
+possible:
+
+    https://www.openstreetmap.org/copyright
+
+For games, the OpenStreetMap Foundation's attribution guidelines permit this
+credit to appear on the credits page, in the menu, or in another suitable
+location.
+
+Where elevation data is sourced from Copernicus DEM GLO-30, its mandatory notice
+must also be reproduced verbatim. The exact strings are recorded in
+docs/adr/0001-map-data-source.md. USGS 3DEP is public domain and carries no
+mandatory notice.
+
+In this project the credit strings are not hand-maintained: they are carried in
+the mandatory `attribution` block of every compiled `*.map.json` and rendered
+onto the credits screen from the data itself.
+
+
+4. Prohibited sources
+---------------------
+
+No bytes derived from Google Maps, Google Earth or Google Street View may enter
+these artifacts, including geometry traced from such imagery. See
+docs/adr/0001-map-data-source.md for the full statement and its citations.

@@ -50,9 +50,12 @@ between arcade and sim" more concretely once prototyping starts.*
 ## 5. Maps & Locations
 
 - **No procedurally generated maps** — ruled out from the start.
-- Leroy has already built a separate tool that takes an area of Google
-  Maps and exports it into files usable for game map creation. This is
-  the preferred pipeline for recreating real-world locations.
+- Map data is compiled **offline from OpenStreetMap plus an open DEM**
+  (USGS 3DEP inside the US, Copernicus DEM GLO-30 globally) into a road
+  graph plus geometry. This is the preferred pipeline for recreating
+  real-world locations. The decision, its licences and its required
+  attribution are frozen in `docs/adr/0001-map-data-source.md`, which
+  supersedes any earlier description of this pipeline in this document.
 - If real-map recreation proves impractical for a given area/mode, hand-
   built maps are an acceptable fallback — but always hand-authored or
   derived from real data, never procedurally generated.

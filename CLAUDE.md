@@ -109,7 +109,7 @@ value.
 | Persistence | `localStorage` + `zod@4.5.4` schema validation on read | Best times and medal state are the player's long-term investment. Validate on load so a schema change doesn't wipe progress or crash on malformed data. |
 | Debug tuning UI | `lil-gui@0.21.0` (or `tweakpane@4.0.5`) | **Essential, not optional.** "Arcade-realistic hybrid" is found by feel, not calculation. You need live sliders for suspension stiffness, friction slip, side friction stiffness, CoM offset, and engine force while driving. Budget this into the first vehicle phase. |
 - **HUD** (speed, timer, medal split, heat meter, radio chatter subtitles) → absolutely-positioned HTML/CSS over the WebGL canvas with `pointer-events: none`. Zero draw calls, zero texture uploads, real text rendering with real fonts, trivially restyled, and CSS animation gives you siren-flash and heat-escalation pulses for free. Rendering text in-canvas (`troika-three-text`, canvas-texture planes) is strictly worse here — you'd be reimplementing typography to solve a problem you don't have.
-- **Minimap** → a separate `<canvas>` 2D context, drawing the **road polylines you already have from the Google Maps extraction tool**, plus dots for the player, checkpoints, and pursuers.
+- **Minimap** → a separate `<canvas>` 2D context, drawing the **road polylines from the OSM-derived road graph (see docs/adr/0001-map-data-source.md)**, plus dots for the player, checkpoints, and pursuers.
 ### Pursuer AI
 | Library | Version | Purpose | Recommendation |
 |---------|---------|---------|----------------|
@@ -195,7 +195,7 @@ value.
 | Example tuning constants (mass 10, stiffness 24, frictionSlip 1000, etc.) | **MEDIUM** | From the official three.js example — correct as *starting values*, but they are demo values, not muscle-car values |
 ## Gaps / Open Items for Later Phases
 - **Whether Rapier's raycast vehicle can hit the "arcade-realistic hybrid" target.** Community reports consistently describe the core tension: lowering wheel friction to enable drift causes loss of control; raising it makes the car feel on-rails. The arcade-assist layering approach (above) is the standard mitigation but is unverified for this specific controller. **This is the single highest-risk item in the stack and should be a spike in the first vehicle phase, not an assumption.**
-- **Rapier trimesh performance at real city-map scale.** No benchmarks found for Rapier trimesh colliders at Google-Maps-derived city scale. Chunking is the mitigation, but the threshold is unknown.
+- **Rapier trimesh performance at real city-map scale.** No benchmarks found for Rapier trimesh colliders at OSM-derived city scale. Chunking is the mitigation, but the threshold is unknown.
 - **Surface-type → collider mapping.** `wheelGroundObject(i)` returns a `Collider`; the mechanism for tagging colliders with a surface type (user data vs. a `Map<colliderHandle, SurfaceType>` vs. collision groups) needs a design decision. All three are viable; not researched in depth.
 - **Engine audio source material.** The technique is clear; whether CC0 muscle-car engine loops at usable quality exist is an asset-sourcing question, not a stack question.
 - **Damage/deformation model.** Requirement 13 mentions damage affecting performance and a destruction end-state. Rapier has no built-in deformation. Likely approach: swap damaged mesh LODs + degrade vehicle-controller parameters (reduced engine force, biased steering, softened suspension). Not researched.

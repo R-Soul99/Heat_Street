@@ -4,6 +4,14 @@
 **Researched:** 2026-09-07
 **Confidence:** HIGH for core stack and vehicle physics (verified against shipped `.d.ts` files and official docs); MEDIUM for renderer choice and audio architecture (judgement calls, documented below)
 
+> **SUPERSEDED — map data source.** Every reference in this document to the Google Maps
+> extraction tool as a source of map data is **superseded by `docs/adr/0001-map-data-source.md`**.
+> OpenStreetMap plus an open DEM (USGS 3DEP inside the US, Copernicus DEM GLO-30 globally) is
+> the only approved source; no bytes derived from Google Maps, Google Earth or Street View may
+> enter the repository, the asset pipeline or the shipped build. The individual lines below are
+> deliberately left unedited as a dated research record — read the ADR, not them, for the
+> current decision. Everything else in this document stands.
+
 ---
 
 ## Headline Finding
