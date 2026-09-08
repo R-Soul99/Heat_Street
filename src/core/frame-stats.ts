@@ -3,12 +3,13 @@
  * `src/debug/profiler-hud.ts` (consumer).
  *
  * Lives under `src/core/` rather than `src/debug/` or `src/loop.ts` because both
- * of those files depend on it and neither should import from the other —
+ * of those files depend on it and neither should depend on the other —
  * `src/loop.ts` must not know the HUD exists (D-05/T-01-22: debug tooling must
  * never perturb simulation timing), and `src/debug/` must not become a
  * dependency of the loop.
  *
- * Type-only module: no imports, no runtime code, nothing to test in isolation.
+ * Type-only module: no dependency statements, no runtime code, nothing to
+ * test in isolation.
  */
 export interface FrameStats {
   /** Wall time (ms) around ALL fixed steps executed this frame, not per step. */
