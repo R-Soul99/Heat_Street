@@ -282,6 +282,58 @@ describe("startLoop — visibility rebaseline (SC3)", () => {
   });
 });
 
+describe("startLoop — same-frame dt-spike rebaseline (SC3, no visibilitychange)", () => {
+  it("does not fast-forward through a 60 second gap even when visibilitychange never fires", () => {
+    const scheduler = new FakeScheduler();
+    const stepsSeen: number[] = [];
+    const { deps } = makeDeps(scheduler, {
+      hud: (stats: FrameStats) => stepsSeen.push(stats.steps),
+    });
+    const handle = startLoop(deps);
+
+    scheduler.runFrame(0);
+    for (let f = 1; f <= 60; f++) scheduler.runFrame((f / 60) * 1000);
+    expect(handle.clock.tick).toBe(60);
+
+    // A 60 real-second gap between two rAF callbacks — e.g. a backgrounded
+    // tab whose window was never actually occluded, so `document.hidden`
+    // never flips and `visibilitychange` never fires. `fireVisible` is
+    // deliberately NOT called anywhere in this test: this must be handled
+    // purely by the same-frame dt-spike detection in `src/loop.ts`, not by
+    // the visibility listener.
+    const resumeMs = 1000 + 60_000;
+    scheduler.runFrame(resumeMs);
+
+    // The very first frame back must NOT run anywhere near the ~3600 ticks
+    // of backlog a 60 second gap represents — it must be bounded exactly
+    // like an ordinary frame (at most one clamp's worth), with the rest
+    // accounted for by `droppedTicks`, not silently executed.
+    const ticksOnResumeFrame = handle.clock.tick - 60;
+    expect(ticksOnResumeFrame).toBeLessThanOrEqual(MAX_STEPS_PER_FRAME);
+    expect(handle.clock.droppedTicks).toBeGreaterThan(3000);
+
+    // Subsequent frames must advance at roughly 1:1 with wall-clock time —
+    // NOT a decaying catch-up curve. Ten more frames at a normal 60 Hz
+    // cadence must add up to (approximately) ten more ticks, not hundreds.
+    const tickBeforeCatchupWindow = handle.clock.tick;
+    for (let f = 1; f <= 10; f++) {
+      scheduler.runFrame(resumeMs + (f / 60) * 1000);
+    }
+    const ticksOverTenFrames = handle.clock.tick - tickBeforeCatchupWindow;
+    expect(ticksOverTenFrames).toBe(10);
+
+    // None of the frames in that ten-frame window may have saturated the
+    // clamp — a decaying catch-up curve looks like repeated
+    // `MAX_STEPS_PER_FRAME` steps every frame; a clean 1:1 resume never
+    // touches the clamp at all, even allowing for the ordinary +/-1 step
+    // pairing that floating-point timestamp rounding produces at a large
+    // absolute `nowMs` (the same rounding the "tick indices" test tolerates
+    // at small `nowMs`).
+    const stepsDuringCatchupWindow = stepsSeen.slice(-10);
+    expect(stepsDuringCatchupWindow.every((s) => s < MAX_STEPS_PER_FRAME)).toBe(true);
+  });
+});
+
 describe("startLoop — saturation fallback", () => {
   it("rebaselines after 31 consecutive saturated frames with no visibility event, and resets the counter on any non-saturating frame", () => {
     const scheduler = new FakeScheduler();

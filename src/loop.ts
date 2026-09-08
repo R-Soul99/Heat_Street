@@ -5,14 +5,27 @@
  * this automatically rather than relying on it being reviewed by eye.
  *
  * Steps on an absolute clock, renders exactly once per animation frame
- * outside the fixed-tick loop, and handles a stall with BOTH halves
- * 01-RESEARCH.md "Pattern 5" requires: `SimClock`'s own `MAX_STEPS_PER_FRAME`
- * clamp bounds a single slow frame's work, and a `visibilitychange`
- * rebaseline — plus a saturation fallback for stalls that never fire that
- * event (debugger pause, long GC, OS sleep while nominally visible) —
- * discards a long backlog instead of replaying it. "Pitfall 2" measured a
- * clamp-only alt-tab producing 300 ticks (a five-times fast-forward) in the
- * first second back instead of 60; this file is where that fix lives.
+ * outside the fixed-tick loop, and handles a stall with THREE
+ * complementary mechanisms — 01-RESEARCH.md "Pattern 5" requires the first
+ * two, and a real 60-second-alt-tab browser verification surfaced the need
+ * for the third:
+ *   1. `SimClock`'s own `MAX_STEPS_PER_FRAME` clamp bounds a single slow
+ *      frame's work.
+ *   2. A `visibilitychange` rebaseline discards a long backlog instead of
+ *      replaying it, on the hidden -> visible transition.
+ *   3. A same-frame dt-spike rebaseline: if a single frame's wall-clock gap
+ *      alone (`dtMs`) exceeds `STALL_DT_THRESHOLD_MS`, rebaseline BEFORE
+ *      computing `stepsFor` for that frame, rather than waiting on either
+ *      `visibilitychange` (which is not guaranteed to fire promptly, or at
+ *      all, in every windowing/OS configuration) or the saturation counter
+ *      below (which — while bounded to ~31 frames — is a belt-and-braces
+ *      fallback, not a same-frame fix, and a human verification pass
+ *      measured a sustained ~10x fast-forward that neither of the first two
+ *      mechanisms cut short). See "Fix note" further down for the measured
+ *      failure this closes.
+ * "Pitfall 2" measured a clamp-only alt-tab producing 300 ticks (a
+ * five-times fast-forward) in the first second back instead of 60; this
+ * file is where that fix lives.
  *
  * See 01-RESEARCH.md "Code Examples > Example 1" and 01-PATTERNS.md
  * "src/loop.ts" for the eight structural conventions this establishes for
@@ -31,6 +44,35 @@ import type { TransformCache } from "./physics/transform-cache";
  * path recovers it, so this is a safety net, not a tuning dial.
  */
 const SATURATION_REBASELINE_THRESHOLD = 30;
+
+/**
+ * Single-frame wall-clock gap, in ms, above which a frame is treated as a
+ * stall and rebaselined immediately — same frame, before `stepsFor` runs —
+ * rather than left to drain via the clamp and the (much slower, ~31-frame)
+ * saturation fallback.
+ *
+ * Fix note: a real browser 60-second alt-tab verification measured `sim`
+ * advancing roughly 10x for a sustained ~10 real seconds after returning —
+ * far longer than either the saturation fallback (bounded to ~31 frames,
+ * well under a second at any real refresh rate) or a correctly-firing
+ * `visibilitychange` should ever allow. That means the loop cannot rely
+ * solely on `document.hidden`/`visibilitychange` timing, which is not
+ * guaranteed to fire promptly (or classify the page as hidden at all) in
+ * every OS/window-manager configuration — a window that is alt-tabbed away
+ * from but not actually occluded/minimized can remain "visible" per the
+ * Page Visibility spec even though the user is not looking at it. This
+ * threshold is a same-frame, environment-agnostic backstop: ANY single
+ * inter-frame gap this large is unambiguously a stall (background timer
+ * throttling, OS sleep, a long GC or debugger pause), never an ordinary
+ * slow frame, so it is safe to rebaseline on it immediately rather than
+ * waiting for confirmation from `visibilitychange` or the saturation
+ * counter. Set comfortably above the clamp test's 1000 ms single-frame
+ * jump (which must still take the bounded-clamp path, not an instant
+ * rebaseline — RESEARCH.md "Pattern 5": the clamp handles one genuinely
+ * slow frame, rebaseline handles a stall) and comfortably below any
+ * realistic alt-tab/backgrounding duration.
+ */
+const STALL_DT_THRESHOLD_MS = 2000;
 
 /**
  * Everything the loop needs from the browser: scheduling a frame, wall time,
@@ -132,6 +174,16 @@ export function startLoop(deps: LoopDeps): LoopHandle {
 
     const dtMs = nowMs - previousNowMs;
     previousNowMs = nowMs;
+
+    // Same-frame stall backstop: a gap this large is unambiguously a stall,
+    // not an ordinary slow frame. Rebaseline BEFORE `stepsFor` runs so THIS
+    // frame — not the 31st frame after it — is the one that resumes at 1:1.
+    // Independent of, and does not replace, the `visibilitychange` listener
+    // above or the saturation fallback below: see `STALL_DT_THRESHOLD_MS`.
+    if (dtMs > STALL_DT_THRESHOLD_MS) {
+      clock.rebaseline(nowMs);
+      saturated = 0;
+    }
 
     const physicsBeginMs = scheduler.now();
     const steps = clock.stepsFor(nowMs);
