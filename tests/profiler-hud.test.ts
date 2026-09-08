@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUDGET, PHASE1_DEBUG_SCENE_TARGETS } from "../src/core/frame-budget";
 import type { FrameStats } from "../src/core/frame-stats";
-import { type HudInputs, formatHudText } from "../src/debug/profiler-hud";
+import { formatHudText, type HudInputs } from "../src/debug/profiler-hud";
 
 /**
  * Only `formatHudText` is exercised here — it is the pure half of the module.
@@ -82,7 +82,9 @@ describe("formatHudText", () => {
   });
 
   it("marks render over its budget", () => {
-    const text = formatHudText(makeInputs({ stats: makeStats({ renderMs: BUDGET.renderCpuMs + 1 }) }));
+    const text = formatHudText(
+      makeInputs({ stats: makeStats({ renderMs: BUDGET.renderCpuMs + 1 }) }),
+    );
     expect(lineStartingWith(text, "render")).toContain("!");
   });
 
