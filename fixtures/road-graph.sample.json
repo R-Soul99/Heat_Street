@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "areaId": "sample-square",
+  "name": "Sample Square Loop",
+  "source": {
+    "osmExtract": "handwritten://fixtures/road-graph.sample.json",
+    "osmSnapshot": "2026-09-01T00:00:00Z",
+    "demSource": "usgs-3dep-1m",
+    "compilerVersion": "0.0.0-fixture"
+  },
+  "attribution": {
+    "osm": "© OpenStreetMap contributors",
+    "osmLicense": "ODbL-1.0",
+    "osmLicenseUrl": "https://www.openstreetmap.org/copyright",
+    "dem": "U.S. Geological Survey 3D Elevation Program (public domain)"
+  },
+  "origin": {
+    "lat": 37.7749,
+    "lon": -122.4194,
+    "projection": "local-enu-metres"
+  },
+  "bounds": {
+    "minX": 0,
+    "minZ": 0,
+    "maxX": 100,
+    "maxZ": 100
+  },
+  "nodes": [
+    { "id": 0, "x": 0, "y": 0, "z": 0, "junction": true, "osmNodeId": 1000000001 },
+    { "id": 1, "x": 100, "y": 0.5, "z": 0, "junction": true, "osmNodeId": 1000000002 },
+    { "id": 2, "x": 100, "y": 1.25, "z": 100, "junction": true, "osmNodeId": 1000000003 },
+    { "id": 3, "x": 0, "y": 0.75, "z": 100, "junction": true, "osmNodeId": 1000000004 }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "from": 0,
+      "to": 1,
+      "points": [[0, 0, 0], [50, 0.25, 0], [100, 0.5, 0]],
+      "lengthM": 100.0,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 6.5,
+      "oneway": false,
+      "speedLimitKph": 50,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000001
+    },
+    {
+      "id": 1,
+      "from": 1,
+      "to": 2,
+      "points": [[100, 0.5, 0], [100, 0.9, 50], [100, 1.25, 100]],
+      "lengthM": 100.0,
+      "surface": "gravel",
+      "roadClass": "track",
+      "lanes": 1,
+      "widthM": 4.0,
+      "oneway": false,
+      "speedLimitKph": 30,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000002
+    },
+    {
+      "id": 2,
+      "from": 2,
+      "to": 3,
+      "points": [[100, 1.25, 100], [50, 1.0, 100], [0, 0.75, 100]],
+      "lengthM": 100.0,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 8.0,
+      "oneway": true,
+      "speedLimitKph": 70,
+      "bridge": true,
+      "tunnel": false,
+      "layer": 1,
+      "osmWayId": 2000000003
+    },
+    {
+      "id": 3,
+      "from": 3,
+      "to": 0,
+      "points": [[0, 0.75, 100], [0, 0.4, 50], [0, 0, 0]],
+      "lengthM": 100.0,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 6.5,
+      "oneway": false,
+      "speedLimitKph": 50,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000004
+    }
+  ],
+  "spawns": [
+    { "id": "default", "nodeId": 0, "headingRad": 0.0 }
+  ]
+}
