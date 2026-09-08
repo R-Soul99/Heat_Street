@@ -1,8 +1,8 @@
+import { describe, expect, it } from "vitest";
 import { type InputFrame, NEUTRAL } from "../src/core/input-tape";
 import { DT } from "../src/core/sim-clock";
 import { createDebugScene } from "../src/physics/debug-scene";
 import { createWorld } from "../src/physics/world";
-import { describe, expect, it } from "vitest";
 
 /**
  * The VEH-03 / SC1 proof.
