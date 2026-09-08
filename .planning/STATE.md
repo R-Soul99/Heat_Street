@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-09-08T13:40:50.588Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-08T18:01:19.517Z"
 last_activity: 2026-09-08
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -26,25 +26,25 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 01 (engine-foundation) — EXECUTING
-Plan: 6 of 7
-Status: Ready to execute
+Plan: 7 of 7
+Status: Ready to execute (01-06 complete)
 Last activity: 2026-09-08
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
-- Average duration: 10 min
-- Total execution time: 0.8 hours
+- Total plans completed: 6
+- Average duration: 9 min
+- Total execution time: 0.9 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 engine-foundation | 5 | 49 min | 10 min |
+| 01 engine-foundation | 6 | 55 min | 9 min |
 
 **Per-plan detail:**
 
@@ -55,17 +55,18 @@ Progress: [███████░░░] 71%
 | Phase 01 P03 | 11 min | 3 | 11 |
 | Phase 01 P04 | 12 min | 3 | 5 |
 | Phase 01 P05 | 7 min | 3 | 4 |
+| Phase 01 P06 | 6 min | 2 | 5 |
 
 **Recent Trend:**
 
-- Last 5 plans: 13 min, 6 min, 11 min, 12 min, 7 min
-- Trend: → steady (01-03 was docs-heavy; 01-05 was the fastest so far because 01-04 had already fixed the buffer layout the render layer reads)
+- Last 5 plans: 6 min, 11 min, 12 min, 7 min, 6 min
+- Trend: → steady (01-03 was docs-heavy; 01-06 was fast because both tasks reused conventions established in 01-01 through 01-05)
 
 *Updated after each plan completion*
 
 > Note: `gsd-sdk query state.record-metric` appends its row AFTER this line rather
 > than into the Per-plan detail table above. Move it up and refresh the velocity
-> rollup by hand after each plan, as was done for P04 and P05.
+> rollup by hand after each plan, as was done for P04, P05 and P06.
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 01-05]: Never compare quaternions with angleTo when the expected angle is near zero — it is 2*acos(dot) and acos is ill-conditioned there, so one-ULP-apart quaternions report ~3e-8 rad; compare components instead
 - [Phase 01-05]: renderer.info.autoReset stays at its default true, so the 01-06 HUD must read renderer.info AFTER the draw; it must become false with a manual reset() if any later phase draws more than once per frame
 - [Phase 01-05]: The render mesh array order is a contract with DebugScene.bodies and TransformCache — createDebugRenderScene takes bodyCount and spinnerIndex as parameters and range-validates them, and the ground is excluded from meshes (T-01-16)
+- [Phase 01-06]: The ?debug + Backquote hotkey convention in src/debug/debug-gate.ts is the exact shape Phase 2's lil-gui tuning panel should reuse
+- [Phase 01-06]: Acceptance greps are design constraints on comments too — frame-stats.ts's doc comment avoids the literal substring "import" entirely, not just an actual import statement
 
 ### Pending Todos
 
@@ -116,6 +119,7 @@ None yet.
 - [01-01] 01-RESEARCH.md 'State of the Art' claims Vite 8.2.2 pre-bundles Rapier correctly — disproven at runtime (dev-only TypeError). That claim and 01-01-PLAN.md's 'no optimizeDeps.exclude anywhere' success criterion should be corrected at phase verification
 - [01-03] Six Google-Maps-pipeline references remain in .planning/ (research/STACK.md 92/212/300, research/ARCHITECTURE.md 367, research/FEATURES.md 73/247, PROJECT.md 75) — deliberately outside the decided grep scope, covered by the STACK.md supersession banner. Upgrade path if ever needed is PATTERNS.md R1 option (b).
 - [01-04] core.autocrlf=true with no .gitattributes and biome's default lineEnding 'lf' means any git-checkout-restored or freshly-cloned file fails 'npx biome check .' on Windows — logged in .planning/phases/01-engine-foundation/deferred-items.md, fix belongs in 01-07 or phase verification
+- [01-06] src/main.ts:21 contains the literal substring "innerHTML" inside a comment stating the DOM-XSS mitigation ("textContent only — never innerHTML"), pre-dating this plan. A repo-wide `grep -rn "innerHTML" src/` (the plan's own verification step 3) will surface this one line even though it documents a prohibition rather than a violation; src/debug/ itself is clean. Worth a note at phase verification.
 
 ## Deferred Items
 
@@ -127,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-08T13:40:50.576Z
-Stopped at: Completed 01-05-PLAN.md
-Resume file: .planning/phases/01-engine-foundation/01-06-PLAN.md
+Last session: 2026-09-08T18:01:12.442Z
+Stopped at: Completed 01-06-PLAN.md
+Resume file: .planning/phases/01-engine-foundation/01-07-PLAN.md

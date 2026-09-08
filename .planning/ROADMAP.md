@@ -57,7 +57,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 01-05-PLAN.md — WebGL renderer, interpolator, Three.js debug scene index-aligned with physics bodies (wave 4)
-- [ ] 01-06-PLAN.md — ?debug gate, single-key toggle, profiler HUD checked against the written budget (wave 4)
+- [x] 01-06-PLAN.md — ?debug gate, single-key toggle, profiler HUD checked against the written budget (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 5/7 | In Progress|  |
+| 1. Engine Foundation | 6/7 | In Progress|  |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
