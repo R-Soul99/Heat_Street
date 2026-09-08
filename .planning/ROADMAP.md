@@ -47,7 +47,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Pure sim core: absolute-clock SimClock, per-tick InputTape, mirrored frame budget (wave 2)
+- [x] 01-02-PLAN.md — Pure sim core: absolute-clock SimClock, per-tick InputTape, mirrored frame budget (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 1/7 | In Progress | - |
+| 1. Engine Foundation | 2/7 | In Progress | - |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
