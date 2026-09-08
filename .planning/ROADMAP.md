@@ -43,7 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Repo scaffold, exact-pinned install, Vite/Vitest configs, Rapier WASM proven in Node and browser (wave 1)
+- [x] 01-01-PLAN.md — Repo scaffold, exact-pinned install, Vite/Vitest configs, Rapier WASM proven in Node and browser (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 0/7 | Planned | - |
+| 1. Engine Foundation | 1/7 | In Progress | - |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |

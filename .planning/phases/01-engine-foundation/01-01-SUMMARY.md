@@ -151,6 +151,10 @@ None — no external service configuration required.
 - **Carry-forward for downstream plans:** do not remove `optimizeDeps.exclude` from `vite.config.ts`, and do not paraphrase `vitest.config.ts` — both are load-bearing and both have been proven so by deliberate breakage.
 - `.planning/phases/01-engine-foundation/01-RESEARCH.md` "State of the Art" and this plan's success criteria now contain a claim contradicted by evidence. Worth a correction note when the phase is verified.
 
+## Self-Check: PASSED
+
+All 11 created files verified present on disk. All 4 commit hashes verified present in git history (`71bfe4e`, `2329e5a`, `9da05e4`, `f85db78`).
+
 ---
 *Phase: 01-engine-foundation*
 *Completed: 2026-09-08*
