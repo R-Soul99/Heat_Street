@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+// The doc is pulled off disk through Vite's `?raw` transform rather than
+// `node:fs`, so this suite needs no `@types/node`. The plan's threat model
+// (T-01-SC) states no new packages are installed in this plan, and `?raw` is
+// already typed by `vite/client`, which tsconfig loads. Later file-reading tests
+// should use `import.meta.glob(..., { query: "?raw", eager: true })` for the same
+// reason.
+import doc from "../docs/frame-budget.md?raw";
 import { BUDGET, PHASE1_DEBUG_SCENE_TARGETS } from "../src/core/frame-budget";
-
-const DOC_PATH = fileURLToPath(new URL("../docs/frame-budget.md", import.meta.url));
-const doc = readFileSync(DOC_PATH, "utf8");
 
 /**
  * Every millisecond figure is matched WITH its unit (`"4.0 ms"`, not `"4"`), and
