@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-09-08T18:01:19.517Z"
+status: verifying
+stopped_at: Completed 01-07-PLAN.md (Phase 1 complete)
+last_updated: "2026-09-08T19:01:23.547Z"
 last_activity: 2026-09-08
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 6
-  percent: 0
+  completed_plans: 7
+  percent: 13
 ---
 
 # Project State
@@ -25,26 +25,26 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 ## Current Position
 
-Phase: 01 (engine-foundation) — EXECUTING
+Phase: 01 (engine-foundation) — COMPLETE
 Plan: 7 of 7
-Status: Ready to execute (01-06 complete)
+Status: Phase complete — ready for verification
 Last activity: 2026-09-08
 
-Progress: [█████████░] 86%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6
-- Average duration: 9 min
-- Total execution time: 0.9 hours
+- Total plans completed: 7
+- Average duration: 15 min
+- Total execution time: 1.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 engine-foundation | 6 | 55 min | 9 min |
+| 01 engine-foundation | 7 | 103 min | 15 min |
 
 **Per-plan detail:**
 
@@ -56,17 +56,18 @@ Progress: [█████████░] 86%
 | Phase 01 P04 | 12 min | 3 | 5 |
 | Phase 01 P05 | 7 min | 3 | 4 |
 | Phase 01 P06 | 6 min | 2 | 5 |
+| Phase 01 P07 | 48 min | 3 | 4 |
 
 **Recent Trend:**
 
-- Last 5 plans: 6 min, 11 min, 12 min, 7 min, 6 min
-- Trend: → steady (01-03 was docs-heavy; 01-06 was fast because both tasks reused conventions established in 01-01 through 01-05)
+- Last 5 plans: 12 min, 7 min, 6 min, 48 min
+- Trend: → P07's 48 min is dominated by wall-clock wait on the two-pass human browser-verification checkpoint (SC2/SC3/SC4), not active implementation time — the bug found on the first pass was fixed and re-verified within the same session. Phase 1 complete: 7/7 plans, 103 min total.
 
 *Updated after each plan completion*
 
 > Note: `gsd-sdk query state.record-metric` appends its row AFTER this line rather
 > than into the Per-plan detail table above. Move it up and refresh the velocity
-> rollup by hand after each plan, as was done for P04, P05 and P06.
+> rollup by hand after each plan, as was done for P04, P05, P06 and P07.
 
 ## Accumulated Context
 
@@ -102,6 +103,7 @@ Recent decisions affecting current work:
 - [Phase 01-05]: The render mesh array order is a contract with DebugScene.bodies and TransformCache — createDebugRenderScene takes bodyCount and spinnerIndex as parameters and range-validates them, and the ground is excluded from meshes (T-01-16)
 - [Phase 01-06]: The ?debug + Backquote hotkey convention in src/debug/debug-gate.ts is the exact shape Phase 2's lil-gui tuning panel should reuse
 - [Phase 01-06]: Acceptance greps are design constraints on comments too — frame-stats.ts's doc comment avoids the literal substring "import" entirely, not just an actual import statement
+- [Phase 01-07]: Stall handling needs a third, environment-agnostic mechanism beyond clamp + visibilitychange -- a same-frame wall-clock dt-spike (>2000ms) rebaselines immediately, before stepsFor runs, because visibilitychange is not guaranteed to fire promptly (or at all) in every OS/window-manager configuration
 
 ### Pending Todos
 
@@ -113,13 +115,11 @@ None yet.
 
 [Issues that affect future work]
 
-- [01-07] Task 3 (browser human verification) failed on the SC3 alt-tab check: `sim` advanced ~10x for a sustained ~10 real seconds after a 60s alt-tab instead of resuming at 1:1. Root cause: the existing `visibilitychange` rebaseline and the ~31-frame saturation fallback both depend on `document.hidden`/`visibilitychange` firing correctly and/or promptly, which is not guaranteed in every OS/window-manager configuration, and the saturation fallback alone is too slow to explain a sustained ~10s overshoot on its own. Fixed in commit `eae86c7`: added a same-frame dt-spike detection (`STALL_DT_THRESHOLD_MS = 2000`) in `src/loop.ts` that rebaselines immediately, before `stepsFor` runs, whenever a single frame's wall-clock gap exceeds the threshold — independent of `visibilitychange` timing. Proven via a new discriminating test in `tests/loop.test.ts` (fails without the fix, passes with it). Full automated gate is green (201/201 tests, tsc clean, biome clean, build clean). **Plan 01-07 is NOT complete** — task 3 (all five checks: SC2 judder, SC3 alt-tab, SC4 HUD/gating, resize, console) must be fully re-verified in a real browser before sign-off, since the fix touches the exact code path task 3 exercises.
 - REQUIREMENTS.md previously stated 29 v1 requirements; the actual traceability list is 30. Corrected during roadmap creation.
 - Open risk (Phase 2): whether Rapier's raycast vehicle can reach the "arcade-realistic hybrid" feel at all — flagged as a spike, not an assumption
 - Open question (Phase 4): whether the existing extraction tool already emits usable road-graph topology, or whether the map-compiler must build it from scratch
 - [01-01] 01-RESEARCH.md 'State of the Art' claims Vite 8.2.2 pre-bundles Rapier correctly — disproven at runtime (dev-only TypeError). That claim and 01-01-PLAN.md's 'no optimizeDeps.exclude anywhere' success criterion should be corrected at phase verification
 - [01-03] Six Google-Maps-pipeline references remain in .planning/ (research/STACK.md 92/212/300, research/ARCHITECTURE.md 367, research/FEATURES.md 73/247, PROJECT.md 75) — deliberately outside the decided grep scope, covered by the STACK.md supersession banner. Upgrade path if ever needed is PATTERNS.md R1 option (b).
-- [01-04] core.autocrlf=true with no .gitattributes and biome's default lineEnding 'lf' means any git-checkout-restored or freshly-cloned file fails 'npx biome check .' on Windows — logged in .planning/phases/01-engine-foundation/deferred-items.md, fix belongs in 01-07 or phase verification
 - [01-06] src/main.ts:21 contains the literal substring "innerHTML" inside a comment stating the DOM-XSS mitigation ("textContent only — never innerHTML"), pre-dating this plan. A repo-wide `grep -rn "innerHTML" src/` (the plan's own verification step 3) will surface this one line even though it documents a prohibition rather than a violation; src/debug/ itself is clean. Worth a note at phase verification.
 
 ## Deferred Items
@@ -132,6 +132,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-08T18:01:12.442Z
-Stopped at: Completed 01-06-PLAN.md
-Resume file: .planning/phases/01-engine-foundation/01-07-PLAN.md
+Last session: 2026-09-08T19:01:23.538Z
+Stopped at: Completed 01-07-PLAN.md (Phase 1 complete)
+Resume file: None

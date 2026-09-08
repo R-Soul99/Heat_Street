@@ -13,7 +13,7 @@ Heat Street gets built from the tire contact patch outward. The fixed-timestep l
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Engine Foundation** - Fixed-timestep loop, Rapier/Three.js wiring, profiler HUD, frozen map-data decision
+- [x] **Phase 1: Engine Foundation** - Fixed-timestep loop, Rapier/Three.js wiring, profiler HUD, frozen map-data decision (completed 2026-09-08)
 - [ ] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there
 - [ ] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed
 - [ ] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph
@@ -61,7 +61,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — rAF loop with clamp + rebaseline, composition root, layering gate, human SC2/SC3/SC4 sign-off (wave 5)
+- [x] 01-07-PLAN.md — rAF loop with clamp + rebaseline, composition root, layering gate, human SC2/SC3/SC4 sign-off (wave 5)
 
 ### Phase 2: Vehicle Feel Core
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 6/7 | In Progress|  |
+| 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
