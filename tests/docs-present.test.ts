@@ -1,0 +1,87 @@
+import { describe, expect, it } from "vitest";
+
+/**
+ * SC5 enforcement, half one: the documents the phase is judged on must exist and
+ * must not be placeholders.
+ *
+ * Files are read through Vite's `?raw` glob transform rather than `node:fs`.
+ * `@types/node` is not installed and this phase's threat model (T-01-SC) forbids
+ * adding packages; see plan 01-02's deviation for the full reasoning. A missing
+ * file simply does not appear as a glob key, which is exactly the existence check
+ * this suite needs — and it fails with the path in the message.
+ */
+
+const PRESENT: Record<string, string> = {
+  ...import.meta.glob<string>("../docs/**/*.md", { query: "?raw", eager: true, import: "default" }),
+  ...import.meta.glob<string>("../fixtures/*.json", {
+    query: "?raw",
+    eager: true,
+    import: "default",
+  }),
+  ...import.meta.glob<string>("../LICENSE-*", { query: "?raw", eager: true, import: "default" }),
+};
+
+function read(path: string): string {
+  const contents = PRESENT[`../${path}`];
+  if (contents === undefined) {
+    throw new Error(
+      `Required file is missing: ${path}. Present: ${Object.keys(PRESENT).sort().join(", ")}`,
+    );
+  }
+  return contents;
+}
+
+/** Every path this phase promises exists, with its minimum size in characters. */
+const REQUIRED: ReadonlyArray<{ path: string; minChars: number }> = [
+  { path: "docs/adr/0001-map-data-source.md", minChars: 1500 },
+  { path: "docs/schemas/road-graph.v1.md", minChars: 1500 },
+  // OWNED BY PLAN 01-02, NOT BY 01-03. This is the deliberate cross-plan presence
+  // check, and it is why plan 01-03 declares depends_on: ["01-01", "01-02"] — a
+  // parallel wave would otherwise let this assertion run before the file exists.
+  // Do NOT create, touch or stub docs/frame-budget.md from plan 01-03; a second
+  // writer on that path would conflict with 01-02. If it is genuinely absent,
+  // that is a real ordering failure to report, not something to paper over.
+  { path: "docs/frame-budget.md", minChars: 1000 },
+  { path: "fixtures/road-graph.sample.json", minChars: 500 },
+  { path: "LICENSE-MAPDATA", minChars: 500 },
+];
+
+describe("SC5 documents are present and substantive", () => {
+  it("found files to check — a broken glob cannot make this suite green", () => {
+    expect(Object.keys(PRESENT).length).toBeGreaterThanOrEqual(REQUIRED.length);
+  });
+
+  for (const { path, minChars } of REQUIRED) {
+    it(`${path} exists and is non-empty`, () => {
+      expect(read(path).length).toBeGreaterThan(0);
+    });
+
+    it(`${path} exceeds ${minChars} characters, so a placeholder cannot pass`, () => {
+      expect(read(path).length).toBeGreaterThan(minChars);
+    });
+  }
+
+  it("the ADR records the OpenStreetMap decision", () => {
+    expect(read("docs/adr/0001-map-data-source.md")).toContain("OpenStreetMap");
+  });
+
+  it("the schema doc specifies schemaVersion", () => {
+    expect(read("docs/schemas/road-graph.v1.md")).toContain("schemaVersion");
+  });
+
+  it("the fixture parses as JSON", () => {
+    expect(() => JSON.parse(read("fixtures/road-graph.sample.json"))).not.toThrow();
+  });
+
+  it("LICENSE-MAPDATA licenses compiled map data under ODbL", () => {
+    const licence = read("LICENSE-MAPDATA");
+    expect(licence).toContain("ODbL");
+    expect(licence).toContain("opendatacommons.org/licenses/odbl/1-0");
+  });
+
+  it("reports the missing path by name when a required file is absent", () => {
+    expect(() => read("docs/this-file-does-not-exist.md")).toThrow(
+      /docs\/this-file-does-not-exist\.md/,
+    );
+  });
+});

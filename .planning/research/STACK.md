@@ -11,6 +11,13 @@
 > enter the repository, the asset pipeline or the shipped build. The individual lines below are
 > deliberately left unedited as a dated research record — read the ADR, not them, for the
 > current decision. Everything else in this document stands.
+>
+> Two exceptions, edited on purpose: the **Minimap** bullet and the **Rapier trimesh
+> performance** bullet. `CLAUDE.md` lines 28-219 are GENERATED from this file
+> (`<!-- GSD:stack-start source:research/STACK.md -->`), so leaving those two lines stale would
+> silently revert the CLAUDE.md amendments the ADR requires the next time CLAUDE.md is
+> regenerated. `tests/no-google-pipeline.test.ts` would then fail — correctly, but after the
+> damage. Fixing the source is cheaper than catching the regeneration.
 
 ---
 
@@ -195,7 +202,7 @@ Two reasons:
 **HUD and minimap: DOM overlay + a 2D canvas minimap. Not in-canvas 3D.**
 
 - **HUD** (speed, timer, medal split, heat meter, radio chatter subtitles) → absolutely-positioned HTML/CSS over the WebGL canvas with `pointer-events: none`. Zero draw calls, zero texture uploads, real text rendering with real fonts, trivially restyled, and CSS animation gives you siren-flash and heat-escalation pulses for free. Rendering text in-canvas (`troika-three-text`, canvas-texture planes) is strictly worse here — you'd be reimplementing typography to solve a problem you don't have.
-- **Minimap** → a separate `<canvas>` 2D context, drawing the **road polylines you already have from the Google Maps extraction tool**, plus dots for the player, checkpoints, and pursuers.
+- **Minimap** → a separate `<canvas>` 2D context, drawing the **road polylines from the OSM-derived road graph (see docs/adr/0001-map-data-source.md)**, plus dots for the player, checkpoints, and pursuers.
 
   This is the important call: the obvious approach is a second orthographic camera rendering the 3D scene to a render target. **Don't.** It roughly doubles draw calls and shadow/material work every frame for a small corner element, and it looks worse — a top-down render of low-poly city geometry reads as visual noise, whereas clean vector road lines read instantly at 150 px. The pmndrs `racing-game` project has an open issue on exactly this ("Minimap using double render"), which is a signal that the double-render approach is a known cost centre.
 
@@ -346,7 +353,7 @@ Note: `@types/three@0.185.4` tracks `three@0.185.1`. Three.js does not ship its 
 ## Gaps / Open Items for Later Phases
 
 - **Whether Rapier's raycast vehicle can hit the "arcade-realistic hybrid" target.** Community reports consistently describe the core tension: lowering wheel friction to enable drift causes loss of control; raising it makes the car feel on-rails. The arcade-assist layering approach (above) is the standard mitigation but is unverified for this specific controller. **This is the single highest-risk item in the stack and should be a spike in the first vehicle phase, not an assumption.**
-- **Rapier trimesh performance at real city-map scale.** No benchmarks found for Rapier trimesh colliders at Google-Maps-derived city scale. Chunking is the mitigation, but the threshold is unknown.
+- **Rapier trimesh performance at real city-map scale.** No benchmarks found for Rapier trimesh colliders at OSM-derived city scale. Chunking is the mitigation, but the threshold is unknown.
 - **Surface-type → collider mapping.** `wheelGroundObject(i)` returns a `Collider`; the mechanism for tagging colliders with a surface type (user data vs. a `Map<colliderHandle, SurfaceType>` vs. collision groups) needs a design decision. All three are viable; not researched in depth.
 - **Engine audio source material.** The technique is clear; whether CC0 muscle-car engine loops at usable quality exist is an asset-sourcing question, not a stack question.
 - **Damage/deformation model.** Requirement 13 mentions damage affecting performance and a destruction end-state. Rapier has no built-in deformation. Likely approach: swap damaged mesh LODs + degrade vehicle-controller parameters (reduced engine force, biased steering, softened suspension). Not researched.
