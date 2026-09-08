@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type InputFrame, NEUTRAL } from "../src/core/input-tape";
-import { DT } from "../src/core/sim-clock";
+import { type InputFrame, type InputSource, NEUTRAL, ReplayInput } from "../src/core/input-tape";
+import { DT, SimClock } from "../src/core/sim-clock";
 import { createDebugScene } from "../src/physics/debug-scene";
 import { createWorld } from "../src/physics/world";
 
@@ -43,6 +43,142 @@ function stepScene(ticks: number, input?: (tick: number) => InputFrame) {
   }
   return { world, scene, hash: fnv1a(world.takeSnapshot()) };
 }
+
+// The eight refresh rates are written inline at each `it.each` rather than
+// hoisted into a constant, so the list a reader sees is the list that runs.
+
+/** A tape long enough to cover a 10 second run at 60 ticks per second. */
+const TAPE_FRAMES = 600;
+
+/** Sampled every tick when no tape is supplied. Out of range resolves to NEUTRAL. */
+const NEUTRAL_TAPE = new ReplayInput([]);
+
+/**
+ * A 600-frame tape whose values are a closed-form function of the frame index.
+ * No random source appears anywhere in this file: every run of this suite, on
+ * every machine, drives the world with byte-identical input.
+ */
+function buildVaryingTape(): ReplayInput {
+  const frames: InputFrame[] = [];
+  for (let i = 0; i < TAPE_FRAMES; i++) {
+    frames.push({
+      steer: Math.sin(i / 37),
+      throttle: (i % 120) / 120,
+      brake: 0,
+      handbrake: false,
+    });
+  }
+  return new ReplayInput(frames);
+}
+
+/**
+ * Drive the REAL `SimClock` with synthetic frame timestamps for a given refresh
+ * rate, stepping the REAL world.
+ *
+ * `(f / fps) * 1000` is an ABSOLUTE millisecond timestamp, recomputed from the
+ * frame index every frame. It is deliberately never accumulated — that is the
+ * whole point of the test, and an `acc += 1000 / fps` rewrite of this line
+ * reproduces the 599-ticks-at-144 fps failure the suite exists to catch.
+ */
+function simulate(fps: number, seconds: number, input: InputSource = NEUTRAL_TAPE) {
+  const world = createWorld();
+  const scene = createDebugScene(world);
+  const clock = new SimClock();
+  clock.start(0);
+
+  const frames = Math.round(seconds * fps);
+  for (let f = 1; f <= frames; f++) {
+    const steps = clock.stepsFor((f / fps) * 1000);
+    for (let s = 0; s < steps; s++) {
+      // `stepsFor` has already advanced `clock.tick` past every step it returned,
+      // so the index of step `s` is counted back from the new tick.
+      const tickIndex = clock.tick - steps + s;
+      scene.preTick(tickIndex);
+      scene.applyInput(input.sampleForTick(tickIndex));
+      world.step();
+    }
+  }
+
+  return {
+    ticks: clock.tick,
+    hash: fnv1a(world.takeSnapshot()),
+    simTimeSec: clock.simTimeSec,
+    scene,
+    world,
+  };
+}
+
+describe("VEH-03: framerate-independent simulation", () => {
+  it.each([30, 60, 75, 90, 120, 144, 165, 240])(
+    "produces an identical tick count and end state at %ifps",
+    (fps) => {
+      const baseline = simulate(60, 10);
+      const actual = simulate(fps, 10);
+
+      expect(actual.ticks).toBe(baseline.ticks);
+      // Byte-exact world snapshot, not a position epsilon. A float comparison
+      // passes while islands, sleeping flags and contact caches have diverged.
+      expect(actual.hash).toBe(baseline.hash);
+    },
+  );
+
+  it("is reproducible across runs", () => {
+    expect(simulate(60, 5).hash).toBe(simulate(60, 5).hash);
+  });
+
+  it("has a snapshot hash sensitive enough to detect a one-tick difference", () => {
+    // Not padding. Without this, a takeSnapshot() that returned a constant — or a
+    // hash that collapsed everything to one value — would make the entire suite
+    // trivially green while proving nothing at all.
+    expect(stepScene(600).hash).not.toBe(stepScene(601).hash);
+  });
+
+  it.each([30, 60, 75, 90, 120, 144, 165, 240])(
+    "runs exactly ten seconds of simulated time at %ifps",
+    (fps) => {
+      const run = simulate(fps, 10);
+
+      expect(Math.abs(run.simTimeSec - 10)).toBeLessThan(1e-12);
+      expect(run.simTimeSec).toBe(run.ticks * DT);
+    },
+  );
+});
+
+describe("VEH-03: recorded input tape", () => {
+  it("replays an input tape to the same end state at 30 fps and at 144 fps", () => {
+    const tape = buildVaryingTape();
+
+    const slow = simulate(30, 10, tape);
+    const fast = simulate(144, 10, tape);
+
+    expect(fast.ticks).toBe(slow.ticks);
+    expect(fast.hash).toBe(slow.hash);
+  });
+
+  it("proves the input tape is load-bearing rather than a no-op", () => {
+    // 01-PATTERNS.md R3: without this assertion the test above would pass even if
+    // applyInput did nothing, because both runs would then be identical for
+    // reasons that have nothing to do with the tape.
+    const varying = simulate(30, 10, buildVaryingTape());
+    const neutral = simulate(30, 10, NEUTRAL_TAPE);
+
+    expect(varying.hash).not.toBe(neutral.hash);
+  });
+
+  it("keeps the spinner awake through 1200 tape-driven ticks", () => {
+    const tape = buildVaryingTape();
+    const run = simulate(60, 20, tape);
+    const spinner = run.scene.bodies[run.scene.spinnerIndex];
+
+    expect(run.ticks).toBe(1200);
+    expect(spinner.isSleeping()).toBe(false);
+
+    const before = spinner.rotation().y;
+    run.scene.preTick(1200);
+    run.world.step();
+    expect(Math.abs(spinner.rotation().y - before)).toBeGreaterThan(1e-4);
+  });
+});
 
 describe("debug scene", () => {
   it("binds the world timestep to the single DT constant", () => {
