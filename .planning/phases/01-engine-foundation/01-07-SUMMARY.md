@@ -146,3 +146,8 @@ None. The neutral `InputSource` in `src/main.ts` is a documented, intentional Ph
 ---
 *Phase: 01-engine-foundation*
 *Completed: 2026-09-08*
+
+## Self-Check: PASSED
+
+All claimed files verified present: `src/loop.ts`, `src/main.ts`, `tests/loop.test.ts`, `tests/layering.test.ts`, `.planning/phases/01-engine-foundation/01-07-SUMMARY.md`.
+All claimed commits verified present in `git log --oneline --all`: `56dd317`, `c85491a`, `7b6e98d`, `eae86c7`, `28f5fa9`.
