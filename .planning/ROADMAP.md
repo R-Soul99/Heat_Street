@@ -52,7 +52,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 01-03-PLAN.md — Map-data ADR, road-graph v1 schema + fixture, Google-pipeline supersession and grep gate (wave 3)
-- [ ] 01-04-PLAN.md — Rapier world, debug scene with never-sleeping spinner, transform cache, VEH-03 determinism harness (wave 3)
+- [x] 01-04-PLAN.md — Rapier world, debug scene with never-sleeping spinner, transform cache, VEH-03 determinism harness (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -187,7 +187,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Foundation | 3/7 | In Progress|  |
+| 1. Engine Foundation | 4/7 | In Progress|  |
 | 2. Vehicle Feel Core | 0/TBD | Not started | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
