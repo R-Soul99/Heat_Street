@@ -235,7 +235,14 @@ describe("applyAllInterpolated — index mapping", () => {
       expect(batched[i].position.x).toBeCloseTo(single.position.x, 12);
       expect(batched[i].position.y).toBeCloseTo(single.position.y, 12);
       expect(batched[i].position.z).toBeCloseTo(single.position.z, 12);
-      expect(batched[i].quaternion.angleTo(single.quaternion)).toBeCloseTo(0, 12);
+      // Component-wise, not `angleTo`: `angleTo` is `2 * acos(dot)` and `acos`
+      // is catastrophically ill-conditioned near 1, so two quaternions differing
+      // by one ULP in the dot product report an angle of ~3e-8 radians. That is
+      // a property of the measurement, not of the interpolation.
+      expect(batched[i].quaternion.x).toBeCloseTo(single.quaternion.x, 12);
+      expect(batched[i].quaternion.y).toBeCloseTo(single.quaternion.y, 12);
+      expect(batched[i].quaternion.z).toBeCloseTo(single.quaternion.z, 12);
+      expect(batched[i].quaternion.w).toBeCloseTo(single.quaternion.w, 12);
     }
   });
 });
