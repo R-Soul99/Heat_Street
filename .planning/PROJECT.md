@@ -56,6 +56,7 @@ value.
 - Reference touchstones for tone: Bullitt, Vanishing Point, The French Connection, The Seven-Ups, Gone in 60 Seconds (1974), Mad Max, The Italian Job, The Blues Brothers, Dukes of Hazzard, Starsky & Hutch, Smokey and the Bandit, The Cannonball Run.
 - Handling target is "arcade-realistic hybrid" — not full sim, not arcade-floaty. Open research item: benchmark against Driver/Burnout/The Crew once prototyping starts.
 - A detailed technical breakdown of core shared systems (vehicle physics, surface friction, camera rig, damage/destruction, NPC driving AI, checkpoint system) already exists in `heat-street-design-doc.md` and the original project draft — useful input for research and roadmap phases.
+- Phase 1 (Engine Foundation) complete (2026-09-08): fixed-timestep sim core, Rapier/Three.js wiring, and the rAF loop are in place and proven framerate-independent (VEH-03). This is the timing substrate the vehicle-feel work in Phase 2 builds on — no player-facing driving requirements are validated yet.
 
 ## Constraints
 
@@ -92,4 +93,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-08 after confirming map data source is clean*
+*Last updated: 2026-09-08 after Phase 1 (Engine Foundation) completion*
