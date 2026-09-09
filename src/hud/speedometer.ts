@@ -89,3 +89,244 @@ export function dampStep(damped: number, targetMph: number, dtMs: number): numbe
 export function readoutColour(dampedMph: number): string {
   return dampedMph >= REDLINE_MPH ? "#E8A33D" : "#F2EFE6";
 }
+
+/** The live gauge's public surface. No `toggle()` — the speedometer is always visible. */
+export interface Speedometer {
+  /**
+   * Called once per rAF. `groundSpeedMs` is `Math.hypot(linvel.x, linvel.z)`;
+   * `dtMs` comes from the render loop.
+   */
+  update(groundSpeedMs: number, dtMs: number): void;
+  /** Remove the gauge's SVG root from the DOM. */
+  dispose(): void;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** cx/cy of the dial, in the 200x200 viewBox's own coordinate space. */
+const CENTER = 100;
+
+/** Major ticks / numerals at every 20 mph from 0 to 160. */
+const MAJOR_STEP_MPH = 20;
+
+/** Minor ticks at every 5 mph, skipping majors. */
+const MINOR_STEP_MPH = 5;
+
+/** mph values whose numeral is inside the redline band and rendered in amber. */
+const AMBER_NUMERALS = new Set([120, 140, 160]);
+
+/** Point on a circle of radius `r` centred at (CENTER, CENTER) for a given needle-space angle. */
+function pointOnCircle(r: number, angleDeg: number): { x: number; y: number } {
+  // The needle is authored pointing straight up (toward -y) and rotated by
+  // `needleAngleDeg`, so 0 degrees here means straight up, matching the
+  // `rotate(angle 100 100)` convention used for the needle itself.
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: CENTER + r * Math.cos(rad), y: CENTER + r * Math.sin(rad) };
+}
+
+/**
+ * Create the SVG speedometer and append it to `document.body`.
+ *
+ * GATE-FREE: unlike `src/debug/tuning-panel.ts` and
+ * `src/debug/telemetry-hud.ts`, this factory does not check `DEBUG_ENABLED`.
+ * The speedometer is player-facing and always on (NAV-01) — mirroring
+ * `createHud`'s own "this module never checks `DEBUG_ENABLED` itself so it
+ * stays independently testable" comment, restated here for the player-facing
+ * reason rather than the dev-tool one.
+ */
+export function createSpeedometer(): Speedometer {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 200 200");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Speedometer");
+  // `font-variant-numeric:tabular-nums` is non-negotiable: the readout
+  // changes up to 60x/sec and proportional digits make the number visibly
+  // shimmer as `1` swaps for `8`. Tabular figures pin the glyph width.
+  svg.style.cssText =
+    "position:fixed;right:16px;bottom:16px;width:200px;height:200px;" +
+    "z-index:5;pointer-events:none;" +
+    'font-family:"Arial Narrow","Helvetica Neue",Helvetica,Arial,sans-serif;' +
+    "font-stretch:condensed;font-variant-numeric:tabular-nums";
+
+  // Dial face.
+  const face = document.createElementNS(SVG_NS, "circle");
+  face.setAttribute("cx", String(CENTER));
+  face.setAttribute("cy", String(CENTER));
+  face.setAttribute("r", "92");
+  face.setAttribute("fill", "#0B0B0C");
+  svg.appendChild(face);
+
+  // Bezel ring.
+  const bezel = document.createElementNS(SVG_NS, "circle");
+  bezel.setAttribute("cx", String(CENTER));
+  bezel.setAttribute("cy", String(CENTER));
+  bezel.setAttribute("r", "94");
+  bezel.setAttribute("stroke", "#2A2A2E");
+  bezel.setAttribute("stroke-width", "4");
+  bezel.setAttribute("fill", "none");
+  svg.appendChild(bezel);
+
+  // Redline arc, 120 -> 160 mph at r 84. Endpoints are computed from
+  // `needleAngleDeg` rather than a hardcoded `d` string, so the band can
+  // never drift from the needle mapping if the sweep constants ever change.
+  const redlineStart = pointOnCircle(84, needleAngleDeg(REDLINE_MPH));
+  const redlineEnd = pointOnCircle(84, needleAngleDeg(MAX_MPH));
+  const redline = document.createElementNS(SVG_NS, "path");
+  redline.setAttribute(
+    "d",
+    `M ${redlineStart.x} ${redlineStart.y} A 84 84 0 0 1 ${redlineEnd.x} ${redlineEnd.y}`,
+  );
+  redline.setAttribute("stroke", "#E8A33D");
+  redline.setAttribute("stroke-width", "6");
+  redline.style.strokeLinecap = "butt";
+  redline.setAttribute("fill", "none");
+  svg.appendChild(redline);
+
+  // Ticks and numerals, 0..160 by MINOR_STEP_MPH, majors every MAJOR_STEP_MPH.
+  for (let mph = 0; mph <= MAX_MPH; mph += MINOR_STEP_MPH) {
+    const isMajor = mph % MAJOR_STEP_MPH === 0;
+    const angle = needleAngleDeg(mph);
+    const outer = pointOnCircle(92, angle);
+    const tick = document.createElementNS(SVG_NS, "line");
+    tick.setAttribute("x1", String(outer.x));
+    tick.setAttribute("y1", String(outer.y));
+    if (isMajor) {
+      const inner = pointOnCircle(78, angle);
+      tick.setAttribute("x2", String(inner.x));
+      tick.setAttribute("y2", String(inner.y));
+      tick.setAttribute("stroke", "#F2EFE6");
+      tick.setAttribute("stroke-width", "3");
+    } else {
+      const inner = pointOnCircle(85, angle);
+      tick.setAttribute("x2", String(inner.x));
+      tick.setAttribute("y2", String(inner.y));
+      tick.setAttribute("stroke", "#6E6E73");
+      tick.setAttribute("stroke-width", "1.5");
+    }
+    svg.appendChild(tick);
+
+    if (isMajor) {
+      const numeralPos = pointOnCircle(62, angle);
+      const numeral = document.createElementNS(SVG_NS, "text");
+      numeral.setAttribute("x", String(numeralPos.x));
+      numeral.setAttribute("y", String(numeralPos.y));
+      numeral.style.fontSize = "14px";
+      numeral.style.fontWeight = "600";
+      numeral.style.textAnchor = "middle";
+      numeral.style.dominantBaseline = "central";
+      numeral.setAttribute("fill", AMBER_NUMERALS.has(mph) ? "#E8A33D" : "#F2EFE6");
+      numeral.textContent = String(mph);
+      svg.appendChild(numeral);
+    }
+  }
+
+  // Readout window.
+  const readoutWindow = document.createElementNS(SVG_NS, "rect");
+  readoutWindow.setAttribute("x", "69");
+  readoutWindow.setAttribute("y", "124");
+  readoutWindow.setAttribute("width", "62");
+  readoutWindow.setAttribute("height", "32");
+  readoutWindow.setAttribute("rx", "3");
+  readoutWindow.setAttribute("fill", "#16161A");
+  readoutWindow.setAttribute("stroke", "#2A2A2E");
+  readoutWindow.setAttribute("stroke-width", "1");
+  svg.appendChild(readoutWindow);
+
+  // Digital readout digits.
+  const digits = document.createElementNS(SVG_NS, "text");
+  digits.setAttribute("x", String(CENTER));
+  digits.setAttribute("y", "140");
+  digits.style.fontSize = "28px";
+  digits.style.fontWeight = "600";
+  digits.style.textAnchor = "middle";
+  digits.style.dominantBaseline = "central";
+  digits.setAttribute("fill", "#F2EFE6");
+  digits.textContent = "0";
+  svg.appendChild(digits);
+
+  // MPH unit label.
+  const mphLabel = document.createElementNS(SVG_NS, "text");
+  mphLabel.setAttribute("x", String(CENTER));
+  mphLabel.setAttribute("y", "168");
+  mphLabel.style.fontSize = "11px";
+  mphLabel.style.fontWeight = "600";
+  mphLabel.style.letterSpacing = "1px";
+  mphLabel.style.textAnchor = "middle";
+  mphLabel.setAttribute("fill", "#9A9AA0");
+  mphLabel.textContent = "MPH";
+  svg.appendChild(mphLabel);
+
+  // Needle casing + needle, authored pointing straight up (100,112)->(100,26)
+  // and rotated together each frame. The dark casing beneath the red needle
+  // is a mandatory legibility mitigation, not decoration: red-on-amber
+  // contrast is poor at 120+ mph where the needle overlaps the redline band,
+  // and the dark casing is what separates the needle from the band beneath
+  // it (02-UI-SPEC.md Color section).
+  const needleCasing = document.createElementNS(SVG_NS, "line");
+  needleCasing.setAttribute("x1", "100");
+  needleCasing.setAttribute("y1", "112");
+  needleCasing.setAttribute("x2", "100");
+  needleCasing.setAttribute("y2", "26");
+  needleCasing.setAttribute("stroke", "#0B0B0C");
+  needleCasing.setAttribute("stroke-width", "7");
+  needleCasing.style.strokeLinecap = "round";
+  svg.appendChild(needleCasing);
+
+  const needle = document.createElementNS(SVG_NS, "line");
+  needle.setAttribute("x1", "100");
+  needle.setAttribute("y1", "112");
+  needle.setAttribute("x2", "100");
+  needle.setAttribute("y2", "26");
+  needle.setAttribute("stroke", "#C8402F");
+  needle.setAttribute("stroke-width", "4");
+  needle.style.strokeLinecap = "round";
+  svg.appendChild(needle);
+
+  // Needle hub.
+  const hub = document.createElementNS(SVG_NS, "circle");
+  hub.setAttribute("cx", String(CENTER));
+  hub.setAttribute("cy", String(CENTER));
+  hub.setAttribute("r", "6");
+  hub.setAttribute("fill", "#2A2A2E");
+  hub.setAttribute("stroke", "#F2EFE6");
+  hub.setAttribute("stroke-width", "1.5");
+  svg.appendChild(hub);
+
+  document.body.appendChild(svg);
+
+  let damped = 0;
+
+  return {
+    update(groundSpeedMs: number, dtMs: number): void {
+      const mph = mphFromGroundSpeed(groundSpeedMs);
+      const angle = needleAngleDeg(mph);
+      const transform = `rotate(${angle} ${CENTER} ${CENTER})`;
+      // Instant, unsmoothed (D-13). The needle's rotation must never be
+      // animated with a CSS timing/easing property: 02-UI-SPEC.md forbids it
+      // because it would reintroduce refresh-rate-dependent lag between the
+      // physics and the display.
+      needleCasing.setAttribute("transform", transform);
+      needle.setAttribute("transform", transform);
+
+      damped = dampStep(damped, mph, dtMs);
+      // Damping is applied BEFORE rounding, so the integer cannot flicker
+      // between two neighbours mid-transit.
+      digits.textContent = String(Math.round(damped));
+      digits.setAttribute("fill", readoutColour(damped));
+
+      // DELIBERATELY runs on EVERY call — do not add a per-frame counter
+      // that skips writes until some accumulated duration has elapsed, the
+      // way `src/debug/profiler-hud.ts` throttles its own DOM write to
+      // roughly 7 Hz. A needle updating 7x/sec reads as broken hardware
+      // (02-UI-SPEC.md Interaction & Motion Contract). The cost is 2
+      // `setAttribute` calls plus 1 `textContent` write plus 1 `fill` write
+      // per frame — negligible against the 16.6ms frame budget in
+      // `docs/frame-budget.md`. Without this comment the next reader will
+      // "fix" it back in.
+    },
+
+    dispose(): void {
+      svg.remove();
+    },
+  };
+}
