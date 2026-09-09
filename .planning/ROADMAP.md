@@ -77,8 +77,37 @@ Plans:
   4. Player sees a live speedometer (needle + digital readout) that tracks actual vehicle speed
   5. Handling can be retuned live in an in-browser panel and re-verified against a scripted telemetry track (0-60, braking, skidpad, slalom, ramp) with no code edit — and a human playtest signs off that the car reads as a heavy muscle car
 
-**Plans**: TBD
+**Plans**: 10 plans
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Vehicle tuning contract: VehicleTuning shape, measured Config A/B defaults, range table, hostile-blob parser (wave 1)
+- [ ] 02-02-PLAN.md — Live input layer: latched keyboard, polled gamepad, DT-driven analog steering ramp (wave 1)
+- [ ] 02-03-PLAN.md — New src/hud/ tier and the retro analog SVG speedometer, pure maths plus DOM half (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-04-PLAN.md — Vehicle factory over Rapier's raycast controller plus the four clamped arcade assists (wave 2)
+- [ ] 02-05-PLAN.md — onDebugKey with a text-entry focus guard, and layering rules for src/input and src/hud (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-06-PLAN.md — Vehicle scene with a drivable ramp, plus chassis and wheel meshes with the wheel rig (wave 3)
+- [ ] 02-07-PLAN.md — Telemetry harness, six scripted routines and the CI regression suite (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-08-PLAN.md — Composition root: driveable slice on screen with live input and gauge, plus browser checkpoint (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-09-PLAN.md — lil-gui tuning panel with persistence and the in-browser telemetry panel (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 02-10-PLAN.md — Feel session, SC1/SC2/SC5 human sign-off, tuned defaults committed and re-verified (wave 6)
 
 ### Phase 3: Surfaces & Helicopter Camera
 
@@ -188,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 0/TBD | Not started | - |
+| 2. Vehicle Feel Core | 0/10 | Planned | - |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
