@@ -1,8 +1,8 @@
 /**
  * The single source of truth for vehicle handling configuration: the shape of
- * every tunable knob, the measured default values, and the per-field legal
- * range. Task 2 of this plan adds the pure parse/clamp functions that make a
- * user-editable `localStorage` blob safe to feed into Rapier.
+ * every tunable knob, the measured default values, the per-field legal range,
+ * and the pure parse/clamp functions that make a user-editable `localStorage`
+ * blob safe to feed into Rapier.
  *
  * Every default value below is `02-RESEARCH.md`'s measured Config A, with
  * Config B's deltas already applied — not a guess and not the three.js
@@ -387,3 +387,185 @@ export const TUNING_RANGES: {
     downforcePerSpeed2: { min: 0, max: 40, step: 0.5 },
   },
 };
+
+/** True for a plain, non-null, non-array object — the shape a group node must be. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** True for a `TuningRange` leaf (as opposed to a nested group of further leaves). */
+function isTuningRange(v: unknown): v is TuningRange {
+  return (
+    isPlainObject(v) &&
+    typeof v.min === "number" &&
+    typeof v.max === "number" &&
+    typeof v.step === "number"
+  );
+}
+
+/**
+ * Recursively walks `rangeNode` (a subtree of `TUNING_RANGES`), and for every
+ * leaf found there, clamps the corresponding value in `valueNode` (the
+ * matching subtree of a `VehicleTuning`) to `[min, max]`. A value that is not
+ * a finite number — `NaN`, `Infinity`, `-Infinity`, `null`, a string, a
+ * missing key, an object — is replaced with the corresponding value from
+ * `fallbackNode` (always a fresh `defaultTuning()` subtree) instead of being
+ * clamped to `min`, so a hostile blob cannot even influence WHICH boundary it
+ * lands on. Mutates `valueNode` in place.
+ */
+function clampNode(
+  valueNode: Record<string, unknown>,
+  rangeNode: Record<string, unknown>,
+  fallbackNode: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(rangeNode)) {
+    const rangeEntry = rangeNode[key];
+    if (isTuningRange(rangeEntry)) {
+      const raw = valueNode[key];
+      const fallback = fallbackNode[key];
+      const safe = typeof raw === "number" && Number.isFinite(raw) ? raw : (fallback as number);
+      valueNode[key] = Math.min(rangeEntry.max, Math.max(rangeEntry.min, safe));
+    } else if (isPlainObject(rangeEntry)) {
+      const nextValue = isPlainObject(valueNode[key])
+        ? (valueNode[key] as Record<string, unknown>)
+        : {};
+      valueNode[key] = nextValue;
+      clampNode(nextValue, rangeEntry, fallbackNode[key] as Record<string, unknown>);
+    }
+  }
+}
+
+/**
+ * ASVS V5 (Input Validation) control, half one of two. Walks `TUNING_RANGES`
+ * recursively and clamps every numeric leaf of `t` to its legal range,
+ * substituting the matching `defaultTuning()` value for anything that is not
+ * a finite number. This is the control that stops a `NaN` mass — or any other
+ * non-finite leaf — from ever reaching `world.step()`, where it would corrupt
+ * every body in the physics world, not just the vehicle's own. Mutates `t` in
+ * place and returns the same object reference for convenient chaining.
+ */
+export function clampTuning(t: VehicleTuning): VehicleTuning {
+  const fallback = defaultTuning() as unknown as Record<string, unknown>;
+  clampNode(
+    t as unknown as Record<string, unknown>,
+    TUNING_RANGES as unknown as Record<string, unknown>,
+    fallback,
+  );
+  return t;
+}
+
+/**
+ * The `localStorage` key this module's saved tuning blob lives under. Fixed
+ * by 02-UI-SPEC.md so the panel (plan 02-09) and any future reader agree on
+ * it without a second source of truth.
+ */
+export const TUNING_STORAGE_KEY = "heat-street.tuning.v1";
+
+/**
+ * Recursively copies only the leaves present in `parsedNode` onto
+ * `targetNode`, walking the shape described by `rangeNode` (a subtree of
+ * `TUNING_RANGES`). A leaf is copied RAW, with no type or range checking at
+ * this stage — `clampTuning` is the single place that sanitizes values, so
+ * there is exactly one code path a non-finite or out-of-range number can be
+ * fixed by, not two. Group keys that are missing or not a plain object in
+ * `parsedNode` are simply skipped, leaving `targetNode`'s existing (default)
+ * values in place for that whole subtree.
+ */
+function copyLeaves(
+  parsedNode: unknown,
+  targetNode: Record<string, unknown>,
+  rangeNode: Record<string, unknown>,
+): void {
+  if (!isPlainObject(parsedNode)) {
+    return;
+  }
+  for (const key of Object.keys(rangeNode)) {
+    const rangeEntry = rangeNode[key];
+    if (!(key in parsedNode)) {
+      continue;
+    }
+    if (isTuningRange(rangeEntry)) {
+      targetNode[key] = parsedNode[key];
+    } else if (isPlainObject(rangeEntry)) {
+      const nextTarget = isPlainObject(targetNode[key])
+        ? (targetNode[key] as Record<string, unknown>)
+        : {};
+      targetNode[key] = nextTarget;
+      copyLeaves(parsedNode[key], nextTarget, rangeEntry);
+    }
+  }
+}
+
+/** The four required top-level group keys of a `VehicleTuning` object. */
+const REQUIRED_GROUP_KEYS = ["chassis", "wheels", "drive", "assists"] as const;
+
+/**
+ * ASVS V5 (Input Validation) control, half two of two. Parses a raw
+ * `localStorage` string into a fully-validated `VehicleTuning`, or `null` if
+ * the input cannot be trusted even partially. This is the boundary D-17's
+ * persisted tuning blob crosses: the blob is user-editable from devtools and
+ * survives across sessions, and on the very next fixed tick a `NaN` mass or
+ * an `Infinity` friction value would be written into
+ * `chassis.setAdditionalMassProperties` / the per-wheel Rapier setters,
+ * corrupting every body in `world.step()` — not just this vehicle.
+ *
+ * Returns `null` for: `null` input; a `JSON.parse` throw (wrapped in
+ * try/catch so this function itself NEVER throws); a parsed value that is not
+ * a plain, non-array object; or an object missing any of the four required
+ * group keys (`chassis`, `wheels`, `drive`, `assists`). Otherwise, starts from
+ * a fresh `defaultTuning()`, copies over only the leaves that exist in the
+ * parsed object at the matching path, runs `clampTuning` over the result, and
+ * returns it. The input string itself is discarded at this boundary — nothing
+ * downstream of this function ever sees the raw text again, and the returned
+ * object is always fully populated and every leaf is a finite, in-range
+ * number.
+ */
+export function parseSavedTuning(raw: string | null): VehicleTuning | null {
+  if (raw === null) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!isPlainObject(parsed)) {
+    return null;
+  }
+
+  for (const groupKey of REQUIRED_GROUP_KEYS) {
+    if (!(groupKey in parsed)) {
+      return null;
+    }
+  }
+
+  const result = defaultTuning();
+  copyLeaves(
+    parsed,
+    result as unknown as Record<string, unknown>,
+    TUNING_RANGES as unknown as Record<string, unknown>,
+  );
+  clampTuning(result);
+  return result;
+}
+
+/**
+ * Serializes a `VehicleTuning` for persistence under `TUNING_STORAGE_KEY`.
+ *
+ * DEVIATION from 02-RESEARCH.md lines 1019-1033 and 02-UI-SPEC.md
+ * "Persistence", both of which recommend `gui.save(true)` / `gui.load(obj,
+ * true)` for D-17's localStorage round trip. `gui.save()`'s own format
+ * couples the stored blob to lil-gui controller paths, and
+ * `three/addons/libs/lil-gui.module.min.js` cannot be imported under
+ * Vitest's `node` test environment (no DOM), which would make this file's own
+ * hostile-blob suite (`tests/tuning-persist.test.ts`, the D-17 security
+ * control) unrunnable. Persisting the plain `VehicleTuning` object directly —
+ * same storage key, same round-trip behaviour — keeps the same behaviour for
+ * the player while keeping the validation path pure and Node-testable.
+ */
+export function serializeTuning(t: VehicleTuning): string {
+  return JSON.stringify(t);
+}

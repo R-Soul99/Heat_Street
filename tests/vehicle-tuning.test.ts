@@ -13,7 +13,11 @@ function walkLeaves(
   value: Record<string, unknown>,
   ranges: Record<string, unknown>,
   path: string[],
-  visit: (path: string[], value: unknown, range: { min: number; max: number; step: number }) => void,
+  visit: (
+    path: string[],
+    value: unknown,
+    range: { min: number; max: number; step: number },
+  ) => void,
 ): void {
   for (const key of Object.keys(ranges)) {
     const rangeEntry = ranges[key] as Record<string, unknown>;
@@ -31,12 +35,7 @@ function walkLeaves(
         rangeEntry as unknown as { min: number; max: number; step: number },
       );
     } else {
-      walkLeaves(
-        value[key] as Record<string, unknown>,
-        rangeEntry,
-        nextPath,
-        visit,
-      );
+      walkLeaves(value[key] as Record<string, unknown>, rangeEntry, nextPath, visit);
     }
   }
 }
@@ -80,7 +79,11 @@ describe("TUNING_RANGES", () => {
     expect(TUNING_RANGES.wheels.suspensionRelaxation).toEqual({ min: 0.2, max: 4, step: 0.05 });
     expect(TUNING_RANGES.wheels.frictionSlip).toEqual({ min: 0.4, max: 3, step: 0.05 });
     expect(TUNING_RANGES.wheels.rearSideFriction).toEqual({ min: 0, max: 0.3, step: 0.005 });
-    expect(TUNING_RANGES.drive.handbrakeRearSideFriction).toEqual({ min: 0, max: 0.05, step: 0.001 });
+    expect(TUNING_RANGES.drive.handbrakeRearSideFriction).toEqual({
+      min: 0,
+      max: 0.05,
+      step: 0.001,
+    });
     expect(TUNING_RANGES.assists.autoLevelGain).toEqual({ min: 0, max: 2, step: 0.05 });
     expect(TUNING_RANGES.assists.bodyRollGain).toEqual({ min: 0, max: 0.15, step: 0.005 });
     expect(TUNING_RANGES.assists.bodyRollMaxDeg).toEqual({ min: 0, max: 25, step: 1 });
