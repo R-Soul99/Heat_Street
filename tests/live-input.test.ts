@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { NEUTRAL } from "../src/core/input-tape";
 import { SimClock } from "../src/core/sim-clock";
+import { readGamepad } from "../src/input/gamepad";
+import { createKeyboard } from "../src/input/keyboard";
 import { LiveInputSource } from "../src/input/live-input";
 
 /** Plain KeyState-shaped state a test can mutate mid-run, plus a bound reader. */
@@ -166,5 +168,92 @@ describe("LiveInputSource — gamepad passthrough", () => {
     expect(Number.isFinite(frame.steer)).toBe(true);
     expect(Number.isFinite(frame.throttle)).toBe(true);
     expect(Number.isFinite(frame.brake)).toBe(true);
+  });
+});
+
+// Ownership note: this file intentionally does NOT add a `src/input/**` rule
+// to tests/layering.test.ts — plan 02-05 owns that file and adds the
+// `src/input/**` and `src/hud/**` rule blocks together once both directories
+// exist (02-PATTERNS.md "tests/layering.test.ts (MODIFY)").
+describe("src/input is importable in a bare Node environment", () => {
+  it("this suite runs under Vitest's node environment with no document or localStorage", () => {
+    // Purity-is-the-proof, in the style of tests/profiler-hud.test.ts: the
+    // fact that every import at the top of this file — including
+    // src/input/keyboard.ts and src/input/gamepad.ts — already succeeded, and
+    // every case above already ran, with neither of these globals defined, IS
+    // the proof that src/input/** never touches a DOM at module scope.
+    //
+    // NOTE: modern Node ships a partial built-in `navigator` global (typeof
+    // "object", no Gamepad API) rather than omitting it entirely — verified
+    // directly against this repo's pinned Node/Vitest by inspecting
+    // `Object.getOwnPropertyDescriptor(globalThis, "navigator")`. The relevant
+    // guarantee for this phase is that `readGamepad()` degrades to `null`
+    // either way, asserted below, not that `typeof navigator` is "undefined".
+    expect(typeof document).toBe("undefined");
+    expect(typeof localStorage).toBe("undefined");
+  });
+
+  it("createKeyboard() is importable with zero listeners registered until called", () => {
+    // Importing the module (top of this file) registered nothing — there is
+    // no `document` in this environment for a listener to attach to. Calling
+    // the factory itself is exercised indirectly via `new LiveInputSource()`
+    // below, whose lazy default is exactly this function.
+    expect(typeof createKeyboard).toBe("function");
+  });
+
+  it("readGamepad() returns null when the Gamepad API is unavailable, rather than throwing", () => {
+    // This Node environment's built-in `navigator` has no `getGamepads`
+    // method, which readGamepad() must treat identically to `navigator` being
+    // absent altogether — both are "no Gamepad API here", never a throw.
+    expect(() => readGamepad()).not.toThrow();
+    expect(readGamepad()).toBeNull();
+  });
+
+  it("readGamepad()'s deadzone rescales a raw 0.05 stick to exactly 0", () => {
+    // Direct exercise of gamepad.ts's own deadzone maths (the case the
+    // "gamepad deadzone" test above could not reach, since that describe
+    // block's imports are limited to live-input.ts/input-tape.ts/sim-clock.ts).
+    // Node's built-in `navigator` is a configurable getter (verified above),
+    // so `Object.defineProperty` can override it for one assertion and the
+    // original descriptor is restored immediately after.
+    const fakePad = {
+      axes: [0.05],
+      buttons: [{ pressed: false, value: 0 }],
+    } as unknown as Gamepad;
+    const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "navigator", {
+      value: { getGamepads: () => [fakePad] },
+      configurable: true,
+    });
+    try {
+      const snapshot = readGamepad();
+      expect(snapshot).not.toBeNull();
+      expect(snapshot?.steer).toBe(0);
+    } finally {
+      if (original) {
+        Object.defineProperty(globalThis, "navigator", original);
+      } else {
+        delete (globalThis as { navigator?: unknown }).navigator;
+      }
+    }
+  });
+
+  it("new LiveInputSource() with no injected deps does not throw when document is undefined", () => {
+    // Ships as: src/input/keyboard.ts's createKeyboard() detects the missing
+    // DOM (`typeof document === "undefined"`) and returns an inert,
+    // all-neutral handle instead of calling addEventListener, and
+    // src/input/gamepad.ts's readGamepad() returns null whenever the Gamepad
+    // API is unavailable. Together these mean LiveInputSource's lazy defaults
+    // never throw outside a browser — construction is NOT deferred.
+    const source = new LiveInputSource();
+    expect(() => source.sampleForTick(0)).not.toThrow();
+    expect(source.sampleForTick(0)).toEqual(NEUTRAL);
+  });
+
+  it("sampling never throws even with no injected deps across several ticks", () => {
+    const source = new LiveInputSource();
+    for (let t = 0; t < 5; t++) {
+      expect(() => source.sampleForTick(t)).not.toThrow();
+    }
   });
 });
