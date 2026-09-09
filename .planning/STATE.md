@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-09T17:54:56.650Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-09T18:14:27.124Z"
 last_activity: 2026-09-09
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 8
+  completed_plans: 9
   percent: 13
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-09-09
 
-Progress: [█████░░░░░] 47%
+Progress: [█████░░░░░] 53%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [█████░░░░░] 47%
 > than into the Per-plan detail table above. Move it up and refresh the velocity
 > rollup by hand after each plan, as was done for P04, P05, P06 and P07.
 | Phase 02 P01 | 20 min | 2 tasks | 3 files |
+| Phase 02 P02 | 20 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ Recent decisions affecting current work:
 - [Phase 01-07]: Stall handling needs a third, environment-agnostic mechanism beyond clamp + visibilitychange -- a same-frame wall-clock dt-spike (>2000ms) rebaselines immediately, before stepsFor runs, because visibilitychange is not guaranteed to fire promptly (or at all) in every OS/window-manager configuration
 - [Phase 02-01]: CLAUDE.md's tuning table (mass 10, stiffness 24, frictionSlip 1000, engine force +/-30) is superseded by 02-RESEARCH.md's measured Config A/B -- documented as a DEVIATION comment in vehicle-tuning.ts; the fix belongs in .planning/research/STACK.md since CLAUDE.md lines 28-219 are generated
 - [Phase 02-01]: serializeTuning persists the plain VehicleTuning object rather than lil-gui's own gui.save() format, because lil-gui cannot be imported under Vitest's node environment and that would make the D-17 security test suite unrunnable
+- [Phase 02-02]: createKeyboard() returns an inert all-neutral handle rather than throwing when document is undefined, so new LiveInputSource() with zero injected deps is always safe to construct outside a browser
+- [Phase 02-02]: Node's built-in navigator global is a partial object (no getGamepads), not absent -- readGamepad() must degrade to null in both cases, verified empirically rather than assumed
 
 ### Pending Todos
 
@@ -136,6 +139,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-09T17:54:56.634Z
-Stopped at: Completed 02-01-PLAN.md
-Resume file: .planning/phases/02-vehicle-feel-core/02-02-PLAN.md
+Last session: 2026-09-09T18:14:27.096Z
+Stopped at: Completed 02-02-PLAN.md
+Resume file: .planning/phases/02-vehicle-feel-core/02-03-PLAN.md
