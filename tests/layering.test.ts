@@ -74,8 +74,12 @@ function format(hits: readonly Hit[]): string {
 }
 
 describe("layering — the scan itself", () => {
-  it("found at least ten source files, so a broken glob cannot make this suite trivially green", () => {
-    expect(FILES.length).toBeGreaterThanOrEqual(10);
+  it("found at least twenty source files, so a broken glob cannot make this suite trivially green", () => {
+    // Raised from 10 to 20 in plan 02-05: Phase 2 adds roughly ten new source
+    // files (src/input/**, src/hud/**, src/physics/vehicle*.ts, etc.), so the
+    // floor stays a meaningful guard against a broken glob rather than a
+    // value that was only ever true in Phase 1.
+    expect(FILES.length).toBeGreaterThanOrEqual(20);
   });
 });
 
@@ -124,6 +128,49 @@ describe("layering — src/render never writes simulation state (T-01-15)", () =
 
   for (const file of renderFiles) {
     it(`${file.path} contains none of world.step / applyImpulse / setTranslation / setRotation / setNextKinematic`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});
+
+describe("layering — src/hud never imports an engine and never writes simulation state (T-02-14)", () => {
+  const hudFiles = FILES.filter((f) => f.path.startsWith("src/hud/"));
+  // Combines the src/core/ engine-import half with the src/render/ write-ban
+  // half. Deliberately DROPS \bdocument\. — the HUD legitimately calls
+  // document.createElementNS to build its SVG. Deliberately does NOT
+  // duplicate a \bperformance\. check — lines 140-149 below already cover
+  // wall-clock reads repo-wide. Do not "tighten" this rule to add either
+  // back; both omissions are load-bearing for a HUD built with real DOM
+  // elements, not a gauge on where the check gets tighter.
+  const FORBIDDEN =
+    /from\s+["'](three|@dimforge\/rapier3d)["']|\b(world\.step|applyImpulse|setTranslation|setRotation|setNextKinematic)\b/;
+
+  it("scanned at least one src/hud file", () => {
+    expect(hudFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of hudFiles) {
+    it(`${file.path} imports nothing from three/@dimforge/rapier3d and writes no simulation state`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});
+
+describe("layering — src/input never imports three and never writes simulation state (T-02-15)", () => {
+  const inputFiles = FILES.filter((f) => f.path.startsWith("src/input/"));
+  // The repo-wide performance.now(/Date.now( rule at lines 140-149 below is
+  // what mechanically prevents a wall-clock-driven steering ramp in this
+  // tier — that rule only works because src/input/ is not on its exception
+  // list, so it is not duplicated here.
+  const FORBIDDEN =
+    /from\s+["']three["']|\b(world\.step|applyImpulse|setTranslation|setRotation|setNextKinematic)\b/;
+
+  it("scanned at least one src/input file", () => {
+    expect(inputFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of inputFiles) {
+    it(`${file.path} does not import three and writes no simulation state`, () => {
       expect(format(findHits(file, FORBIDDEN))).toBe("");
     });
   }
