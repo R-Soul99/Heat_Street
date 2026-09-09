@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { parseDebugFlag } from "../src/debug/debug-gate";
+import {
+  DEBUG_ENABLED,
+  isTextEntryFocused,
+  onDebugKey,
+  onDebugToggle,
+  parseDebugFlag,
+} from "../src/debug/debug-gate";
 
 /**
- * Only `parseDebugFlag` is exercised here. `DEBUG_ENABLED` and `onDebugToggle`
- * touch `location` and `addEventListener`, which do not exist in Vitest's
- * `node` environment — see `vitest.config.ts` (`test.environment: "node"`,
- * shared by every Rapier test in this repo). `debug-gate.ts` guards its
- * `location.search` read with a `typeof` check specifically so that importing
- * the module here does not throw.
+ * Only `parseDebugFlag` and `isTextEntryFocused` are fully exercised here.
+ * `DEBUG_ENABLED`, `onDebugKey` and `onDebugToggle` touch `location` and
+ * `addEventListener`, which do not exist in Vitest's `node` environment — see
+ * `vitest.config.ts` (`test.environment: "node"`, shared by every Rapier test
+ * in this repo). `debug-gate.ts` guards its `location.search` read with a
+ * `typeof` check specifically so that importing the module here does not
+ * throw, and the same absence of a DOM is what lets the "registers zero
+ * listeners" case below run safely: `DEBUG_ENABLED` is `false` in this
+ * environment, so both functions return before ever touching
+ * `addEventListener`.
  */
 describe("parseDebugFlag", () => {
   it('is true for "?debug"', () => {
@@ -46,5 +56,67 @@ describe("parseDebugFlag", () => {
       parseDebugFlag("?debug");
     }
     expect(parseDebugFlag("?debug")).toBe(true);
+  });
+});
+
+describe("isTextEntryFocused", () => {
+  it("is false for null", () => {
+    const result = isTextEntryFocused(null);
+    expect(result).toBe(false);
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("is true for a fake INPUT element", () => {
+    const result = isTextEntryFocused({ tagName: "INPUT" } as unknown as Element);
+    expect(result).toBe(true);
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("is true for a fake TEXTAREA element", () => {
+    const result = isTextEntryFocused({ tagName: "TEXTAREA" } as unknown as Element);
+    expect(result).toBe(true);
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("is true for a fake contenteditable DIV", () => {
+    const result = isTextEntryFocused({
+      tagName: "DIV",
+      isContentEditable: true,
+    } as unknown as Element);
+    expect(result).toBe(true);
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("is false for a fake non-contenteditable DIV", () => {
+    const result = isTextEntryFocused({
+      tagName: "DIV",
+      isContentEditable: false,
+    } as unknown as Element);
+    expect(result).toBe(false);
+    expect(typeof result).toBe("boolean");
+  });
+
+  it("is false for a fake CANVAS element", () => {
+    const result = isTextEntryFocused({ tagName: "CANVAS" } as unknown as Element);
+    expect(result).toBe(false);
+    expect(typeof result).toBe("boolean");
+  });
+});
+
+describe("onDebugKey / onDebugToggle", () => {
+  it("are both exported functions", () => {
+    expect(typeof onDebugKey).toBe("function");
+    expect(typeof onDebugToggle).toBe("function");
+  });
+
+  it("register zero listeners and do not throw when DEBUG_ENABLED is false (the Node default)", () => {
+    // Mirrors the "registers zero listeners in a normal build" property the
+    // rest of this suite already relies on: in this Node environment
+    // DEBUG_ENABLED is false, so calling either function must return
+    // immediately without touching `addEventListener` (which does not exist
+    // here) or throwing.
+    expect(DEBUG_ENABLED).toBe(false);
+    expect(() => onDebugKey("KeyG", () => {})).not.toThrow();
+    expect(() => onDebugToggle(() => {})).not.toThrow();
   });
 });
