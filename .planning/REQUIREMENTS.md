@@ -9,7 +9,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 
 ### Vehicle & Handling
 
-- [ ] **VEH-01**: Player can drive a car with weighty, momentum-driven handling — late braking has real consequences, understeer/oversteer are readable and controllable
+- [x] **VEH-01**: Player can drive a car with weighty, momentum-driven handling — late braking has real consequences, understeer/oversteer are readable and controllable
 - [ ] **VEH-02**: Player steers via smoothed/analog input on both keyboard and gamepad
 - [x] **VEH-03**: Vehicle physics run on a fixed timestep so lap and medal times are framerate-independent
 - [ ] **VEH-04**: Vehicle can go airborne off jumps/ramps and lands stably without the physics breaking
@@ -116,7 +116,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VEH-01 | Phase 2 | Pending |
+| VEH-01 | Phase 2 | Complete |
 | VEH-02 | Phase 2 | Pending |
 | VEH-03 | Phase 1 | Complete |
 | VEH-04 | Phase 2 | Pending |

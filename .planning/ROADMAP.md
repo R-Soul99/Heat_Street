@@ -83,7 +83,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Vehicle tuning contract: VehicleTuning shape, measured Config A/B defaults, range table, hostile-blob parser (wave 1)
+- [x] 02-01-PLAN.md — Vehicle tuning contract: VehicleTuning shape, measured Config A/B defaults, range table, hostile-blob parser (wave 1)
 - [ ] 02-02-PLAN.md — Live input layer: latched keyboard, polled gamepad, DT-driven analog steering ramp (wave 1)
 - [ ] 02-03-PLAN.md — New src/hud/ tier and the retro analog SVG speedometer, pure maths plus DOM half (wave 1)
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 0/10 | Planned | - |
+| 2. Vehicle Feel Core | 1/10 | In Progress|  |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
