@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-09-09T19:05:21.096Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-09T19:18:41.919Z"
 last_activity: 2026-09-09
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 13
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Ready to execute
 Last activity: 2026-09-09
 
-Progress: [███████░░░] 65%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [███████░░░] 65%
 | Phase 02 P02 | 20 min | 3 tasks | 4 files |
 | Phase 02 P03 | 9 min | 2 tasks | 2 files |
 | Phase 02 P04 | 40 min | 2 tasks | 3 files |
+| Phase 02 P05 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Recent decisions affecting current work:
 - [Phase 02-04]: Rapier setAdditionalMassProperties needs recomputeMassPropertiesFromColliders() to take effect before the next world.step() — Otherwise tick 0's applyTorqueImpulse divides by the tiny collider-default inertia instead of the cached principal inertia, inflating angular response ~180x on the first tick
 - [Phase 02-04]: Auto-level assist torque axis corrected to (-up.z, 0, up.x), the negation of 02-RESEARCH.md/02-04-PLAN.md's stated (up.z, 0, -up.x) — Verified empirically: the documented sign drives a tilted chassis further from level instead of recovering
 - [Phase 02-04]: boxPrincipalInertia's Config A test anchor corrected from the documented {3080,3480,512} to the formula-derived {3078.7,3426.7,614.7} — The stated anchor's I.y/I.z do not match evaluating the (correct, unambiguous) box-inertia formula against Config A's actual shipped mass/halfExtents
+- [Phase 02-05]: isTextEntryFocused falls back to a duck-typed tagName/isContentEditable check when HTMLInputElement/HTMLTextAreaElement/HTMLElement are undefined (Node), rather than requiring jsdom
+- [Phase 02-05]: src/hud/** layering rule deliberately omits a document. ban (HUD legitimately calls document.createElementNS) and does not duplicate the repo-wide performance. ban -- both omissions commented in place
 
 ### Pending Todos
 
@@ -146,6 +149,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-09T19:05:21.078Z
-Stopped at: Completed 02-04-PLAN.md
-Resume file: .planning/phases/02-vehicle-feel-core/02-05-PLAN.md
+Last session: 2026-09-09T19:18:41.908Z
+Stopped at: Completed 02-05-PLAN.md
+Resume file: None

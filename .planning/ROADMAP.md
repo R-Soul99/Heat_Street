@@ -90,7 +90,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 02-04-PLAN.md — Vehicle factory over Rapier's raycast controller plus the four clamped arcade assists (wave 2)
-- [ ] 02-05-PLAN.md — onDebugKey with a text-entry focus guard, and layering rules for src/input and src/hud (wave 2)
+- [x] 02-05-PLAN.md — onDebugKey with a text-entry focus guard, and layering rules for src/input and src/hud (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 4/10 | In Progress|  |
+| 2. Vehicle Feel Core | 5/10 | In Progress|  |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
