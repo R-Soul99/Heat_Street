@@ -4,6 +4,7 @@ import { defaultTuning } from "../src/core/vehicle-tuning";
 import { sampleVehicle, type VehicleSample } from "../src/physics/vehicle";
 import { createVehicleScene, RAMP_APPROACH_Z, SPAWN } from "../src/physics/vehicle-scene";
 import { createWorld } from "../src/physics/world";
+import { createVehicleView } from "../src/render/vehicle-view";
 
 /**
  * The VEH-04 / ROADMAP SC3 proof: "hit a ramp at speed and land driveable".
@@ -85,6 +86,52 @@ describe("createVehicleScene: structure", () => {
     expect(scene.bodies.length).toBe(1);
     expect(scene.bodies[0]).toBe(scene.vehicle.body);
   });
+
+  it("spawns the chassis exactly at the exported SPAWN point, well clear of the ramp", () => {
+    const world = createWorld();
+    const scene = createVehicleScene(world, defaultTuning());
+
+    const t = scene.vehicle.body.translation();
+    expect(t.x).toBeCloseTo(SPAWN.x, 6);
+    expect(t.y).toBeCloseTo(SPAWN.y, 6);
+    expect(t.z).toBeCloseTo(SPAWN.z, 6);
+    // "Well clear of the ramp" per this plan's <action>: enough approach
+    // distance for the car to build real speed before reaching the ramp.
+    expect(SPAWN.z - RAMP_APPROACH_Z).toBeGreaterThan(20);
+  });
+});
+
+describe("createVehicleView: parameter validation", () => {
+  it("throws a RangeError for a zero or negative wheelRadius", () => {
+    expect(() => createVehicleView(0, 0.85, 1.55, { x: 0.95, y: 0.5, z: 2.35 })).toThrow(
+      RangeError,
+    );
+    expect(() => createVehicleView(-0.36, 0.85, 1.55, { x: 0.95, y: 0.5, z: 2.35 })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("throws a RangeError for a zero or negative halfTrack or halfWheelbase", () => {
+    expect(() => createVehicleView(0.36, 0, 1.55, { x: 0.95, y: 0.5, z: 2.35 })).toThrow(
+      RangeError,
+    );
+    expect(() => createVehicleView(0.36, 0.85, -1.55, { x: 0.95, y: 0.5, z: 2.35 })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("throws a RangeError for a non-positive chassisHalfExtents component", () => {
+    expect(() => createVehicleView(0.36, 0.85, 1.55, { x: 0, y: 0.5, z: 2.35 })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("builds a chassis mesh plus four child wheel meshes for valid parameters", () => {
+    const view = createVehicleView(0.36, 0.85, 1.55, { x: 0.95, y: 0.5, z: 2.35 });
+    expect(view.meshes.length).toBe(1);
+    expect(view.meshes[0].children.length).toBe(4);
+    view.dispose();
+  });
 });
 
 describe("createVehicleScene: rest state", () => {
@@ -128,9 +175,7 @@ describe("createVehicleScene: ramp geometry (02-RESEARCH.md Open Question 2)", (
     // past the crest and the car has fallen back toward rest height. A car
     // that struck a vertical leading edge would never enter this window
     // with any forward speed at all -- it would stop dead at the wall.
-    const firstAirborneIndex = samples.findIndex(
-      (s, i) => i >= rampFootIndex && s.contacts === 0,
-    );
+    const firstAirborneIndex = samples.findIndex((s, i) => i >= rampFootIndex && s.contacts === 0);
     expect(firstAirborneIndex).toBeGreaterThan(rampFootIndex);
     const climb = samples.slice(rampFootIndex, firstAirborneIndex);
     expect(climb.length).toBeGreaterThan(5);
@@ -165,9 +210,7 @@ describe("createVehicleScene: ramp geometry (02-RESEARCH.md Open Question 2)", (
     );
     expect(launchIndex).toBeGreaterThan(-1);
 
-    const touchdownIndex = samples.findIndex(
-      (s, i) => i > launchIndex && s.contacts > 0,
-    );
+    const touchdownIndex = samples.findIndex((s, i) => i > launchIndex && s.contacts > 0);
     expect(touchdownIndex).toBeGreaterThan(-1);
 
     // 0.5s of sim time is exactly 30 ticks at the fixed 60Hz timestep.

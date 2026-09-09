@@ -114,14 +114,27 @@ function buildGround(world: RAPIER.World): void {
  * ever found to catch under some other tuning.
  */
 function buildRamp(world: RAPIER.World): void {
-  // prettier-ignore
+  // Six points, XYZ-interleaved: knife edge (left, right), crest back-base
+  // (left, right), crest top (left, right) -- see the doc comment above.
   const points = new Float32Array([
-    -RAMP_HALF_WIDTH, 0,           RAMP_APPROACH_Z, // knife edge, left
-     RAMP_HALF_WIDTH, 0,           RAMP_APPROACH_Z, // knife edge, right
-    -RAMP_HALF_WIDTH, 0,           RAMP_CREST_Z,    // crest back-base, left
-     RAMP_HALF_WIDTH, 0,           RAMP_CREST_Z,    // crest back-base, right
-    -RAMP_HALF_WIDTH, RAMP_HEIGHT, RAMP_CREST_Z,    // crest top, left
-     RAMP_HALF_WIDTH, RAMP_HEIGHT, RAMP_CREST_Z,    // crest top, right
+    -RAMP_HALF_WIDTH,
+    0,
+    RAMP_APPROACH_Z,
+    RAMP_HALF_WIDTH,
+    0,
+    RAMP_APPROACH_Z,
+    -RAMP_HALF_WIDTH,
+    0,
+    RAMP_CREST_Z,
+    RAMP_HALF_WIDTH,
+    0,
+    RAMP_CREST_Z,
+    -RAMP_HALF_WIDTH,
+    RAMP_HEIGHT,
+    RAMP_CREST_Z,
+    RAMP_HALF_WIDTH,
+    RAMP_HEIGHT,
+    RAMP_CREST_Z,
   ]);
 
   const desc = RAPIER.ColliderDesc.convexHull(points);
