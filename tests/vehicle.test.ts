@@ -1,8 +1,10 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import { NEUTRAL } from "../src/core/input-tape";
+import { DT } from "../src/core/sim-clock";
 import { defaultTuning, type VehicleTuning } from "../src/core/vehicle-tuning";
 import { createVehicle, FL, FR, RL, RR, sampleVehicle } from "../src/physics/vehicle";
+import { applyAssists, boxPrincipalInertia } from "../src/physics/vehicle-assists";
 import { createWorld } from "../src/physics/world";
 
 /**
@@ -235,5 +237,156 @@ describe("createVehicle: applyTuning retunes live without rebuilding", () => {
     expect(vehicle.controller.wheelFrictionSlip(0)).toBeCloseTo(retuned.wheels.frictionSlip, 6);
     expect(vehicle.body).toBe(bodyBefore);
     expect(world.bodies.len()).toBe(bodyCountBefore);
+  });
+});
+
+/**
+ * Coverage for the free `applyAssists` function, driven directly with a
+ * synthetic chassis and no full `Vehicle` — per 02-PATTERNS.md, this is
+ * exactly why `applyAssists` is a free function rather than a method.
+ */
+describe("vehicle-assists", () => {
+  /** A dynamic chassis body matching `tuning`'s mass/shape, with no wheels. */
+  function makeFreeChassis(world: RAPIER.World, tuning: VehicleTuning): RAPIER.RigidBody {
+    const c = tuning.chassis;
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 5, 0).setCanSleep(false),
+    );
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(c.halfExtents.x, c.halfExtents.y, c.halfExtents.z),
+      body,
+    );
+    const inertia = boxPrincipalInertia(c.mass, c.halfExtents);
+    body.setAdditionalMassProperties(
+      c.mass,
+      c.comOffset,
+      inertia,
+      { x: 0, y: 0, z: 0, w: 1 },
+      true,
+    );
+    // Without this, the total mass properties (additional + collider) are
+    // not applied until the next world.step() and applyTorqueImpulse below
+    // would divide by the tiny collider-default inertia instead — see the
+    // matching comment in src/physics/vehicle.ts.
+    body.recomputeMassPropertiesFromColliders();
+    return body;
+  }
+
+  /** World-space Y component of the chassis local up axis (0,1,0) rotated by `q`. */
+  function upY(q: { x: number; y: number; z: number; w: number }): number {
+    return 1 - 2 * (q.x * q.x + q.z * q.z);
+  }
+
+  it("auto-level assist is gated to airborne only", () => {
+    const tuning = defaultTuning();
+    const I = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
+
+    // Grounded (contacts = 2): must be a true no-op on angular velocity.
+    const worldA = createWorld();
+    const bodyA = makeFreeChassis(worldA, tuning);
+    bodyA.setAngvel({ x: 0.5, y: 0, z: 0.2 }, true);
+    const vcA = worldA.createVehicleController(bodyA);
+    const before = bodyA.angvel();
+    applyAssists(bodyA, vcA, 2, tuning.assists, I);
+    const after = bodyA.angvel();
+    expect(after.x).toBe(before.x);
+    expect(after.y).toBe(before.y);
+    expect(after.z).toBe(before.z);
+
+    // Airborne (contacts = 0) with a tilted chassis: repeated ticks reduce
+    // tilt (`upY` climbs back toward 1 = level).
+    const worldB = createWorld();
+    const bodyB = makeFreeChassis(worldB, tuning);
+    const tiltRad = Math.PI / 3; // 60 degrees, tipped about the local X axis
+    bodyB.setRotation({ x: Math.sin(tiltRad / 2), y: 0, z: 0, w: Math.cos(tiltRad / 2) }, true);
+    const vcB = worldB.createVehicleController(bodyB);
+    const upYBefore = upY(bodyB.rotation());
+
+    for (let i = 0; i < 30; i++) {
+      applyAssists(bodyB, vcB, 0, tuning.assists, I);
+      worldB.step();
+    }
+    const upYAfter = upY(bodyB.rotation());
+
+    expect(upYAfter).toBeGreaterThan(upYBefore);
+  });
+
+  it("body-roll assist respects its cutoff", () => {
+    const tuning = defaultTuning();
+    const I = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
+    const world = createWorld();
+    const body = makeFreeChassis(world, tuning);
+
+    // Roll the chassis (rotation about the local forward/Z axis) past the
+    // cutoff before ever calling applyAssists.
+    const overRad = ((tuning.assists.bodyRollMaxDeg + 5) * Math.PI) / 180;
+    body.setRotation({ x: 0, y: 0, z: Math.sin(overRad / 2), w: Math.cos(overRad / 2) }, true);
+    const vc = world.createVehicleController(body);
+
+    const before = body.angvel();
+    applyAssists(body, vc, 4, tuning.assists, I);
+    const after = body.angvel();
+
+    expect(after.x).toBe(before.x);
+    expect(after.y).toBe(before.y);
+    expect(after.z).toBe(before.z);
+  });
+
+  it("body-roll torque is capped", () => {
+    const tuning = defaultTuning();
+    const I = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
+    const world = createWorld();
+    const body = makeFreeChassis(world, tuning);
+
+    // Drive latAccel = w.y * dot(v, fwd) to an absurd value at identity
+    // rotation, so the uncapped open-loop magnitude vastly exceeds the cap.
+    body.setAngvel({ x: 0, y: 1000, z: 0 }, true);
+    body.setLinvel({ x: 0, y: 0, z: -1000 }, true);
+    const vc = world.createVehicleController(body);
+
+    const before = body.angvel();
+    applyAssists(body, vc, 4, tuning.assists, I);
+    const after = body.angvel();
+
+    // At identity rotation the torque impulse lands purely on the Z axis;
+    // recover its magnitude via I.z and compare against the documented cap.
+    const deltaWz = after.z - before.z;
+    const appliedImpulseMagnitude = Math.abs(deltaWz) * I.z;
+    const cap = tuning.assists.bodyRollGain * I.x * 30 * DT;
+    expect(appliedImpulseMagnitude).toBeLessThanOrEqual(cap + 1e-6);
+  });
+
+  it("downforce is inert at the default gain", () => {
+    const tuning = defaultTuning();
+    expect(tuning.assists.downforcePerSpeed2).toBe(0);
+    const I = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
+    const world = createWorld();
+    const body = makeFreeChassis(world, tuning);
+    body.setLinvel({ x: 0, y: 0, z: -50 }, true);
+    const vc = world.createVehicleController(body);
+
+    const before = body.linvel();
+    applyAssists(body, vc, 4, tuning.assists, I);
+    world.step();
+    const after = body.linvel();
+
+    // No linear impulse from applyAssists itself at the default gain, so the
+    // only change in linvel.y is gravity integrated by world.step().
+    expect(after.y).toBeCloseTo(before.y - 9.81 * DT, 5);
+  });
+
+  it("boxPrincipalInertia matches the Config A anchor", () => {
+    // DEVIATION from 02-RESEARCH.md line 1057 and 02-04-PLAN.md's stated
+    // anchor of {3080, 3480, 512}: evaluating this file's formula (copied
+    // verbatim from 02-04-PLAN.md's own action text) against Config A's
+    // actual shipped values (mass 1600, halfExtents {0.95, 0.5, 2.35}) gives
+    // {3078.7, 3426.7, 614.7}. See the doc comment on `boxPrincipalInertia`.
+    const tuning = defaultTuning();
+    const inertia = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
+    const expected = { x: 3078.67, y: 3426.67, z: 614.67 };
+
+    expect(Math.abs(inertia.x - expected.x) / expected.x).toBeLessThan(0.01);
+    expect(Math.abs(inertia.y - expected.y) / expected.y).toBeLessThan(0.01);
+    expect(Math.abs(inertia.z - expected.z) / expected.z).toBeLessThan(0.01);
   });
 });
