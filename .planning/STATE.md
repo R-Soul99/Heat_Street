@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-09T18:30:38.157Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-09-09T19:05:21.096Z"
 last_activity: 2026-09-09
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
   percent: 13
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-09-09
 
-Progress: [██████░░░░] 59%
+Progress: [███████░░░] 65%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [██████░░░░] 59%
 | Phase 02 P01 | 20 min | 2 tasks | 3 files |
 | Phase 02 P02 | 20 min | 3 tasks | 4 files |
 | Phase 02 P03 | 9 min | 2 tasks | 2 files |
+| Phase 02 P04 | 40 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,9 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Node's built-in navigator global is a partial object (no getGamepads), not absent -- readGamepad() must degrade to null in both cases, verified empirically rather than assumed
 - [Phase 02-03]: Doc comments describe forbidden techniques (vehicle-controller speed getter, DOM-write throttling, CSS transitions) by behavior rather than literal identifier, resolving a plan self-contradiction between action-mandated warning comments and acceptance-criteria zero-count greps on those same identifiers
 - [Phase 02-03]: src/hud/speedometer.ts builds every SVG element with a direct document.createElementNS(SVG_NS, tag) call at its own site rather than a private wrapper, keeping the literal createElementNS count auditable against the plan's >=8 acceptance floor
+- [Phase 02-04]: Rapier setAdditionalMassProperties needs recomputeMassPropertiesFromColliders() to take effect before the next world.step() — Otherwise tick 0's applyTorqueImpulse divides by the tiny collider-default inertia instead of the cached principal inertia, inflating angular response ~180x on the first tick
+- [Phase 02-04]: Auto-level assist torque axis corrected to (-up.z, 0, up.x), the negation of 02-RESEARCH.md/02-04-PLAN.md's stated (up.z, 0, -up.x) — Verified empirically: the documented sign drives a tilted chassis further from level instead of recovering
+- [Phase 02-04]: boxPrincipalInertia's Config A test anchor corrected from the documented {3080,3480,512} to the formula-derived {3078.7,3426.7,614.7} — The stated anchor's I.y/I.z do not match evaluating the (correct, unambiguous) box-inertia formula against Config A's actual shipped mass/halfExtents
 
 ### Pending Todos
 
@@ -142,6 +146,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-09T18:30:38.144Z
-Stopped at: Completed 02-03-PLAN.md
-Resume file: .planning/phases/02-vehicle-feel-core/02-04-PLAN.md
+Last session: 2026-09-09T19:05:21.078Z
+Stopped at: Completed 02-04-PLAN.md
+Resume file: .planning/phases/02-vehicle-feel-core/02-05-PLAN.md
