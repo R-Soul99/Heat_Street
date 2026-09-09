@@ -28,7 +28,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 
 ### Navigation & HUD
 
-- [ ] **NAV-01**: Player sees a live speedometer (needle + digital readout)
+- [x] **NAV-01**: Player sees a live speedometer (needle + digital readout)
 - [ ] **NAV-02**: Player sees a live run timer with medal thresholds visible before and during the run
 - [ ] **NAV-03**: Player sees an always-on minimap showing remaining checkpoints and their own position
 - [ ] **NAV-04**: Player is guided to the next objective via a world-space beacon (where) plus a road-aware directional arrow (how)
@@ -126,7 +126,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAM-02 | Phase 3 | Pending |
 | CAM-03 | Phase 3 | Pending |
 | CAM-04 | Phase 3 | Pending |
-| NAV-01 | Phase 2 | Pending |
+| NAV-01 | Phase 2 | Complete |
 | NAV-02 | Phase 6 | Pending |
 | NAV-03 | Phase 5 | Pending |
 | NAV-04 | Phase 5 | Pending |
