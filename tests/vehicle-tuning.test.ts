@@ -59,7 +59,11 @@ describe("defaultTuning()", () => {
     expect(t.wheels.frictionSlip).toBe(1.2);
     expect(t.wheels.rearSideFriction).toBe(0.12);
     expect(t.drive.handbrakeRearSideFriction).toBe(0.01);
-    expect(t.assists.bodyRollGain).toBe(0.1);
+    // Corrected 0.1 -> 0.08 in plan 02-07: at 0.1 the handbrake telemetry
+    // routine's own 34deg slide reaches 15.40deg of chassis tilt, over the
+    // roll-assist-stability gate's 15deg cutoff (see the doc comment on
+    // `bodyRollGain` in src/core/vehicle-tuning.ts).
+    expect(t.assists.bodyRollGain).toBe(0.08);
     expect(t.assists.autoLevelGain).toBe(0.4);
     expect(t.assists.downforcePerSpeed2).toBe(0);
     expect(t.chassis.mass).toBe(1600);
