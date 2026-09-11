@@ -99,7 +99,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-08-PLAN.md — Composition root: driveable slice on screen with live input and gauge, plus browser checkpoint (wave 4)
+- [x] 02-08-PLAN.md — Composition root: driveable slice on screen with live input and gauge, plus browser checkpoint (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 7/10 | In Progress|  |
+| 2. Vehicle Feel Core | 8/10 | In Progress|  |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
