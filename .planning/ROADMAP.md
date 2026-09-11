@@ -14,7 +14,7 @@ Heat Street gets built from the tire contact patch outward. The fixed-timestep l
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Engine Foundation** - Fixed-timestep loop, Rapier/Three.js wiring, profiler HUD, frozen map-data decision (completed 2026-09-08)
-- [ ] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there
+- [x] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there (completed 2026-09-11)
 - [ ] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed
 - [ ] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
@@ -107,7 +107,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 02-10-PLAN.md — Feel session, SC1/SC2/SC5 human sign-off, tuned defaults committed and re-verified (wave 6)
+- [x] 02-10-PLAN.md — Feel session, SC1/SC2/SC5 human sign-off, tuned defaults committed and re-verified (wave 6)
 
 ### Phase 3: Surfaces & Helicopter Camera
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 9/10 | In Progress|  |
+| 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |

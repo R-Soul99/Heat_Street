@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-09-PLAN.md
-last_updated: "2026-09-11T22:13:00.000Z"
+stopped_at: Completed 02-10-PLAN.md — Phase 02 COMPLETE
+last_updated: "2026-09-11T23:45:00.000Z"
 last_activity: 2026-09-11
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 17
-  completed_plans: 16
-  percent: 16
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 02 — vehicle-feel-core
+**Current focus:** Phase 02 — vehicle-feel-core COMPLETE. Phase 03 (surfaces-and-helicopter-camera) not yet planned.
 
 ## Current Position
 
-Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 10 of 10
-Status: Ready to execute
+Phase: 02 (vehicle-feel-core) — COMPLETE (10/10 plans)
+Phase: 03 (surfaces-and-helicopter-camera) — NOT STARTED (not yet broken into plans)
 Last activity: 2026-09-11
 
-Progress: [█████████░] 94%
+Progress (phases 1-2 of 8, the only ones planned so far): [██████████] 100% of 17 known plans
 
 ## Performance Metrics
 
@@ -138,6 +137,12 @@ Recent decisions affecting current work:
 - [Phase 02-09]: createTuningPanel/createTelemetryHud are gate-free (never check DEBUG_ENABLED internally) — src/main.ts does the gating, matching createHud's existing convention rather than 02-RESEARCH.md/02-UI-SPEC.md's originally-stated internal-null-return approach
 - [Phase 02-09]: Wheel tuning properties bind on lil-gui's .onChange (live, per-frame safe); chassis.mass/comOffset/halfExtents bind on .onFinishChange only — a slider DRAG on those would call setAdditionalMassProperties mid-drag and invalidate the cached principal inertia (Pitfall 10)
 - [Phase 02-09]: telemetry-hud's Run button does not auto-run on panel open — an unexpected ~100-300ms frame stall mid-drive would be a bad surprise; the run is always a deliberate button press
+- [Phase 02-10]: rearSideFriction corrected 0.12 -> 0.2 — sustained full-throttle straight-line driving with ZERO steering input spontaneously spun the car out at ~89mph at the old default; root-caused headlessly (not the assists, not wheelspin/differential asymmetry, not a generic speed-based instability — coasting at any speed to 120mph is stable). It is specific to sustained throttle plus low rearSideFriction: a symmetric, exponentially-growing lateral force builds under power and a microscopic L/R asymmetry eventually couples it into yaw. 0.2 pushes the onset past 120mph+ and does not blunt the deliberate full-lock power-oversteer move (powerOversteerGain's lerp already reaches the handbrake value there regardless of baseline). Phase 3 should re-verify this on real road surfaces — a lower-friction surface type could reopen it at a lower speed.
+- [Phase 02-10]: powerOversteerGain corrected 0.5 -> 1.1 (never swept before this session) — 0.5 and 1.0 produced no throttle-oversteer at full lock, 1.3 spun into a full doughnut; 1.1 gives a controllable, readable step-out
+- [Phase 02-10]: bodyRollGain raised 0.08 -> 0.12 for the Bullitt-anchor feel (flat at 0.08); roll-assist-stability CI gate still passes (5.42deg max, under the 15deg cutoff)
+- [Phase 02-10]: slideCatchGain raised 0.1 -> 0.12; raising it further to 0.3 during the instability diagnosis made the high-speed spin trigger EARLIER, confirming slideCatchGain was never the mechanism behind that bug
+- [Phase 02-10]: src/main.ts's placeholder chase camera widened (0,5,9) -> (0,8,16) and src/render/vehicle-view.ts gained a THREE.GridHelper ground reference grid — the tighter camera and featureless ground from plan 02-08 made it impossible to judge speed/slip during the feel session; both still explicit placeholders pending Phase 3's real camera
+- [Phase 02-10]: SC2's gamepad half is unverified (no hardware available this session) — open item for Phase 3, along with 02-RESEARCH.md's unverified standard-mapping axis assumption (A1)
 
 ### Pending Todos
 
@@ -150,8 +155,10 @@ None yet.
 [Issues that affect future work]
 
 - REQUIREMENTS.md previously stated 29 v1 requirements; the actual traceability list is 30. Corrected during roadmap creation.
-- Open risk (Phase 2): whether Rapier's raycast vehicle can reach the "arcade-realistic hybrid" feel at all — flagged as a spike, not an assumption
+- RESOLVED (Phase 2, plan 02-10): Rapier's raycast vehicle DOES reach the "arcade-realistic hybrid" feel — human-signed-off on SC1/SC5 in the plan 02-10 feel session. The residual open risk is narrower: a genuine high-speed straight-line instability was found and fixed (rearSideFriction 0.12->0.2, see the Phase 02-10 decision above); Phase 3 should re-verify it holds once real road surfaces (lower friction than the flat test ground) exist.
 - Open question (Phase 4): whether the existing extraction tool already emits usable road-graph topology, or whether the map-compiler must build it from scratch
+- Open item (Phase 3): SC2's gamepad half was never verified in Phase 2 (no hardware available) — verify proportional steering and analog triggers, and 02-RESEARCH.md's unverified standard-mapping axis-index assumption (A1), once a gamepad is available
+- [Phase 2, all plans] Repo-wide CRLF-vs-LF working-directory line-ending mismatch (`core.autocrlf=true` on this Windows checkout vs LF-normalized committed blobs) makes `npm run check`'s Biome step fail on files never touched by any Phase 2 plan. Confirmed pre-existing and cosmetic (committed content is correct LF); logged in `.planning/phases/02-vehicle-feel-core/deferred-items.md` with a fix path (`.gitattributes` with `* text=lf` + renormalize, or `biome.json`'s `formatter.lineEnding: "crlf"`). Worth resolving before Phase 3 so `npm run check` is trustworthy again as a single green/red signal.
 - [01-01] 01-RESEARCH.md 'State of the Art' claims Vite 8.2.2 pre-bundles Rapier correctly — disproven at runtime (dev-only TypeError). That claim and 01-01-PLAN.md's 'no optimizeDeps.exclude anywhere' success criterion should be corrected at phase verification
 - [01-03] Six Google-Maps-pipeline references remain in .planning/ (research/STACK.md 92/212/300, research/ARCHITECTURE.md 367, research/FEATURES.md 73/247, PROJECT.md 75) — deliberately outside the decided grep scope, covered by the STACK.md supersession banner. Upgrade path if ever needed is PATTERNS.md R1 option (b).
 - [01-06] src/main.ts:21 contains the literal substring "innerHTML" inside a comment stating the DOM-XSS mitigation ("textContent only — never innerHTML"), pre-dating this plan. A repo-wide `grep -rn "innerHTML" src/` (the plan's own verification step 3) will surface this one line even though it documents a prohibition rather than a violation; src/debug/ itself is clean. Worth a note at phase verification.
@@ -166,6 +173,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-11T22:13:00.000Z
-Stopped at: Completed 02-09-PLAN.md
+Last session: 2026-09-11T23:45:00.000Z
+Stopped at: Completed 02-10-PLAN.md — Phase 02 vehicle-feel-core is COMPLETE. Next: plan Phase 03 (surfaces-and-helicopter-camera).
 Resume file: None
