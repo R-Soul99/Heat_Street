@@ -57,8 +57,16 @@ export interface Routine {
 
 // ---- Unit conversions, exact per 02-RESEARCH.md "Units and Normalisation" --
 // mph = m/s * 2.2369362920544; the reverse (mph -> m/s) is mph * 0.44704.
+const MPH_45_MS = 20.1168;
+const MPH_50_MS = 22.352;
 const MPH_60_MS = 26.8224;
 const METERS_TO_FEET = 3.28084;
+const RAD_TO_DEG = 180 / Math.PI;
+
+/** Clamp `v` into `[lo, hi]`. */
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
 
 /** Speed at which a braking/coasting-to-rest routine considers the car "stopped". */
 const STOP_SPEED_MS = 0.15;
@@ -83,6 +91,17 @@ export const TELEMETRY_TARGETS = {
   accel: { min: 6.0, max: 7.0, unit: "s", label: "6.0-7.0 s" },
   brake: { min: 110, max: 135, unit: "ft", label: "110-135 ft" },
   skidpad: { min: 0.75, max: 1.05, unit: "g", label: "0.75-1.05 g" },
+  slalom: {
+    maxSlipDeg: 90,
+    recoverBelowDeg: 5,
+    label: "no spin (max <90 deg, recovers <5 deg by the end)",
+  },
+  handbrake: {
+    minMaxSlipDeg: 25,
+    recoverBelowDeg: 5,
+    recoverWithinSec: 2.5,
+    label: ">25 deg max slip, recovers <5 deg within 2.5 s",
+  },
 } as const;
 
 /**
@@ -194,9 +213,264 @@ function makeBrakeRoutine(): Routine {
 }
 
 /**
+ * `skidpad`: accelerate to 45 mph, then hold a fixed 15-degree steer for 4 s.
+ * `sample` accumulates steady-state lateral g as
+ * `|angvel.y * groundSpeedMs| / 9.81`, averaged over the LAST 2 s of the 4 s
+ * hold only — the first 2 s are the transient corner-entry and are discarded.
+ * Target `0.75-1.05 g`.
+ *
+ * `[MEASURED]` (02-RESEARCH.md "the frictionSlip saturation cliff"):
+ * `frictionSlip` 10.5 and 1000 both measured 3.48-3.49 g and are IDENTICAL —
+ * the dial is dead above ~10 and the useful band is 0.6-2.0. This routine's
+ * `frictionSlip: 10.5` companion case (in the test file) asserts a FAILING
+ * skidpad result, proving this routine actually measures grip rather than
+ * returning a constant.
+ *
+ * `STEER_FRACTION_15DEG` assumes the DEFAULT `maxSteerLock` of pi/4 (45 deg,
+ * Config A) — `drive` has no access to `tuning`, only to the sampled state,
+ * so a fixed InputFrame fraction is the only way to target a specific wheel
+ * angle. A live-retuned `maxSteerLock` will shift the true wheel angle away
+ * from exactly 15 deg; that is an accepted approximation, not a bug — the
+ * panel's whole point is to show measured values change as tuning changes.
+ */
+const STEER_FRACTION_15DEG = 15 / 45;
+const SKIDPAD_TARGET_MPH = MPH_45_MS;
+const SKIDPAD_HOLD_TICKS = Math.round(4 / DT);
+const SKIDPAD_AVERAGE_WINDOW_TICKS = Math.round(2 / DT);
+/** Light throttle during the hold, just enough to offset tire drag scrub so
+ * the corner does not visibly slow down mid-measurement. */
+const SKIDPAD_HOLD_THROTTLE = 0.3;
+
+function makeSkidpadRoutine(): Routine {
+  let holding = false;
+  let holdStartTick = 0;
+
+  return {
+    id: "skidpad",
+    label: "skidpad steady-state lateral g",
+    setup() {
+      holding = false;
+      holdStartTick = 0;
+    },
+    drive(tick, s) {
+      if (!holding) {
+        if (s.forwardSpeedMs >= SKIDPAD_TARGET_MPH) {
+          holding = true;
+          holdStartTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (tick - holdStartTick >= SKIDPAD_HOLD_TICKS) {
+        return null;
+      }
+      return {
+        steer: STEER_FRACTION_15DEG,
+        throttle: SKIDPAD_HOLD_THROTTLE,
+        brake: 0,
+        handbrake: false,
+      };
+    },
+    sample(tick, s, acc) {
+      if (!holding) {
+        return;
+      }
+      const elapsed = tick - holdStartTick;
+      if (elapsed >= SKIDPAD_HOLD_TICKS - SKIDPAD_AVERAGE_WINDOW_TICKS) {
+        const g = Math.abs(s.angvel.y * s.groundSpeedMs) / 9.81;
+        acc.gSum = (acc.gSum ?? 0) + g;
+        acc.gCount = (acc.gCount ?? 0) + 1;
+      }
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.skidpad;
+      const gCount = acc.gCount ?? 0;
+      const avgG = gCount > 0 ? (acc.gSum ?? 0) / gCount : 0;
+      return {
+        id: "skidpad",
+        label: "skidpad steady-state lateral g",
+        value: avgG,
+        unit: "g",
+        target: t.label,
+        pass: avgG >= t.min && avgG <= t.max,
+      };
+    },
+  };
+}
+
+/**
+ * `slalom`: hold 50 mph and alternate steer on a fixed period — a CLOSED-FORM
+ * sine wave of the tick index, per this file's no-random discipline. `sample`
+ * records the max `|slipAngleRad|` seen and whether slip has fallen back
+ * below 5 deg by the time the routine ends. Target: never exceeds 90 deg,
+ * and ends below 5 deg — "no spin".
+ */
+const SLALOM_TARGET_MPH = MPH_50_MS;
+const SLALOM_PERIOD_TICKS = 90;
+const SLALOM_HOLD_TICKS = Math.round(6 / DT);
+const SLALOM_STEER_FRACTION = 0.5;
+const SLALOM_HOLD_THROTTLE = 0.25;
+
+function makeSlalomRoutine(): Routine {
+  let holding = false;
+  let holdStartTick = 0;
+
+  return {
+    id: "slalom",
+    label: "slalom max slip angle",
+    setup() {
+      holding = false;
+      holdStartTick = 0;
+    },
+    drive(tick, s) {
+      if (!holding) {
+        if (s.forwardSpeedMs >= SLALOM_TARGET_MPH) {
+          holding = true;
+          holdStartTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      const elapsed = tick - holdStartTick;
+      if (elapsed >= SLALOM_HOLD_TICKS) {
+        return null;
+      }
+      const steer = SLALOM_STEER_FRACTION * Math.sin((2 * Math.PI * elapsed) / SLALOM_PERIOD_TICKS);
+      return { steer, throttle: SLALOM_HOLD_THROTTLE, brake: 0, handbrake: false };
+    },
+    sample(_tick, s, acc) {
+      if (!holding) {
+        return;
+      }
+      const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+      acc.maxSlipDeg = Math.max(acc.maxSlipDeg ?? 0, slipDeg);
+      acc.lastSlipDeg = slipDeg;
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.slalom;
+      const maxSlipDeg = acc.maxSlipDeg ?? 0;
+      const lastSlipDeg = acc.lastSlipDeg ?? Number.POSITIVE_INFINITY;
+      return {
+        id: "slalom",
+        label: "slalom max slip angle",
+        value: maxSlipDeg,
+        unit: "deg",
+        target: t.label,
+        pass: maxSlipDeg <= t.maxSlipDeg && lastSlipDeg < t.recoverBelowDeg,
+      };
+    },
+  };
+}
+
+/**
+ * `handbrake`: reach 60 mph, apply a fixed 0.45 rad steer with the handbrake
+ * held for 0.75 s, then release the handbrake and apply a PROPORTIONAL
+ * counter-steer standing in for a human driver (steer opposing the sampled
+ * slip angle, scaled and clamped). `sample` records the max slip angle
+ * during the hold and the sim time from release until slip falls back below
+ * 5 deg. Target: max slip above 25 deg AND recovery below 5 deg within 2.5 s.
+ *
+ * `[MEASURED]` (02-RESEARCH.md): at `handbrakeRearSideFriction` 0.01 with a
+ * 0.75 s hold, the useful curve is 34 deg max slip / 0.53 s recovery; the
+ * entire useful tuning range for that dial is 0.004-0.04, and 0.0 spins the
+ * car out to 101 deg with a 2.60 s recovery instead of sliding.
+ *
+ * `HANDBRAKE_STEER_FRACTION` assumes the default `maxSteerLock` (Config A),
+ * same caveat as `STEER_FRACTION_15DEG` above.
+ */
+const HANDBRAKE_STEER_RAD = 0.45;
+const HANDBRAKE_STEER_FRACTION = HANDBRAKE_STEER_RAD / (Math.PI / 4);
+const HANDBRAKE_HOLD_TICKS = Math.round(0.75 / DT);
+/** Proportional counter-steer gain, steer-fraction per radian of slip angle. */
+const HANDBRAKE_COUNTER_STEER_GAIN = 2.0;
+const HANDBRAKE_RECOVER_SLIP_DEG = 5;
+
+type HandbrakePhase = "accel" | "hold" | "recover" | "done";
+
+function makeHandbrakeRoutine(): Routine {
+  let phase: HandbrakePhase = "accel";
+  let holdStartTick = 0;
+  let releaseTick = 0;
+
+  return {
+    id: "handbrake",
+    label: "handbrake slide and recovery",
+    setup() {
+      phase = "accel";
+      holdStartTick = 0;
+      releaseTick = 0;
+    },
+    drive(tick, s) {
+      if (phase === "accel") {
+        if (s.forwardSpeedMs >= MPH_60_MS) {
+          phase = "hold";
+          holdStartTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (phase === "hold") {
+        if (tick - holdStartTick >= HANDBRAKE_HOLD_TICKS) {
+          phase = "recover";
+          releaseTick = tick;
+        } else {
+          return { steer: HANDBRAKE_STEER_FRACTION, throttle: 0, brake: 0, handbrake: true };
+        }
+      }
+      if (phase === "recover") {
+        const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+        if (slipDeg < HANDBRAKE_RECOVER_SLIP_DEG) {
+          phase = "done";
+          return null;
+        }
+        const counterSteer = clamp(-s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
+        return { steer: counterSteer, throttle: 0.2, brake: 0, handbrake: false };
+      }
+      return null;
+    },
+    sample(tick, s, acc) {
+      const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+      if (phase === "hold") {
+        acc.maxSlipDeg = Math.max(acc.maxSlipDeg ?? 0, slipDeg);
+      }
+      if (phase === "recover" || phase === "done") {
+        if (!("recoverStartTick" in acc)) {
+          acc.recoverStartTick = releaseTick;
+        }
+        if (!("recoveredTick" in acc) && slipDeg < HANDBRAKE_RECOVER_SLIP_DEG) {
+          acc.recoveredTick = tick;
+        }
+      }
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.handbrake;
+      const maxSlipDeg = acc.maxSlipDeg ?? 0;
+      const recoverSec =
+        "recoveredTick" in acc && "recoverStartTick" in acc
+          ? (acc.recoveredTick - acc.recoverStartTick) * DT
+          : Number.POSITIVE_INFINITY;
+      return {
+        id: "handbrake",
+        label: "handbrake slide and recovery",
+        value: maxSlipDeg,
+        unit: "deg",
+        target: t.label,
+        pass: maxSlipDeg > t.minMaxSlipDeg && recoverSec < t.recoverWithinSec,
+      };
+    },
+  };
+}
+
+/**
  * The six scripted routines, in the fixed order every consumer (the Vitest
  * suite, the plan 02-09 browser panel, `runAllRoutines`) iterates. Written
  * inline here rather than assembled elsewhere, so the list a reader sees is
  * the list that runs.
  */
-export const ROUTINES: readonly Routine[] = [accelRoutine, makeBrakeRoutine()];
+export const ROUTINES: readonly Routine[] = [
+  accelRoutine,
+  makeBrakeRoutine(),
+  makeSkidpadRoutine(),
+  makeSlalomRoutine(),
+  makeHandbrakeRoutine(),
+];
