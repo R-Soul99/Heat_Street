@@ -119,7 +119,11 @@ if (telemetry) {
 // 1's recommendation that the feel session not be judged through an unusable
 // view). A simple fixed chase offset behind and above the chassis, aimed at
 // the chassis, updated every frame from the live simulation position.
-const CHASE_OFFSET = { x: 0, y: 5, z: 9 };
+// Pulled back from an initial (0, 5, 9) after the plan 02-10 feel session
+// found that offset too close to judge speed or slide angle from — more
+// distance and height gives more ground (now gridded, see
+// src/render/vehicle-view.ts) in frame around the car.
+const CHASE_OFFSET = { x: 0, y: 8, z: 16 };
 {
   const spawnPos = scene.vehicle.body.translation();
   camera.position.set(

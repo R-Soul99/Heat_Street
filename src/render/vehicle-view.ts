@@ -58,6 +58,19 @@ const COLOUR_GROUND = 0x2b2b33;
 const COLOUR_RAMP = 0x4a4a55;
 const COLOUR_CHASSIS = 0xb5321f;
 const COLOUR_WHEEL = 0x151515;
+const COLOUR_GRID = 0x50505c;
+const COLOUR_GRID_CENTER = 0x6a6a78;
+
+/**
+ * Size/division of the ground reference grid, metres. A featureless flat
+ * plane gives a driver no way to judge speed or lateral slide from a chase
+ * camera -- this is a cheap, no-asset-pipeline fix (a built-in
+ * `THREE.GridHelper`, not a texture) added after the plan 02-10 feel session
+ * found the bare ground unreadable. 10 m lines are coarse enough not to moire
+ * at speed and fine enough to read a slide against.
+ */
+const GRID_SIZE = 400;
+const GRID_DIVISIONS = 40;
 
 /** Half-width of the area the shadow camera frames, metres. */
 const SHADOW_AREA_HALF = 30;
@@ -196,6 +209,14 @@ export function createVehicleView(
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // Reference grid, sat a hair above y = 0 to avoid z-fighting with the
+  // ground plane it shares a surface with. Centred at the world origin
+  // (not on the chassis) -- the ramp and the vehicle's spawn/drive corridor
+  // both sit well inside its footprint (see GRID_SIZE's doc comment).
+  const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, COLOUR_GRID_CENTER, COLOUR_GRID);
+  grid.position.y = 0.01;
+  scene.add(grid);
+
   const ramp = new THREE.Mesh(
     buildRampGeometry(),
     new THREE.MeshStandardMaterial({ color: COLOUR_RAMP, roughness: 0.8 }),
@@ -317,6 +338,8 @@ export function createVehicleView(
     dispose(): void {
       groundGeometry.dispose();
       (ground.material as THREE.Material).dispose();
+      grid.geometry.dispose();
+      (grid.material as THREE.Material).dispose();
       ramp.geometry.dispose();
       (ramp.material as THREE.Material).dispose();
       chassisGeometry.dispose();
