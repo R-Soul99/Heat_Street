@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-09-09T19:49:13.491Z"
-last_activity: 2026-09-09
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-09-11T21:10:00.000Z"
+last_activity: 2026-09-11
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 13
-  percent: 13
+  completed_plans: 14
+  percent: 14
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Ready to execute
-Last activity: 2026-09-09
+Last activity: 2026-09-11
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [████████░░] 76%
 | Phase 02 P04 | 40 min | 2 tasks | 3 files |
 | Phase 02 P05 | 15min | 2 tasks | 3 files |
 | Phase 02 P06 | 23min | 2 tasks | 3 files |
+| Phase 02 P07 | 55min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,10 @@ Recent decisions affecting current work:
 - [Phase 02-05]: src/hud/** layering rule deliberately omits a document. ban (HUD legitimately calls document.createElementNS) and does not duplicate the repo-wide performance. ban -- both omissions commented in place
 - [Phase 02-06]: Ramp geometry (02-RESEARCH.md Open Question 2) solved as a ColliderDesc.convexHull wedge with a knife-edge leading edge flush at y=0 — Verified empirically: monotonic climb, airborne launch past the 1.6m crest, 1.68deg tilt / 42.4mph 0.5s after touchdown -- not assumed
 - [Phase 02-06]: src/render/vehicle-view.ts hardcodes ground/ramp visual dimensions matching src/physics/vehicle-scene.ts rather than importing from it — Keeps the render module a pure, physics-import-free concern (mirroring debug-scene.ts's own ground-visual precedent), with a MUST MATCH comment as the cross-reference
+- [Phase 02-07]: engineForcePerRearWheel corrected 4000N -> 3650N — the shipped vehicle.ts/vehicle-assists.ts code (post plan 02-04's inertia and auto-level-sign fixes) measures 5.9s 0-60 at 4000N, missing D-14's locked 6.0-7.0s band; 3650N measures 6.52s
+- [Phase 02-07]: bodyRollGain corrected 0.1 -> 0.08 — at 0.1 the handbrake routine's own 34deg slide reaches 15.40deg of chassis tilt, over the roll-assist-stability gate's 15deg cutoff; 0.08 keeps all six canonical routines under 15deg (worst case 12.15deg) while the 0.20 companion still clearly fails
+- [Phase 02-07]: D-04's brake-understeer does NOT emerge at the shipped default tuning — the RWD-loose rearSideFriction 0.12 bias dominates and braking measurably TIGHTENS the cornering radius (oversteer) at every steer angle/frictionSlip combination tried against literal defaultTuning(); isolated with a dedicated symmetric-friction, frictionSlip 0.5 test tuning instead, and flagged for the human playtest session (02-10) since it's a real divergence from 02-RESEARCH.md's assumption
+- [Phase 02-07]: runRoutine/runAllRoutines in src/physics/telemetry/run.ts is the single shared harness both the Vitest suite (against defaultTuning()) and plan 02-09's browser tuning panel (against LIVE-tuned values) call — this is what makes SC5's "retuned live and re-verified with no code edit" literal rather than aspirational
 
 ### Pending Todos
 
@@ -152,6 +157,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-09T19:49:13.456Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-09-11T21:10:00.000Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None
