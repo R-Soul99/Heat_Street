@@ -19,8 +19,10 @@
  * as a second live composition path.
  */
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
-import { DEBUG_ENABLED, onDebugToggle } from "./debug/debug-gate";
+import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createHud } from "./debug/profiler-hud";
+import { createTelemetryHud } from "./debug/telemetry-hud";
+import { createTuningPanel } from "./debug/tuning-panel";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { startLoop } from "./loop";
@@ -83,6 +85,33 @@ const speedo = createSpeedometer();
 const hud = DEBUG_ENABLED ? createHud(renderer, world) : null;
 if (hud) {
   onDebugToggle(() => hud.toggle());
+}
+
+// Both dev panels below follow the exact same shape as the profiler HUD
+// above: construct only when `DEBUG_ENABLED`, then register the toggle. A
+// normal (non-`?debug`) build therefore creates zero panels and registers
+// zero listeners for `KeyG`/`KeyT` either — this is the ASVS V4 control
+// (T-02-03) and it is also why the tuning panel can never be player-facing:
+// player-side handling tuning would break medal-time comparability (D-15).
+//
+// `onApply` is `() => scene.setTuning(tuning)` — the SAME object reference
+// the panel mutates in place, so a slider move takes effect on the very
+// next fixed tick with no rebuild. Rebuilding the vehicle on every slider
+// move would lose the car's state mid-drive (position, velocity, the
+// tuning session itself) and make the panel unusable.
+const panel = DEBUG_ENABLED ? createTuningPanel(tuning, () => scene.setTuning(tuning)) : null;
+if (panel) {
+  onDebugKey("KeyG", () => panel.toggle());
+}
+
+// `() => tuning` — a callback, not the captured value — so a telemetry run
+// triggered after the panel above has mutated `tuning` reads the LIVE
+// object rather than a stale copy taken at composition-root startup. This
+// is what makes SC5's "retuned live … and re-verified … with no code edit"
+// literally true.
+const telemetry = DEBUG_ENABLED ? createTelemetryHud(() => tuning) : null;
+if (telemetry) {
+  onDebugKey("KeyT", () => telemetry.toggle());
 }
 
 // Temporary placeholder camera for this phase's SC5 playtest (Phase 3 owns
