@@ -115,7 +115,16 @@ export interface VehicleTuning {
     rearSideFriction: number;
   };
   readonly drive: {
-    /** Engine force applied to each rear wheel at full throttle, newtons. */
+    /**
+     * Engine force applied to each rear wheel at full throttle, newtons.
+     * `[MEASURED]` (plan 02-07): 02-RESEARCH.md's Config A value of 4000 N
+     * measures 5.9 s 0-60 mph against the SHIPPED vehicle/assist code in this
+     * repo (`tests/vehicle-telemetry.test.ts -t accel`), not the 6.28 s the
+     * research probe recorded — the gap is downstream of plan 02-04's own
+     * corrections to the inertia formula and the auto-level torque sign,
+     * which post-date that probe. 3650 N lands at 6.52 s, centred in D-14's
+     * locked 6.0-7.0 s band; this file's default is corrected to match.
+     */
     engineForcePerRearWheel: number;
     /** Brake impulse applied to each wheel at full brake, newton-seconds. */
     brakeImpulsePerWheel: number;
@@ -247,7 +256,7 @@ export function defaultTuning(): VehicleTuning {
       rearSideFriction: 0.12,
     },
     drive: {
-      engineForcePerRearWheel: 4000,
+      engineForcePerRearWheel: 3650,
       brakeImpulsePerWheel: 60,
       maxSteerLock: Math.PI / 4,
       steerRampPerSec: 2.5,
