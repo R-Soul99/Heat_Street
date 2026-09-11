@@ -103,7 +103,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 02-09-PLAN.md — lil-gui tuning panel with persistence and the in-browser telemetry panel (wave 5)
+- [x] 02-09-PLAN.md — lil-gui tuning panel with persistence and the in-browser telemetry panel (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
-| 2. Vehicle Feel Core | 8/10 | In Progress|  |
+| 2. Vehicle Feel Core | 9/10 | In Progress|  |
 | 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |

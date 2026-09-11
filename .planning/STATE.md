@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-08-PLAN.md
-last_updated: "2026-09-11T21:25:00.000Z"
+stopped_at: Completed 02-09-PLAN.md
+last_updated: "2026-09-11T22:13:00.000Z"
 last_activity: 2026-09-11
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 15
-  percent: 15
+  completed_plans: 16
+  percent: 16
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 02 (vehicle-feel-core) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Ready to execute
 Last activity: 2026-09-11
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [█████████░] 88%
 | Phase 02 P06 | 23min | 2 tasks | 3 files |
 | Phase 02 P07 | 55min | 3 tasks | 5 files |
 | Phase 02 P08 | 35min | 3 tasks | 3 files |
+| Phase 02 P09 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,10 @@ Recent decisions affecting current work:
 - [Phase 02-08]: LoopDeps.render gained a second dtMs parameter rather than routing the speedometer through the existing DEBUG_ENABLED-gated hud callback — the speedometer is player-facing and always on, so that routing would have silently made the gauge a debug-only feature
 - [Phase 02-08]: src/main.ts's camera is a temporary fixed-offset chase cam (behind/above the chassis, recomputed from live translation every frame) — explicitly a placeholder per 02-RESEARCH.md Open Question 1, replaced by Phase 3's permanent helicopter camera
 - [Phase 02-08]: Human browser checkpoint passed all 10 steps on the first pass (steering direction, wheel spin/turn/suspension, braking dive, handbrake slide-and-recover, ramp climb-launch-land, speedometer tracking + 120mph amber transition, ?debug HUD gate) — no fixes required
+- [Phase 02-09]: lil-gui imported from three's bundled `three/addons/libs/lil-gui.module.min.js`, not installed as a dependency — zero net package.json change, per 02-RESEARCH.md's Package Legitimacy Audit
+- [Phase 02-09]: createTuningPanel/createTelemetryHud are gate-free (never check DEBUG_ENABLED internally) — src/main.ts does the gating, matching createHud's existing convention rather than 02-RESEARCH.md/02-UI-SPEC.md's originally-stated internal-null-return approach
+- [Phase 02-09]: Wheel tuning properties bind on lil-gui's .onChange (live, per-frame safe); chassis.mass/comOffset/halfExtents bind on .onFinishChange only — a slider DRAG on those would call setAdditionalMassProperties mid-drag and invalidate the cached principal inertia (Pitfall 10)
+- [Phase 02-09]: telemetry-hud's Run button does not auto-run on panel open — an unexpected ~100-300ms frame stall mid-drive would be a bad surprise; the run is always a deliberate button press
 
 ### Pending Todos
 
@@ -161,6 +166,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-11T21:25:00.000Z
-Stopped at: Completed 02-08-PLAN.md
+Last session: 2026-09-11T22:13:00.000Z
+Stopped at: Completed 02-09-PLAN.md
 Resume file: None
