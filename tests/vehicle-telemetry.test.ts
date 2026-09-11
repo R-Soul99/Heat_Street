@@ -4,7 +4,7 @@ import { DT } from "../src/core/sim-clock";
 import type { VehicleTuning } from "../src/core/vehicle-tuning";
 import { defaultTuning } from "../src/core/vehicle-tuning";
 import type { Routine } from "../src/physics/telemetry/routines";
-import { ROUTINES } from "../src/physics/telemetry/routines";
+import { handbrakeRoutine, ROUTINES } from "../src/physics/telemetry/routines";
 import { buildTelemetryScene, runAllRoutines, runRoutine } from "../src/physics/telemetry/run";
 import { createVehicle, sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
@@ -193,7 +193,7 @@ describe("vehicle-telemetry: slalom (VEH-01)", () => {
 
 describe("vehicle-telemetry: handbrake (VEH-01, D-01)", () => {
   it("handbrake: max slip above 25 deg AND recovers below 5 deg within 2.5 s at default tuning", () => {
-    const result = runRoutine(findRoutine("handbrake"), defaultTuning());
+    const result = runRoutine(handbrakeRoutine, defaultTuning());
 
     // Both halves of the D-01 target asserted separately, not just `pass`:
     // the max-slip half via the exposed `value`, the recovery-time half
@@ -300,9 +300,113 @@ describe("vehicle-telemetry: brake-understeer (VEH-01, D-04)", () => {
   });
 });
 
+describe("vehicle-telemetry: ramp (VEH-04, D-07)", () => {
+  it("ramp: lands with tilt under 20 deg and forward speed over 40 mph at default tuning", () => {
+    const result = runRoutine(findRoutine("ramp"), defaultTuning());
+
+    expect(result.pass).toBe(true);
+    expect(result.value).toBeLessThan(20);
+  });
+
+  it("ramp without assist: disabling autoLevelGain makes the ramp routine fail (load-bearing proof)", () => {
+    // 02-PATTERNS.md / determinism.test.ts:158-166's shape: without this,
+    // the case above would pass even if the auto-level assist were dead
+    // code. `[MEASURED]` (02-RESEARCH.md D-07): with the assist off, the
+    // chassis never lands on its wheels — tumbles indefinitely instead.
+    const tuning = defaultTuning();
+    tuning.assists.autoLevelGain = 0;
+    const result = runRoutine(findRoutine("ramp"), tuning);
+
+    expect(result.pass).toBe(false);
+  });
+});
+
+describe("vehicle-telemetry: stability (SC3, D-08)", () => {
+  it("stability: max chassis tilt under 15 deg through 5 s of full-lock 60 mph at default tuning", () => {
+    const result = runRoutine(findRoutine("stability"), defaultTuning());
+
+    expect(result.pass).toBe(true);
+    expect(result.value).toBeLessThan(15);
+  });
+});
+
+describe("vehicle-telemetry: roll assist stability (D-06, SC3, Open Question 3)", () => {
+  /**
+   * Wraps an existing `Routine` so this test can independently track the max
+   * chassis tilt seen across an ENTIRE run, without needing every routine's
+   * own `RoutineResult.value` to already be a tilt reading (most are not —
+   * `accel`'s is seconds, `skidpad`'s is g, etc). A fresh wrapper is built
+   * per call, so there is no shared closure state to reset between runs.
+   *
+   * Only counts tilt while `contacts >= 3` — the SAME gate
+   * `src/physics/vehicle-assists.ts` uses for the body-roll assist itself.
+   * This is what this gate is actually regression-testing (D-06's
+   * positive-feedback cliff), so it deliberately EXCLUDES `ramp`'s legitimate
+   * mid-air tumble (which the auto-level assist, a different gate entirely —
+   * D-07, `contacts === 0` — is responsible for, and which is already
+   * covered by the `ramp` / `ramp without assist` cases above).
+   */
+  function wrapWithTiltTracking(routine: Routine): { routine: Routine; maxTiltDeg: () => number } {
+    let maxTiltDeg = 0;
+    const wrapped: Routine = {
+      id: routine.id,
+      label: routine.label,
+      setup: routine.setup,
+      drive: routine.drive,
+      sample(tick, s, acc) {
+        if (s.contacts >= 3) {
+          maxTiltDeg = Math.max(maxTiltDeg, s.tiltDeg);
+        }
+        routine.sample(tick, s, acc);
+      },
+      evaluate: routine.evaluate,
+    };
+    return { routine: wrapped, maxTiltDeg: () => maxTiltDeg };
+  }
+
+  // Written inline rather than derived from `ROUTINES.map(r => r.id)`, so the
+  // list a reader sees here is the exact list this gate runs against.
+  const CANONICAL_ROUTINE_IDS = ["accel", "brake", "skidpad", "slalom", "ramp", "stability"];
+
+  it.each(CANONICAL_ROUTINE_IDS)(
+    "roll assist stability: %s never exceeds 15 deg of tilt at default tuning",
+    (id) => {
+      const wrapped = wrapWithTiltTracking(findRoutine(id));
+      runRoutine(wrapped.routine, defaultTuning());
+
+      expect(wrapped.maxTiltDeg()).toBeLessThan(15);
+    },
+  );
+
+  it("roll assist stability companion: bodyRollGain 0.20 makes at least one routine exceed 15 deg (proves the gate can fail)", () => {
+    const tuning = defaultTuning();
+    tuning.assists.bodyRollGain = 0.2;
+
+    const maxTilts = CANONICAL_ROUTINE_IDS.map((id) => {
+      const wrapped = wrapWithTiltTracking(findRoutine(id));
+      runRoutine(wrapped.routine, tuning);
+      return wrapped.maxTiltDeg();
+    });
+
+    expect(maxTilts.some((tilt) => tilt > 15)).toBe(true);
+  });
+});
+
 describe("vehicle-telemetry: runAllRoutines", () => {
   it("runs every routine currently registered and returns one result per routine", () => {
     const results = runAllRoutines(defaultTuning());
     expect(results.length).toBe(ROUTINES.length);
+  });
+
+  it("returns exactly six results, every one passing, at default tuning", () => {
+    // A routine silently dropped from ROUTINES (or added without also
+    // passing at default tuning) fails this suite rather than slipping
+    // through unnoticed.
+    const results = runAllRoutines(defaultTuning());
+
+    expect(results.length).toBe(6);
+    for (const result of results) {
+      expect(result.pass).toBe(true);
+    }
   });
 });

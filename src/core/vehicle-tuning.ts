@@ -179,11 +179,22 @@ export interface VehicleTuning {
      * with no assist, versus a real car's 4-6deg). This is an OPEN-LOOP
      * torque, not a closed-loop PD-toward-target controller — 02-RESEARCH.md
      * explicitly measured that the PD-toward-target formulation flipped the
-     * car at every gain and cap tested. Gain 0.10 -> 5.46deg (Bullitt range).
+     * car at every gain and cap tested. Gain 0.10 -> 5.46deg (Bullitt range)
+     * at 02-RESEARCH.md's own probe conditions (45 mph, 0.26 rad steer).
      * Gain 0.20 -> the car FLIPS ONTO ITS ROOF. This is positive feedback:
      * rolling the body shifts suspension load, which changes lateral force,
      * which feeds the torque. `bodyRollMaxDeg` below is not an optional
      * decoration — it is the cutoff that keeps this assist from running away.
+     *
+     * `[MEASURED]` (plan 02-07): the roll-assist stability gate this plan
+     * adds (`tests/vehicle-telemetry.test.ts -t "roll assist stability"`)
+     * checks every scripted routine, not just the 45 mph probe condition
+     * above — and at gain 0.1 the `handbrake` routine's own 34deg slide
+     * reaches 15.40deg of chassis tilt, over the 15deg safety cutoff, a
+     * "mid-drift" operating point 02-RESEARCH.md Open Question 3 flagged as
+     * never characterised. 0.08 keeps every scripted routine under 15deg
+     * (worst case 12.15deg, in `slalom`) with margin; this file's default is
+     * corrected to match.
      */
     bodyRollGain: number;
     /** Body-roll rate damping term, as a multiple of the gain. */
@@ -267,7 +278,7 @@ export function defaultTuning(): VehicleTuning {
     assists: {
       autoLevelGain: 0.4,
       autoLevelDamping: 0.6,
-      bodyRollGain: 0.1,
+      bodyRollGain: 0.08,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
       slideCatchGain: 0.1,

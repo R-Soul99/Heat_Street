@@ -102,6 +102,12 @@ export const TELEMETRY_TARGETS = {
     recoverWithinSec: 2.5,
     label: ">25 deg max slip, recovers <5 deg within 2.5 s",
   },
+  ramp: {
+    maxTiltDeg: 20,
+    minSpeedMph: 40,
+    label: "<20 deg tilt, >40 mph forward speed (0.5 s after landing)",
+  },
+  stability: { maxTiltDeg: 15, label: "<15 deg max tilt" },
 } as const;
 
 /**
@@ -300,14 +306,20 @@ function makeSkidpadRoutine(): Routine {
 
 /**
  * `slalom`: hold 50 mph and alternate steer on a fixed period — a CLOSED-FORM
- * sine wave of the tick index, per this file's no-random discipline. `sample`
- * records the max `|slipAngleRad|` seen and whether slip has fallen back
- * below 5 deg by the time the routine ends. Target: never exceeds 90 deg,
- * and ends below 5 deg — "no spin".
+ * sine wave of the tick index, per this file's no-random discipline. After
+ * the alternating phase, a short STRAIGHT-STEER recovery tail lets slip decay
+ * before the final sample — without it, `lastSlipDeg` is measured mid-way
+ * through the sine wave's own transition back toward centre, which is a
+ * chassis-inertia lag away from "has it actually stopped spinning", not a
+ * real recovery check. `sample` records the max `|slipAngleRad|` seen and
+ * whether slip has fallen back below 5 deg by the end of the tail. Target:
+ * never exceeds 90 deg, and ends below 5 deg — "no spin".
  */
 const SLALOM_TARGET_MPH = MPH_50_MS;
 const SLALOM_PERIOD_TICKS = 90;
-const SLALOM_HOLD_TICKS = Math.round(6 / DT);
+const SLALOM_ALTERNATE_TICKS = Math.round(6 / DT);
+const SLALOM_RECOVERY_TAIL_TICKS = Math.round(1 / DT);
+const SLALOM_HOLD_TICKS = SLALOM_ALTERNATE_TICKS + SLALOM_RECOVERY_TAIL_TICKS;
 const SLALOM_STEER_FRACTION = 0.5;
 const SLALOM_HOLD_THROTTLE = 0.25;
 
@@ -334,6 +346,10 @@ function makeSlalomRoutine(): Routine {
       const elapsed = tick - holdStartTick;
       if (elapsed >= SLALOM_HOLD_TICKS) {
         return null;
+      }
+      if (elapsed >= SLALOM_ALTERNATE_TICKS) {
+        // Recovery tail: straight steer, let slip decay before the final sample.
+        return { steer: 0, throttle: SLALOM_HOLD_THROTTLE, brake: 0, handbrake: false };
       }
       const steer = SLALOM_STEER_FRACTION * Math.sin((2 * Math.PI * elapsed) / SLALOM_PERIOD_TICKS);
       return { steer, throttle: SLALOM_HOLD_THROTTLE, brake: 0, handbrake: false };
@@ -462,6 +478,178 @@ function makeHandbrakeRoutine(): Routine {
 }
 
 /**
+ * `ramp` (VEH-04): a SCRIPTED LAUNCH, per 02-RESEARCH.md Open Question 2's
+ * explicit recommendation, rather than driving over ramp geometry — this
+ * regression-tests the auto-level assist independently of the ramp collider
+ * plan 02-06 owns (a physical drive-over is covered separately by
+ * `tests/vehicle-scene.test.ts`; the two together cover VEH-04).
+ *
+ * `setup(vehicle)` places the chassis 3 m up and injects a 120 mph (-Z)
+ * launch with an upward component and an off-axis angular velocity —
+ * simulating a launch with a nose-up pitch and spin, without any ramp
+ * collider. `drive` holds neutral input while airborne, then applies a mild
+ * throttle after at least 3 wheels regain contact. `sample` records the
+ * max tilt while airborne (informational only — the auto-level assist is
+ * gated to airborne-only and is expected to fight a large tumble there) and
+ * the tilt/forward-speed 0.5 s after the first tick with 3+ wheels grounded.
+ * Target: tilt < 20 deg AND forward speed > 40 mph at that check point.
+ *
+ * `[MEASURED]` (plan 02-07, this exact launch): with `autoLevelGain: 0` the
+ * chassis never regains 3-wheel contact inside `MAX_TICKS` (it tumbles
+ * indefinitely, matching 02-RESEARCH.md's D-07 finding of "never landed on
+ * its wheels" at gain 0) — the `ramp without assist` companion in the test
+ * file asserts exactly this FAILS. At the default gain the chassis lands at
+ * tick ~115, tilt 0.5 s later is ~7 deg, and forward speed is ~100 mph.
+ */
+const RAMP_LAUNCH_HEIGHT_M = 3;
+const RAMP_LAUNCH_SPEED_MS = 53.6448;
+const RAMP_LAUNCH_UPWARD_MS = 8;
+/** Off-axis spin, rad/s. Severe enough that an unassisted landing never
+ * regains 3-wheel contact, but shallow enough that the default-gain assist
+ * settles the chassis to grounded tilt comfortably under the roll-assist
+ * stability gate's 15 deg gate (see `TELEMETRY_TARGETS.stability`). */
+const RAMP_LAUNCH_ANGVEL = { x: 0.71, y: 0.142, z: 0.355 };
+const RAMP_CHECK_DELAY_TICKS = Math.round(0.5 / DT);
+const RAMP_LANDED_HOLD_TICKS = Math.round(1.0 / DT);
+const RAMP_THROTTLE_AFTER_LANDING = 0.3;
+
+function makeRampRoutine(): Routine {
+  let landed = false;
+  let landedTick = 0;
+
+  return {
+    id: "ramp",
+    label: "ramp launch landing tilt",
+    setup(vehicle) {
+      landed = false;
+      landedTick = 0;
+      vehicle.body.setTranslation({ x: 0, y: RAMP_LAUNCH_HEIGHT_M, z: 0 }, true);
+      vehicle.body.setLinvel({ x: 0, y: RAMP_LAUNCH_UPWARD_MS, z: -RAMP_LAUNCH_SPEED_MS }, true);
+      vehicle.body.setAngvel(RAMP_LAUNCH_ANGVEL, true);
+    },
+    drive(tick, s) {
+      if (!landed) {
+        if (s.contacts >= 3) {
+          landed = true;
+          landedTick = tick;
+        } else {
+          return { steer: 0, throttle: 0, brake: 0, handbrake: false };
+        }
+      }
+      if (tick - landedTick >= RAMP_LANDED_HOLD_TICKS) {
+        return null;
+      }
+      return { steer: 0, throttle: RAMP_THROTTLE_AFTER_LANDING, brake: 0, handbrake: false };
+    },
+    sample(tick, s, acc) {
+      if (!landed) {
+        acc.maxAirTiltDeg = Math.max(acc.maxAirTiltDeg ?? 0, s.tiltDeg);
+        return;
+      }
+      const sinceLanding = tick - landedTick;
+      if (sinceLanding === RAMP_CHECK_DELAY_TICKS) {
+        acc.tiltAtCheckDeg = s.tiltDeg;
+        acc.speedAtCheckMs = s.forwardSpeedMs;
+      }
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.ramp;
+      // Never landing (still tumbling when MAX_TICKS is reached) or never
+      // reaching the check point both leave `tiltAtCheckDeg` unset, and
+      // Infinity always fails the band (T-02-19) rather than reporting a
+      // spurious pass on an incomplete run.
+      const tiltAtCheckDeg = "tiltAtCheckDeg" in acc ? acc.tiltAtCheckDeg : Number.POSITIVE_INFINITY;
+      const speedAtCheckMs = acc.speedAtCheckMs ?? 0;
+      return {
+        id: "ramp",
+        label: "ramp launch landing tilt",
+        value: tiltAtCheckDeg,
+        unit: "deg",
+        target: t.label,
+        pass: tiltAtCheckDeg < t.maxTiltDeg && speedAtCheckMs * 2.2369362920544 > t.minSpeedMph,
+      };
+    },
+  };
+}
+
+/**
+ * `stability` (SC3 / D-08): reach 60 mph, then hold FULL steer lock for 5 s
+ * with the body-roll assist at its default gain. `sample` records the max
+ * chassis tilt across the WHOLE run (accel phase included, though tilt there
+ * is negligible). Target: max tilt under 15 deg.
+ *
+ * `[MEASURED]` (02-RESEARCH.md): full lock at both 60 mph and 110 mph
+ * produced at most 1.5 deg of tilt with NO assist — rollover from tire
+ * forces alone is a non-risk. The real thing this gate protects against is
+ * the body-roll assist's OWN positive feedback: 02-RESEARCH.md's 45 mph /
+ * 0.26 rad probe measured gain 0.10 -> 5.46 deg and gain 0.20 -> the car
+ * flipping onto its roof. At this routine's own 60 mph / full-lock
+ * condition the cliff is shallower (gain 0.08 -> ~5 deg, gain 0.5 -> ~16 deg,
+ * no flip observed even at 0.5) — the sharpest cliff instead shows up in the
+ * `slalom` routine, which is what makes the CROSS-ROUTINE
+ * "roll assist stability" gate below (not just this routine alone) the real
+ * regression coverage for D-06's positive-feedback risk.
+ */
+const STABILITY_HOLD_TICKS = Math.round(5 / DT);
+const STABILITY_STEER_FRACTION = 1.0;
+const STABILITY_HOLD_THROTTLE = 0.3;
+
+function makeStabilityRoutine(): Routine {
+  let holding = false;
+  let holdStartTick = 0;
+
+  return {
+    id: "stability",
+    label: "full-lock stability max tilt",
+    setup() {
+      holding = false;
+      holdStartTick = 0;
+    },
+    drive(tick, s) {
+      if (!holding) {
+        if (s.forwardSpeedMs >= MPH_60_MS) {
+          holding = true;
+          holdStartTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (tick - holdStartTick >= STABILITY_HOLD_TICKS) {
+        return null;
+      }
+      return { steer: STABILITY_STEER_FRACTION, throttle: STABILITY_HOLD_THROTTLE, brake: 0, handbrake: false };
+    },
+    sample(_tick, s, acc) {
+      acc.maxTiltDeg = Math.max(acc.maxTiltDeg ?? 0, s.tiltDeg);
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.stability;
+      const maxTiltDeg = acc.maxTiltDeg ?? 0;
+      return {
+        id: "stability",
+        label: "full-lock stability max tilt",
+        value: maxTiltDeg,
+        unit: "deg",
+        target: t.label,
+        pass: maxTiltDeg < t.maxTiltDeg,
+      };
+    },
+  };
+}
+
+/**
+ * A standing instance of the `handbrake` routine (D-01), usable directly via
+ * `runRoutine`. Deliberately NOT a member of `ROUTINES` below — per this
+ * file's interface contract `ROUTINES` is exactly the six routines named in
+ * its own doc comment (accel, brake, skidpad, slalom, ramp, stability), the
+ * ones `runAllRoutines` and the plan 02-09 panel iterate uniformly.
+ * `handbrake` measures a deliberately provoked, transient slide rather than
+ * one of those six steady-state/pass-fail checks, so `tests/vehicle-telemetry.test.ts`
+ * imports and runs it directly instead.
+ */
+export const handbrakeRoutine: Routine = makeHandbrakeRoutine();
+
+/**
  * The six scripted routines, in the fixed order every consumer (the Vitest
  * suite, the plan 02-09 browser panel, `runAllRoutines`) iterates. Written
  * inline here rather than assembled elsewhere, so the list a reader sees is
@@ -472,5 +660,6 @@ export const ROUTINES: readonly Routine[] = [
   makeBrakeRoutine(),
   makeSkidpadRoutine(),
   makeSlalomRoutine(),
-  makeHandbrakeRoutine(),
+  makeRampRoutine(),
+  makeStabilityRoutine(),
 ];
