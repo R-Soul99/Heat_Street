@@ -57,13 +57,15 @@ describe("defaultTuning()", () => {
   it("has the eight measured load-bearing default values, asserted by literal", () => {
     const t = defaultTuning();
     expect(t.wheels.frictionSlip).toBe(1.2);
-    expect(t.wheels.rearSideFriction).toBe(0.12);
+    // Tuned 0.12 -> 0.2 in the plan 02-10 feel session: at 0.12, sustained
+    // full-throttle straight-line driving spontaneously spins out at ~89 mph
+    // (see the doc comment on `rearSideFriction` in src/core/vehicle-tuning.ts).
+    expect(t.wheels.rearSideFriction).toBe(0.2);
     expect(t.drive.handbrakeRearSideFriction).toBe(0.01);
-    // Corrected 0.1 -> 0.08 in plan 02-07: at 0.1 the handbrake telemetry
-    // routine's own 34deg slide reaches 15.40deg of chassis tilt, over the
-    // roll-assist-stability gate's 15deg cutoff (see the doc comment on
-    // `bodyRollGain` in src/core/vehicle-tuning.ts).
-    expect(t.assists.bodyRollGain).toBe(0.08);
+    // Corrected 0.1 -> 0.08 in plan 02-07, tuned further to 0.12 in the plan
+    // 02-10 feel session (see the doc comment on `bodyRollGain` in
+    // src/core/vehicle-tuning.ts).
+    expect(t.assists.bodyRollGain).toBe(0.12);
     expect(t.assists.autoLevelGain).toBe(0.4);
     expect(t.assists.downforcePerSpeed2).toBe(0);
     expect(t.chassis.mass).toBe(1600);

@@ -105,12 +105,31 @@ export interface VehicleTuning {
     /**
      * Rear-axle lateral grip multiplier — the PERMANENT RWD-loose bias
      * (independent of the handbrake). `[MEASURED]`: 1.0 -> 0.9deg of slip at
-     * 45 mph / 0.3 rad steer, 0.12 -> 2.2deg (this file's default: mild
-     * looseness without instability), 0.06 -> 6.5deg (looser, closer to
-     * unstable). See `handbrakeRearSideFriction` below for Pitfall 14 — the
+     * 45 mph / 0.3 rad steer, 0.12 -> 2.2deg, 0.06 -> 6.5deg (looser, closer
+     * to unstable). See `handbrakeRearSideFriction` below for Pitfall 14 — the
      * useful range for THIS style of dial is a narrow band near zero, which is
      * why `TUNING_RANGES.wheels.rearSideFriction` is bounded to `0..0.3`, not
      * a naive `0..1`.
+     *
+     * TUNED in the plan 02-10 feel session; supersedes the previous default of
+     * 0.12. `[MEASURED]` during that session: at full throttle with ZERO
+     * steering input, straight-line driving is unconditionally unaffected by
+     * `powerOversteerGain` (its lerp factor is `gain * throttle * |steer|`,
+     * which is exactly 0 with no steer), so the raw value here alone governs
+     * high-speed straight-line stability. At 0.12 the car spontaneously spins
+     * out from a symmetric, exponentially-growing lateral-force buildup under
+     * sustained full throttle at ~89 mph — reproduced headlessly with every
+     * assist disabled, and confirmed NOT speed-dependent alone (coasting with
+     * zero throttle is stable at every speed up to 120 mph; only sustained
+     * throttle triggers it). A `rearSideFriction` sweep at full throttle found
+     * the onset speed rises sharply with this value (0.06 -> 67 mph, 0.12 ->
+     * 89 mph, 0.2 -> 128 mph, 0.3 -> stable through a 20 s/1200-tick run) —
+     * 0.2 was chosen as comfortably above realistic sustained-chase speeds
+     * while still measurably looser than `frontSideFriction`. Confirmed in
+     * the same session that this does NOT blunt the deliberate full-lock
+     * power-oversteer move: at full throttle + full steer, `powerOversteerGain`
+     * already drives the lerp factor to 1, so only `handbrakeRearSideFriction`
+     * matters there regardless of this baseline.
      */
     rearSideFriction: number;
   };
@@ -154,6 +173,13 @@ export interface VehicleTuning {
      * as a function of throttle and steer angle, authoring the effect
      * directly (`rearSfs = lerp(baseline, handbrakeValue, gain * throttle *
      * |steer|)`, wired in plan 02-04).
+     *
+     * TUNED in the plan 02-10 feel session; supersedes the previous default of
+     * 0.5, which was never swept. `[MEASURED]` in that session: 0.5 produced
+     * no oversteer at all at full throttle + full lock; 1.0 still produced
+     * none; 1.3 spun the car into a full doughnut (too aggressive, effectively
+     * removing rear grip at full lock). 1.1 was the value that produced a
+     * controllable, readable step-out — human-confirmed in-browser.
      */
     powerOversteerGain: number;
   };
@@ -192,9 +218,14 @@ export interface VehicleTuning {
      * above — and at gain 0.1 the `handbrake` routine's own 34deg slide
      * reaches 15.40deg of chassis tilt, over the 15deg safety cutoff, a
      * "mid-drift" operating point 02-RESEARCH.md Open Question 3 flagged as
-     * never characterised. 0.08 keeps every scripted routine under 15deg
-     * (worst case 12.15deg, in `slalom`) with margin; this file's default is
-     * corrected to match.
+     * never characterised. 0.08 kept every scripted routine under 15deg
+     * (worst case 12.15deg, in `slalom`) with margin.
+     *
+     * TUNED FURTHER in the plan 02-10 feel session; supersedes plan 02-07's
+     * 0.08. Raised toward the Bullitt-anchor target after the car read as
+     * too flat through corners at 0.08 — human-confirmed in-browser, and the
+     * `tests/vehicle-telemetry.test.ts -t "roll assist stability"` gate still
+     * passes at 0.12 (measured 5.42deg max tilt, well under the 15deg cutoff).
      */
     bodyRollGain: number;
     /** Body-roll rate damping term, as a multiple of the gain. */
@@ -215,6 +246,13 @@ export interface VehicleTuning {
      * actually catches the slide. It becomes meaningful only at the deeper
      * `0.01`/`0.004` handbrake settings where slides persist for 1.5-2.5 s,
      * which is exactly where the recommended tuning sits.
+     *
+     * TUNED in the plan 02-10 feel session; supersedes the previous default of
+     * 0.1. Minor adjustment alongside the other session changes; raising it
+     * further (0.3, tested during the same session's straight-line-instability
+     * diagnosis) made the unrelated high-speed spin trigger EARLIER, not
+     * later — that instability's actual fix was `rearSideFriction` (see its
+     * own doc comment), not this gain, so 0.3 was rejected and 0.12 kept.
      */
     slideCatchGain: number;
     /** Slide-catch yaw-rate damping term, as a multiple of the gain. */
@@ -264,7 +302,7 @@ export function defaultTuning(): VehicleTuning {
       maxSuspensionForce: 20000,
       frictionSlip: 1.2,
       frontSideFriction: 1.0,
-      rearSideFriction: 0.12,
+      rearSideFriction: 0.2,
     },
     drive: {
       engineForcePerRearWheel: 3650,
@@ -273,15 +311,15 @@ export function defaultTuning(): VehicleTuning {
       steerRampPerSec: 2.5,
       steerReturnPerSec: 4.0,
       handbrakeRearSideFriction: 0.01,
-      powerOversteerGain: 0.5,
+      powerOversteerGain: 1.1,
     },
     assists: {
       autoLevelGain: 0.4,
       autoLevelDamping: 0.6,
-      bodyRollGain: 0.08,
+      bodyRollGain: 0.12,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
-      slideCatchGain: 0.1,
+      slideCatchGain: 0.12,
       slideCatchDamping: 0.35,
       downforcePerSpeed2: 0,
     },
