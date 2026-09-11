@@ -397,6 +397,31 @@ describe("startLoop — hud receives clock-accurate FrameStats", () => {
   });
 });
 
+describe("startLoop — render receives dtMs", () => {
+  it("passes the wall-clock delta as render's second argument, and 0 on the start-only first frame", () => {
+    const scheduler = new FakeScheduler();
+    const renderArgs: Array<[number, number]> = [];
+    const render = vi.fn((alpha: number, dtMs: number) => {
+      renderArgs.push([alpha, dtMs]);
+    });
+    const { deps } = makeDeps(scheduler, { render });
+
+    startLoop(deps);
+    scheduler.runFrame(0); // frame 1: start only, no render call at all
+    expect(render).not.toHaveBeenCalled();
+
+    scheduler.runFrame(1000 / 60);
+    scheduler.runFrame((2 * 1000) / 60);
+
+    expect(renderArgs).toHaveLength(2);
+    for (const [, dtMs] of renderArgs) {
+      expect(Number.isFinite(dtMs)).toBe(true);
+    }
+    expect(renderArgs[0][1]).toBeCloseTo(1000 / 60, 5);
+    expect(renderArgs[1][1]).toBeCloseTo(1000 / 60, 5);
+  });
+});
+
 describe("startLoop — stop()", () => {
   it("cancels the pending frame and removes the visibility listener; no further callbacks run", () => {
     const scheduler = new FakeScheduler();

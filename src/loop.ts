@@ -124,8 +124,18 @@ export interface LoopDeps {
    * multi-step frames (01-RESEARCH.md "Anti-Patterns to Avoid").
    */
   onTickEnd?(tick: number, events: RAPIER.EventQueue | null): void;
-  /** Called exactly once per animation frame, outside the fixed-tick loop. */
-  render(alpha: number): void;
+  /**
+   * Called exactly once per animation frame, outside the fixed-tick loop.
+   * `dtMs` is the wall-clock delta since the previous frame, supplied so a
+   * HUD (e.g. the speedometer) can do framerate-independent smoothing
+   * without reading a clock itself — keeping `performance.now(` confined to
+   * this file and `src/debug/` under `tests/layering.test.ts`'s rule.
+   * Rejected alternative: routing the speedometer through the `hud` field
+   * below instead of adding this parameter — `hud` is only constructed when
+   * `DEBUG_ENABLED` is true, and the speedometer is player-facing and always
+   * on, so that routing would silently make the gauge a debug-only feature.
+   */
+  render(alpha: number, dtMs: number): void;
   /** Called once per frame, after `render` returns. */
   hud?(stats: FrameStats, dtMs: number): void;
   /** Defaults to a browser implementation wrapping rAF / performance.now / visibilitychange. */
@@ -217,7 +227,7 @@ export function startLoop(deps: LoopDeps): LoopHandle {
     // ONE render per frame, outside the step loop above. Rendering per tick
     // collapses the architecture back into variable-rate rendering.
     const renderBeginMs = scheduler.now();
-    deps.render(clock.alpha(nowMs));
+    deps.render(clock.alpha(nowMs), dtMs);
     const renderMs = scheduler.now() - renderBeginMs;
 
     // Runs LAST, after render returns, so a HUD reading `renderer.info` sees
