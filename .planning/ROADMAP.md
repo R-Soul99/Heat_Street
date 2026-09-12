@@ -145,7 +145,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-07-PLAN.md — Composition root on the surface scene and helicopter camera, plus live surface/camera tuning (wave 4)
+- [x] 03-07-PLAN.md — Composition root on the surface scene and helicopter camera, plus live surface/camera tuning (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 6/12 | In Progress|  |
+| 3. Surfaces & Helicopter Camera | 7/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
