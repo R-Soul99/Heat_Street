@@ -558,7 +558,8 @@ function makeRampRoutine(): Routine {
       // reaching the check point both leave `tiltAtCheckDeg` unset, and
       // Infinity always fails the band (T-02-19) rather than reporting a
       // spurious pass on an incomplete run.
-      const tiltAtCheckDeg = "tiltAtCheckDeg" in acc ? acc.tiltAtCheckDeg : Number.POSITIVE_INFINITY;
+      const tiltAtCheckDeg =
+        "tiltAtCheckDeg" in acc ? acc.tiltAtCheckDeg : Number.POSITIVE_INFINITY;
       const speedAtCheckMs = acc.speedAtCheckMs ?? 0;
       return {
         id: "ramp",
@@ -617,7 +618,12 @@ function makeStabilityRoutine(): Routine {
       if (tick - holdStartTick >= STABILITY_HOLD_TICKS) {
         return null;
       }
-      return { steer: STABILITY_STEER_FRACTION, throttle: STABILITY_HOLD_THROTTLE, brake: 0, handbrake: false };
+      return {
+        steer: STABILITY_STEER_FRACTION,
+        throttle: STABILITY_HOLD_THROTTLE,
+        brake: 0,
+        handbrake: false,
+      };
     },
     sample(_tick, s, acc) {
       acc.maxTiltDeg = Math.max(acc.maxTiltDeg ?? 0, s.tiltDeg);
