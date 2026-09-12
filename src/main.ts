@@ -46,6 +46,8 @@ import {
   createHelicopterCameraRig,
 } from "./render/camera/helicopter-camera";
 import { createObjectCameraTarget } from "./render/camera/object-camera-target";
+import { createOcclusionController } from "./render/camera/occlusion-controller";
+import { createOcclusionProbe } from "./render/camera/occlusion-probe";
 import { applyAllInterpolated } from "./render/interpolator";
 import { createRenderer } from "./render/renderer";
 import { createSurfaceWorld } from "./render/surface-view";
@@ -211,6 +213,29 @@ if (DEBUG_ENABLED) {
   });
 }
 
+// CAM-04's occlusion mitigation (plan 03-09): constructed ALWAYS, NOT gated
+// on `DEBUG_ENABLED` — occlusion mitigation is player-facing behaviour,
+// exactly like the camera rig itself. Bound to `helicopterRig` specifically,
+// not the momentarily-active `activeRig` — the helicopter rig is the
+// confirmed shipped camera (docs/adr/0002-helicopter-camera-go-no-go.md),
+// and `chaseRig.setPitchBiasRad` is a documented no-op, so biasing whichever
+// rig happens to be active would gain the dev-only `C` comparison nothing
+// while losing the guarantee that occlusion behaviour is always exercised
+// against the rig it actually ships on.
+const occlusionProbe = createOcclusionProbe(surfaceWorld.buildingMeshes);
+// "fade" is the default arm — PROVISIONAL pending plan 03-12's SC6 playtest.
+// This is the line to change once that session picks a winner.
+const occlusion = createOcclusionController(
+  occlusionProbe,
+  surfaceWorld.buildingMeshes,
+  helicopterRig,
+  cameraTuning,
+  "fade",
+);
+if (DEBUG_ENABLED) {
+  onDebugKey("KeyO", () => occlusion.cycle());
+}
+
 // The camera skin (CAM-03) is always constructed and applied — the camera is
 // permanently skinned, and Phase 5 is what will drive the choice from the
 // active game mode. "police" is the boot default. Only the PREVIEW toggle
@@ -218,8 +243,8 @@ if (DEBUG_ENABLED) {
 //
 // Full key map for this phase, recorded here as the single place a reader
 // would look: Backquote = profiler HUD, G = tuning panel, T = telemetry
-// panel, C = camera rig swap, V = camera skin, O = reserved for plan
-// 03-09's occlusion mitigation A/B.
+// panel, C = camera rig swap, V = camera skin, O = occlusion mitigation A/B
+// (fade / steepen / off).
 const cameraChrome = createCameraSkinChrome();
 const skin = createCameraSkin(canvas.classList, cameraChrome, "police");
 if (DEBUG_ENABLED) {
@@ -253,6 +278,14 @@ startLoop({
     // fixed physics tick — nothing in the camera tier may be called from
     // `applyInput`/`onTickBegin` (03-RESEARCH.md Pitfall 3).
     activeRig.update(dtMs);
+    // `occlusion.update` runs AFTER `activeRig.update(dtMs)` so the probe
+    // casts its rays from THIS frame's converged camera pose, and BEFORE
+    // `renderer.render` so a pitch bias it sets lands before the draw call.
+    // The bias itself only takes effect on the NEXT frame's
+    // `activeRig.update` (the rig reads it at the top of its own update) —
+    // a one-frame lag that is imperceptible, in the same spirit as the
+    // surface-friction one-tick lag documented in 03-RESEARCH.md Pitfall 2.
+    occlusion.update(camera.position, view.meshes[0].position, dtMs);
     renderer.render(view.scene, camera);
   },
   hud: hud ? (stats, dtMs) => hud.update(stats, dtMs) : undefined,
