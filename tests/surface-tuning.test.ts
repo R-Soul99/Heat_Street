@@ -1,18 +1,17 @@
 import { describe, expect, it } from "vitest";
-import {
-  clampSurfaceProfiles,
-  defaultSurfaceProfiles,
-  parseSavedSurfaceProfiles,
-  serializeSurfaceProfiles,
-  SURFACE_PROFILE_RANGES,
-  SURFACE_TUNING_STORAGE_KEY,
-} from "../src/core/surface-tuning";
-import { SURFACE_TYPES } from "../src/core/surface-types";
-
 // Both files are read through Vite's `?raw` transform rather than `node:fs`,
 // matching `tests/road-graph-schema.test.ts`'s established convention —
 // `@types/node` is not installed and this phase installs zero new packages.
 import schemaDoc from "../docs/schemas/road-graph.v1.md?raw";
+import {
+  clampSurfaceProfiles,
+  defaultSurfaceProfiles,
+  parseSavedSurfaceProfiles,
+  SURFACE_PROFILE_RANGES,
+  SURFACE_TUNING_STORAGE_KEY,
+  serializeSurfaceProfiles,
+} from "../src/core/surface-tuning";
+import { SURFACE_TYPES } from "../src/core/surface-types";
 
 /**
  * T-03-04's mechanical guard: the six surface names spelled in game code must
@@ -107,7 +106,6 @@ describe("clampSurfaceProfiles", () => {
 
   it("replaces a missing leaf key with the default", () => {
     const p = defaultSurfaceProfiles();
-    // biome-ignore lint/performance/noDelete: simulating a hostile blob missing a key
     delete (p.sand as Partial<typeof p.sand>).lateralGrip;
     const result = clampSurfaceProfiles(p);
     expect(result.sand.lateralGrip).toBe(defaultSurfaceProfiles().sand.lateralGrip);
@@ -134,12 +132,9 @@ describe("parseSavedSurfaceProfiles — structural rejection, never throws", () 
     expect(parseSavedSurfaceProfiles("[]")).toBeNull();
   });
 
-  it.each(['"hello"', "7", "null", "true"])(
-    "returns null for a JSON scalar: %s",
-    (raw) => {
-      expect(parseSavedSurfaceProfiles(raw)).toBeNull();
-    },
-  );
+  it.each(['"hello"', "7", "null", "true"])("returns null for a JSON scalar: %s", (raw) => {
+    expect(parseSavedSurfaceProfiles(raw)).toBeNull();
+  });
 
   it("returns null for an object missing any of the six surface keys", () => {
     const blob = JSON.stringify({ tarmac: { forwardGrip: 1, lateralGrip: 1 } });
