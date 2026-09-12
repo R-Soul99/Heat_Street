@@ -43,7 +43,7 @@ function zoneInfos(world: ReturnType<typeof createWorld>, scene: SurfaceScene): 
   const infos: ZoneInfo[] = [];
   world.colliders.forEach((collider) => {
     const parent = collider.parent();
-    if (!parent || !parent.isFixed()) return;
+    if (!parent?.isFixed()) return;
     const t = parent.translation();
     if (t.y >= 0) return;
     const half = collider.halfExtents();
@@ -112,8 +112,7 @@ describe("createSurfaceScene: zone registration and geometry (D-01)", () => {
     const zones = zoneInfos(world, scene);
 
     const spawnZone = zones.find(
-      (z) =>
-        SURFACE_SCENE_SPAWN.z <= z.z + z.halfZ && SURFACE_SCENE_SPAWN.z >= z.z - z.halfZ,
+      (z) => SURFACE_SCENE_SPAWN.z <= z.z + z.halfZ && SURFACE_SCENE_SPAWN.z >= z.z - z.halfZ,
     );
     expect(spawnZone?.surface).toBe("tarmac");
 
@@ -137,7 +136,9 @@ describe("createSurfaceScene: D-02, no ramp", () => {
       });
       return n;
     })();
-    expect(fixedBodyCount).toBe(SURFACE_ZONE_ORDER.length + SPARSE_BUILDINGS.length + DENSE_BUILDINGS.length);
+    expect(fixedBodyCount).toBe(
+      SURFACE_ZONE_ORDER.length + SPARSE_BUILDINGS.length + DENSE_BUILDINGS.length,
+    );
   });
 });
 
@@ -147,19 +148,22 @@ describe("createSurfaceScene: SC1, the straight-drive proof", () => {
     const scene = createSurfaceScene(world, defaultTuning(), defaultSurfaceProfiles());
 
     const frame = { steer: 0, throttle: 1, brake: 0, handbrake: false };
-    const sequence: SurfaceType[] = [];
+    const collapsed: SurfaceType[] = [];
     const maxTicks = 1800;
-    for (let t = 0; t < maxTicks; t++) {
+    // "up to 1800 ticks" (this plan's <behavior>): stop as soon as the
+    // collapsed sequence has reached all six surfaces, rather than driving a
+    // fixed 1800 ticks unconditionally -- past the mud zone's far edge the
+    // world has no collider at all, and `SurfaceMap.lookup`'s documented
+    // absent-handle fallback (src/physics/surface.ts) would otherwise append
+    // a trailing, spurious "tarmac" default that has nothing to do with D-01's
+    // six-surface crossing.
+    for (let t = 0; t < maxTicks && collapsed.length < SURFACE_ZONE_ORDER.length; t++) {
       scene.preTick(t);
       scene.applyInput(frame);
       world.step();
-      sequence.push(scene.vehicle.wheelSurfaces[0]);
-    }
-
-    const collapsed: SurfaceType[] = [];
-    for (const s of sequence) {
-      if (collapsed.length === 0 || collapsed[collapsed.length - 1] !== s) {
-        collapsed.push(s);
+      const surface = scene.vehicle.wheelSurfaces[0];
+      if (collapsed.length === 0 || collapsed[collapsed.length - 1] !== surface) {
+        collapsed.push(surface);
       }
     }
 
