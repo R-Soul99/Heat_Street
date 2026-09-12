@@ -158,10 +158,21 @@ describe("camera-skin.ts — presentation only (CAM-03), source-level proof", ()
     // targeting") without tripping the very rule it documents.
     const FORBIDDEN =
       /\b(camera|fov|updateProjectionMatrix|quaternion|lookAt|position|distance|Lambda|CameraRig|CameraTarget)\b/;
+    // ONE narrow, documented exemption, mirroring the precedent recorded in
+    // .planning/STATE.md for plan 01-06 (a literal substring match that
+    // documents rather than violates the rule it sits inside): the chrome
+    // overlay's DOM `id` must literally equal "camera-chrome" to match
+    // index.html's `#camera-chrome` CSS selectors — that string is
+    // presentation-layer wiring, not a reference to camera-rig STATE (no
+    // `CameraRig`/`CameraTarget`/distance/damping value flows through it),
+    // so this one id-assignment line is exempted rather than restructured
+    // into something less readable purely to dodge a word match.
+    const CHROME_ID_EXEMPTION = /chrome\.id\s*=\s*"camera-chrome"/;
     const lines = cameraSkinSource.split("\n");
     const hits: string[] = [];
     for (let i = 0; i < lines.length; i++) {
       if (isCommentLine(lines[i])) continue;
+      if (CHROME_ID_EXEMPTION.test(lines[i])) continue;
       if (FORBIDDEN.test(lines[i])) {
         hits.push(`${i + 1}: ${lines[i].trim()}`);
       }
