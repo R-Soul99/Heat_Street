@@ -8,6 +8,7 @@ import {
   parseSavedCameraTuning,
   serializeCameraTuning,
 } from "../src/core/camera-tuning";
+import { isTuningRange } from "../src/core/tuning-utils";
 
 /**
  * Node-only tests for the camera's tuning contract. Mirrors
@@ -36,6 +37,25 @@ function forEachLeaf(node: unknown, fn: (value: unknown, path: string) => void, 
 function leafPaths(node: unknown, path = ""): string[] {
   const paths: string[] = [];
   forEachLeaf(node, (_v, p) => paths.push(p), path);
+  return paths;
+}
+
+/**
+ * Recursively collect every leaf path of a `CAMERA_TUNING_RANGES`-shaped
+ * table, stopping at each `TuningRange` leaf (a `{min,max,step}` object)
+ * rather than descending into its own `min`/`max`/`step` keys — those are
+ * NOT further tuning groups, so `leafPaths` above would over-recurse here.
+ */
+function rangeLeafPaths(node: Record<string, unknown>, path = ""): string[] {
+  const paths: string[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    const nextPath = path ? `${path}.${key}` : key;
+    if (isTuningRange(value)) {
+      paths.push(nextPath);
+    } else {
+      paths.push(...rangeLeafPaths(value as Record<string, unknown>, nextPath));
+    }
+  }
   return paths;
 }
 
@@ -77,7 +97,9 @@ describe("defaultCameraTuning — freshness and finiteness", () => {
   });
 
   it("CAMERA_TUNING_RANGES has the identical key shape as defaultCameraTuning() at every level", () => {
-    expect(leafPaths(CAMERA_TUNING_RANGES).sort()).toEqual(leafPaths(defaultCameraTuning()).sort());
+    expect(
+      rangeLeafPaths(CAMERA_TUNING_RANGES as unknown as Record<string, unknown>).sort(),
+    ).toEqual(leafPaths(defaultCameraTuning()).sort());
   });
 });
 
