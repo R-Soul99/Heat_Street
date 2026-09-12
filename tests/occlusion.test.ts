@@ -3,6 +3,7 @@ import {
   classifyOcclusion,
   densityFrom,
   fadeTargetOpacity,
+  fanOffsetsRad,
   type OcclusionHit,
   steepenPitchRad,
 } from "../src/render/camera/occlusion";
@@ -129,5 +130,58 @@ describe("steepenPitchRad", () => {
       steepenPitchRad(basePitchRad, maxPitchRad, 0.5);
     expect(stepNearStart).toBeLessThan(stepNearMid);
     expect(stepNearMid).toBeLessThan(range);
+  });
+});
+
+describe("fanOffsetsRad", () => {
+  const HALF_SPREAD_RAD = Math.PI / 6;
+
+  it("returns exactly count values, symmetric about 0, sorted ascending", () => {
+    const offsets = fanOffsetsRad(5);
+    expect(offsets).toHaveLength(5);
+    const sorted = [...offsets].sort((a, b) => a - b);
+    expect(offsets).toEqual(sorted);
+    // Symmetric about 0: offsets[i] === -offsets[length - 1 - i], to
+    // floating-point tolerance (two independently-summed float paths from
+    // opposite ends of the spread need not be bit-identical).
+    for (let i = 0; i < offsets.length; i++) {
+      expect(offsets[i]).toBeCloseTo(-offsets[offsets.length - 1 - i], 12);
+    }
+  });
+
+  it("the middle element is exactly 0 when count is odd", () => {
+    const offsets = fanOffsetsRad(5);
+    expect(offsets[2]).toBe(0);
+    const offsets7 = fanOffsetsRad(7);
+    expect(offsets7[3]).toBe(0);
+  });
+
+  it("fanOffsetsRad(1) returns [0] — a fan of one degenerates to the centre ray", () => {
+    expect(fanOffsetsRad(1)).toEqual([0]);
+  });
+
+  it("fanOffsetsRad(0) returns [0] rather than an empty array", () => {
+    expect(fanOffsetsRad(0)).toEqual([0]);
+  });
+
+  it("the outermost offsets do not exceed the documented PI/6 half-spread", () => {
+    for (const count of [2, 3, 5, 9]) {
+      const offsets = fanOffsetsRad(count);
+      for (const o of offsets) {
+        expect(Math.abs(o)).toBeLessThanOrEqual(HALF_SPREAD_RAD + 1e-12);
+      }
+      expect(Math.max(...offsets.map(Math.abs))).toBeCloseTo(HALF_SPREAD_RAD, 12);
+    }
+  });
+
+  it("offsets are evenly spaced across the spread", () => {
+    const offsets = fanOffsetsRad(5);
+    const steps: number[] = [];
+    for (let i = 1; i < offsets.length; i++) {
+      steps.push(offsets[i] - offsets[i - 1]);
+    }
+    for (const step of steps) {
+      expect(step).toBeCloseTo(steps[0], 12);
+    }
   });
 });

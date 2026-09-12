@@ -117,3 +117,34 @@ export function steepenPitchRad(
   const t = smoothstep01(clamp(density01, 0, 1));
   return basePitchRad + (maxPitchRad - basePitchRad) * t;
 }
+
+/**
+ * Half-spread of the occlusion-probe's fan of rays, in radians: PI/6 (30
+ * degrees each side of centre, 60 degrees total). Bounded deliberately —
+ * `src/render/camera/occlusion-probe.ts`'s `occludedFanRayCount` casts each
+ * ray from a camera position rotated by one of these offsets about the
+ * target, and a wider fan would sample poses the rig can never actually
+ * occupy, reporting a density signal that has nothing to do with what the
+ * player can see (plan 03-09's own instruction).
+ */
+const FAN_HALF_SPREAD_RAD = Math.PI / 6;
+
+/**
+ * `count` offsets (radians) spread evenly across
+ * `[-FAN_HALF_SPREAD_RAD, +FAN_HALF_SPREAD_RAD]`, symmetric about 0 and
+ * sorted ascending. `count <= 1` always returns `[0]` — a fan of one
+ * degenerates to the single centre ray, and a `count` of 0 must never hand
+ * `densityFrom` a zero denominator (that function already guards it, but this
+ * keeps the caller's array non-empty too).
+ */
+export function fanOffsetsRad(count: number): readonly number[] {
+  if (count <= 1) {
+    return [0];
+  }
+  const offsets: number[] = [];
+  const step = (2 * FAN_HALF_SPREAD_RAD) / (count - 1);
+  for (let i = 0; i < count; i++) {
+    offsets.push(-FAN_HALF_SPREAD_RAD + step * i);
+  }
+  return offsets;
+}
