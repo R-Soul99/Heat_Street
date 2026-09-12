@@ -74,12 +74,14 @@ function format(hits: readonly Hit[]): string {
 }
 
 describe("layering — the scan itself", () => {
-  it("found at least twenty source files, so a broken glob cannot make this suite trivially green", () => {
-    // Raised from 10 to 20 in plan 02-05: Phase 2 adds roughly ten new source
-    // files (src/input/**, src/hud/**, src/physics/vehicle*.ts, etc.), so the
-    // floor stays a meaningful guard against a broken glob rather than a
-    // value that was only ever true in Phase 1.
-    expect(FILES.length).toBeGreaterThanOrEqual(20);
+  it("found at least twenty-eight source files, so a broken glob cannot make this suite trivially green", () => {
+    // Raised from 10 to 20 in plan 02-05, and from 20 to 28 here in plan
+    // 03-07, for the same reason each time: Phase 3 adds roughly ten new
+    // source files (src/render/camera/**, src/physics/surface*.ts,
+    // src/render/surface-view.ts, src/physics/telemetry/surface-routines.ts,
+    // etc.), so the floor stays a meaningful guard against a broken glob
+    // rather than a value that was only ever true in an earlier phase.
+    expect(FILES.length).toBeGreaterThanOrEqual(28);
   });
 });
 
@@ -176,6 +178,68 @@ describe("layering — src/input never imports three and never writes simulation
   }
 });
 
+describe("layering — src/render/camera never imports src/physics (T-03-20)", () => {
+  const cameraFiles = FILES.filter((f) => f.path.startsWith("src/render/camera/"));
+  // This is what keeps the whole camera tier reusable for a Phase 7/8
+  // pursuer (D-13) and what stops camera code from reaching into the
+  // simulation — the rig follows a generic `CameraTarget`, never a concrete
+  // physics body.
+  const FORBIDDEN = /from\s+["'][^"']*physics\//;
+
+  it("scanned at least one src/render/camera file", () => {
+    expect(cameraFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of cameraFiles) {
+    it(`${file.path} does not import from src/physics`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});
+
+describe("layering — src/render/camera never expresses smoothing in ticks (T-03-21)", () => {
+  const cameraFiles = FILES.filter((f) => f.path.startsWith("src/render/camera/"));
+  // 03-RESEARCH.md Pitfall 3's warning sign is "a camera-smoothing constant
+  // expressed in ticks rather than seconds"; this is that warning sign made
+  // mechanical. The camera runs on `dtMs` from the variable render frame,
+  // never on the fixed physics tick, so nothing in this tier may import the
+  // fixed-tick clock or reference its tick-count constant.
+  const FORBIDDEN = /from\s+["'][^"']*sim-clock["']|\bDT\b/;
+
+  it("scanned at least one src/render/camera file", () => {
+    expect(cameraFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of cameraFiles) {
+    it(`${file.path} does not import sim-clock and does not reference DT`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});
+
+describe("layering — camera-math.ts and occlusion.ts never import three (T-03-22)", () => {
+  // Scoped to these two EXACT paths, not the whole src/render/camera/ tier —
+  // this is the property that keeps the Wave-0 tests runnable under
+  // `vitest.config.ts`'s `environment: "node"`. Without a mechanical guard,
+  // a future edit adding one `THREE.Vector3` to either file would silently
+  // make three Node-tested files unrunnable.
+  const files = FILES.filter(
+    (f) =>
+      f.path === "src/render/camera/camera-math.ts" || f.path === "src/render/camera/occlusion.ts",
+  );
+  const FORBIDDEN = /from\s+["']three["']/;
+
+  it("scanned at least one file", () => {
+    expect(files.length).toBeGreaterThan(0);
+  });
+
+  for (const file of files) {
+    it(`${file.path} does not import three`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});
+
 describe("layering — requestAnimationFrame lives in exactly one file (T-01-24)", () => {
   it("appears only in src/loop.ts", () => {
     const hits = scan(FILES, /\brequestAnimationFrame\b/);
@@ -200,3 +264,9 @@ describe("layering — no innerHTML anywhere under src/ (T-01-28)", () => {
     expect(format(scan(FILES, /\binnerHTML\b/))).toBe("");
   });
 });
+
+// FORWARD REFERENCE for plan 03-11: `src/audio/**` does not exist yet (it
+// lands in that plan), so no layering rule is added for it here — the
+// "scanned at least one file" guard on an empty filter would fail and make
+// the rule trivially green for the wrong reason. Plan 03-11 must add its own
+// `describe` block for that tier, following this file's existing shape.
