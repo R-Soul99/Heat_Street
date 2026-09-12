@@ -170,12 +170,22 @@ const SCRATCH_COMPOSED_QUAT = new THREE.Quaternion();
  * @param halfTrack Half the left-right wheel spacing, metres. Must be a positive finite number.
  * @param halfWheelbase Half the front-rear wheel spacing, metres. Must be a positive finite number.
  * @param chassisHalfExtents Chassis box half-extents, metres. Every component must be a positive finite number.
+ * @param options.includePhase2Ground When `false`, skips the Phase 2 ground
+ *   plane and ramp meshes (and their disposal) -- plan 03-05's composition
+ *   root uses this to swap in `src/render/surface-view.ts`'s zone/building
+ *   visuals instead without dragging the Phase 2 flat-ground/ramp geometry
+ *   along underneath them. Defaults to `true` so every existing call site
+ *   keeps working with no change. The `THREE.GridHelper` reference grid is
+ *   built on BOTH branches regardless -- plan 02-10's feel session found a
+ *   featureless ground made speed and slip impossible to judge, and SC4's
+ *   speed-legibility gate needs it more than that session did.
  */
 export function createVehicleView(
   wheelRadius: number,
   halfTrack: number,
   halfWheelbase: number,
   chassisHalfExtents: { x: number; y: number; z: number },
+  options?: { readonly includePhase2Ground?: boolean },
 ): VehicleView {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
     throw new RangeError(`wheelRadius must be a positive finite number, got ${wheelRadius}`);
@@ -193,37 +203,49 @@ export function createVehicleView(
     }
   }
 
+  const includePhase2Ground = options?.includePhase2Ground ?? true;
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLOUR_BACKGROUND);
 
   // Ground and ramp visuals: static, not part of `meshes` (they have no
   // physics body counterpart, matching `src/render/debug-scene.ts`'s
-  // exclusion of its own ground for exactly the same reason).
-  const groundGeometry = new THREE.PlaneGeometry(GROUND_SIZE.width, GROUND_SIZE.depth);
-  groundGeometry.rotateX(-Math.PI / 2);
-  // Top surface at y = 0, matching the physics ground's top surface.
-  const ground = new THREE.Mesh(
-    groundGeometry,
-    new THREE.MeshStandardMaterial({ color: COLOUR_GROUND, roughness: 0.95 }),
-  );
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // exclusion of its own ground for exactly the same reason). Both are
+  // nullable and built ONLY when `includePhase2Ground` is true, so
+  // `dispose()` below can skip disposing resources that were never created.
+  let groundGeometry: THREE.PlaneGeometry | null = null;
+  let groundMaterial: THREE.MeshStandardMaterial | null = null;
+  let rampGeometry: THREE.BufferGeometry | null = null;
+  let rampMaterial: THREE.MeshStandardMaterial | null = null;
+
+  if (includePhase2Ground) {
+    groundGeometry = new THREE.PlaneGeometry(GROUND_SIZE.width, GROUND_SIZE.depth);
+    groundGeometry.rotateX(-Math.PI / 2);
+    // Top surface at y = 0, matching the physics ground's top surface.
+    groundMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_GROUND, roughness: 0.95 });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.receiveShadow = true;
+    scene.add(ground);
+  }
 
   // Reference grid, sat a hair above y = 0 to avoid z-fighting with the
   // ground plane it shares a surface with. Centred at the world origin
   // (not on the chassis) -- the ramp and the vehicle's spawn/drive corridor
-  // both sit well inside its footprint (see GRID_SIZE's doc comment).
+  // both sit well inside its footprint (see GRID_SIZE's doc comment). Built
+  // on BOTH branches of `includePhase2Ground` -- see this function's own
+  // `options.includePhase2Ground` doc comment for why.
   const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, COLOUR_GRID_CENTER, COLOUR_GRID);
   grid.position.y = 0.01;
   scene.add(grid);
 
-  const ramp = new THREE.Mesh(
-    buildRampGeometry(),
-    new THREE.MeshStandardMaterial({ color: COLOUR_RAMP, roughness: 0.8 }),
-  );
-  ramp.castShadow = true;
-  ramp.receiveShadow = true;
-  scene.add(ramp);
+  if (includePhase2Ground) {
+    rampGeometry = buildRampGeometry();
+    rampMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_RAMP, roughness: 0.8 });
+    const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
+    ramp.castShadow = true;
+    ramp.receiveShadow = true;
+    scene.add(ramp);
+  }
 
   // The chassis mesh. No pose is set here -- every body mesh transform is
   // owned by `applyAllInterpolated` and written on the first rendered frame;
@@ -336,12 +358,12 @@ export function createVehicleView(
     },
 
     dispose(): void {
-      groundGeometry.dispose();
-      (ground.material as THREE.Material).dispose();
+      groundGeometry?.dispose();
+      groundMaterial?.dispose();
       grid.geometry.dispose();
       (grid.material as THREE.Material).dispose();
-      ramp.geometry.dispose();
-      (ramp.material as THREE.Material).dispose();
+      rampGeometry?.dispose();
+      rampMaterial?.dispose();
       chassisGeometry.dispose();
       chassisMaterial.dispose();
       wheelGeometry.dispose();
