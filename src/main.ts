@@ -194,9 +194,12 @@ const cameraTarget = createObjectCameraTarget(view.meshes[0], () => scene.vehicl
 // Both rigs are built and kept alive so the composition root can swap
 // between them with zero rebuild cost. NOT gated on `DEBUG_ENABLED` — the
 // camera itself is player-facing, exactly like `speedo`. Only the SWAP below
-// is a dev control. Per CONTEXT.md D-12 the chase rig is a genuine shipping
-// candidate, not a dev escape hatch: if plan 03-08's go/no-go gate fails,
-// flipping this `activeRig` initialiser is the whole change.
+// is a dev control. Plan 03-08's go/no-go gate is now DECIDED: GO, with no
+// retuning (docs/adr/0002-helicopter-camera-go-no-go.md) — the helicopter
+// rig is the confirmed shipped camera, not merely today's default. Per
+// CONTEXT.md D-12 the chase rig remains a genuine shipping candidate should
+// a future playtest ever overturn this decision; flipping this `activeRig`
+// initialiser would be the whole change.
 const helicopterRig = createHelicopterCameraRig(camera, cameraTarget, cameraTuning);
 const chaseRig = createChaseCameraRig(camera, cameraTarget, cameraTuning);
 let activeRig: CameraRig = helicopterRig;
