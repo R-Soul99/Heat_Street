@@ -139,3 +139,14 @@ None - no external service configuration required.
 ---
 *Phase: 03-surfaces-helicopter-camera*
 *Completed: 2026-09-12*
+
+## Self-Check: PASSED
+
+- FOUND: src/physics/telemetry/run.ts
+- FOUND: src/physics/telemetry/surface-routines.ts
+- FOUND: tests/surface-telemetry.test.ts
+- FOUND: .planning/phases/03-surfaces-helicopter-camera/03-06-SUMMARY.md
+- FOUND: 693a0fc (feat(03-06): extend telemetry harness with optional surface context)
+- FOUND: 3783782 (test(03-06): add failing test for per-surface skidpad sweep and A1 control)
+- FOUND: 0d63a1f (feat(03-06): add per-surface skidpad/stability sweeps and the A1 friction control)
+- FOUND: c11228c (docs(03-06): complete per-surface telemetry sweep plan)
