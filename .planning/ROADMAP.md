@@ -124,7 +124,48 @@ Plans:
   5. The camera skin can be switched between police/news and sports-broadcast presentations, changing presentation only — never distance, damping or targeting
   6. Buildings between the camera and car never permanently hide the car or the road ahead — both candidate mitigations (fade occluding buildings to translucent; dynamically steepen toward near-overhead in dense areas, relaxing in open areas) are prototyped, and the one that reads best in a human playtest is kept. Not a paper decision
 
-**Plans**: TBD
+**Plans**: 12 plans
+**UI hint**: yes
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — LF normalisation, tuning-utils extraction, surface name contract and SurfaceProfiles (wave 1)
+- [ ] 03-02-PLAN.md — Camera pure maths: velocity-heading blend, speed framing curve, occlusion classification (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-03-PLAN.md — SurfaceMap side-table and per-wheel surface grip applied inside the fixed tick (wave 2)
+- [ ] 03-04-PLAN.md — CameraTuning contract, helicopter rig, D-12 chase fallback, and both presentation skins (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-05-PLAN.md — Six-band surface test scene with two building clusters, plus its matching visuals (wave 3)
+- [ ] 03-06-PLAN.md — Per-surface skidpad sweep, the collider-friction control, and the stability re-verification (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-07-PLAN.md — Composition root on the surface scene and helicopter camera, plus live surface/camera tuning (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 03-08-PLAN.md — SC3/SC4 human playtest and the camera go/no-go decision, recorded as an ADR (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 03-09-PLAN.md — Occlusion probe and both CAM-04 mitigations behind a debug A/B toggle (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 03-10-PLAN.md — Per-surface particle FX and skid decals, and a revised frame budget (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 03-11-PLAN.md — First audio system: gesture-gated listener and six crossfaded per-surface channels (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 03-12-PLAN.md — Full-phase feel session, SC6 occlusion decision, and tuned defaults committed (wave 9)
 
 ### Phase 4: Map Pipeline & First Area
 
@@ -218,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 0/TBD | Not started | - |
+| 3. Surfaces & Helicopter Camera | 0/12 | Not started | - |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
