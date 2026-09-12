@@ -135,22 +135,42 @@ if (hud) {
 // (T-02-03) and it is also why the tuning panel can never be player-facing:
 // player-side handling tuning would break medal-time comparability (D-15).
 //
-// `onApply` is `() => scene.setTuning(tuning)` — the SAME object reference
-// the panel mutates in place, so a slider move takes effect on the very
-// next fixed tick with no rebuild. Rebuilding the vehicle on every slider
-// move would lose the car's state mid-drive (position, velocity, the
-// tuning session itself) and make the panel unusable.
-const panel = DEBUG_ENABLED ? createTuningPanel(tuning, () => scene.setTuning(tuning)) : null;
+// `onApplyVehicle` is `() => scene.setTuning(tuning)` — the SAME object
+// reference the panel mutates in place, so a slider move takes effect on
+// the very next fixed tick with no rebuild. Rebuilding the vehicle on every
+// slider move would lose the car's state mid-drive (position, velocity, the
+// tuning session itself) and make the panel unusable. `onApplySurfaces`
+// mirrors this for the live `SurfaceProfiles` object. `onApplyCamera` is a
+// genuine no-op: `helicopterRig`/`chaseRig` (built below) read their shared
+// `cameraTuning` object BY REFERENCE every `update(dtMs)`, so a camera
+// slider move takes effect on the very next render frame with nothing to
+// push — this is said explicitly here rather than silently omitting the
+// handler.
+const panel = DEBUG_ENABLED
+  ? createTuningPanel(tuning, surfaceProfiles, cameraTuning, {
+      onApplyVehicle: () => scene.setTuning(tuning),
+      onApplySurfaces: () => scene.setSurfaceProfiles(surfaceProfiles),
+      onApplyCamera: () => {
+        // No-op — see this block's own comment above.
+      },
+    })
+  : null;
 if (panel) {
   onDebugKey("KeyG", () => panel.toggle());
 }
 
-// `() => tuning` — a callback, not the captured value — so a telemetry run
-// triggered after the panel above has mutated `tuning` reads the LIVE
-// object rather than a stale copy taken at composition-root startup. This
-// is what makes SC5's "retuned live … and re-verified … with no code edit"
-// literally true.
-const telemetry = DEBUG_ENABLED ? createTelemetryHud(() => tuning) : null;
+// `() => tuning` / `() => surfaceProfiles` — callbacks, not captured values,
+// so a telemetry run triggered after the panel above has mutated either
+// object reads the LIVE values rather than a stale copy taken at
+// composition-root startup. This is what makes SC5's "retuned live … and
+// re-verified … with no code edit" literally true, extended to surfaces by
+// this plan's second sweep button.
+const telemetry = DEBUG_ENABLED
+  ? createTelemetryHud(
+      () => tuning,
+      () => surfaceProfiles,
+    )
+  : null;
 if (telemetry) {
   onDebugKey("KeyT", () => telemetry.toggle());
 }

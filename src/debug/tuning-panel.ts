@@ -40,6 +40,21 @@
 import type { KeyToValueOfType } from "three/addons/libs/lil-gui.module.min.js";
 import GUI from "three/addons/libs/lil-gui.module.min.js";
 import {
+  CAMERA_TUNING_RANGES,
+  CAMERA_TUNING_STORAGE_KEY,
+  type CameraTuning,
+  defaultCameraTuning,
+  serializeCameraTuning,
+} from "../core/camera-tuning";
+import {
+  defaultSurfaceProfiles,
+  SURFACE_PROFILE_RANGES,
+  SURFACE_TUNING_STORAGE_KEY,
+  type SurfaceProfiles,
+  serializeSurfaceProfiles,
+} from "../core/surface-tuning";
+import { SURFACE_TYPES } from "../core/surface-types";
+import {
   defaultTuning,
   serializeTuning,
   TUNING_RANGES,
@@ -139,16 +154,28 @@ export interface TuningPanel {
   dispose(): void;
 }
 
+/** The three independent write paths this panel's controls fan out to — one per persisted tuning domain (T-03-01's three-key rationale). */
+export interface TuningPanelHandlers {
+  onApplyVehicle(): void;
+  onApplySurfaces(): void;
+  onApplyCamera(): void;
+}
+
 /**
- * Build the lil-gui panel over `tuning`. GATE-FREE, like `createHud` — see
- * the module doc comment above for why.
+ * Build the lil-gui panel over `tuning`, `surfaces` and `cameraTuning`.
+ * GATE-FREE, like `createHud` — see the module doc comment above for why.
  *
- * `onApply` is called after every change that must reach the physics layer.
- * `storage` defaults, lazily, to a real `localStorage` adapter.
+ * `handlers` is called after every change that must reach the matching
+ * layer: `onApplyVehicle` for the physics/vehicle tier (unchanged from
+ * plan 02-09), `onApplySurfaces` for the live `SurfaceProfiles` object the
+ * scene reads per wheel per tick, and `onApplyCamera` for the camera rig's
+ * tuning. `storage` defaults, lazily, to a real `localStorage` adapter.
  */
 export function createTuningPanel(
   tuning: VehicleTuning,
-  onApply: () => void,
+  surfaces: SurfaceProfiles,
+  cameraTuning: CameraTuning,
+  handlers: TuningPanelHandlers,
   storage?: TuningStorage,
 ): TuningPanel {
   const store = storage ?? createLocalStorageAdapter();
@@ -159,15 +186,19 @@ export function createTuningPanel(
   const gui = new GUI({ title: "Vehicle Tuning [DEV]", width: 320 });
 
   // Folder order is a CONTRACT, not a suggestion (02-UI-SPEC.md "Tuning
-  // panel"): Chassis -> Suspension -> Grip -> Drive -> Assists -> Telemetry.
-  // New knobs append INSIDE their existing folder; folders themselves never
-  // reorder, so muscle memory survives a multi-session tuning effort.
+  // panel"): Chassis -> Suspension -> Grip -> Drive -> Assists -> Telemetry,
+  // now followed by Phase 3's Surfaces -> Camera. New knobs append INSIDE
+  // their existing folder; folders themselves never reorder (nor does a new
+  // folder insert itself before an existing one), so muscle memory survives
+  // a multi-session tuning effort.
   const chassisFolder = gui.addFolder("Chassis");
   const suspensionFolder = gui.addFolder("Suspension");
   const gripFolder = gui.addFolder("Grip");
   const driveFolder = gui.addFolder("Drive");
   const assistsFolder = gui.addFolder("Assists");
   const telemetryFolder = gui.addFolder("Telemetry");
+  const surfacesFolder = gui.addFolder("Surfaces");
+  const cameraFolder = gui.addFolder("Camera");
 
   // ---- Chassis --------------------------------------------------------
   // `mass`, `comOffset.*` and `halfExtents.*` bind on `.onFinishChange`,
@@ -177,26 +208,26 @@ export function createTuningPanel(
   // would produce discontinuities or a launched car. Only a drag-release (or
   // an input blur) should trigger a rebuild.
   addNumber(chassisFolder, tuning.chassis, "mass", TUNING_RANGES.chassis.mass).onFinishChange(
-    onApply,
+    handlers.onApplyVehicle,
   );
   addNumber(chassisFolder, tuning.chassis.comOffset, "x", TUNING_RANGES.chassis.comOffset.x)
     .name("comOffset.x")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   addNumber(chassisFolder, tuning.chassis.comOffset, "y", TUNING_RANGES.chassis.comOffset.y)
     .name("comOffset.y")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   addNumber(chassisFolder, tuning.chassis.comOffset, "z", TUNING_RANGES.chassis.comOffset.z)
     .name("comOffset.z")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   addNumber(chassisFolder, tuning.chassis.halfExtents, "x", TUNING_RANGES.chassis.halfExtents.x)
     .name("halfExtents.x")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   addNumber(chassisFolder, tuning.chassis.halfExtents, "y", TUNING_RANGES.chassis.halfExtents.y)
     .name("halfExtents.y")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   addNumber(chassisFolder, tuning.chassis.halfExtents, "z", TUNING_RANGES.chassis.halfExtents.z)
     .name("halfExtents.z")
-    .onFinishChange(onApply);
+    .onFinishChange(handlers.onApplyVehicle);
   // Damping is not mass-property-invalidating — safe live, like every wheel
   // property below.
   addNumber(
@@ -204,72 +235,72 @@ export function createTuningPanel(
     tuning.chassis,
     "linearDamping",
     TUNING_RANGES.chassis.linearDamping,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     chassisFolder,
     tuning.chassis,
     "angularDamping",
     TUNING_RANGES.chassis.angularDamping,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Suspension (wheel geometry + suspension physics) ----------------
-  // Every WHEEL property below uses `.onChange(onApply)` — Rapier's
+  // Every WHEEL property below uses `.onChange(handlers.onApplyVehicle)` — Rapier's
   // per-index wheel setters are genuinely per-frame safe, unlike
   // `setAdditionalMassProperties` above.
   addNumber(suspensionFolder, tuning.wheels, "halfTrack", TUNING_RANGES.wheels.halfTrack).onChange(
-    onApply,
+    handlers.onApplyVehicle,
   );
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "halfWheelbase",
     TUNING_RANGES.wheels.halfWheelbase,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "connectionY",
     TUNING_RANGES.wheels.connectionY,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(suspensionFolder, tuning.wheels, "radius", TUNING_RANGES.wheels.radius).onChange(
-    onApply,
+    handlers.onApplyVehicle,
   );
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionRestLength",
     TUNING_RANGES.wheels.suspensionRestLength,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "maxSuspensionTravel",
     TUNING_RANGES.wheels.maxSuspensionTravel,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionStiffness",
     TUNING_RANGES.wheels.suspensionStiffness,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionCompression",
     TUNING_RANGES.wheels.suspensionCompression,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionRelaxation",
     TUNING_RANGES.wheels.suspensionRelaxation,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "maxSuspensionForce",
     TUNING_RANGES.wheels.maxSuspensionForce,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Grip --------------------------------------------------------------
   // `frictionSlip`: [MEASURED] dead above ~10 (10.5 and 1000 read identical,
@@ -277,14 +308,14 @@ export function createTuningPanel(
   // is why `TUNING_RANGES.wheels.frictionSlip` stays 0.4-3, not a naive
   // 0-1000 range that would waste the whole slider on a dead zone.
   addNumber(gripFolder, tuning.wheels, "frictionSlip", TUNING_RANGES.wheels.frictionSlip).onChange(
-    onApply,
+    handlers.onApplyVehicle,
   );
   addNumber(
     gripFolder,
     tuning.wheels,
     "frontSideFriction",
     TUNING_RANGES.wheels.frontSideFriction,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   // Pitfall 14 (02-RESEARCH.md): the useful range for this rear-bias dial is
   // a narrow band near zero (0.06-1.0 all meaningfully distinct), which is
   // why this stays bounded to 0..0.3 (`TUNING_RANGES.wheels.rearSideFriction`)
@@ -295,7 +326,7 @@ export function createTuningPanel(
     tuning.wheels,
     "rearSideFriction",
     TUNING_RANGES.wheels.rearSideFriction,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Drive ---------------------------------------------------------
   addNumber(
@@ -303,28 +334,28 @@ export function createTuningPanel(
     tuning.drive,
     "engineForcePerRearWheel",
     TUNING_RANGES.drive.engineForcePerRearWheel,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "brakeImpulsePerWheel",
     TUNING_RANGES.drive.brakeImpulsePerWheel,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(driveFolder, tuning.drive, "maxSteerLock", TUNING_RANGES.drive.maxSteerLock).onChange(
-    onApply,
+    handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
     "steerRampPerSec",
     TUNING_RANGES.drive.steerRampPerSec,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "steerReturnPerSec",
     TUNING_RANGES.drive.steerReturnPerSec,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   // Pitfall 14 (02-RESEARCH.md): the ENTIRE useful range measured for this
   // dial is 0.004..0.04 — a 10x span inside the bottom 4% of a naive 0..1
   // track. Bounding this to 0..0.05 (`TUNING_RANGES.drive.handbrakeRearSideFriction`)
@@ -334,13 +365,13 @@ export function createTuningPanel(
     tuning.drive,
     "handbrakeRearSideFriction",
     TUNING_RANGES.drive.handbrakeRearSideFriction,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "powerOversteerGain",
     TUNING_RANGES.drive.powerOversteerGain,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
@@ -350,13 +381,13 @@ export function createTuningPanel(
     tuning.assists,
     "autoLevelGain",
     TUNING_RANGES.assists.autoLevelGain,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "autoLevelDamping",
     TUNING_RANGES.assists.autoLevelDamping,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   // `bodyRollGain`: [MEASURED] POSITIVE FEEDBACK — gain 0.10 -> ~5.5deg,
   // gain 0.20 -> the car flips onto its roof. `bodyRollMaxDeg` below is the
   // cutoff that keeps this assist from running away, not a decoration.
@@ -365,31 +396,31 @@ export function createTuningPanel(
     tuning.assists,
     "bodyRollGain",
     TUNING_RANGES.assists.bodyRollGain,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "bodyRollDamping",
     TUNING_RANGES.assists.bodyRollDamping,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "bodyRollMaxDeg",
     TUNING_RANGES.assists.bodyRollMaxDeg,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "slideCatchGain",
     TUNING_RANGES.assists.slideCatchGain,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "slideCatchDamping",
     TUNING_RANGES.assists.slideCatchDamping,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
   // [MEASURED] default is deliberately zero — full lock at 60/110 mph on
   // flat ground produced no more than 1.5deg of tilt with no downforce at
   // all. The knob is retained for Phase 3/4 surfaces, not removed.
@@ -398,7 +429,7 @@ export function createTuningPanel(
     tuning.assists,
     "downforcePerSpeed2",
     TUNING_RANGES.assists.downforcePerSpeed2,
-  ).onChange(onApply);
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Telemetry ---------------------------------------------------------
   // Reserved slot in the fixed folder order above. The telemetry RESULTS
@@ -408,16 +439,194 @@ export function createTuningPanel(
   const telemetryPointer = { hint: "Press T for telemetry results" };
   telemetryFolder.add(telemetryPointer, "hint").disable();
 
+  // ---- Surfaces (plan 03-07) ---------------------------------------------
+  // Twelve controls: forwardGrip + lateralGrip per SURFACE_TYPES entry, in
+  // SURFACE_TYPES order. Named "{surface} fwd" / "{surface} lat" so both the
+  // surface and the axis stay visible inside this panel's 320px width. All
+  // twelve bind `.onChange` — these are plain per-wheel multipliers applied
+  // fresh every tick (`src/physics/vehicle.ts`) and none of them invalidates
+  // cached mass properties the way `chassis.mass` does, so Pitfall 10's
+  // drag-release-only restriction on the Chassis folder above does not apply
+  // here. The asymmetry with the Chassis folder is deliberate, not an
+  // oversight.
+  for (const surface of SURFACE_TYPES) {
+    addNumber(
+      surfacesFolder,
+      surfaces[surface],
+      "forwardGrip",
+      SURFACE_PROFILE_RANGES[surface].forwardGrip,
+    )
+      .name(`${surface} fwd`)
+      .onChange(handlers.onApplySurfaces);
+    addNumber(
+      surfacesFolder,
+      surfaces[surface],
+      "lateralGrip",
+      SURFACE_PROFILE_RANGES[surface].lateralGrip,
+    )
+      .name(`${surface} lat`)
+      .onChange(handlers.onApplySurfaces);
+  }
+
+  // ---- Camera (plan 03-07) -----------------------------------------------
+  // One control per numeric leaf of `CAMERA_TUNING_RANGES` (~21 total),
+  // grouped into sub-folders so the flat leaf count stays navigable. All
+  // bind `.onChange(handlers.onApplyCamera)` — the rig re-reads its
+  // `CameraTuning` object by reference every `update(dtMs)`, so every one of
+  // these is safe live, matching the Suspension/Grip/Drive folders' own
+  // per-frame-safe convention rather than the Chassis folder's
+  // drag-release-only one.
+  const framingFolder = cameraFolder.addFolder("Framing");
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "lowSpeedMs",
+    CAMERA_TUNING_RANGES.framing.lowSpeedMs,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "highSpeedMs",
+    CAMERA_TUNING_RANGES.framing.highSpeedMs,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "lowAltitudeM",
+    CAMERA_TUNING_RANGES.framing.lowAltitudeM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "lowDistanceM",
+    CAMERA_TUNING_RANGES.framing.lowDistanceM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "lowFovDeg",
+    CAMERA_TUNING_RANGES.framing.lowFovDeg,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "highAltitudeM",
+    CAMERA_TUNING_RANGES.framing.highAltitudeM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "highDistanceM",
+    CAMERA_TUNING_RANGES.framing.highDistanceM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    framingFolder,
+    cameraTuning.framing,
+    "highFovDeg",
+    CAMERA_TUNING_RANGES.framing.highFovDeg,
+  ).onChange(handlers.onApplyCamera);
+
+  const dampingFolder = cameraFolder.addFolder("Damping");
+  addNumber(
+    dampingFolder,
+    cameraTuning.damping,
+    "positionLambda",
+    CAMERA_TUNING_RANGES.damping.positionLambda,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    dampingFolder,
+    cameraTuning.damping,
+    "headingLambda",
+    CAMERA_TUNING_RANGES.damping.headingLambda,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    dampingFolder,
+    cameraTuning.damping,
+    "framingLambda",
+    CAMERA_TUNING_RANGES.damping.framingLambda,
+  ).onChange(handlers.onApplyCamera);
+
+  const headingFolder = cameraFolder.addFolder("Heading");
+  addNumber(
+    headingFolder,
+    cameraTuning.heading,
+    "blendSpeedMs",
+    CAMERA_TUNING_RANGES.heading.blendSpeedMs,
+  ).onChange(handlers.onApplyCamera);
+
+  const occlusionFolder = cameraFolder.addFolder("Occlusion");
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "nearTargetMarginM",
+    CAMERA_TUNING_RANGES.occlusion.nearTargetMarginM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "fadeFloorOpacity",
+    CAMERA_TUNING_RANGES.occlusion.fadeFloorOpacity,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "fadeLambda",
+    CAMERA_TUNING_RANGES.occlusion.fadeLambda,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "basePitchDeg",
+    CAMERA_TUNING_RANGES.occlusion.basePitchDeg,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "maxPitchDeg",
+    CAMERA_TUNING_RANGES.occlusion.maxPitchDeg,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    occlusionFolder,
+    cameraTuning.occlusion,
+    "fanRayCount",
+    CAMERA_TUNING_RANGES.occlusion.fanRayCount,
+  ).onChange(handlers.onApplyCamera);
+
+  const chaseFallbackFolder = cameraFolder.addFolder("Chase fallback");
+  addNumber(
+    chaseFallbackFolder,
+    cameraTuning.chaseFallback,
+    "altitudeM",
+    CAMERA_TUNING_RANGES.chaseFallback.altitudeM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    chaseFallbackFolder,
+    cameraTuning.chaseFallback,
+    "distanceM",
+    CAMERA_TUNING_RANGES.chaseFallback.distanceM,
+  ).onChange(handlers.onApplyCamera);
+  addNumber(
+    chaseFallbackFolder,
+    cameraTuning.chaseFallback,
+    "fovDeg",
+    CAMERA_TUNING_RANGES.chaseFallback.fovDeg,
+  ).onChange(handlers.onApplyCamera);
+
   // D-17: persist on ANY change, anywhere in the tree — a controller's
   // change bubbles to its parent GUI and on up to the root regardless of
   // whether that controller itself was bound with `.onChange` or
   // `.onFinishChange` (verified by reading the shipped
   // `lil-gui.module.min.js`: `Controller._callOnChange` always calls
-  // `this.parent._callOnChange(this)`). Persisting the plain object
-  // (`serializeTuning`), not `gui.save(true)` — see the DEVIATION comment on
-  // `serializeTuning` in `src/core/vehicle-tuning.ts` for why.
+  // `this.parent._callOnChange(this)`). Persisting the plain objects
+  // (`serializeTuning`/`serializeSurfaceProfiles`/`serializeCameraTuning`),
+  // not `gui.save(true)` — see the DEVIATION comment on `serializeTuning` in
+  // `src/core/vehicle-tuning.ts` for why. Three small writes on any change is
+  // deliberate: three separate keys means a corrupt camera blob can never
+  // take the vehicle tuning down with it, which a single merged blob would.
   gui.onChange(() => {
     store.set(TUNING_STORAGE_KEY, serializeTuning(tuning));
+    store.set(SURFACE_TUNING_STORAGE_KEY, serializeSurfaceProfiles(surfaces));
+    store.set(CAMERA_TUNING_STORAGE_KEY, serializeCameraTuning(cameraTuning));
   });
 
   // Reset: the LAST control in the root. Two-click confirm from the
@@ -450,8 +659,22 @@ export function createTuningPanel(
             defaultTuning() as unknown as Record<string, unknown>,
             TUNING_RANGES as unknown as Record<string, unknown>,
           );
+          writeDefaultsOnto(
+            surfaces as unknown as Record<string, unknown>,
+            defaultSurfaceProfiles() as unknown as Record<string, unknown>,
+            SURFACE_PROFILE_RANGES as unknown as Record<string, unknown>,
+          );
+          writeDefaultsOnto(
+            cameraTuning as unknown as Record<string, unknown>,
+            defaultCameraTuning() as unknown as Record<string, unknown>,
+            CAMERA_TUNING_RANGES as unknown as Record<string, unknown>,
+          );
           store.remove(TUNING_STORAGE_KEY);
-          onApply();
+          store.remove(SURFACE_TUNING_STORAGE_KEY);
+          store.remove(CAMERA_TUNING_STORAGE_KEY);
+          handlers.onApplyVehicle();
+          handlers.onApplySurfaces();
+          handlers.onApplyCamera();
 
           // lil-gui 0.17.0 (the version bundled in three@0.185.1, verified
           // by reading the shipped `lil-gui.module.min.js`) ships

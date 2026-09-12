@@ -20,9 +20,11 @@
  * exercise.
  */
 
+import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import type { RoutineResult } from "../physics/telemetry/routines";
 import { runAllRoutines } from "../physics/telemetry/run";
+import { runSurfaceSkidpadSweep } from "../physics/telemetry/surface-routines";
 
 /**
  * Routine id -> 02-UI-SPEC.md's exact display label. Deliberately NOT
@@ -87,12 +89,15 @@ export interface TelemetryHud {
  * Build the DOM overlay. GATE-FREE like `createHud`/`createTuningPanel` — the
  * `DEBUG_ENABLED` check lives at the composition root (plan 02-09 task 3).
  *
- * `getTuning` is a CALLBACK, not a captured `VehicleTuning` value, so a run
- * triggered after the tuning panel has mutated its object reads the LIVE
- * values rather than a stale copy taken at construction time — this is the
- * whole point of SC5.
+ * `getTuning`/`getSurfaceProfiles` are CALLBACKS, not captured values, so a
+ * run triggered after the tuning panel has mutated its objects reads the
+ * LIVE values rather than a stale copy taken at construction time — this is
+ * the whole point of SC5, extended to surfaces by plan 03-07.
  */
-export function createTelemetryHud(getTuning: () => VehicleTuning): TelemetryHud {
+export function createTelemetryHud(
+  getTuning: () => VehicleTuning,
+  getSurfaceProfiles: () => SurfaceProfiles,
+): TelemetryHud {
   const el = document.createElement("div");
   // Surface styling is DELIBERATELY IDENTICAL to `profiler-hud.ts:84-87` —
   // same background, padding, border-radius and font — so the two dev
@@ -140,15 +145,44 @@ export function createTelemetryHud(getTuning: () => VehicleTuning): TelemetryHud
   const runButton = document.createElement("button");
   runButton.textContent = "Run telemetry suite";
   runButton.style.cssText =
-    "font:11px/1.45 ui-monospace,monospace;padding:4px 8px;cursor:pointer;" +
+    "font:11px/1.45 ui-monospace,monospace;padding:4px 8px;cursor:pointer;margin-right:6px;" +
     "background:#2A2A2E;color:#e8e8e8;border:1px solid #6E6E73;border-radius:4px";
   el.appendChild(runButton);
 
-  // Opening the panel does NOT auto-run: it opens into the empty state above
-  // and waits for a deliberate button press. Auto-running on a keypress
-  // (`KeyT`) would stall the frame unexpectedly mid-drive — the suite costs
-  // roughly 100-300ms (02-RESEARCH.md Pattern 4 measurement), which is
-  // several frames at 60 fps.
+  // SECOND button, next to the existing one — plan 03-07's six-surface
+  // skidpad sweep. Kept as a SEPARATE button rather than folded into the run
+  // above: the sweep below runs SIX throwaway worlds (one per
+  // `SURFACE_TYPES` entry), so this is roughly six times the existing run's
+  // stall. Folding it in would silently sextuple the cost of the button a
+  // developer already knows takes ~300ms.
+  const runSurfaceButton = document.createElement("button");
+  runSurfaceButton.textContent = "Run surface sweep";
+  runSurfaceButton.style.cssText =
+    "font:11px/1.45 ui-monospace,monospace;padding:4px 8px;cursor:pointer;" +
+    "background:#2A2A2E;color:#e8e8e8;border:1px solid #6E6E73;border-radius:4px";
+  el.appendChild(runSurfaceButton);
+
+  /** Shared results-table renderer for both buttons below. */
+  function renderResults(results: readonly RoutineResult[]): void {
+    rowsEl.textContent = "";
+    for (const r of results) {
+      const rowEl = document.createElement("div");
+      rowEl.textContent = formatTelemetryRow(r);
+      rowEl.style.color = r.pass ? "#6FBF73" : "#C8402F";
+      rowsEl.appendChild(rowEl);
+    }
+    rowsEl.style.display = "block";
+
+    stateHeadingEl.style.color = "";
+    stateHeadingEl.textContent = formatTelemetrySummary(results);
+  }
+
+  // Opening the panel does NOT auto-run either button: it opens into the
+  // empty state above and waits for a deliberate button press. Auto-running
+  // on a keypress (`KeyT`) would stall the frame unexpectedly mid-drive —
+  // the suite costs roughly 100-300ms (02-RESEARCH.md Pattern 4
+  // measurement), which is several frames at 60 fps, and the surface sweep
+  // costs roughly six times that.
   runButton.addEventListener("click", () => {
     // The suite runs synchronously (no `requestAnimationFrame`/`setTimeout`
     // boundary), so this "Running…" write and the final results write below
@@ -161,19 +195,15 @@ export function createTelemetryHud(getTuning: () => VehicleTuning): TelemetryHud
     stateHeadingEl.style.color = "#9A9AA0";
     bodyTextEl.style.display = "none";
 
-    const results = runAllRoutines(getTuning());
+    renderResults(runAllRoutines(getTuning()));
+  });
 
-    rowsEl.textContent = "";
-    for (const r of results) {
-      const rowEl = document.createElement("div");
-      rowEl.textContent = formatTelemetryRow(r);
-      rowEl.style.color = r.pass ? "#6FBF73" : "#C8402F";
-      rowsEl.appendChild(rowEl);
-    }
-    rowsEl.style.display = "block";
+  runSurfaceButton.addEventListener("click", () => {
+    stateHeadingEl.textContent = "Running…";
+    stateHeadingEl.style.color = "#9A9AA0";
+    bodyTextEl.style.display = "none";
 
-    stateHeadingEl.style.color = "";
-    stateHeadingEl.textContent = formatTelemetrySummary(results);
+    renderResults(runSurfaceSkidpadSweep(getTuning(), getSurfaceProfiles()));
   });
 
   return {
