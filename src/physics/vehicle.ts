@@ -16,7 +16,9 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
+import type { SurfaceType } from "../core/surface-types";
 import type { VehicleTuning } from "../core/vehicle-tuning";
+import type { SurfaceContext } from "./surface";
 import { applyAssists, boxPrincipalInertia } from "./vehicle-assists";
 
 /**
@@ -118,8 +120,23 @@ export interface Vehicle {
   readonly controller: RAPIER.DynamicRayCastVehicleController;
   /** Cached principal inertia, kg*m^2. Recomputed by `applyTuning` when mass or halfExtents change. */
   readonly inertia: { x: number; y: number; z: number };
-  /** Advance one fixed tick. Called BEFORE `world.step()`, per 02-RESEARCH.md Pattern 2. */
-  tick(frame: InputFrame, tuning: VehicleTuning): void;
+  /**
+   * Each wheel's currently-resolved surface, `FL/FR/RL/RR` order. Allocated
+   * ONCE at `createVehicle` time and mutated in place every tick that a
+   * `SurfaceContext` is supplied (never reallocated) — same discipline as
+   * `TransformCache`'s typed-array buffers. Initialised to `"tarmac"`.
+   * Unchanged (stays at its previous values) on any tick called without a
+   * `surfaces` argument.
+   */
+  readonly wheelSurfaces: readonly SurfaceType[];
+  /**
+   * Advance one fixed tick. Called BEFORE `world.step()`, per
+   * 02-RESEARCH.md Pattern 2. `surfaces` is OPTIONAL — when omitted, the
+   * per-wheel surface-grip block is skipped entirely (not run with an
+   * all-1.0 profile), so there is provably zero numeric change on the
+   * Phase 2 path (plan 03-03 T-03-09).
+   */
+  tick(frame: InputFrame, tuning: VehicleTuning, surfaces?: SurfaceContext): void;
   /** Live retune, no rebuild. Every wheel setter is per-frame safe; mass/CoM only reapplied on change (Pitfall 10). */
   applyTuning(tuning: VehicleTuning): void;
   /** Remove the vehicle controller from its world. */
@@ -242,16 +259,55 @@ export function createVehicle(
 
   applyTuning(tuning);
 
+  // Allocated ONCE, mutated in place every surfaced tick — never
+  // reallocated. See the matching doc comment on `Vehicle.wheelSurfaces`.
+  const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+
   return {
     body,
     controller: vc,
     inertia,
+    wheelSurfaces,
 
-    tick(frame: InputFrame, t: VehicleTuning): void {
+    tick(frame: InputFrame, t: VehicleTuning, surfaces?: SurfaceContext): void {
       // The order below is 02-RESEARCH.md Pattern 2 and is LOAD-BEARING:
       // `updateVehicle` raycasts, computes suspension/tire impulses and
       // writes them onto the chassis; telemetry is valid only after it
       // runs, and the assists must read THIS tick's contact/load state.
+
+      // 0. Per-wheel surface grip (03-RESEARCH.md Pattern 1), inserted at
+      // the TOP of tick, BEFORE steering. `surfaces` is OPTIONAL: when
+      // omitted this whole block is skipped — not run with an all-1.0
+      // profile — so the Phase 2 path is provably byte-identical (T-03-09).
+      //
+      // The per-wheel ground-collider read below reflects the PREVIOUS
+      // tick's raycast (it is only refreshed by THIS tick's own
+      // `updateVehicle` call, further down, step 5) — a one-tick (~16.6ms)
+      // lag between crossing a surface boundary and the new friction
+      // values taking effect. This is 03-RESEARCH.md Pitfall 2, intentional
+      // and accepted: do NOT move `updateVehicle` earlier or add a second
+      // call to get a "fresher" read, that would break the load-bearing
+      // tick order this whole comment block sits inside of.
+      //
+      // Rear wheels' per-wheel lateralGrip multiplier is captured here but
+      // APPLIED in step 4 below, composed onto (never replacing) the
+      // handbrake/power-oversteer blend that step already computes — see
+      // the comment there.
+      const rearLateralGrip: number[] = [1, 1];
+      if (surfaces) {
+        for (let i = 0; i < 4; i++) {
+          const ground = vc.wheelGroundObject(i);
+          const surface = surfaces.map.lookup(ground?.handle);
+          wheelSurfaces[i] = surface;
+          const profile = surfaces.profiles[surface];
+          vc.setWheelFrictionSlip(i, t.wheels.frictionSlip * profile.forwardGrip);
+          if (i < 2) {
+            vc.setWheelSideFrictionStiffness(i, t.wheels.frontSideFriction * profile.lateralGrip);
+          } else {
+            rearLateralGrip[i - 2] = profile.lateralGrip;
+          }
+        }
+      }
 
       // 1. Steering. InputFrame.steer is -1 = LEFT / +1 = RIGHT; with
       // forward = local -Z, up = +Y and axleCs = {-1,0,0}, a POSITIVE
@@ -288,6 +344,16 @@ export function createVehicle(
       // because the friction-circle clamp scales the side impulse down
       // proportionally instead of releasing it. SC1's "provoke oversteer
       // with throttle OR handbrake" therefore requires this authored term.
+      //
+      // COMPOSITION, not replacement (03-RESEARCH.md Pattern 1 / this
+      // plan's threat T-03-09): the surface's lateralGrip multiplier SCALES
+      // this blended value, it never replaces it. Step 0 deliberately does
+      // NOT write RL/RR's side friction itself — if it did, this block
+      // would silently overwrite it and discard the surface effect on
+      // exactly the two wheels the game's oversteer feel depends on. When
+      // `surfaces` is undefined, `rearLateralGrip` stays at its `[1, 1]`
+      // initialiser (an explicit local default, not a second code path),
+      // so this line is unchanged from the Phase 2 behaviour.
       const rearSfs = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
@@ -295,8 +361,8 @@ export function createVehicle(
             t.drive.handbrakeRearSideFriction,
             clamp(t.drive.powerOversteerGain * frame.throttle * Math.abs(frame.steer), 0, 1),
           );
-      vc.setWheelSideFrictionStiffness(RL, rearSfs);
-      vc.setWheelSideFrictionStiffness(RR, rearSfs);
+      vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
+      vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 
       // 5. Solve the vehicle — writes suspension + tire impulses onto the
       // chassis body. Imported DT, never a literal.
