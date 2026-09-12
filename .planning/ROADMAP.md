@@ -135,8 +135,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-03-PLAN.md — SurfaceMap side-table and per-wheel surface grip applied inside the fixed tick (wave 2)
-- [ ] 03-04-PLAN.md — CameraTuning contract, helicopter rig, D-12 chase fallback, and both presentation skins (wave 2)
+- [x] 03-03-PLAN.md — SurfaceMap side-table and per-wheel surface grip applied inside the fixed tick (wave 2)
+- [x] 03-04-PLAN.md — CameraTuning contract, helicopter rig, D-12 chase fallback, and both presentation skins (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 2/12 | In Progress|  |
+| 3. Surfaces & Helicopter Camera | 4/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
