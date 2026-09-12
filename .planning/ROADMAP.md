@@ -130,8 +130,8 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — LF normalisation, tuning-utils extraction, surface name contract and SurfaceProfiles (wave 1)
-- [ ] 03-02-PLAN.md — Camera pure maths: velocity-heading blend, speed framing curve, occlusion classification (wave 1)
+- [x] 03-01-PLAN.md — LF normalisation, tuning-utils extraction, surface name contract and SurfaceProfiles (wave 1)
+- [x] 03-02-PLAN.md — Camera pure maths: velocity-heading blend, speed framing curve, occlusion classification (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 0/12 | Not started | - |
+| 3. Surfaces & Helicopter Camera | 2/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |

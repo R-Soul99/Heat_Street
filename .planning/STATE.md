@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-09-12T11:31:56.082Z"
-last_activity: 2026-09-12 -- Phase 03 planning complete
+last_updated: "2026-09-12T12:53:59.670Z"
+last_activity: 2026-09-12 -- Phase 03 execution started
 progress:
   total_phases: 8
   completed_phases: 2
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 02 — vehicle-feel-core COMPLETE. Phase 03 (surfaces-and-helicopter-camera) not yet planned.
+**Current focus:** Phase 03 — surfaces-helicopter-camera
 
 ## Current Position
 
-Phase: 02 (vehicle-feel-core) — COMPLETE (10/10 plans)
+Phase: 03 (surfaces-helicopter-camera) — EXECUTING
+Plan: 1 of 12
 Phase: 03 (surfaces-and-helicopter-camera) — NOT STARTED (not yet broken into plans)
-Last activity: 2026-09-12 -- Phase 03 planning complete
+Last activity: 2026-09-12 -- Phase 03 execution started
 
 Progress (phases 1-2 of 8, the only ones planned so far): [██████████] 100% of 17 known plans
 
