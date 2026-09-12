@@ -1,0 +1,18 @@
+# Repo-wide LF normalisation, fixing the pre-existing CRLF-vs-LF mismatch
+# recorded in .planning/phases/02-vehicle-feel-core/deferred-items.md: this
+# Windows worktree's `core.autocrlf=true` checks every file out with CRLF line
+# endings on disk, while biome's formatter (and the committed git blobs
+# themselves) expect LF. This is the smaller, non-Windows-specific fix path —
+# matching the repo to its own already-LF committed content — chosen over the
+# alternative of setting `formatter.lineEnding: "crlf"` in biome.json.
+* text=auto eol=lf
+
+# Binary assets later plans commit (e.g. plan 03-10's CC0 audio files, future
+# glTF models) must never be line-ending-mangled by the `text=auto` rule above.
+*.glb binary
+*.wasm binary
+*.png binary
+*.jpg binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
