@@ -62,15 +62,20 @@ const COLOUR_GRID = 0x50505c;
 const COLOUR_GRID_CENTER = 0x6a6a78;
 
 /**
- * Size/division of the ground reference grid, metres. A featureless flat
- * plane gives a driver no way to judge speed or lateral slide from a chase
- * camera -- this is a cheap, no-asset-pipeline fix (a built-in
- * `THREE.GridHelper`, not a texture) added after the plan 02-10 feel session
- * found the bare ground unreadable. 10 m lines are coarse enough not to moire
- * at speed and fine enough to read a slide against.
+ * Default half-extents/spacing of the ground reference grid, metres. A
+ * featureless flat plane gives a driver no way to judge speed or lateral
+ * slide from a chase camera -- this is a cheap, no-asset-pipeline fix (hand-
+ * built `LineSegments`, not a texture) added after the plan 02-10 feel
+ * session found the bare ground unreadable. 10 m lines are coarse enough not
+ * to moire at speed and fine enough to read a slide against.
+ *
+ * These are the DEFAULTS used when a caller does not pass
+ * `options.groundExtents` -- they match the Phase 2 flat-plane fixture's
+ * footprint (a 400 x 400 m square, i.e. 200 m half-extents both axes) and
+ * exist so every pre-Phase-3 call site keeps its exact prior grid unchanged.
  */
-const GRID_SIZE = 400;
-const GRID_DIVISIONS = 40;
+const GRID_HALF_EXTENT_DEFAULT = 200;
+const GRID_SPACING = 10;
 
 /** Half-width of the area the shadow camera frames, metres. */
 const SHADOW_AREA_HALF = 30;
@@ -164,6 +169,55 @@ const SCRATCH_ROLL_QUAT = new THREE.Quaternion();
 const SCRATCH_COMPOSED_QUAT = new THREE.Quaternion();
 
 /**
+ * Build a rectangular reference grid bounded to exactly `[-halfX, halfX]` x
+ * `[-halfZ, halfZ]`, at `spacing`-metre intervals, with the two centreline
+ * segments (x = 0 and z = 0) drawn in `colorCenter` and every other line in
+ * `colorLine`. Replaces a plain `THREE.GridHelper` (which is always square,
+ * `size` x `size`) because a square grid drawn wider than the actual
+ * drivable floor reads as "the ground continues here" when it does not --
+ * found during plan 03-08's human go/no-go session, where a driver fell off
+ * the six-surface scene's 120 m-wide floor while the grid still showed lines
+ * out to 400 m. One `LineSegments` with a per-vertex `color` attribute,
+ * mirroring `THREE.GridHelper`'s own internal construction so `dispose()`
+ * below (`grid.geometry.dispose()` / `(grid.material as
+ * THREE.Material).dispose()`) needs no change.
+ */
+function buildReferenceGrid(
+  halfX: number,
+  halfZ: number,
+  spacing: number,
+  colorCenter: number,
+  colorLine: number,
+): THREE.LineSegments {
+  const center = new THREE.Color(colorCenter);
+  const line = new THREE.Color(colorLine);
+
+  const positions: number[] = [];
+  const colors: number[] = [];
+
+  const pushSegment = (x1: number, z1: number, x2: number, z2: number, c: THREE.Color): void => {
+    positions.push(x1, 0, z1, x2, 0, z2);
+    colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+  };
+
+  // Lines parallel to Z (running the length of the floor), stepped across X.
+  for (let x = -halfX; x <= halfX + 1e-6; x += spacing) {
+    pushSegment(x, -halfZ, x, halfZ, x === 0 ? center : line);
+  }
+  // Lines parallel to X (running the width of the floor), stepped across Z.
+  for (let z = -halfZ; z <= halfZ + 1e-6; z += spacing) {
+    pushSegment(-halfX, z, halfX, z, z === 0 ? center : line);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+  const material = new THREE.LineBasicMaterial({ vertexColors: true, toneMapped: false });
+  return new THREE.LineSegments(geometry, material);
+}
+
+/**
  * Build the chassis mesh, four wheel meshes and static ground/ramp visuals.
  *
  * @param wheelRadius Wheel visual radius, metres. Must be a positive finite number.
@@ -175,17 +229,28 @@ const SCRATCH_COMPOSED_QUAT = new THREE.Quaternion();
  *   root uses this to swap in `src/render/surface-view.ts`'s zone/building
  *   visuals instead without dragging the Phase 2 flat-ground/ramp geometry
  *   along underneath them. Defaults to `true` so every existing call site
- *   keeps working with no change. The `THREE.GridHelper` reference grid is
- *   built on BOTH branches regardless -- plan 02-10's feel session found a
- *   featureless ground made speed and slip impossible to judge, and SC4's
- *   speed-legibility gate needs it more than that session did.
+ *   keeps working with no change.
+ * @param options.groundExtents Half-extents (metres) the reference grid is
+ *   bounded to, `{ x, z }`. Defaults to `{ x: GRID_HALF_EXTENT_DEFAULT, z:
+ *   GRID_HALF_EXTENT_DEFAULT }` (the Phase 2 400 x 400 m square) so every
+ *   pre-Phase-3 call site is pixel-identical to before this option existed.
+ *   Phase 3's composition root (`src/main.ts`) passes the six-surface
+ *   scene's actual floor half-extents here -- see this function's own
+ *   `buildReferenceGrid` doc comment for why a mismatch matters. The grid is
+ *   built on BOTH branches of `includePhase2Ground` regardless -- plan
+ *   02-10's feel session found a featureless ground made speed and slip
+ *   impossible to judge, and SC4's speed-legibility gate needs it more than
+ *   that session did.
  */
 export function createVehicleView(
   wheelRadius: number,
   halfTrack: number,
   halfWheelbase: number,
   chassisHalfExtents: { x: number; y: number; z: number },
-  options?: { readonly includePhase2Ground?: boolean },
+  options?: {
+    readonly includePhase2Ground?: boolean;
+    readonly groundExtents?: { readonly x: number; readonly z: number };
+  },
 ): VehicleView {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
     throw new RangeError(`wheelRadius must be a positive finite number, got ${wheelRadius}`);
@@ -204,6 +269,16 @@ export function createVehicleView(
   }
 
   const includePhase2Ground = options?.includePhase2Ground ?? true;
+  const groundExtents = options?.groundExtents ?? {
+    x: GRID_HALF_EXTENT_DEFAULT,
+    z: GRID_HALF_EXTENT_DEFAULT,
+  };
+  for (const axis of ["x", "z"] as const) {
+    const v = groundExtents[axis];
+    if (!Number.isFinite(v) || v <= 0) {
+      throw new RangeError(`groundExtents.${axis} must be a positive finite number, got ${v}`);
+    }
+  }
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLOUR_BACKGROUND);
@@ -230,11 +305,17 @@ export function createVehicleView(
 
   // Reference grid, sat a hair above y = 0 to avoid z-fighting with the
   // ground plane it shares a surface with. Centred at the world origin
-  // (not on the chassis) -- the ramp and the vehicle's spawn/drive corridor
-  // both sit well inside its footprint (see GRID_SIZE's doc comment). Built
-  // on BOTH branches of `includePhase2Ground` -- see this function's own
-  // `options.includePhase2Ground` doc comment for why.
-  const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, COLOUR_GRID_CENTER, COLOUR_GRID);
+  // (not on the chassis) and bounded to `groundExtents` -- see
+  // `buildReferenceGrid`'s doc comment for why an unbounded grid is a bug,
+  // not a feature. Built on BOTH branches of `includePhase2Ground` -- see
+  // this function's own `options.includePhase2Ground` doc comment for why.
+  const grid = buildReferenceGrid(
+    groundExtents.x,
+    groundExtents.z,
+    GRID_SPACING,
+    COLOUR_GRID_CENTER,
+    COLOUR_GRID,
+  );
   grid.position.y = 0.01;
   scene.add(grid);
 

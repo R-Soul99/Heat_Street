@@ -69,6 +69,20 @@ export const SURFACE_ZONE_ORDER: readonly SurfaceType[] = [
 export const SURFACE_SCENE_SPAWN = { x: 0, y: 0.6, z: 205 };
 
 /**
+ * Half-extents (metres) of the scene's full drivable floor footprint: X is
+ * one band's half-width (`ZONE_HALF_X`, every band is the same width), Z is
+ * the whole six-band patchwork's half-length (`SURFACE_ZONE_ORDER.length *
+ * ZONE_HALF_Z`, since the bands are contiguous with no gap). Exported so
+ * `src/main.ts` can size the render tier's reference grid to match -- a grid
+ * wider than the real floor reads as "the ground continues here" when it
+ * does not (found during plan 03-08's human go/no-go session).
+ */
+export const SURFACE_SCENE_FLOOR_HALF_EXTENTS = {
+  x: ZONE_HALF_X,
+  z: SURFACE_ZONE_ORDER.length * ZONE_HALF_Z,
+} as const;
+
+/**
  * Build one surface band's static collider and register it into
  * `surfaceMap`. Mirrors `vehicle-scene.ts`'s `buildGround` shape.
  */

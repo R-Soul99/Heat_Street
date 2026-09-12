@@ -36,7 +36,7 @@ import { createTuningPanel } from "./debug/tuning-panel";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { startLoop } from "./loop";
-import { createSurfaceScene } from "./physics/surface-scene";
+import { createSurfaceScene, SURFACE_SCENE_FLOOR_HALF_EXTENTS } from "./physics/surface-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
 import { createCameraSkin, createCameraSkinChrome } from "./render/camera/camera-skin";
@@ -101,14 +101,17 @@ const { renderer, camera } = createRenderer(canvas);
 // `scene.bodies.length` / `scene.spinnerIndex` (threat T-01-16).
 // `{ includePhase2Ground: false }` -- Phase 3's `src/render/surface-view.ts`
 // zone/building visuals below replace the flat Phase 2 ground and ramp; the
-// `THREE.GridHelper` reference grid is still built either way (see that
-// option's own doc comment).
+// reference grid is still built either way (see that option's own doc
+// comment), but `groundExtents` bounds it to the six-surface scene's actual
+// floor footprint rather than the Phase 2 flat-plane default -- an
+// unbounded grid was found during plan 03-08's human go/no-go session to
+// read as drivable floor well past where the real physics floor ends.
 const view = createVehicleView(
   tuning.wheels.radius,
   tuning.wheels.halfTrack,
   tuning.wheels.halfWheelbase,
   tuning.chassis.halfExtents,
-  { includePhase2Ground: false },
+  { includePhase2Ground: false, groundExtents: SURFACE_SCENE_FLOOR_HALF_EXTENTS },
 );
 const surfaceWorld = createSurfaceWorld();
 view.scene.add(surfaceWorld.group);
