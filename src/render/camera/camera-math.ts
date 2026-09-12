@@ -101,3 +101,58 @@ export function blendedHeadingRad(
 
   return Math.atan2(blendedX, blendedZ);
 }
+
+/** The camera rig's altitude/distance/FOV triple at a given point on the speed curve. */
+export interface CameraFraming {
+  readonly altitudeM: number;
+  readonly distanceM: number;
+  readonly fovDeg: number;
+}
+
+/**
+ * A low-speed -> high-speed `CameraFraming` curve. `distanceM` exists
+ * separately from `altitudeM` because the helicopter rig is a high ANGLE,
+ * not a top-down: both legs of the offset must scale together or the pitch
+ * angle drifts with speed. `highSpeedMs` is intended to be aligned to the
+ * speedometer's existing 120 mph amber transition (53.64 m/s,
+ * `src/hud/speedometer.ts`'s `REDLINE_MPH`) so the camera stops changing at
+ * the same speed the gauge changes colour — the actual default VALUES for
+ * this curve live in `src/core/camera-tuning.ts` (plan 03-04), matching the
+ * way `src/physics/vehicle-assists.ts` takes its gains as parameters while
+ * `src/core/vehicle-tuning.ts` owns the numbers. This file never hardcodes
+ * curve values.
+ */
+export interface CameraSpeedCurve {
+  readonly lowSpeedMs: number;
+  readonly highSpeedMs: number;
+  readonly low: CameraFraming;
+  readonly high: CameraFraming;
+}
+
+/**
+ * Linear-clamped speed factor: 0 at or below `lowMs`, 1 at or above `highMs`,
+ * linear in between. Guarded against a degenerate `highMs === lowMs` range
+ * (returns 0 rather than dividing by zero).
+ */
+export function speedFactor01(speedMs: number, lowMs: number, highMs: number): number {
+  const range = highMs - lowMs;
+  if (range <= 0) return 0;
+  return clamp((speedMs - lowMs) / range, 0, 1);
+}
+
+/**
+ * Interpolate a `CameraSpeedCurve`'s low/high `CameraFraming` triples by
+ * `speedMs`. Non-finite `speedMs` (e.g. `NaN`) is treated as `curve.lowSpeedMs`
+ * before anything else runs — a `NaN` reaching `camera.fov` +
+ * `updateProjectionMatrix()` produces a blank canvas with no console error,
+ * which is the hardest class of camera bug to diagnose.
+ */
+export function framingForSpeed(speedMs: number, curve: CameraSpeedCurve): CameraFraming {
+  const safeSpeedMs = Number.isFinite(speedMs) ? speedMs : curve.lowSpeedMs;
+  const t = speedFactor01(safeSpeedMs, curve.lowSpeedMs, curve.highSpeedMs);
+  return {
+    altitudeM: curve.low.altitudeM + (curve.high.altitudeM - curve.low.altitudeM) * t,
+    distanceM: curve.low.distanceM + (curve.high.distanceM - curve.low.distanceM) * t,
+    fovDeg: curve.low.fovDeg + (curve.high.fovDeg - curve.low.fovDeg) * t,
+  };
+}
