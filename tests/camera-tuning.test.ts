@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { framingForSpeed } from "../src/render/camera/camera-math";
 import {
   CAMERA_TUNING_RANGES,
   CAMERA_TUNING_STORAGE_KEY,
@@ -9,6 +8,7 @@ import {
   serializeCameraTuning,
 } from "../src/core/camera-tuning";
 import { isTuningRange } from "../src/core/tuning-utils";
+import { framingForSpeed } from "../src/render/camera/camera-math";
 
 /**
  * Node-only tests for the camera's tuning contract. Mirrors

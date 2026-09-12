@@ -280,7 +280,13 @@ export function clampCameraTuning(t: CameraTuning): CameraTuning {
 export const CAMERA_TUNING_STORAGE_KEY = "heat-street.camera-tuning.v1";
 
 /** The five required top-level group keys of a `CameraTuning` object. */
-const REQUIRED_GROUP_KEYS = ["framing", "damping", "heading", "occlusion", "chaseFallback"] as const;
+const REQUIRED_GROUP_KEYS = [
+  "framing",
+  "damping",
+  "heading",
+  "occlusion",
+  "chaseFallback",
+] as const;
 
 /**
  * ASVS V5 (Input Validation) control, half two of two (T-03-01). Parses a
