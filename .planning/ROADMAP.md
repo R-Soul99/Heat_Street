@@ -140,8 +140,8 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-05-PLAN.md — Six-band surface test scene with two building clusters, plus its matching visuals (wave 3)
-- [ ] 03-06-PLAN.md — Per-surface skidpad sweep, the collider-friction control, and the stability re-verification (wave 3)
+- [x] 03-05-PLAN.md — Six-band surface test scene with two building clusters, plus its matching visuals (wave 3)
+- [x] 03-06-PLAN.md — Per-surface skidpad sweep, the collider-friction control, and the stability re-verification (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 4/12 | In Progress|  |
+| 3. Surfaces & Helicopter Camera | 6/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
