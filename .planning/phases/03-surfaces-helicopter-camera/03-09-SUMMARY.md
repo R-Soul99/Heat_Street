@@ -137,3 +137,10 @@ None - no external service configuration required.
 ---
 *Phase: 03-surfaces-helicopter-camera*
 *Completed: 2026-09-12*
+
+## Self-Check: PASSED
+
+All created/modified files verified present on disk (`src/render/camera/occlusion-probe.ts`,
+`src/render/camera/occlusion-controller.ts`, `src/render/camera/occlusion.ts`, `src/main.ts`,
+`tests/occlusion.test.ts`, this SUMMARY.md). All three commits (`7b09719`, `bfc7bcf`, `44a81da`)
+confirmed present in `git log`.
