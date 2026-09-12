@@ -15,6 +15,51 @@
         width: 100vw;
         height: 100vh;
       }
+
+      /*
+       * CAM-03 camera skins (D-15). Presentation only — see
+       * src/render/camera/camera-skin.ts's module doc comment: "never
+       * distance, damping or targeting". Both filter recipes are a
+       * research-informed STARTING POINT (03-RESEARCH.md "Camera Skin
+       * Presentation"), refined in plan 03-11's playtest, not a locked
+       * decision.
+       */
+      /* Police/news: cooler, desaturated, higher-contrast ENG
+         (electronic news gathering) broadcast look. */
+      #game.skin-police {
+        filter: saturate(0.85) contrast(1.05) hue-rotate(-4deg);
+      }
+      /* Sports-broadcast: warmer, more saturated sports-aerial look. */
+      #game.skin-sports {
+        filter: saturate(1.25) contrast(1.1) brightness(1.05);
+      }
+
+      /*
+       * Chrome overlay (channel-bug-style label), built by
+       * src/render/camera/camera-skin.ts's createCameraSkinChrome() and
+       * written to via textContent only (never innerHTML). Top-left so it
+       * never collides with the speedometer, which is fixed bottom-right
+       * (src/hud/speedometer.ts).
+       */
+      #camera-chrome {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        z-index: 5;
+        pointer-events: none;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      }
+      /* Chrome colour differs per skin too, not just the underlying filter. */
+      #game.skin-police ~ #camera-chrome {
+        color: #e8eef5;
+      }
+      #game.skin-sports ~ #camera-chrome {
+        color: #ffd97a;
+      }
     </style>
   </head>
   <body>

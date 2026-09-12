@@ -21,9 +21,9 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 
 ### Camera
 
-- [ ] **CAM-01**: Player views the game through a permanent high-angle "helicopter" camera that smoothly follows the car's velocity heading, not chassis yaw
-- [ ] **CAM-02**: Camera altitude and FOV adjust dynamically with vehicle speed to preserve sense of speed
-- [ ] **CAM-03**: Camera is contextually skinned per mode (police/news chopper for Getaway, sports-broadcast chopper for Point-to-Point/Circuit)
+- [x] **CAM-01**: Player views the game through a permanent high-angle "helicopter" camera that smoothly follows the car's velocity heading, not chassis yaw
+- [x] **CAM-02**: Camera altitude and FOV adjust dynamically with vehicle speed to preserve sense of speed
+- [x] **CAM-03**: Camera is contextually skinned per mode (police/news chopper for Getaway, sports-broadcast chopper for Point-to-Point/Circuit)
 - [ ] **CAM-04**: Buildings between the camera and the car never permanently block the view of the car or road. Exact approach resolved by prototyping during Phase 3, not fixed in advance — candidates are (a) fading occluding buildings to translucent/wireframe, and (b) dynamically steepening the camera toward near-overhead in dense areas (GTA1/2-style) then relaxing in open areas. Decided by human playtest feel, not on paper
 
 ### Navigation & HUD
@@ -122,9 +122,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VEH-04 | Phase 2 | Complete |
 | SURF-01 | Phase 3 | Complete |
 | SURF-02 | Phase 3 | Pending |
-| CAM-01 | Phase 3 | Pending |
-| CAM-02 | Phase 3 | Pending |
-| CAM-03 | Phase 3 | Pending |
+| CAM-01 | Phase 3 | Complete |
+| CAM-02 | Phase 3 | Complete |
+| CAM-03 | Phase 3 | Complete |
 | CAM-04 | Phase 3 | Pending |
 | NAV-01 | Phase 2 | Complete |
 | NAV-02 | Phase 6 | Pending |
