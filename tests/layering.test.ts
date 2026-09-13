@@ -74,14 +74,14 @@ function format(hits: readonly Hit[]): string {
 }
 
 describe("layering — the scan itself", () => {
-  it("found at least twenty-eight source files, so a broken glob cannot make this suite trivially green", () => {
-    // Raised from 10 to 20 in plan 02-05, and from 20 to 28 here in plan
-    // 03-07, for the same reason each time: Phase 3 adds roughly ten new
-    // source files (src/render/camera/**, src/physics/surface*.ts,
-    // src/render/surface-view.ts, src/physics/telemetry/surface-routines.ts,
-    // etc.), so the floor stays a meaningful guard against a broken glob
-    // rather than a value that was only ever true in an earlier phase.
-    expect(FILES.length).toBeGreaterThanOrEqual(28);
+  it("found at least thirty-one source files, so a broken glob cannot make this suite trivially green", () => {
+    // Raised from 10 to 20 in plan 02-05, from 20 to 28 in plan 03-07, and
+    // from 28 to 31 here in plan 03-11: this plan adds three new files
+    // under src/audio/ (audio-bootstrap.ts, surface-loops.ts,
+    // surface-audio.ts), so the floor stays a meaningful guard against a
+    // broken glob rather than a value that was only ever true in an
+    // earlier phase.
+    expect(FILES.length).toBeGreaterThanOrEqual(31);
   });
 });
 
@@ -265,8 +265,26 @@ describe("layering — no innerHTML anywhere under src/ (T-01-28)", () => {
   });
 });
 
-// FORWARD REFERENCE for plan 03-11: `src/audio/**` does not exist yet (it
-// lands in that plan), so no layering rule is added for it here — the
-// "scanned at least one file" guard on an empty filter would fail and make
-// the rule trivially green for the wrong reason. Plan 03-11 must add its own
-// `describe` block for that tier, following this file's existing shape.
+describe("layering — src/audio never imports @dimforge/rapier3d and never writes simulation state (T-03-37)", () => {
+  const audioFiles = FILES.filter((f) => f.path.startsWith("src/audio/"));
+  // Combines the rapier-import ban with the five simulation-write
+  // identifiers already used by the src/render/ and src/hud/ blocks above —
+  // the new src/audio/ tier reads sampled state (surface, grounded, slip)
+  // and writes only gain, exactly like src/render/'s "reads simulation
+  // state and never writes it" rule, plus the same import-direction
+  // constraint src/physics/ already enforces against three (mirrored here
+  // for rapier instead, since src/audio/ legitimately imports `three` for
+  // `THREE.PositionalAudio`/`THREE.AudioListener`).
+  const FORBIDDEN =
+    /from\s+["']@dimforge\/rapier3d["']|\b(world\.step|applyImpulse|setTranslation|setRotation|setNextKinematic)\b/;
+
+  it("scanned at least one file", () => {
+    expect(audioFiles.length).toBeGreaterThan(0);
+  });
+
+  for (const file of audioFiles) {
+    it(`${file.path} does not import @dimforge/rapier3d and writes no simulation state`, () => {
+      expect(format(findHits(file, FORBIDDEN))).toBe("");
+    });
+  }
+});

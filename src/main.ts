@@ -19,6 +19,9 @@
  * as a second live composition path.
  */
 import * as THREE from "three";
+import { createAudioBootstrap } from "./audio/audio-bootstrap";
+import { createSurfaceAudio } from "./audio/surface-audio";
+import { createSynthesizedSurfaceLoops } from "./audio/surface-loops";
 import {
   CAMERA_TUNING_STORAGE_KEY,
   defaultCameraTuning,
@@ -150,6 +153,32 @@ const wheelFxInput: WheelFxSample[] = [0, 1, 2, 3].map(() => ({
   slip: 0,
   position: new THREE.Vector3(),
 }));
+
+// SURF-02's audio half (plan 03-11): always constructed, NOT gated on
+// DEBUG_ENABLED -- audio is player-facing, exactly like the speedometer,
+// camera and surface FX above.
+const audio = createAudioBootstrap(camera);
+// Synthesized loops ship as the DEFAULT and, per this plan's resolved
+// checkpoint (see SUMMARY.md), the ONLY source this build ships with -- no
+// external CC0 asset was sourced or committed this session. This is the
+// single line a future real-recording upgrade would replace with a
+// `loadSurfaceLoops(...)` call, falling back to synthesis per surface for
+// whichever URL is absent or fails.
+const surfaceAudio = createSurfaceAudio(
+  audio.listener,
+  view.meshes[0],
+  createSynthesizedSurfaceLoops(audio.listener.context),
+);
+
+// Reused parallel arrays alongside `wheelFxInput` above, filled in the SAME
+// per-wheel loop in the render callback -- `wheelFxInput` holds objects
+// (`WheelFxSample`), not parallel arrays, so `surfaceAudio.update`'s own
+// parallel-array signature (`surfaceGains`' shape, matching
+// `src/render/surface-fx.ts`'s reused-array convention) needs its own
+// allocation-free trio rather than a second per-frame object array.
+const wheelAudioSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+const wheelAudioGrounded: boolean[] = [false, false, false, false];
+const wheelAudioSlip: number[] = [0, 0, 0, 0];
 
 // This replaces the Phase 1 all-NEUTRAL stub with live keyboard + gamepad
 // input.
@@ -338,8 +367,16 @@ startLoop({
       const forwardImpulse = scene.vehicle.controller.wheelForwardImpulse(i) ?? 0;
       wi.slip = Math.hypot(sideImpulse, forwardImpulse);
       view.wheelMeshes[i].getWorldPosition(wi.position);
+      // Filled in the SAME loop as `wheelFxInput` above -- see the
+      // `wheelAudioSurfaces`/`wheelAudioGrounded`/`wheelAudioSlip`
+      // declaration comment for why this is three reused parallel arrays
+      // rather than a second per-frame object array.
+      wheelAudioSurfaces[i] = wi.surface;
+      wheelAudioGrounded[i] = wi.grounded;
+      wheelAudioSlip[i] = wi.slip;
     }
     fx.update(wheelFxInput, dtMs);
+    surfaceAudio.update(wheelAudioSurfaces, wheelAudioGrounded, wheelAudioSlip, dtMs);
 
     renderer.render(view.scene, camera);
   },
