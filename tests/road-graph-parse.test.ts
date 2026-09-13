@@ -201,7 +201,11 @@ describe("parseRoadGraph — prototype pollution resistance", () => {
 
   it("a constructor key in the input cannot reach the returned object", () => {
     const clone = cloneFixture();
-    (clone as Record<string, unknown>).constructor = { polluted: true };
+    Object.defineProperty(clone, "constructor", {
+      value: { polluted: true },
+      enumerable: true,
+      configurable: true,
+    });
     const raw = JSON.stringify(clone);
 
     const graph = parseRoadGraph(raw, "x");
