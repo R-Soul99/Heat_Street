@@ -1,9 +1,9 @@
 ---
 phase: 4
 slug: map-pipeline-first-area
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-09-13
 ---
 
@@ -77,11 +77,11 @@ this table when writing PLAN.md files.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (topology, surface-mapping, validator tests; `no-google-pipeline` and `tsconfig.json` extensions; fixture data)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — confirmed by gsd-plan-checker: no `MISSING` placeholders in any of the 11 plans
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — confirmed by gsd-plan-checker
+- [x] Wave 0 covers all MISSING references (topology, surface-mapping, validator tests; `no-google-pipeline` and `tsconfig.json` extensions; fixture data) — all present in plan 04-01 Task 1/3, 04-03, 04-06
+- [x] No watch-mode flags — confirmed by gsd-plan-checker
+- [x] Feedback latency < 10s — scoped `vitest run` command, no full-suite requirement per task
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-09-13 (gsd-plan-checker VERIFICATION PASSED, decision-coverage gate 9/9)
