@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 (surfaces-helicopter-camera) COMPLETE — plan 03-12's full feel session closed out
-last_updated: "2026-09-13T13:30:00.000Z"
-last_activity: 2026-09-13 - Completed plan 03-12 (full-phase feel session): D-05 gravel/dirt_road retune, SC6 occlusion decision (fade ships), frame-budget target fix, gamepad and rearSideFriction carry-forwards closed. Phase 3 complete.
+stopped_at: Phase 4 context gathered
+last_updated: "2026-09-13T13:03:56.547Z"
+last_activity: 2026-09-13 -- Plan 03-12 (full-phase feel session) closed out Phase 3
 progress:
   total_phases: 8
   completed_phases: 3
@@ -184,6 +184,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-13T13:30:00.000Z
-Stopped at: Phase 3 (surfaces-helicopter-camera) COMPLETE — all 12 plans done, plan 03-12's feel session signed off
-Resume file: .planning/ROADMAP.md (Phase 4: Map Pipeline & First Area — not yet planned; run /gsd-plan-phase or /gsd-discuss-phase to start it)
+Last session: 2026-09-13T13:03:56.534Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-map-pipeline-first-area/04-CONTEXT.md
