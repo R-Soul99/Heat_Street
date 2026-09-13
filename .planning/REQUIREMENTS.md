@@ -17,7 +17,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 ### Surfaces
 
 - [x] **SURF-01**: Tarmac, gravel, grass, mud, sand, and dirt-road surfaces each provide distinct grip via per-wheel friction values (not ground-collider friction)
-- [ ] **SURF-02**: Each surface type has distinct visual feedback (tire smoke / dust plume / mud spray / skid decal) and audio (tire chirp vs. muffled rumble)
+- [x] **SURF-02**: Each surface type has distinct visual feedback (tire smoke / dust plume / mud spray / skid decal) and audio (tire chirp vs. muffled rumble)
 
 ### Camera
 
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VEH-03 | Phase 1 | Complete |
 | VEH-04 | Phase 2 | Complete |
 | SURF-01 | Phase 3 | Complete |
-| SURF-02 | Phase 3 | Pending |
+| SURF-02 | Phase 3 | Complete |
 | CAM-01 | Phase 3 | Complete |
 | CAM-02 | Phase 3 | Complete |
 | CAM-03 | Phase 3 | Complete |

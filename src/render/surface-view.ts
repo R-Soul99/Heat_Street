@@ -124,6 +124,16 @@ export interface SurfaceWorldView {
    */
   readonly buildingMeshes: readonly THREE.Mesh[];
 
+  /**
+   * The six zone meshes, in `SURFACE_ZONE_ORDER` order (tarmac -> gravel ->
+   * dirt_road -> grass -> sand -> mud, the same order `createSurfaceWorld`
+   * builds them in above). Added for plan 03-10's `surface-fx.ts`, whose
+   * skid-decal pool projects a `DecalGeometry` onto whichever zone mesh
+   * matches a sliding wheel's current surface -- a mismatch here would
+   * project a decal onto the wrong zone's mesh.
+   */
+  readonly zoneMeshes: readonly THREE.Mesh[];
+
   /** Dispose every geometry and material this module created. */
   dispose(): void;
 }
@@ -152,13 +162,20 @@ export function createSurfaceWorld(): SurfaceWorldView {
   const mudMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_MUD, roughness: 0.95 });
 
   // MUST MATCH SURFACE_ZONE_ORDER's z = 200 - i * 80 band-centre formula in
-  // src/physics/surface-scene.ts: tarmac at +200 down to mud at -200.
-  group.add(buildZoneMesh(zoneGeometry, tarmacMaterial, 200));
-  group.add(buildZoneMesh(zoneGeometry, gravelMaterial, 120));
-  group.add(buildZoneMesh(zoneGeometry, dirtRoadMaterial, 40));
-  group.add(buildZoneMesh(zoneGeometry, grassMaterial, -40));
-  group.add(buildZoneMesh(zoneGeometry, sandMaterial, -120));
-  group.add(buildZoneMesh(zoneGeometry, mudMaterial, -200));
+  // src/physics/surface-scene.ts: tarmac at +200 down to mud at -200. Kept
+  // as a `zoneMeshes` array (not just added to `group`) in this exact order
+  // so `SurfaceWorldView.zoneMeshes` matches `SURFACE_ZONE_ORDER` positionally.
+  const zoneMeshes: readonly THREE.Mesh[] = [
+    buildZoneMesh(zoneGeometry, tarmacMaterial, 200),
+    buildZoneMesh(zoneGeometry, gravelMaterial, 120),
+    buildZoneMesh(zoneGeometry, dirtRoadMaterial, 40),
+    buildZoneMesh(zoneGeometry, grassMaterial, -40),
+    buildZoneMesh(zoneGeometry, sandMaterial, -120),
+    buildZoneMesh(zoneGeometry, mudMaterial, -200),
+  ];
+  for (const mesh of zoneMeshes) {
+    group.add(mesh);
+  }
 
   // Building meshes: ONE shared geometry PER CLUSTER (the two clusters have
   // different half-extents -- MUST MATCH SPARSE_BUILDINGS' {6,10,6} and
@@ -184,6 +201,7 @@ export function createSurfaceWorld(): SurfaceWorldView {
   return {
     group,
     buildingMeshes,
+    zoneMeshes,
 
     dispose(): void {
       zoneGeometry.dispose();

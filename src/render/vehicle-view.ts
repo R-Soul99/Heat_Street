@@ -155,6 +155,17 @@ export interface VehicleView {
    */
   updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void;
 
+  /**
+   * The four wheel meshes, `FL/FR/RL/RR = 0/1/2/3` -- THE SAME index
+   * contract `updateWheels` above and `src/physics/vehicle.ts`'s exported
+   * wheel-index constants already honour (see THE INDEX CONTRACT in this
+   * file's header comment). Added for plan 03-10's `surface-fx.ts`, which
+   * needs each wheel's world position to spawn particles/decals at; a
+   * mismatch here draws FX at another wheel's location, the same hazard
+   * threat T-01-16 already names for meshes/bodies.
+   */
+  readonly wheelMeshes: readonly THREE.Object3D[];
+
   /** Dispose every geometry and material this module created. */
   dispose(): void;
 }
@@ -406,6 +417,7 @@ export function createVehicleView(
   return {
     scene,
     meshes: [chassis],
+    wheelMeshes,
 
     updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void {
       for (let i = 0; i < 4; i++) {
