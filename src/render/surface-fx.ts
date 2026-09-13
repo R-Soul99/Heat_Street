@@ -1,7 +1,6 @@
 /**
  * The visual half of SURF-02: per-surface tire-smoke/dust/spray/fleck
- * particle sprites. Skid decals are plan 03-10 Task 2's addition to this
- * same file.
+ * particle sprites, plus a fixed-size skid-decal ring buffer (Task 2).
  *
  * D-09 (CONTEXT.md) reads all-six-surfaces-distinct LITERALLY -- the six
  * `THREE.Points` systems below differ across FIVE independent axes (colour,
@@ -16,7 +15,15 @@
  * DEFERRED (CONTEXT.md's Deferred Ideas entry): physics-based kicked-up
  * debris (gravity-affected mud clods as real Rapier bodies) is explicitly
  * NOT this phase's job. This module is a deliberate first stage -- cheap
- * GPU sprites -- not the end state.
+ * GPU sprites and a pooled decal mesh -- not the end state.
+ *
+ * ONE PER-SPAWN ALLOCATION THIS FILE ACCEPTS: `DecalGeometry` always builds
+ * a fresh `BufferGeometry` per projection (see `spawnDecal` below), which is
+ * unavoidable with the bundled addon. Because D-01's ground is a single flat
+ * plane this phase, a shared `THREE.PlaneGeometry` quad laid flat just above
+ * y = 0 would be allocation-free instead -- but `DecalGeometry` is kept
+ * because Phase 4's real map is not flat and this pool carries forward.
+ * Revisit only if profiling shows this one allocation actually matters.
  *
  * NOT tunable via lil-gui or `localStorage`: every value below is a
  * render-only constant with no persistence boundary. Wiring a third
@@ -30,13 +37,14 @@
  *
  * Layering: reads sampled state passed in as plain values (surface,
  * grounded, slip magnitude, world position) and writes only to objects this
- * module owns (its own `THREE.Points` instances). Never imports
+ * module owns (its own `THREE.Points`/`THREE.Mesh` instances). Never imports
  * `@dimforge/rapier3d` in any form and contains none of
  * `tests/layering.test.ts`'s banned simulation-write identifiers
  * (`world.step`, `applyImpulse`, `setTranslation`, `setRotation`,
  * `setNextKinematic`).
  */
 import * as THREE from "three";
+import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 import { SURFACE_TYPES, type SurfaceType } from "../core/surface-types";
 
 /**
@@ -71,7 +79,7 @@ export interface SurfaceFxProfile {
   readonly gravityMps2: number;
   /** Skid-decal colour, hex -- a darker, less saturated relative of `colour`: a skid mark is a scuff, not a dust cloud. */
   readonly decalColour: number;
-  /** Skid-decal projector width/height, metres (the `DecalGeometry` size's X/Y; Z is a shared, shallow projection depth). */
+  /** Skid-decal projector width/height, metres (the `DecalGeometry` size's X/Y; Z is the shared, shallow `DECAL_PROJECTION_DEPTH_M`). */
   readonly decalSizeM: number;
   /** Seconds a skid decal takes to fade from opaque to invisible. */
   readonly decalLifetimeSec: number;
@@ -229,6 +237,15 @@ const PARTICLE_SPAWN_HEIGHT_OFFSET_M = 0.05;
 
 /** Horizontal jitter applied to a fresh particle's spawn position, metres -- keeps four wheels' particles from stacking at one exact point. */
 const PARTICLE_SPAWN_JITTER_M = 0.3;
+
+/** Fixed skid-decal ring-buffer capacity, shared by the allocation loop and the write-cursor's wrap arithmetic -- a single named constant so the two can never silently diverge. */
+const DECAL_POOL_SIZE = 48;
+
+/** Minimum travel, metres, a wheel must cover since its last decal before it may spawn another -- the gate that stops a stationary spinning wheel from consuming the whole ring buffer in one second. */
+const DECAL_MIN_SPACING_M = 1.2;
+
+/** Shallow decal-projector depth along the surface normal, metres -- D-01's ground is a flat plane this phase, so this only needs to be a few centimetres either side of it. */
+const DECAL_PROJECTION_DEPTH_M = 0.4;
 
 /**
  * Upper bound on the emission-rate multiplier `1 + excess/threshold` can
@@ -401,18 +418,43 @@ export interface SurfaceFxWheelInput {
 export interface SurfaceFx {
   readonly group: THREE.Group;
   /**
-   * Advance every particle system by one render frame. Allocates nothing:
-   * reuses module- and pool-level scratch state only. `dtMs` is a variable
-   * RENDER-frame delta, matching every other render-tier `update` in this
-   * codebase -- never the fixed physics tick.
+   * Advance every particle system and skid decal by one render frame.
+   * Allocates nothing beyond the one documented per-spawn `DecalGeometry`
+   * exception: reuses module- and pool-level scratch state otherwise.
+   * `dtMs` is a variable RENDER-frame delta, matching every other render-
+   * tier `update` in this codebase -- never the fixed physics tick.
    */
   update(wheels: readonly SurfaceFxWheelInput[], dtMs: number): void;
   /** Dispose every geometry, material and texture this module created. */
   dispose(): void;
 }
 
-/** Build the six per-surface particle systems. */
-export function createSurfaceFx(): SurfaceFx {
+/**
+ * One skid-decal ring-buffer slot: a persistent `Mesh` + persistent per-slot
+ * material clone (mutated in place at every spawn, never re-cloned -- only
+ * `DecalGeometry` itself is the one per-spawn allocation this module
+ * deliberately accepts), reassigned to a fresh `DecalGeometry` on every
+ * (re)spawn.
+ */
+interface DecalSlot {
+  readonly mesh: THREE.Mesh;
+  readonly material: THREE.MeshStandardMaterial;
+  geometry: THREE.BufferGeometry;
+  active: boolean;
+  ageSec: number;
+  lifetimeSec: number;
+}
+
+/**
+ * Build the six per-surface particle systems and the skid-decal ring
+ * buffer. `zoneMeshes`/`zoneSurfaces` are the `DecalGeometry` projection
+ * targets -- parallel arrays, same order, exactly `src/render/surface-
+ * view.ts`'s `SurfaceWorldView.zoneMeshes` and `SURFACE_ZONE_ORDER`.
+ */
+export function createSurfaceFx(
+  zoneMeshes: readonly THREE.Mesh[],
+  zoneSurfaces: readonly SurfaceType[],
+): SurfaceFx {
   const group = new THREE.Group();
 
   const puffTexture = createPuffTexture();
@@ -424,6 +466,88 @@ export function createSurfaceFx(): SurfaceFx {
     const sys = createParticleSystem(surface, SURFACE_FX_PROFILES[surface], puffTexture);
     systems[surface] = sys;
     group.add(sys.points);
+  }
+
+  // ---- Skid decals: a fixed-size recycled ring buffer (T-03-03/T-03-33) ----
+
+  const zoneMeshBySurface = new Map<SurfaceType, THREE.Mesh>();
+  for (let i = 0; i < zoneSurfaces.length; i++) {
+    zoneMeshBySurface.set(zoneSurfaces[i], zoneMeshes[i]);
+  }
+
+  // One template per surface, used only as the initial colour/settings seed
+  // for each ring-buffer slot's persistent material clone below -- never
+  // assigned directly onto a mesh, so mutating a slot's own clone at spawn
+  // time can never bleed into another slot or another surface's template.
+  const decalMaterialTemplates: Record<SurfaceType, THREE.MeshStandardMaterial> = {} as Record<
+    SurfaceType,
+    THREE.MeshStandardMaterial
+  >;
+  for (const surface of SURFACE_TYPES) {
+    decalMaterialTemplates[surface] = new THREE.MeshStandardMaterial({
+      color: SURFACE_FX_PROFILES[surface].decalColour,
+      roughness: 0.9,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
+    });
+  }
+
+  const decalSlots: DecalSlot[] = [];
+  for (let i = 0; i < DECAL_POOL_SIZE; i++) {
+    const material = decalMaterialTemplates.tarmac.clone();
+    material.opacity = 0;
+    const geometry = new THREE.BufferGeometry();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.visible = false;
+    mesh.receiveShadow = false;
+    group.add(mesh);
+    decalSlots.push({ mesh, material, geometry, active: false, ageSec: 0, lifetimeSec: 0 });
+  }
+  let decalWriteCursor = 0;
+
+  // Per-wheel (FL/FR/RL/RR) last-decal position -- `null` until that wheel's
+  // first decal, so the very first spawn is never blocked by the spacing
+  // gate. Populated lazily with cloned Vector3s (once per wheel, on that
+  // wheel's first spawn), then mutated in place forever after.
+  const lastDecalPos: (THREE.Vector3 | null)[] = [null, null, null, null];
+
+  // Reused scratch for every `DecalGeometry` construction -- the projector
+  // position/orientation/size objects are read once by the constructor and
+  // never retained, so these are safe to overwrite and reuse every spawn.
+  const DECAL_POSITION = new THREE.Vector3();
+  // A flat -X-rotation aligns the projector's local Z axis (its projection/
+  // depth axis) with world +Y, matching D-01's flat ground -- every zone's
+  // top face normal is world up this phase.
+  const DECAL_ORIENTATION = new THREE.Euler(-Math.PI / 2, 0, 0);
+  const DECAL_SIZE = new THREE.Vector3();
+
+  function spawnDecal(position: THREE.Vector3, surface: SurfaceType): void {
+    const zoneMesh = zoneMeshBySurface.get(surface);
+    if (!zoneMesh) return; // Defensive: an unmapped surface spawns nothing rather than throwing.
+
+    const slot = decalSlots[decalWriteCursor];
+    decalWriteCursor = (decalWriteCursor + 1) % DECAL_POOL_SIZE;
+    const profile = SURFACE_FX_PROFILES[surface];
+    DECAL_POSITION.set(position.x, 0.02, position.z);
+    DECAL_SIZE.set(profile.decalSizeM, profile.decalSizeM, DECAL_PROJECTION_DEPTH_M);
+
+    // Dispose the previous geometry before assigning the new one below -- see
+    // the module header's "one per-spawn allocation this file accepts" note:
+    // `DecalGeometry` always builds a fresh `BufferGeometry` per projection.
+    slot.geometry.dispose();
+    const geometry = new DecalGeometry(zoneMesh, DECAL_POSITION, DECAL_ORIENTATION, DECAL_SIZE);
+
+    slot.geometry = geometry;
+    slot.mesh.geometry = geometry;
+    slot.material.color.setHex(profile.decalColour);
+    slot.material.opacity = 1;
+    slot.mesh.visible = true;
+    slot.active = true;
+    slot.ageSec = 0;
+    slot.lifetimeSec = profile.decalLifetimeSec;
   }
 
   return {
@@ -496,6 +620,48 @@ export function createSurfaceFx(): SurfaceFx {
         // Pitfall 5 names).
         sys.points.visible = sys.liveCount > 0;
       }
+
+      // ---- Skid decals ----
+      // Interpreting "crosses its surface's slipThreshold upward" as the
+      // qualifying CONDITION (grounded + slip > threshold), with the
+      // DISTANCE gate as the actual repeat-spawn limiter: a strict one-shot
+      // edge trigger would make the distance gate's own stated purpose ("a
+      // stationary spinning wheel consuming the whole ring buffer in ONE
+      // SECOND") impossible to reach in the first place, since an edge
+      // trigger alone already caps a continuously-slipping stationary wheel
+      // at exactly one decal. A repeated condition gated by travelled
+      // distance is what actually produces a continuous skid-mark TRAIL
+      // while a moving car slides, and is what the distance gate is
+      // protecting against for a wheel that never moves.
+      for (let w = 0; w < wheels.length; w++) {
+        const wheel = wheels[w];
+        if (!wheel.grounded) continue;
+        const profile = SURFACE_FX_PROFILES[wheel.surface];
+        if (wheel.slip <= profile.slipThreshold) continue;
+        const last = lastDecalPos[w];
+        if (last !== null && last.distanceTo(wheel.position) < DECAL_MIN_SPACING_M) continue;
+        spawnDecal(wheel.position, wheel.surface);
+        const existing = lastDecalPos[w];
+        if (existing === null) {
+          lastDecalPos[w] = wheel.position.clone();
+        } else {
+          existing.copy(wheel.position);
+        }
+      }
+
+      for (let i = 0; i < DECAL_POOL_SIZE; i++) {
+        const slot = decalSlots[i];
+        if (!slot.active) continue;
+        slot.ageSec += dtSec;
+        const fade = 1 - slot.ageSec / slot.lifetimeSec;
+        if (fade <= 0) {
+          slot.material.opacity = 0;
+          slot.mesh.visible = false;
+          slot.active = false;
+          continue;
+        }
+        slot.material.opacity = fade;
+      }
     },
 
     dispose(): void {
@@ -517,6 +683,21 @@ export function createSurfaceFx(): SurfaceFx {
       systems.mud.geometry.dispose();
       systems.mud.material.dispose();
       puffTexture.dispose();
+
+      // 48 decal geometries and 48 per-slot material clones, plus the six
+      // templates those clones were seeded from -- see this plan's
+      // SUMMARY.md for why every clone (not just the six templates) is
+      // disposed here, beyond this plan's own threat-model shorthand.
+      for (const slot of decalSlots) {
+        slot.geometry.dispose();
+        slot.material.dispose();
+      }
+      decalMaterialTemplates.tarmac.dispose();
+      decalMaterialTemplates.gravel.dispose();
+      decalMaterialTemplates.dirt_road.dispose();
+      decalMaterialTemplates.grass.dispose();
+      decalMaterialTemplates.sand.dispose();
+      decalMaterialTemplates.mud.dispose();
     },
   };
 }
