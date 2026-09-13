@@ -2,7 +2,12 @@ import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import { NEUTRAL } from "../src/core/input-tape";
 import { DT } from "../src/core/sim-clock";
-import { defaultTuning, type VehicleTuning } from "../src/core/vehicle-tuning";
+import {
+  defaultTuning,
+  parseSavedTuning,
+  TUNING_RANGES,
+  type VehicleTuning,
+} from "../src/core/vehicle-tuning";
 import { createVehicle, FL, FR, RL, RR, sampleVehicle } from "../src/physics/vehicle";
 import { applyAssists, boxPrincipalInertia } from "../src/physics/vehicle-assists";
 import { createWorld } from "../src/physics/world";
@@ -165,6 +170,128 @@ describe("createVehicle: brake wins over throttle (Pitfall 7)", () => {
     const endSpeed = sampleVehicle(vehicle).forwardSpeedMs;
 
     expect(endSpeed).toBeGreaterThan(startSpeed);
+  });
+});
+
+describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)", () => {
+  it("held brake at rest produces POSITIVE rear engine force and ZERO brake impulse on all four wheels", () => {
+    const { world, vehicle, tuning } = buildScene();
+    settle(world, vehicle, tuning, 120);
+
+    const frame = { steer: 0, throttle: 0, brake: 1, handbrake: false };
+    vehicle.tick(frame, tuning);
+    world.step();
+
+    // Forward is chassis-local -Z, so positive rear engine force IS backward
+    // — see the comment in src/physics/vehicle.ts step 2.
+    expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
+      tuning.drive.reverseEngineForcePerRearWheel,
+      6,
+    );
+    expect(vehicle.controller.wheelEngineForce(RR)).toBeCloseTo(
+      tuning.drive.reverseEngineForcePerRearWheel,
+      6,
+    );
+    for (let i = 0; i < 4; i++) {
+      expect(vehicle.controller.wheelBrake(i)).toBe(0);
+    }
+  });
+
+  it("held brake while moving forward above the engage threshold produces ZERO engine force and full brake impulse — unchanged from today", () => {
+    const { world, vehicle, tuning } = buildScene();
+    settle(world, vehicle, tuning, 60);
+
+    // Establish forward motion well above reverseEngageSpeedMs (0.1 m/s
+    // default). Forward is -Z, so this is a negative z linvel.
+    vehicle.body.setLinvel({ x: 0, y: vehicle.body.linvel().y, z: -18 }, true);
+
+    const frame = { steer: 0, throttle: 0, brake: 1, handbrake: false };
+    vehicle.tick(frame, tuning);
+    world.step();
+
+    // Literal pre-change values — a regression here is caught by value, not
+    // by feel (this plan's own instruction).
+    expect(vehicle.controller.wheelEngineForce(RL)).toBe(0);
+    expect(vehicle.controller.wheelEngineForce(RR)).toBe(0);
+    for (let i = 0; i < 4; i++) {
+      expect(vehicle.controller.wheelBrake(i)).toBeCloseTo(tuning.drive.brakeImpulsePerWheel, 6);
+    }
+  });
+
+  it("held brake while ALREADY moving backward keeps producing reverse engine force (does not re-brake itself to a standstill)", () => {
+    const { world, vehicle, tuning } = buildScene();
+    settle(world, vehicle, tuning, 60);
+
+    // Moving backward: forward is -Z, so a POSITIVE z linvel is backward
+    // motion, i.e. forwardSpeedMs is negative — well below
+    // reverseEngageSpeedMs (0.1 m/s default).
+    vehicle.body.setLinvel({ x: 0, y: vehicle.body.linvel().y, z: 5 }, true);
+
+    const frame = { steer: 0, throttle: 0, brake: 1, handbrake: false };
+    vehicle.tick(frame, tuning);
+    world.step();
+
+    expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
+      tuning.drive.reverseEngineForcePerRearWheel,
+      6,
+    );
+    for (let i = 0; i < 4; i++) {
+      expect(vehicle.controller.wheelBrake(i)).toBe(0);
+    }
+  });
+
+  it("reverse force scales with frame.brake, proportionally — a gamepad analog trigger gives proportional reverse", () => {
+    const { world, vehicle, tuning } = buildScene();
+    settle(world, vehicle, tuning, 120);
+
+    const frame = { steer: 0, throttle: 0, brake: 0.5, handbrake: false };
+    vehicle.tick(frame, tuning);
+    world.step();
+
+    expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
+      0.5 * tuning.drive.reverseEngineForcePerRearWheel,
+      6,
+    );
+  });
+
+  it("a saved tuning blob with reverseEngineForcePerRearWheel 1e9/NaN/-5 is clamped into range by parseSavedTuning", () => {
+    const absurdHigh = parseSavedTuning(
+      JSON.stringify({
+        chassis: {},
+        wheels: {},
+        drive: { reverseEngineForcePerRearWheel: 1e9 },
+        assists: {},
+      }),
+    );
+    expect(absurdHigh?.drive.reverseEngineForcePerRearWheel).toBe(
+      TUNING_RANGES.drive.reverseEngineForcePerRearWheel.max,
+    );
+
+    // JSON has no NaN literal — the hostile case that matters is the string
+    // "NaN" landing in a numeric field (tests/tuning-persist.test.ts's own
+    // convention).
+    const poisoned = parseSavedTuning(
+      JSON.stringify({
+        chassis: {},
+        wheels: {},
+        drive: { reverseEngineForcePerRearWheel: "NaN" },
+        assists: {},
+      }),
+    );
+    expect(poisoned?.drive.reverseEngineForcePerRearWheel).toBe(1500);
+    expect(Number.isFinite(poisoned?.drive.reverseEngineForcePerRearWheel)).toBe(true);
+
+    const negative = parseSavedTuning(
+      JSON.stringify({
+        chassis: {},
+        wheels: {},
+        drive: { reverseEngineForcePerRearWheel: -5 },
+        assists: {},
+      }),
+    );
+    expect(negative?.drive.reverseEngineForcePerRearWheel).toBe(
+      TUNING_RANGES.drive.reverseEngineForcePerRearWheel.min,
+    );
   });
 });
 

@@ -325,14 +325,36 @@ export function createVehicle(
       // the brake on that wheel — measured, throttle + full brake together
       // went 40.1 mph -> 41.1 mph after 2s, versus 40.1 -> -0.2 with brake
       // alone (02-RESEARCH.md Pitfall 7). Zeroing engine force while
-      // braking is mandatory, not defensive.
+      // braking is mandatory, not defensive. Reverse (below) must ALSO zero
+      // the BRAKE, not just the engine force: Pitfall 7 only disables the
+      // brake on the wheels carrying engine force (the rears), so leaving
+      // front brake impulse on while reversing would hold the car against
+      // its own reverse drive.
+      //
+      // Reverse is DERIVED from physics state (this tick's chassis-forward
+      // speed) rather than from a new `InputFrame` field — `InputFrame`'s
+      // shape is frozen by `tests/determinism.test.ts` and the recorded-tape
+      // contract (src/core/input-tape.ts). Deriving it here instead keeps
+      // reverse a pure function of the SAME inputs every other branch of this
+      // tick already reads, so determinism is preserved with no tape-format
+      // change.
+      const q = body.rotation();
+      const forward = rotateVec(q, 0, 0, -1);
+      const linvel = body.linvel();
+      const forwardSpeedMs = linvel.x * forward.x + linvel.y * forward.y + linvel.z * forward.z;
       const braking = frame.brake > 0;
-      const engineForce = braking ? 0 : -frame.throttle * t.drive.engineForcePerRearWheel;
+      const reversing = braking && forwardSpeedMs < t.drive.reverseEngageSpeedMs;
+      const engineForce = !braking
+        ? -frame.throttle * t.drive.engineForcePerRearWheel
+        : reversing
+          ? frame.brake * t.drive.reverseEngineForcePerRearWheel
+          : 0;
       vc.setWheelEngineForce(RL, engineForce);
       vc.setWheelEngineForce(RR, engineForce);
 
-      // 3. Brake, all four wheels.
-      const brakeImpulse = frame.brake * t.drive.brakeImpulsePerWheel;
+      // 3. Brake, all four wheels — zero while reversing (see the comment
+      // above step 2).
+      const brakeImpulse = reversing ? 0 : frame.brake * t.drive.brakeImpulsePerWheel;
       for (let i = 0; i < 4; i++) {
         vc.setWheelBrake(i, brakeImpulse);
       }

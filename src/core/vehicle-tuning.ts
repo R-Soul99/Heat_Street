@@ -181,6 +181,29 @@ export interface VehicleTuning {
      * controllable, readable step-out — human-confirmed in-browser.
      */
     powerOversteerGain: number;
+    /**
+     * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
+     * each rear wheel, newtons, while `reversing` is true in
+     * `src/physics/vehicle.ts`'s `tick`. A starting value, not swept — chosen
+     * to be roughly 40% of `engineForcePerRearWheel`'s default (3650 N), on
+     * the reasoning that reverse gear in a real car is materially lower-geared
+     * than any forward gear, so a docile creep-out-of-a-jam force is more
+     * appropriate here than parity with forward acceleration.
+     */
+    reverseEngineForcePerRearWheel: number;
+    /**
+     * `[ASSUMED]` (this plan, 260913-epf): the forward-speed threshold below
+     * which holding brake engages reverse instead of braking, m/s. Its
+     * default (0.1) is DELIBERATELY BELOW
+     * `src/physics/telemetry/routines.ts`'s `STOP_SPEED_MS` (0.15) so the
+     * 60-0 braking telemetry routine provably terminates before reverse can
+     * engage — a threshold at or above `STOP_SPEED_MS` would release the
+     * brakes mid-measurement and the routine would never reach its stop
+     * condition (it drives `brake: 1` until `forwardSpeedMs <= STOP_SPEED_MS`,
+     * and reversing zeroes the brake impulse — see the matching comment in
+     * `src/physics/vehicle.ts`).
+     */
+    reverseEngageSpeedMs: number;
   };
   readonly assists: {
     /**
@@ -311,6 +334,8 @@ export function defaultTuning(): VehicleTuning {
       steerReturnPerSec: 4.0,
       handbrakeRearSideFriction: 0.01,
       powerOversteerGain: 1.1,
+      reverseEngineForcePerRearWheel: 1500,
+      reverseEngageSpeedMs: 0.1,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -373,6 +398,8 @@ export const TUNING_RANGES: {
     steerReturnPerSec: TuningRange;
     handbrakeRearSideFriction: TuningRange;
     powerOversteerGain: TuningRange;
+    reverseEngineForcePerRearWheel: TuningRange;
+    reverseEngageSpeedMs: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -432,6 +459,10 @@ export const TUNING_RANGES: {
     // inside the first half-percent of the track.
     handbrakeRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     powerOversteerGain: { min: 0, max: 2, step: 0.05 },
+    reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
+    // Max 1 m/s keeps the engage window at walking pace or below — a larger
+    // max would let a slider release the brakes at real driving speed.
+    reverseEngageSpeedMs: { min: 0, max: 1, step: 0.01 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },
