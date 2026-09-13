@@ -1,0 +1,81 @@
+{
+  "fetchedAt": "2026-09-13T00:00:00.000Z",
+  "endpoint": "https://overpass-api.de/api/interpreter",
+  "bbox": { "south": 33.0963, "west": -83.8242, "north": 33.1223, "east": -83.7948 },
+  "query": "[out:json][timeout:25];(way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track)\"](33.0963,-83.8242,33.1223,-83.7948););out body geom qt;",
+  "response": {
+    "elements": [
+      {
+        "type": "way",
+        "id": 5001,
+        "nodes": [1001, 1002, 1003],
+        "geometry": [
+          { "lat": 33.1, "lon": -83.81 },
+          { "lat": 33.101, "lon": -83.808 },
+          { "lat": 33.102, "lon": -83.806 }
+        ],
+        "tags": { "highway": "tertiary", "surface": "asphalt", "name": "McCrakin Street" }
+      },
+      {
+        "type": "way",
+        "id": 5002,
+        "nodes": [1003, 1004],
+        "geometry": [
+          { "lat": 33.102, "lon": -83.806 },
+          { "lat": 33.103, "lon": -83.804 }
+        ],
+        "tags": { "highway": "tertiary", "surface": "asphalt", "name": "McCrakin Street" }
+      },
+      {
+        "type": "way",
+        "id": 5003,
+        "nodes": [1004, 1005],
+        "geometry": [
+          { "lat": 33.103, "lon": -83.804 },
+          { "lat": 33.1, "lon": -83.804 }
+        ],
+        "tags": { "highway": "residential" }
+      },
+      {
+        "type": "way",
+        "id": 5004,
+        "nodes": [1005, 1006],
+        "geometry": [
+          { "lat": 33.1, "lon": -83.804 },
+          { "lat": 33.099, "lon": -83.806 }
+        ],
+        "tags": { "highway": "residential", "surface": "gravel" }
+      },
+      {
+        "type": "way",
+        "id": 5005,
+        "nodes": [1006, 1007],
+        "geometry": [
+          { "lat": 33.099, "lon": -83.806 },
+          { "lat": 33.0995, "lon": -83.809 }
+        ],
+        "tags": { "highway": "unclassified", "surface": "unpaved" }
+      },
+      {
+        "type": "way",
+        "id": 5006,
+        "nodes": [1007, 1001],
+        "geometry": [
+          { "lat": 33.0995, "lon": -83.809 },
+          { "lat": 33.1, "lon": -83.81 }
+        ],
+        "tags": { "highway": "residential" }
+      },
+      {
+        "type": "way",
+        "id": 5007,
+        "nodes": [1003, 1008],
+        "geometry": [
+          { "lat": 33.102, "lon": -83.806 },
+          { "lat": 33.1025, "lon": -83.8065 }
+        ],
+        "tags": { "highway": "track", "surface": "dirt" }
+      }
+    ]
+  }
+}
