@@ -115,6 +115,22 @@ export interface SurfaceFxProfile {
 const SLIP_THRESHOLD_HIGH = 65;
 const SLIP_THRESHOLD_MID = 30;
 const SLIP_THRESHOLD_LOW = 12;
+/**
+ * `[TUNED in plan 03-12's feel session]`: sand/mud's very low `forwardGrip`
+ * (0.45/0.40) means ordinary throttle -- not just a deliberate slide --
+ * already pushed wheel slip well past `SLIP_THRESHOLD_LOW` and near the
+ * emit-rate multiplier's x4 cap (`EMIT_RATE_EXCESS_CAP`), so particle
+ * intensity read as constant regardless of how hard the player was actually
+ * driving. This sits between `_LOW` and `_MID` so ordinary driving still
+ * trips it (dust must start early per D-05's spirit) but leaves headroom for
+ * the emit rate to genuinely ramp with input intensity, the way
+ * gravel/dirt_road's `_LOW` already does on their higher-grip surfaces.
+ * Confirmed by direct playtest: "yes it helped, dust is produced for
+ * longer." A genuinely continuous (not slip-threshold-gated) emission
+ * channel for loose surfaces remains a separate, deferred idea — see
+ * `.planning/seeds/dust-cloud-los-evasion.md`.
+ */
+const SLIP_THRESHOLD_LOOSE = 22;
 
 /**
  * D-08's colour language (grey smoke/tarmac, tan-brown dust/gravel-dirt,
@@ -204,7 +220,7 @@ export const SURFACE_FX_PROFILES: { readonly [K in SurfaceType]: SurfaceFxProfil
     particleSizeM: 1.5,
     lifetimeSec: 1.2,
     emitPerSec: 80,
-    slipThreshold: SLIP_THRESHOLD_LOW,
+    slipThreshold: SLIP_THRESHOLD_LOOSE,
     riseMps: 1.8,
     gravityMps2: -1.4,
     decalColour: 0x8a7a52,
@@ -220,7 +236,7 @@ export const SURFACE_FX_PROFILES: { readonly [K in SurfaceType]: SurfaceFxProfil
     particleSizeM: 1.1,
     lifetimeSec: 0.9,
     emitPerSec: 60,
-    slipThreshold: SLIP_THRESHOLD_LOW,
+    slipThreshold: SLIP_THRESHOLD_LOOSE,
     riseMps: 1.4,
     gravityMps2: -5.0,
     decalColour: 0x2e1f14,

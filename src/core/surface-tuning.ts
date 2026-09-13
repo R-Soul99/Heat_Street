@@ -47,26 +47,28 @@ export function defaultSurfaceProfiles(): SurfaceProfiles {
      */
     tarmac: { forwardGrip: 1.0, lateralGrip: 1.0 },
     /**
-     * `[CITED: hpwizard.com/tire-friction-coefficient.html]` — real-world peak
-     * mu ratio to asphalt is ~0.67 (0.60/0.90), so forwardGrip 0.75 is
-     * well-grounded. lateralGrip is deliberately pushed LOWER than that
-     * real-world ratio would suggest: this is the D-05 anchor — gravel needs
-     * a pronounced, dramatic slide, which only emerges if lateral grip is cut
-     * more aggressively than forward grip. Retune in plan 03-11's feel
-     * session, exactly like rearSideFriction/powerOversteerGain/bodyRollGain
-     * were in Phase 2's plan 02-10.
+     * forwardGrip `[CITED: hpwizard.com/tire-friction-coefficient.html]` —
+     * real-world peak mu ratio to asphalt is ~0.67 (0.60/0.90), so 0.75 is
+     * well-grounded. lateralGrip `[TUNED in plan 03-12's feel session]` —
+     * corrected 0.55 -> 0.6. This is the D-05 anchor: at 0.55 the handbrake/
+     * power-oversteer slide on gravel read as merely "somewhat loose," not
+     * the dramatic Dukes-of-Hazzard break-loose D-05 requires; 0.6 delivered
+     * it, confirmed by direct playtest ("yeah that's the dramatic slide now,
+     * good").
      */
-    gravel: { forwardGrip: 0.75, lateralGrip: 0.55 },
+    gravel: { forwardGrip: 0.75, lateralGrip: 0.6 },
     /**
-     * `[CITED: hpwizard.com/tire-friction-coefficient.html]` — real-world dry
-     * earth-road peak mu ratio to asphalt is ~0.76-0.85, so forwardGrip 0.78
-     * sits in that band. lateralGrip shares gravel's aggressive D-05 cut —
-     * dirt_road and gravel are the two surfaces the D-05 anchor names
-     * together for a dramatic power-slide character. Retune in plan 03-11's
-     * feel session, exactly like rearSideFriction/powerOversteerGain/
-     * bodyRollGain were in Phase 2's plan 02-10.
+     * forwardGrip `[CITED: hpwizard.com/tire-friction-coefficient.html]` —
+     * real-world dry earth-road peak mu ratio to asphalt is ~0.76-0.85, so
+     * 0.78 sits in that band. lateralGrip `[TUNED in plan 03-12's feel
+     * session]` — corrected 0.55 -> 0.5, slightly looser than gravel's
+     * retuned 0.6 rather than sharing its exact value: dirt_road and gravel
+     * are the two surfaces D-05 names together for a dramatic power-slide
+     * character, but the feel session differentiated them rather than
+     * leaving both pinned to one identical number. Confirmed by direct
+     * playtest alongside gravel's retune.
      */
-    dirt_road: { forwardGrip: 0.78, lateralGrip: 0.55 },
+    dirt_road: { forwardGrip: 0.78, lateralGrip: 0.5 },
     /**
      * `[ASSUMED]` — grass is conventionally treated as looser than
      * dirt/gravel in driving games but with less dramatic power-slide

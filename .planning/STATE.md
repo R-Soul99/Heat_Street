@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Quick task 260913-epf complete; Phase 3 plan 03-12 human playtest in progress
-last_updated: "2026-09-13T09:35:00.931Z"
-last_activity: 2026-09-13 - Completed quick task 260913-epf: Add reverse gear and a temporary debug free-look camera override
+stopped_at: Phase 3 (surfaces-helicopter-camera) COMPLETE — plan 03-12's full feel session closed out
+last_updated: "2026-09-13T13:30:00.000Z"
+last_activity: 2026-09-13 - Completed plan 03-12 (full-phase feel session): D-05 gravel/dirt_road retune, SC6 occlusion decision (fade ships), frame-budget target fix, gamepad and rearSideFriction carry-forwards closed. Phase 3 complete.
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 29
-  completed_plans: 17
-  percent: 25
+  completed_plans: 29
+  percent: 38
 ---
 
 # Project State
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 03 — surfaces-helicopter-camera
+**Current focus:** Phase 03 complete — Phase 04 (Map Pipeline & First Area) is next, not yet planned
 
 ## Current Position
 
-Phase: 03 (surfaces-helicopter-camera) — EXECUTING
-Plan: 1 of 12
-Phase: 03 (surfaces-and-helicopter-camera) — NOT STARTED (not yet broken into plans)
-Last activity: 2026-09-12 -- Phase 03 execution started
+Phase: 03 (surfaces-helicopter-camera) — COMPLETE (12 of 12 plans)
+Next: Phase 04 (Map Pipeline & First Area) — not yet broken into plans
+Last activity: 2026-09-13 -- Plan 03-12 (full-phase feel session) closed out Phase 3
 
-Progress (phases 1-2 of 8, the only ones planned so far): [██████████] 100% of 17 known plans
+Progress (phases 1-3 of 8, the only ones planned so far): [██████████] 100% of 29 known plans
 
 ## Performance Metrics
 
@@ -146,6 +145,8 @@ Recent decisions affecting current work:
 - [Phase 02-10]: SC2's gamepad half is unverified (no hardware available this session) — open item for Phase 3, along with 02-RESEARCH.md's unverified standard-mapping axis assumption (A1)
 - [Phase 03-12 Task 2]: CAM-04/SC6 occlusion decision made — fade ships (docs/adr/0003-occlusion-mitigation.md). Fade was directly verified (building faded on occlusion, no visual issues). Steepen and off were NOT genuinely evaluated: steepen is blocked by the confirmed fan-ray/back-face bug ([Quick 260913-epf] below, density always reads 0/5 in the test canyon) and off was never explicitly driven as its own comparison arm this session. Fade alone satisfies CAM-04's hard requirement (car never permanently hidden), so it ships; steepen/off remain live behind the `O` toggle for a cheap re-run once the density bug is fixed. No src/core/camera-tuning.ts occlusion values changed.
 - [Phase 03-12 Task 1 step 10]: `src/core/frame-budget.ts`'s `PHASE1_DEBUG_SCENE_TARGETS` renamed `SCENE_TARGETS` and its `drawCalls`/`bodies` targets raised 20->70 / 20->30 — it was the only live target set the HUD ever checks (no scene-awareness), so leaving Phase 1's bare-scene numbers in place was flagging Phase 3's real scene as over-budget when it wasn't. Real measured reading during a heavy gravel slide (dust at full): frame 16.68ms (~exact 60fps, "16.6" budget is a rounded constant), physics 0.38ms, render 1.64ms cpu-submit, 57 draws, 692 tris, 21 total bodies (1 active) — all comfortably under the revised targets. `docs/frame-budget.md`'s prior "NOT YET TAKEN" estimate is replaced with this real reading; the estimate itself proved accurate (predicted ~45-57 draws, measured 57).
+- [Phase 03-12 Task 1, full feel session]: All 12 steps complete, human-signed-off. Per-surface verdict: tarmac/grass/sand/mud all "right" as shipped, unchanged; gravel and mud/sand both pass D-04 controllability. **D-05's Dukes anchor initially FAILED** on gravel/dirt_road at their 0.55/0.55 shipped lateralGrip ("the back doesn't kick out quite enough") and was corrected live: gravel lateralGrip 0.55->0.6, dirt_road 0.55->0.5 (deliberately differentiated, not left equal) — re-tested and confirmed dramatic ("yeah that's the dramatic slide now, good"). Measured skidpad lateral-g at the new defaults barely moved from 03-06's original figures (tarmac 1.027g, dirt_road 0.820g, gravel 0.784g, grass 0.567g, sand 0.461g, mud 0.411g — ordering and `SURFACE_SEPARATION_MIN_G` both still hold, `tests/surface-telemetry.test.ts` green unchanged): the felt "more dramatic slide" comes from break-away/slide character the skidpad's sustained-cornering metric doesn't capture, not from a large steady-state grip change — expected, not a test conflict. Also tuned: `src/render/surface-fx.ts`'s sand/mud dust `slipThreshold` 12->22 (own `SLIP_THRESHOLD_LOOSE` constant) — ordinary throttle on sand/mud's very low forwardGrip was pinning the emit-rate multiplier near its cap regardless of input intensity, reading as "constant regardless of driving style"; confirmed fixed ("yes it helped, dust is produced for longer"). FX/decal/audio distinctness (SC2/D-09) all pass — six particle effects and six audio loops all distinguishable, decal pool recycles cleanly under sustained drift with no frame-rate cost, audio crossfade reads as a blend not mush. Audio *quality* (not distinctness) is poor — expected, `src/audio/surface-loops.ts`'s loops are all runtime-synthesized placeholder noise; developer may supply real recordings via the existing unwired `loadSurfaceLoops`/`THREE.AudioLoader` path (WAV, one file per surface, any length, T-03-34's license checkpoint is trivial for self-made audio). Camera skins (CAM-03/D-15) pass, distinct and clear on all six surfaces. Two real, deferred findings captured as seeds: continuous (non-slip-gated) dust emission for loose surfaces, and a doughnut-dust-cloud pursuer-LOS-break evasion mechanic (`.planning/seeds/dust-cloud-los-evasion.md`) — both explicitly out of scope for this session.
+- RESOLVED (Phase 3, plan 03-12 Task 1 step 2 + 03-06's automated sweep): the plan-02-10 `rearSideFriction` straight-line-instability carry-forward is now re-verified on real surfaces both ways — 03-06's headless stability sweep (worst case gravel 8.8deg, all six surfaces under the 30deg threshold) and this session's hands-on driving across all six retuned surfaces (including the gravel/dirt_road relatuning above) raised no spin-out report. Closed.
 
 ### Pending Todos
 
@@ -183,6 +184,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-13T09:35:00.931Z
-Stopped at: Quick task 260913-epf complete; Phase 3 plan 03-12 human playtest still in progress (surfaces + occlusion feel session)
-Resume file: .planning/phases/03-surfaces-helicopter-camera/03-12-PLAN.md
+Last session: 2026-09-13T13:30:00.000Z
+Stopped at: Phase 3 (surfaces-helicopter-camera) COMPLETE — all 12 plans done, plan 03-12's feel session signed off
+Resume file: .planning/ROADMAP.md (Phase 4: Map Pipeline & First Area — not yet planned; run /gsd-plan-phase or /gsd-discuss-phase to start it)
