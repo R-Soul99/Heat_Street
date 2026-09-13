@@ -15,7 +15,8 @@
       "!.planning",
       "!docs",
       "!fixtures",
-      "!tools/map-compiler/areas/*.raw-*.json"
+      "!tools/map-compiler/areas/*.raw-*.json",
+      "!public/maps/*.json"
     ]
   },
   "formatter": {

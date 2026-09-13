@@ -25,7 +25,10 @@
  * see the `--area` resolution below) is the only guard against a
  * path-traversal- or arbitrary-file-read-shaped bug here.
  */
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
+import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
 import { type LoadOrFetchAreaResult, loadOrFetchArea } from "./sources/overpass.ts";
 
 /**
@@ -84,6 +87,72 @@ function formatFrequency(counts: Readonly<Record<string, number>>): string {
   return entries.length === 0
     ? "(none)"
     : entries.map(([key, count]) => `${key}:${count}`).join(", ");
+}
+
+/** Above this overall fallback ratio, the compiled surfaces are mostly guesses rather than data — the build is aborted rather than shipping a silently-wrong map. */
+const FALLBACK_RATIO_FAIL_THRESHOLD = 0.75;
+/** Above this ratio (but at or below the fail threshold), the build proceeds but prints a named warning asking for a human spot-check — 04-RESEARCH.md's recommendation, not an automatic failure. */
+const FALLBACK_RATIO_WARN_THRESHOLD = 0.4;
+
+/** Where every area's compiled artifact is written — loaded by URL at runtime, never bundled (STACK.md's "maps go in public/" guidance). */
+const MAPS_OUTPUT_DIR = path.join(import.meta.dirname, "..", "..", "public", "maps");
+
+/**
+ * Prints `BuildReport` as a readable, complete summary: way counts retained
+ * and dropped by reason, node/edge/junction counts, every pruned component
+ * (edge id, osm way id, length), the node-identity mode used, and the
+ * surface-coverage table with its overall fallback ratio — the compensating
+ * control 04-RESEARCH.md's "OSM Surface Tag Reliability" section asks for,
+ * since an absent (not wrong) surface tag is not something the schema's
+ * BUILD-fail rule catches by design.
+ */
+function printBuildReport(config: AreaConfig, report: BuildReport): void {
+  console.log(`compile-map: build report for "${config.areaId}"`);
+  console.log(`  ways retained: ${report.waysRetained}`);
+  const dropEntries = Object.entries(report.waysDroppedByReason);
+  console.log(
+    `  ways dropped by reason: ${
+      dropEntries.length === 0
+        ? "(none)"
+        : dropEntries.map(([reason, count]) => `${reason}:${count}`).join(", ")
+    }`,
+  );
+  console.log(
+    `  nodes: ${report.nodeCount} (junctions: ${report.junctionCount}), edges: ${report.edgeCount}`,
+  );
+  console.log(`  node identity mode: ${report.nodeIdentityMode}`);
+  if (report.nodeIdentityMode === "coordinate-keyed") {
+    console.warn(
+      "  WARNING: at least one way had no OSM `nodes` array — node identity fell back to " +
+        "coordinate-keying. This should not happen against plan 04-02's `out body geom qt` " +
+        "query; investigate the source snapshot if this is unexpected.",
+    );
+  }
+  if (report.prunedEdges.length === 0) {
+    console.log("  pruned components: (none)");
+  } else {
+    console.log(
+      `  pruned components: ${report.prunedEdges.length} edge(s) not connected to the largest component:`,
+    );
+    for (const pruned of report.prunedEdges) {
+      console.log(
+        `    edge id=${pruned.id} osmWayId=${pruned.osmWayId} lengthM=${pruned.lengthM.toFixed(1)}`,
+      );
+    }
+  }
+  if (report.surfaceCoverage !== null) {
+    const { overall, byRoadClass } = report.surfaceCoverage;
+    console.log(
+      `  surface coverage: explicit=${overall.explicit} fallback=${overall.fallback} ` +
+        `fallbackRatio=${overall.fallbackRatio.toFixed(3)}`,
+    );
+    for (const [roadClass, counts] of Object.entries(byRoadClass)) {
+      console.log(
+        `    ${roadClass}: explicit=${counts.explicit} fallback=${counts.fallback} ` +
+          `fallbackRatio=${counts.fallbackRatio.toFixed(3)}`,
+      );
+    }
+  }
 }
 
 /**
@@ -147,9 +216,37 @@ async function main(argv: readonly string[]): Promise<void> {
 
   printFetchSummary(config, roadsResult, buildingsResult);
 
-  // Stages 3-8 (DEM, graph build, geometry, author, validate, write) land in
-  // later plans — see this file's own header comment for the full pipeline
-  // order.
+  const { graph, report } = buildGraph(roadsResult.envelope, config);
+  printBuildReport(config, report);
+
+  const overallFallbackRatio = report.surfaceCoverage?.overall.fallbackRatio ?? 0;
+  if (overallFallbackRatio > FALLBACK_RATIO_FAIL_THRESHOLD) {
+    console.error(
+      `compile-map: ABORTED — overall surface fallback ratio ${overallFallbackRatio.toFixed(3)} ` +
+        `exceeds ${FALLBACK_RATIO_FAIL_THRESHOLD}. The compiled surfaces would be almost entirely ` +
+        `guesses rather than data. Investigate the source snapshot's surface tagging before retrying.`,
+    );
+    process.exit(1);
+    return;
+  }
+  if (overallFallbackRatio > FALLBACK_RATIO_WARN_THRESHOLD) {
+    console.warn(
+      `compile-map: WARNING — overall surface fallback ratio ${overallFallbackRatio.toFixed(3)} ` +
+        `exceeds ${FALLBACK_RATIO_WARN_THRESHOLD}. Proceeding, but a human spot-check of the ` +
+        `compiled surfaces (satellite/street-view, or just driving the result) is recommended.`,
+    );
+  }
+
+  await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
+  const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
+  await writeFile(outputPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+  console.log(`compile-map: wrote ${outputPath}`);
+
+  // Stages 5-8 (geometry, author, validate against ngraph reachability) land
+  // in later plans — see this file's own header comment for the full
+  // pipeline order. Elevation (`y`) is 0 for every node/point until plan
+  // 04-05 lands DEM sampling — this artifact is a flat, schema-valid,
+  // deliberately intermediate map (D-P11).
 }
 
 main(process.argv.slice(2)).catch((err: unknown) => {

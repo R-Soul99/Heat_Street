@@ -19,6 +19,15 @@ const PRESENT: Record<string, string> = {
     import: "default",
   }),
   ...import.meta.glob<string>("../LICENSE-*", { query: "?raw", eager: true, import: "default" }),
+  // Plan 04-04: registers the compiled Juliette, GA artifact so it cannot
+  // silently become a stub. Extending this glob set follows
+  // tests/no-google-pipeline.test.ts's documented twin-update convention
+  // (widen the glob and the REQUIRED entry together).
+  ...import.meta.glob<string>("../public/maps/*.json", {
+    query: "?raw",
+    eager: true,
+    import: "default",
+  }),
 };
 
 function read(path: string): string {
@@ -44,6 +53,10 @@ const REQUIRED: ReadonlyArray<{ path: string; minChars: number }> = [
   { path: "docs/frame-budget.md", minChars: 1000 },
   { path: "fixtures/road-graph.sample.json", minChars: 500 },
   { path: "LICENSE-MAPDATA", minChars: 500 },
+  // Plan 04-04: the first real compiled area artifact. 36 retained ways
+  // compile to 50 nodes / 64 edges pretty-printed — a stub or truncated
+  // write would be nowhere near this floor.
+  { path: "public/maps/juliette-ga.map.json", minChars: 5000 },
 ];
 
 describe("SC5 documents are present and substantive", () => {
