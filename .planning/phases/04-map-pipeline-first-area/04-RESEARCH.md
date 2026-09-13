@@ -1,8 +1,9 @@
 # Phase 4: Map Pipeline & First Area - Research
 
-**Researched:** 2026-09-13
+**Researched:** 2026-09-13 (Geomesh Investigation section updated same day, after the user made
+the repository public mid-session)
 **Domain:** Offline OSM-to-drivable-road-graph compilation (geodata processing, procedural mesh generation, physics collision authoring)
-**Confidence:** MEDIUM-HIGH overall (HIGH on schema/licensing/library facts verified against source; MEDIUM on junction-geometry and area-selection findings, which are reasoned/adapted rather than copy-verified against a shipped implementation of this exact pipeline)
+**Confidence:** MEDIUM-HIGH overall (HIGH on schema/licensing/library facts verified against source, and now HIGH on the Geomesh data-sourcing finding below, directly read from source; MEDIUM on junction-geometry findings, which are reasoned/adapted rather than copy-verified against a shipped implementation of this exact pipeline)
 
 ## Summary
 
@@ -11,22 +12,35 @@ API query plus a USGS 3DEP elevation raster into the two artifacts `docs/schemas
 already specifies: a `.map.json` road graph and a companion `.glb`. Three findings dominate this
 research pass.
 
-**First:** the user's existing "Geomesh" tool at `https://github.com/R-Soul99/Geomesh` **could not
-be found** — that GitHub user's public repositories (verified via the GitHub REST API directly,
-not a UI scrape) are `R-Soul`, `generative-ai-for-beginners` (a fork), `Shopatron3000`, `AssManger`,
-`Shortcut-Manager`, `plugin-freedom-windows`. No `Geomesh` repository is publicly visible under
-this account. This blocks D-06's investigation entirely with the tools available this session —
-see "Geomesh Investigation" below and the Open Questions section. The recommendation this forces:
-**build the Phase 4 compiler fresh, directly against `road-graph.v1.md`**, since there is nothing
-to adapt to.
+**First:** the user's existing "Geomesh" tool at `https://github.com/R-Soul99/Geomesh` was
+initially unreachable (404 at research time — the repo was private) but was made public mid-session
+and then read directly. Verdict: **its road and building extraction is genuinely reusable, its
+elevation pipeline is not.** `server.ts`'s `/api/roads/network` and `/api/buildings/structures`
+endpoints are both pure OpenStreetMap Overpass queries (`highway=*` and
+`building=*`/`man_made=*`/`amenity=*` respectively) returning GeoJSON — zero Google involvement,
+confirmed by grepping `gltfExporter.ts`/`roadRenderer.ts`/`buildingRenderer.ts` for any mention of
+"google" (none found) and by reading the road/building route handlers directly. The
+`buildings/structures` endpoint already infers real height from OSM `height`/`building:levels`
+tags — directly answering Open Question 2 below (building/landmark geometry is genuinely cheap to
+add, not a from-scratch design problem). Google Maps Platform (`@vis.gl/react-google-maps`,
+`GOOGLE_MAPS_API_KEY`) appears only as an **optional** elevation/geocoding accelerant with an
+automatic open-data fallback (Terrarium DEM / Open-Meteo / Nominatim) when no key is set, and as
+an allowed proxy host for on-screen satellite/Street View **preview** imagery — exactly the shape
+ADR 0001 already anticipated and cleared ("its exported game data already comes from OpenStreetMap
+via Overpass... What is prohibited is its Google satellite/Street View preview imagery ever being
+baked into an export"). **User-confirmed decision:** port/adapt Geomesh's road + building Overpass
+query logic into the new compiler (real reuse of working, license-clean code); do NOT reuse its
+elevation pipeline — Geomesh defaults to 30m Terrarium tiles, which is not one of ADR 0001's two
+approved DEM sources (USGS 3DEP / Copernicus GLO-30), so the compiler fetches USGS 3DEP 1m
+directly instead, per the ADR's own selection rule for a US-based area. See "Geomesh Investigation"
+below for the full source-reading evidence.
 
 **Second:** a live Overpass API query against Juliette, GA (Monroe County — the real-world
 inspiration for the "Whistle Stop Café" of *Fried Green Tomatoes*, a genuine small-town Main
 Street) confirms it satisfies every one of D-01–D-09's candidate criteria with real, queried data:
 gravel/unpaved surface tags genuinely present (not just untagged `residential` defaulting to
 tarmac), a real town core, rolling Piedmont elevation (~33 m of relief across the candidate box),
-and a road network with real junction/loop variety. This is the primary candidate, HIGH confidence
-because it is the one candidate this session actually queried live rather than reasoned about.
+and a road network with real junction/loop variety. **User-confirmed as the target area.**
 
 **Third:** the existing runtime already dictates the collision-authoring granularity. Phase 3's
 `src/physics/surface.ts` (`SurfaceMap`) is a `ColliderHandle -> SurfaceType` side-table with
@@ -40,12 +54,16 @@ granularity.
 
 **Primary recommendation:** build a Node CLI at `tools/map-compiler/` (outside `src/`, so it can
 use real `node:fs`/`node:https` without violating the browser-layering rules `tests/layering.test.ts`
-enforces) that (1) fetches a live Overpass QL query for the confirmed area, (2) fetches a USGS
-3DEP `exportImage` GeoTIFF for the same bounding box, (3) builds the node/edge graph with
-compiler-assigned dense ids, offset-ribbon ferrying + angle-sorted junction-fan geometry for
-render and collision, DEM-sampled and endpoint-clamped-smoothed elevation, and the locked
-surface-enum mapping table, and (4) validates the result (undirected reachability + geometry
-sanity) before writing `.map.json` + `.glb`.
+enforces) that (1) queries Overpass for roads and buildings using query shapes ported from
+Geomesh's `server.ts` (`/api/roads/network`, `/api/buildings/structures` — both already
+production-tested Overpass QL against real areas including this session's own Juliette, GA
+queries), (2) fetches a USGS 3DEP `exportImage` GeoTIFF directly for the confirmed bounding box
+(NOT Geomesh's Terrarium/Google elevation path — see Geomesh Investigation), (3) builds the
+node/edge graph with compiler-assigned dense ids, offset-ribbon + angle-sorted junction-fan
+geometry for render and collision, DEM-sampled and endpoint-clamped-smoothed elevation, and the
+locked surface-enum mapping table, plus lightweight building footprint geometry adapted from
+Geomesh's height-inference logic for D-04's Main Street landmark, and (4) validates the result
+(undirected reachability + geometry sanity) before writing `.map.json` + `.glb`.
 
 ## User Constraints
 
@@ -124,42 +142,65 @@ tool. The tiers below are this project's actual shape.
 
 ## Geomesh Investigation (D-05/D-06)
 
-**Finding: the repository is not publicly reachable.** Three independent checks agree:
+**Update, same session:** initially unreachable (404, three independent checks — see git history
+of this document for that evidence), the repository was **made public by the user mid-session**
+and then read directly via the GitHub REST API + `raw.githubusercontent.com`. This section
+replaces the original "could not be located" finding with the real investigation.
 
-1. `WebFetch` against `https://github.com/R-Soul99/Geomesh` returned HTTP 404.
-2. `curl -I` against both `https://github.com/R-Soul99/Geomesh` and
-   `https://github.com/R-Soul99/GeoMesh` returned HTTP 404 (case variant also checked).
-3. The GitHub REST API (`GET /users/R-Soul99/repos`, unauthenticated, public repos only) lists
-   exactly six repositories for this account, none named `Geomesh` or anything resembling it:
-   `AssManger` (TypeScript, "Asset Management app"), `generative-ai-for-beginners` (a fork),
-   `Shopatron3000`, `Shortcut-Manager`, `plugin-freedom-windows`, `R-Soul`. `[VERIFIED: GitHub
-   REST API, api.github.com/users/R-Soul99/repos, queried 2026-09-13]`
+### What Geomesh actually is
 
-This is consistent with the repository being **private** (invisible to an unauthenticated fetch),
-**deleted**, or **renamed away from "Geomesh."** It is not possible to distinguish which from
-outside GitHub's UI, and no `gh auth login` session was available this session (the sandboxed
-`gh` CLI is unauthenticated). CONTEXT.md's own text hedges consistently with this ("the user does
-not know which is right without more information") — this is not a contradiction of the user's
-account, just an access gap this session's tools cannot close.
+A React/Vite + Express single-page app ("Heightmap & 3D GLTF Studio" per its UI, `description:
+"Take google maps data and convert to 3d map info"` in its repo metadata — a stale/inaccurate
+description relative to what the code actually does, evidenced below). `package.json`'s
+`name: "react-example"` and its AI-Studio-flavored `.env.example` comments ("AI Studio
+automatically injects this...") indicate it was scaffolded from a Google AI Studio template,
+which explains the `@vis.gl/react-google-maps` and `@google/genai` dependencies being present in
+`package.json` without being load-bearing for the actual data pipeline (see below).
 
-**What this means for planning:** D-06's investigation cannot be completed as scoped. Two paths
-forward, both compatible with "build fresh" as the safe default:
+### What it emits, per endpoint (`server.ts`, read in full)
 
-1. **Recommended:** proceed with a from-scratch compiler built directly against
-   `road-graph.v1.md` (this document's Standard Stack/Architecture Patterns sections below are
-   written for exactly this path). This has no dependency on Geomesh's state and matches the
-   ADR's own framing that Geomesh's *role* was always "optional accelerant," never the only path.
-2. **If the user wants Geomesh's actual output reused:** the user needs to either make the repo
-   temporarily public, share a local clone path (it may only exist on the user's own machine and
-   never have been pushed with that name), or paste representative output/source directly into a
-   future session. This is a **blocking input**, not something the planner can resolve — flagged
-   as Open Question 1.
+| Endpoint | Data source | Google involvement |
+|---|---|---|
+| `POST /api/roads/network` | Live Overpass query: `way["highway"~"^(motorway\|trunk\|primary\|secondary\|tertiary\|unclassified\|residential\|service\|living_street\|track)"]`, returns `{roads: RoadSegment[], geojson}` | **None.** |
+| `POST /api/buildings/structures` | Live Overpass query: `way["building"]`, `way["man_made"~...]`, `way["amenity"~"^(fuel\|parking\|charging_station)"]`, returns `{buildings: BuildingStructure[], geojson, summary}` with real height inference from OSM `height`/`building:levels`/`levels` tags, falling back to type-based defaults (e.g. `commercial: 12.0m`, `residential: 6.8m`) | **None.** |
+| `POST /api/elevation/grid` | Cascading: Google Elevation API (only if a key is configured AND active) → AWS-hosted Terrarium DEM tiles (Mapzen/SRTM-derived, 30m, no key) → Open-Meteo elevation API (no key) → flat 100m fallback | **Optional, not primary** — and even when active, Google is just one of four fallback tiers, never required. |
+| `GET /api/geocode` | Cascading: raw coordinate parse → Google Geocoding (only if key present) → Open-Meteo Geocoding → OSM Nominatim | Same — optional convenience tier only. |
+| `GET /api/proxy-image` | Proxies satellite/Street View tiles from an explicit allowlist (`maps.googleapis.com`, `streetviewpixels-pa.googleapis.com`, `*.ggpht.com`, plus `tile.openstreetmap.org`, ArcGIS, CartoDB) | **On-screen preview only** — grepped `gltfExporter.ts`, `roadRenderer.ts`, `buildingRenderer.ts` for "google": zero matches in all three. The export/render pipeline never touches this endpoint's output. |
 
-Either way, **do not architect the compiler with a hard dependency on Geomesh's output shape.**
-If the user later supplies real Geomesh output that happens to already resemble
-`road-graph.v1.md`, treating it as one possible *OSM extract input format* the compiler's
-ingestion step can special-case is a much smaller change than discovering mid-build that the
-whole pipeline was designed around an unverified assumption.
+`src/components/MapSelector.tsx` (the area-picker UI) renders via **Leaflet**, not the Google Maps
+SDK — `@vis.gl/react-google-maps` is a `package.json` dependency but not used in the map-picker
+component read this session; its actual call site (if any — e.g. inside `StreetViewModal.tsx`)
+is out of scope for this investigation since it would only ever touch preview imagery per the
+proxy allowlist above, not exported geometry.
+
+### Verdict: matches ADR 0001's own prior framing exactly
+
+ADR 0001 already recorded, before this investigation, that the tool's "exported game data already
+comes from OpenStreetMap via Overpass with open-data elevation fallbacks... What is prohibited is
+its Google satellite/Street View preview imagery ever being baked into an export." This session's
+direct source read **confirms that framing was correct**, with one addition ADR 0001 didn't have
+visibility into: Google Elevation/Geocoding APIs are also present as an *optional* convenience
+tier, not just imagery preview — still never baked into exports, still always has a working
+non-Google fallback, still doesn't change the ADR's conclusion.
+
+### What this means for planning (user-confirmed decision)
+
+1. **Port, don't wholesale-adopt.** Geomesh's `RoadSegment`/`BuildingStructure` output shapes
+   (`src/types.ts`) are flat GeoJSON-adjacent structures — useful raw material, but NOT
+   `road-graph.v1.md`'s shape (no dense compiler-assigned ids, no `oneway` resolution, no
+   surface-enum mapping, no junction detection). The compiler's ingestion layer should reuse
+   Geomesh's Overpass QL query strings and its OSM-tag-to-attributes mapping logic (particularly
+   the building height-inference table) as a starting point, then build `road-graph.v1.md`'s
+   actual node/edge/surface structure from that raw data — this is still real, meaningful reuse
+   of working code, not a from-scratch reinvention of the Overpass query shape.
+2. **Skip Geomesh's elevation pipeline entirely.** Its primary non-Google source (Terrarium 30m
+   tiles) is not one of ADR 0001's two approved DEM sources. Fetch USGS 3DEP directly (1m,
+   public domain, no mandatory notice) per the ADR's own selection rule for a US-based target —
+   this document's "Code Examples" section already has the `exportImage` REST pattern for this.
+3. **Building/landmark geometry (Open Question 2, below) is resolved**, not still open: adapt
+   Geomesh's `buildings/structures` endpoint logic for D-04's Main Street landmark. This was
+   previously flagged as uncertain scope; it is now a concrete, cheap adaptation of already-working
+   code, not a new design problem.
 
 ## Standard Stack
 
@@ -314,7 +355,9 @@ tools/
     ├── areas/
     │   └── <area-id>.config.ts # bbox, osmSnapshot pin, demSource, output areaId/name
     ├── sources/
-    │   ├── overpass.ts         # live query + osmtogeojson conversion, retry/backoff
+    │   ├── overpass.ts         # live query (roads/buildings QL ported from Geomesh's
+    │   │                        #   server.ts, github.com/R-Soul99/Geomesh) + osmtogeojson
+    │   │                        #   conversion, retry/backoff
     │   └── dem.ts               # USGS 3DEP exportImage fetch + geotiff sampling
     ├── graph/
     │   ├── build-graph.ts       # OSM ways/nodes -> dense-id RoadGraph nodes/edges
@@ -715,41 +758,32 @@ long-stable, low-churn infrastructure.
 |---|-------|---------|---------------|
 | A1 | `osmtogeojson` and the `@gltf-transform/core`/`functions`/`extensions` package names are correct (recalled from training, then registry+slopcheck confirmed to exist) | Standard Stack | If a name is subtly wrong (e.g. a similarly-named typosquat), `npm install` would still succeed since these names DO exist on the registry as scanned — the risk is a wrong *choice* of package for the intended purpose, not a nonexistent name. Low risk given both are well-known, long-standing libraries, but genuinely unverified against an official doc/Context7 source this session. |
 | A2 | Junction fan geometry surface = highest-road-class connected edge | Pattern 2 | If wrong, a junction reads as a grip discontinuity exactly where players cross most often (every intersection) — should be feel-verified in a browser checkpoint, same as Phase 3's surface tuning. |
-| A3 | The Geomesh repository is private/deleted/renamed rather than simply mistyped in a way this session's tools could still resolve | Geomesh Investigation | If the user actually has local, never-pushed source, "build fresh" is still the safe default (no wasted work), but the opportunity to reuse working extraction code would be missed until the user supplies it directly. |
+| A3 | RESOLVED, no longer a live assumption | Geomesh Investigation | The repository was private (not deleted/renamed) — user made it public mid-session, resolved by direct source read. See the updated Geomesh Investigation section. |
 | A4 | Candidate 2 (Ider, AL) and Candidate 3 (GA Piedmont, general) are viable per their secondary/tertiary sourcing | Target Area Selection | Both are explicitly flagged LOW/MEDIUM confidence and marked "not live-verified" — the risk is already surfaced, not hidden. If Juliette, GA is rejected by the user, re-run this session's exact Overpass method against these before locking either. |
 | A5 | `@types/node` version `26.5.1` (npm's current `latest` tag) is an appropriate pin for a Node `24.14.1` project | Standard Stack | `@types/node` major versions track Node majors loosely, not strictly; the planner should verify at install time whether a `24.x`-series `@types/node` exists and is preferred, or whether `latest` (`26.x`) is fine to use against Node 24 (TypeScript's `@types/node` packages are generally forward-compatible for the API surface this compiler needs — fs/path/https — so this is low risk either way). |
 
 ## Open Questions
 
-1. **Can the user make the Geomesh repository accessible, or confirm it should be abandoned as a
-   reference?**
-   - What we know: the account `R-Soul99` is real and has six other public repos; `Geomesh` is
-     not one of them, verified via the GitHub API directly.
-   - What's unclear: private vs. deleted vs. renamed vs. never-pushed-with-that-name — all are
-     consistent with the evidence.
-   - Recommendation: proceed with the "build fresh" architecture this document specifies. If the
-     user later shares real Geomesh output or source, treat it as one possible *input format* the
-     compiler's OSM-ingestion step could special-case, not a redesign of the whole pipeline. Ask
-     the user directly rather than guessing further — this is a genuine external-information gap,
-     not something more research effort can close.
+1. ~~Can the user make the Geomesh repository accessible?~~ **RESOLVED mid-session** — the user
+   made the repository public, it was read directly, and the finding is recorded in full in
+   "Geomesh Investigation" above. No longer an open question.
 
-2. **Does Phase 4's scope include any building/landmark geometry, or is it roads + bare terrain
-   only?**
+2. ~~Does Phase 4's scope include any building/landmark geometry?~~ **RESOLVED mid-session** —
+   Geomesh's `buildings/structures` endpoint already does real OSM building extraction with
+   height inference; the compiler adapts that logic for D-04's landmark rather than treating
+   building geometry as a from-scratch design question. Still worth the planner explicitly
+   scoping HOW MUCH building detail (the original lightweight-placeholder-boxes framing below
+   remains a reasonable ceiling — Geomesh's height/type inference is a nice-to-reuse bonus on top
+   of simple boxes, not a mandate to build full architectural detail):
    - What we know: `road-graph.v1.md` specifies road-network fields only — no building schema
-     exists anywhere in the repo. Phase 4's success criteria (SC1-5) mention only roads, surfaces,
-     the `.glb`/`.map.json` pair, and the validator — no building/landmark requirement. D-04 asks
-     for a recognizable Main Street landmark, and `docs/adr/0003-occlusion-mitigation.md` notes
+     exists anywhere in the repo, and Phase 4's SC1-5 mention only roads/surfaces/`.glb`+`.map.json`/
+     the validator, not buildings. `docs/adr/0003-occlusion-mitigation.md` separately notes
      revisiting its fade/steepen choice "once real building density exists," implying some future
-     phase expects Phase 4 (or a later one) to eventually produce real buildings.
-   - What's unclear: whether "recognizable landmark" (D-04) requires actual building meshes in
-     THIS phase, or is satisfied by road layout + naming alone (e.g., a `spawns[]` entry literally
-     named "Main Street" plus the player recognizing the real-world grid pattern).
-   - Recommendation: the planner should explicitly scope this — a lightweight recommendation is
-     minimal placeholder building boxes at OSM `building=*` footprints (a straightforward
-     Overpass query addition: `way["building"](bbox)`) for basic visual orientation, deferring
-     real building art/density to whichever phase actually needs occlusion-testing-grade density
-     per ADR 0003's own note. This keeps Phase 4 scoped to its stated success criteria while not
-     silently ignoring D-04's landmark intent.
+     phase expects real building density eventually — not necessarily this one.
+   - Recommendation: minimal placeholder building boxes at OSM `building=*` footprints (now with a
+     working Overpass query and height-inference logic to adapt from Geomesh, rather than
+     building that from scratch), deferring real building art/density to whichever phase actually
+     needs occlusion-testing-grade density per ADR 0003's own note.
 
 3. **Does Phase 4 compile off-road terrain surface (grass/dirt outside the road ribbons), or is
    the area strictly road-network-only with an undefined/unshippable off-road void?**
@@ -881,7 +915,11 @@ fetched by URL, same trust level as any other static asset already in `public/`)
   `.planning/ROADMAP.md`, `.planning/STATE.md`, `.planning/REQUIREMENTS.md`, `CLAUDE.md` — all
   read directly this session
 - GitHub REST API (`api.github.com/users/R-Soul99/repos`), queried directly, unauthenticated —
-  Geomesh non-existence finding
+  initial Geomesh non-visibility finding (repo was private at that point)
+- `github.com/R-Soul99/Geomesh` (`server.ts`, `package.json`, `.env.example`, `src/types.ts`,
+  `src/components/MapSelector.tsx`, `src/utils/{gltfExporter,roadRenderer,buildingRenderer}.ts`),
+  read directly via the GitHub API + `raw.githubusercontent.com` after the user made the
+  repository public mid-session — the full Geomesh Investigation finding above
 - `npm view` (registry) for `ngraph.path`, `ngraph.graph`, `@gltf-transform/cli`, `geotiff`,
   `osmtogeojson`, `@types/node` — versions and publish dates, this session
 - `slopcheck 0.6.1` scan output, this session, against a scratchpad probe `package.json`
