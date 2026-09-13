@@ -26,7 +26,7 @@
  * see the `--area` resolution below) is the only guard against a
  * path-traversal- or arbitrary-file-read-shaped bug here.
  */
-import { julietteGaConfig, type AreaConfig } from "./areas/juliette-ga.config.ts";
+import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 
 /**
  * Explicit registry of every known area, keyed by `areaId`. Deliberately a

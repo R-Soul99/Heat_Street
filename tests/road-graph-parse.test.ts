@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseRoadGraph } from "../src/core/road-graph";
-
 // Read through Vite's `?raw` transform, matching
 // `tests/road-graph-schema.test.ts`'s existing idiom.
 import fixtureRaw from "../fixtures/road-graph.sample.json?raw";
+import { parseRoadGraph } from "../src/core/road-graph";
 
 /** A fresh, independent deep clone of the fixture, safe to mutate per test case. */
 function cloneFixture(): Record<string, unknown> {
@@ -48,7 +47,7 @@ describe("parseRoadGraph — schemaVersion", () => {
     expect(() => parseRoadGraph(JSON.stringify(clone), "x")).toThrow(/schemaVersion/);
   });
 
-  it("throws naming schemaVersion when it is the string \"1\"", () => {
+  it('throws naming schemaVersion when it is the string "1"', () => {
     const clone = cloneFixture();
     clone.schemaVersion = "1";
     expect(() => parseRoadGraph(JSON.stringify(clone), "x")).toThrow(/schemaVersion/);

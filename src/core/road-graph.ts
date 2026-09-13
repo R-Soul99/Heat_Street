@@ -241,10 +241,7 @@ function parseSource(sourceLabel: string, raw: Record<string, unknown>): RoadGra
   };
 }
 
-function parseAttribution(
-  sourceLabel: string,
-  raw: Record<string, unknown>,
-): RoadGraphAttribution {
+function parseAttribution(sourceLabel: string, raw: Record<string, unknown>): RoadGraphAttribution {
   requireKeys(sourceLabel, raw, REQUIRED_ATTRIBUTION, "attribution");
   return {
     osm: requireString(sourceLabel, raw, "osm", "attribution"),

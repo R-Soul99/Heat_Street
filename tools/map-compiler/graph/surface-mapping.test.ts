@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mapSurface, surfaceCoverage } from "./surface-mapping.ts";
-
 // Both files read through Vite's `?raw` transform, matching
 // `tests/road-graph-schema.test.ts`'s existing idiom.
 import schemaDoc from "../../../docs/schemas/road-graph.v1.md?raw";
+import { mapSurface, surfaceCoverage } from "./surface-mapping.ts";
 
 /**
  * Copy of `tests/road-graph-schema.test.ts`'s `surfaceEnumFromDoc` idiom —
@@ -36,7 +35,9 @@ function osmSurfaceValuesFromDocTable(doc: string): string[] {
     (line) => line.includes("Game surface") && line.includes("OSM `surface=*` values"),
   );
   if (headerIndex === -1) {
-    throw new Error('docs/schemas/road-graph.v1.md contains no "OSM -> game surface mapping" table header');
+    throw new Error(
+      'docs/schemas/road-graph.v1.md contains no "OSM -> game surface mapping" table header',
+    );
   }
   const values: string[] = [];
   for (let i = headerIndex + 2; i < lines.length; i++) {
@@ -65,7 +66,14 @@ describe("mapSurface — explicit surface tag mapping", () => {
     });
   });
 
-  for (const value of ["concrete", "concrete:plates", "paved", "chipseal", "paving_stones", "sett"]) {
+  for (const value of [
+    "concrete",
+    "concrete:plates",
+    "paved",
+    "chipseal",
+    "paving_stones",
+    "sett",
+  ]) {
     it(`maps "${value}" to tarmac`, () => {
       expect(mapSurface(value, "residential").surface).toBe("tarmac");
       expect(mapSurface(value, "residential").fromFallback).toBe(false);

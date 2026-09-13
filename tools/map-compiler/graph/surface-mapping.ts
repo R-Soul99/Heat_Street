@@ -91,7 +91,7 @@ const DELIBERATELY_UNMAPPED: Readonly<Record<string, string>> = {
   cobblestone:
     'recognised but deliberately unmapped — see docs/schemas/road-graph.v1.md\'s cobblestone paragraph. The OSM wiki flags "cobblestone" itself as an unclear value; use "sett" or "unhewn_cobblestone" on the source data instead.',
   unhewn_cobblestone:
-    'recognised but deliberately unmapped — see docs/schemas/road-graph.v1.md. If this ever needs to render distinctly from the mapped surfaces, add a seventh game surface enum value rather than remapping this row.',
+    "recognised but deliberately unmapped — see docs/schemas/road-graph.v1.md. If this ever needs to render distinctly from the mapped surfaces, add a seventh game surface enum value rather than remapping this row.",
 };
 
 /** `mapSurface`'s return value. */
