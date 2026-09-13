@@ -144,6 +144,7 @@ Recent decisions affecting current work:
 - [Phase 02-10]: slideCatchGain raised 0.1 -> 0.12; raising it further to 0.3 during the instability diagnosis made the high-speed spin trigger EARLIER, confirming slideCatchGain was never the mechanism behind that bug
 - [Phase 02-10]: src/main.ts's placeholder chase camera widened (0,5,9) -> (0,8,16) and src/render/vehicle-view.ts gained a THREE.GridHelper ground reference grid — the tighter camera and featureless ground from plan 02-08 made it impossible to judge speed/slip during the feel session; both still explicit placeholders pending Phase 3's real camera
 - [Phase 02-10]: SC2's gamepad half is unverified (no hardware available this session) — open item for Phase 3, along with 02-RESEARCH.md's unverified standard-mapping axis assumption (A1)
+- [Phase 03-12 Task 2]: CAM-04/SC6 occlusion decision made — fade ships (docs/adr/0003-occlusion-mitigation.md). Fade was directly verified (building faded on occlusion, no visual issues). Steepen and off were NOT genuinely evaluated: steepen is blocked by the confirmed fan-ray/back-face bug ([Quick 260913-epf] below, density always reads 0/5 in the test canyon) and off was never explicitly driven as its own comparison arm this session. Fade alone satisfies CAM-04's hard requirement (car never permanently hidden), so it ships; steepen/off remain live behind the `O` toggle for a cheap re-run once the density bug is fixed. No src/core/camera-tuning.ts occlusion values changed.
 
 ### Pending Todos
 

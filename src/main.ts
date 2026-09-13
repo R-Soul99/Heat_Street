@@ -286,8 +286,11 @@ if (DEBUG_ENABLED) {
 // while losing the guarantee that occlusion behaviour is always exercised
 // against the rig it actually ships on.
 const occlusionProbe = createOcclusionProbe(surfaceWorld.buildingMeshes);
-// "fade" is the default arm — PROVISIONAL pending plan 03-12's SC6 playtest.
-// This is the line to change once that session picks a winner.
+// "fade" is CAM-04/SC6's shipped mitigation — decided by plan 03-12's human
+// playtest, not on paper (docs/adr/0003-occlusion-mitigation.md). Steepen
+// remains fully implemented behind the `O` toggle but is currently blocked
+// by a confirmed fan-ray/back-face bug (same ADR) rather than rejected on
+// feel; it was never actually exercised above its baseline pitch.
 const occlusion = createOcclusionController(
   occlusionProbe,
   surfaceWorld.buildingMeshes,
