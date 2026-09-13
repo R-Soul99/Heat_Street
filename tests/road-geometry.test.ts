@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildRibbon, type Vec3 } from "../src/core/road-geometry";
-import type { RoadGraphEdge } from "../src/core/road-graph";
+import {
+  buildJunctionFan,
+  buildRibbon,
+  buildRoadGeometry,
+  type IncidentEdgeAtNode,
+  type RoadGeometry,
+  type Vec3,
+} from "../src/core/road-geometry";
+import type { RoadGraph, RoadGraphEdge, RoadGraphNode } from "../src/core/road-graph";
 
 /** Builds a conforming RoadGraphEdge literal, filling in plausible defaults for every field a test doesn't care about. */
 function makeEdge(
@@ -19,6 +26,36 @@ function makeEdge(
     layer: 0,
     osmWayId: 0,
     ...overrides,
+  };
+}
+
+function makeNode(
+  overrides: Partial<RoadGraphNode> & { id: number; x: number; y: number; z: number },
+): RoadGraphNode {
+  return { junction: false, osmNodeId: 0, ...overrides };
+}
+
+function makeGraph(nodes: RoadGraphNode[], edges: RoadGraphEdge[]): RoadGraph {
+  return {
+    schemaVersion: 1,
+    areaId: "test-area",
+    name: "Test Area",
+    source: {
+      osmExtract: "test://fixture",
+      osmSnapshot: "2026-09-13T00:00:00Z",
+      demSource: "usgs-3dep-1m",
+      compilerVersion: "0.0.0-test",
+    },
+    attribution: {
+      osm: "© OpenStreetMap contributors",
+      osmLicense: "ODbL-1.0",
+      osmLicenseUrl: "https://www.openstreetmap.org/copyright",
+      dem: "U.S. Geological Survey 3D Elevation Program (public domain)",
+    },
+    origin: { lat: 0, lon: 0, projection: "local-enu-metres" },
+    bounds: { minX: -100, minZ: -100, maxX: 100, maxZ: 100 },
+    nodes,
+    edges,
   };
 }
 
@@ -248,5 +285,400 @@ describe("buildRibbon — degenerate 2-point edge", () => {
       widthM: 6,
     });
     expect(() => buildRibbon(edge)).toThrow(/42/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 2: buildJunctionFan / buildRoadGeometry
+// ---------------------------------------------------------------------------
+
+describe("buildJunctionFan — surface assignment", () => {
+  it("resolves a tarmac tertiary + gravel track + tarmac residential junction to tarmac (tertiary wins)", () => {
+    const node = makeNode({ id: 0, x: 0, y: 0, z: 0, junction: true });
+    const incident: IncidentEdgeAtNode[] = [
+      {
+        edgeId: 5,
+        surface: "tarmac",
+        roadClass: "tertiary",
+        nearLeft: [1, 0, 1],
+        nearRight: [-1, 0, 1],
+        awayPoint: [0, 0, 10],
+      },
+      {
+        edgeId: 2,
+        surface: "gravel",
+        roadClass: "track",
+        nearLeft: [11, 0, -1],
+        nearRight: [9, 0, 1],
+        awayPoint: [10, 0, 0],
+      },
+      {
+        edgeId: 9,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [-9, 0, -1],
+        nearRight: [-11, 0, 1],
+        awayPoint: [-10, 0, 0],
+      },
+    ];
+    const fan = buildJunctionFan(node, incident);
+    expect(fan.surface).toBe("tarmac");
+  });
+
+  it("breaks a same-rank (residential) tie by lowest edge id", () => {
+    const node = makeNode({ id: 0, x: 0, y: 0, z: 0, junction: true });
+    const incident: IncidentEdgeAtNode[] = [
+      {
+        edgeId: 7,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [1, 0, 1],
+        nearRight: [-1, 0, 1],
+        awayPoint: [0, 0, 10],
+      },
+      {
+        edgeId: 2,
+        surface: "gravel",
+        roadClass: "residential",
+        nearLeft: [11, 0, -1],
+        nearRight: [9, 0, 1],
+        awayPoint: [10, 0, 0],
+      },
+      {
+        edgeId: 15,
+        surface: "mud",
+        roadClass: "residential",
+        nearLeft: [-9, 0, -1],
+        nearRight: [-11, 0, 1],
+        awayPoint: [-10, 0, 0],
+      },
+    ];
+    const fan = buildJunctionFan(node, incident);
+    expect(fan.surface).toBe("gravel"); // edgeId 2 is the lowest among the tied residential entries
+  });
+});
+
+describe("buildJunctionFan — fan centre vertex", () => {
+  it("takes the node's authored x, y, z exactly", () => {
+    const node = makeNode({ id: 3, x: 12.5, y: 4.25, z: -7.5, junction: true });
+    const incident: IncidentEdgeAtNode[] = [
+      {
+        edgeId: 0,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [13, 4.25, -4],
+        nearRight: [11, 4.25, -4],
+        awayPoint: [12.5, 4.25, 2.5],
+      },
+      {
+        edgeId: 1,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [22.5, 4.25, -8],
+        nearRight: [22.5, 4.25, -7],
+        awayPoint: [22.5, 4.25, -7.5],
+      },
+      {
+        edgeId: 2,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [2.5, 4.25, -7],
+        nearRight: [2.5, 4.25, -8],
+        awayPoint: [2.5, 4.25, -7.5],
+      },
+    ];
+    const fan = buildJunctionFan(node, incident);
+    const centre = vertexAt(fan.positions, 0);
+    expect(centre).toEqual([12.5, 4.25, -7.5]);
+  });
+});
+
+/** Builds an asymmetric 4-arm crossroads at the origin (avoids exact bearing ties). */
+function buildFourWayGraph(): RoadGraph {
+  const bearingsDeg = [0, 80, 190, 290];
+  const armLength = 20;
+  const nodes: RoadGraphNode[] = [makeNode({ id: 0, x: 0, y: 0, z: 0, junction: true })];
+  const edges: RoadGraphEdge[] = [];
+  bearingsDeg.forEach((deg, i) => {
+    const rad = (deg * Math.PI) / 180;
+    const dx = Math.sin(rad) * armLength;
+    const dz = Math.cos(rad) * armLength;
+    const nodeId = i + 1;
+    nodes.push(makeNode({ id: nodeId, x: dx, y: 0, z: dz, junction: false }));
+    edges.push(
+      makeEdge({
+        id: i,
+        from: 0,
+        to: nodeId,
+        points: [
+          [0, 0, 0],
+          [dx, 0, dz],
+        ],
+        widthM: 6,
+        surface: "tarmac",
+        roadClass: "residential",
+      }),
+    );
+  });
+  return makeGraph(nodes, edges);
+}
+
+describe("buildRoadGeometry — 4-way crossroads fan", () => {
+  const geometry = buildRoadGeometry(buildFourWayGraph());
+  const fan = geometry.junctions.find((j) => j.nodeId === 0);
+
+  it("returns one edge entry per edge and one junction entry for the crossroads node", () => {
+    expect(geometry.edges).toHaveLength(4);
+    expect(geometry.junctions).toHaveLength(1);
+    expect(fan).toBeDefined();
+  });
+
+  it("produces exactly 8 boundary vertices plus 1 centre vertex and 8 triangles", () => {
+    expect(fan?.positions).toHaveLength((1 + 8) * 3);
+    expect(fan?.indices).toHaveLength(8 * 3);
+  });
+
+  it("every fan triangle shares its third vertex with the node centre (index 0)", () => {
+    for (let t = 0; t < (fan?.indices.length ?? 0) / 3; t++) {
+      expect(fan?.indices[t * 3]).toBe(0);
+    }
+  });
+
+  it("winds every fan triangle CCW viewed from +Y", () => {
+    if (fan) expectAllTrianglesCCW(fan.positions, fan.indices);
+  });
+});
+
+describe("buildRoadGeometry — degree-2 and degree-1 nodes", () => {
+  it("degree-2 node produces no fan, and the two incident ribbons' corners at it are identical", () => {
+    const nodeStart = makeNode({ id: 1, x: -10, y: 0, z: 0, junction: false });
+    const nodeMid = makeNode({ id: 0, x: 0, y: 0, z: 0, junction: false });
+    const nodeEnd = makeNode({ id: 2, x: 10, y: 0, z: 0, junction: false });
+    const edgeA = makeEdge({
+      id: 0,
+      from: 1,
+      to: 0,
+      points: [
+        [-10, 0, 0],
+        [0, 0, 0],
+      ],
+      widthM: 6,
+      surface: "tarmac",
+    });
+    const edgeB = makeEdge({
+      id: 1,
+      from: 0,
+      to: 2,
+      points: [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      widthM: 6,
+      surface: "gravel",
+    });
+    const graph = makeGraph([nodeStart, nodeMid, nodeEnd], [edgeA, edgeB]);
+    const geometry = buildRoadGeometry(graph);
+
+    expect(geometry.junctions.find((j) => j.nodeId === 0)).toBeUndefined();
+
+    const ribbonA = buildRibbon(edgeA);
+    const ribbonB = buildRibbon(edgeB);
+    // edgeA ends at node 0 (index 1 of its corners); edgeB starts at node 0 (index 0).
+    expect(ribbonA.leftCorners[1]).toEqual(ribbonB.leftCorners[0]);
+    expect(ribbonA.rightCorners[1]).toEqual(ribbonB.rightCorners[0]);
+  });
+
+  it("degree-1 dead end nodes produce no fan", () => {
+    const geometry = buildRoadGeometry(buildFourWayGraph());
+    for (const armNodeId of [1, 2, 3, 4]) {
+      expect(geometry.junctions.find((j) => j.nodeId === armNodeId)).toBeUndefined();
+    }
+  });
+});
+
+describe("buildJunctionFan — throws below 3 incident edges", () => {
+  it("throws naming the node id when given only 2 incident edges", () => {
+    const node = makeNode({ id: 9, x: 0, y: 0, z: 0, junction: false });
+    const incident: IncidentEdgeAtNode[] = [
+      {
+        edgeId: 0,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [1, 0, 1],
+        nearRight: [-1, 0, 1],
+        awayPoint: [0, 0, 10],
+      },
+      {
+        edgeId: 1,
+        surface: "tarmac",
+        roadClass: "residential",
+        nearLeft: [11, 0, -1],
+        nearRight: [9, 0, 1],
+        awayPoint: [10, 0, 0],
+      },
+    ];
+    expect(() => buildJunctionFan(node, incident)).toThrow(/9/);
+  });
+});
+
+describe("buildRoadGeometry — whole-graph watertightness across every node degree", () => {
+  // A single synthetic graph covering all four node degrees the plan
+  // requires: node 0 (degree 4, crossroads), node 2 (degree 3, a T-junction
+  // grafted onto one arm), node 3 (degree 2, a surface-change split with no
+  // fan), and several degree-1 dead ends (nodes 1, 4, 5, 6, 7).
+  function buildSyntheticGraph(): RoadGraph {
+    const n0 = makeNode({ id: 0, x: 0, y: 0, z: 0, junction: true });
+    const n1 = makeNode({ id: 1, x: 0, y: 0, z: 20, junction: false });
+    const n2 = makeNode({ id: 2, x: 19.696, y: 0, z: 3.472, junction: true });
+    const n3 = makeNode({ id: 3, x: -3.472, y: 0, z: -19.696, junction: false });
+    const n4 = makeNode({ id: 4, x: -18.794, y: 0, z: 6.84, junction: false });
+    // n5/n6 are deliberately NOT collinear-opposite through n2 (that would give
+    // e4/e5 identical corner bearings at equal width, producing an exact
+    // duplicate boundary vertex and a zero-area fan triangle).
+    const n5 = makeNode({ id: 5, x: 24.696, y: 0, z: 18.472, junction: false });
+    const n6 = makeNode({ id: 6, x: 27.696, y: 0, z: -8.528, junction: false });
+    const n7 = makeNode({ id: 7, x: -6.076, y: 0, z: -34.468, junction: false });
+
+    const e0 = makeEdge({
+      id: 0,
+      from: 0,
+      to: 1,
+      points: [
+        [0, 0, 0],
+        [0, 0, 20],
+      ],
+      widthM: 6,
+      surface: "tarmac",
+      roadClass: "residential",
+    });
+    const e1 = makeEdge({
+      id: 1,
+      from: 0,
+      to: 2,
+      points: [
+        [0, 0, 0],
+        [19.696, 0, 3.472],
+      ],
+      widthM: 6,
+      surface: "tarmac",
+      roadClass: "residential",
+    });
+    const e2 = makeEdge({
+      id: 2,
+      from: 0,
+      to: 3,
+      points: [
+        [0, 0, 0],
+        [-3.472, 0, -19.696],
+      ],
+      widthM: 6,
+      surface: "tarmac",
+      roadClass: "tertiary",
+    });
+    const e3 = makeEdge({
+      id: 3,
+      from: 0,
+      to: 4,
+      points: [
+        [0, 0, 0],
+        [-18.794, 0, 6.84],
+      ],
+      widthM: 6,
+      surface: "tarmac",
+      roadClass: "residential",
+    });
+    const e4 = makeEdge({
+      id: 4,
+      from: 2,
+      to: 5,
+      points: [
+        [19.696, 0, 3.472],
+        [24.696, 0, 18.472],
+      ],
+      widthM: 5,
+      surface: "tarmac",
+      roadClass: "residential",
+    });
+    const e5 = makeEdge({
+      id: 5,
+      from: 2,
+      to: 6,
+      points: [
+        [19.696, 0, 3.472],
+        [27.696, 0, -8.528],
+      ],
+      widthM: 5,
+      surface: "tarmac",
+      roadClass: "residential",
+    });
+    const e6 = makeEdge({
+      id: 6,
+      from: 3,
+      to: 7,
+      points: [
+        [-3.472, 0, -19.696],
+        [-6.076, 0, -34.468],
+      ],
+      widthM: 6, // must match e2's width — a degree-2 collinear split requires equal width to butt seamlessly
+      surface: "gravel",
+      roadClass: "track",
+    });
+
+    return makeGraph([n0, n1, n2, n3, n4, n5, n6, n7], [e0, e1, e2, e3, e4, e5, e6]);
+  }
+
+  const graph = buildSyntheticGraph();
+  const geometry = buildRoadGeometry(graph);
+
+  it("produces a junction fan for the degree-4 and degree-3 nodes only", () => {
+    const junctionNodeIds = geometry.junctions.map((j) => j.nodeId).sort((a, b) => a - b);
+    expect(junctionNodeIds).toEqual([0, 2]);
+  });
+
+  it("every fan boundary vertex matches some ribbon corner position exactly, zero unmatched vertices", () => {
+    const cornerKeys = new Set<string>();
+    for (const edgeEntry of geometry.edges) {
+      const n = edgeEntry.positions.length / 6; // points per ribbon
+      const pushCorner = (index: number) => {
+        const v = vertexAt(edgeEntry.positions, index);
+        cornerKeys.add(`${v[0]},${v[1]},${v[2]}`);
+      };
+      pushCorner(0); // L0
+      pushCorner(1); // R0
+      pushCorner(2 * (n - 1)); // L_last
+      pushCorner(2 * (n - 1) + 1); // R_last
+    }
+
+    const unmatched: { nodeId: number; vertex: Vec3 }[] = [];
+    for (const fan of geometry.junctions) {
+      const boundaryCount = fan.positions.length / 3 - 1;
+      for (let i = 1; i <= boundaryCount; i++) {
+        const v = vertexAt(fan.positions, i);
+        const key = `${v[0]},${v[1]},${v[2]}`;
+        if (!cornerKeys.has(key)) {
+          unmatched.push({ nodeId: fan.nodeId, vertex: v });
+        }
+      }
+    }
+
+    expect(unmatched, `unmatched fan boundary vertices: ${JSON.stringify(unmatched)}`).toEqual([]);
+  });
+
+  it("winds every triangle CCW viewed from +Y across every edge ribbon and junction fan", () => {
+    for (const edgeEntry of geometry.edges) {
+      expectAllTrianglesCCW(edgeEntry.positions, edgeEntry.indices);
+    }
+    for (const fan of geometry.junctions) {
+      expectAllTrianglesCCW(fan.positions, fan.indices);
+    }
+  });
+
+  it("degree-2 node 3 produces no fan", () => {
+    expect(geometry.junctions.find((j) => j.nodeId === 3)).toBeUndefined();
+  });
+
+  it("has no unused RoadGeometry export left untyped (sanity import check)", () => {
+    const g: RoadGeometry = geometry;
+    expect(g.edges.length + g.junctions.length).toBeGreaterThan(0);
   });
 });
