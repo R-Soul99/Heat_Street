@@ -133,6 +133,52 @@ describe("steepenPitchRad", () => {
   });
 });
 
+describe("steepenPitchRad — density-to-pitch anchor for the DENSE_BUILDINGS canyon (260913-epf investigation)", () => {
+  // Derived against src/physics/surface-scene.ts's DENSE_BUILDINGS canyon: a
+  // 10 m drivable corridor (x in [-36, -26]) between two rows of 28 m tall
+  // buildings. At the low-speed framing (basePitchDeg 41, altitude 14 m /
+  // distance 16 m, src/core/camera-tuning.ts), the fan's horizontal radius
+  // is 16 m, so its outermost rays (+/-30 deg) originate 16*sin(30deg) = 8 m
+  // lateral of the car — past the corridor's 5 m half-width, i.e. INSIDE a
+  // building. This 260913-epf investigation found the fan-ray density
+  // measured in that canyon is 0/5, NOT a low-but-nonzero value (see
+  // 260913-epf-SUMMARY.md for the full ray-by-ray arithmetic and verdict),
+  // so this block anchors the CURVE ITSELF at every density a 5-ray fan can
+  // possibly produce (1/5 .. 5/5) — a permanent regression anchor for the
+  // smoothstep squash, independent of whatever any one canyon's geometry
+  // happens to measure.
+  const DEG_TO_RAD = Math.PI / 180;
+  const RAD_TO_DEG = 180 / Math.PI;
+  const basePitchRad = 41 * DEG_TO_RAD;
+  const maxPitchRad = 78 * DEG_TO_RAD;
+
+  it("1/5 (smoothstep(0.2) = 0.104) produces ~44.85 deg — only ~3.85 deg of pitch change from base", () => {
+    const pitchDeg = steepenPitchRad(basePitchRad, maxPitchRad, 1 / 5) * RAD_TO_DEG;
+    expect(pitchDeg).toBeCloseTo(44.848, 2);
+    expect(pitchDeg - 41).toBeCloseTo(3.848, 2);
+  });
+
+  it("2/5 (smoothstep(0.4) = 0.352) produces ~54.02 deg", () => {
+    const pitchDeg = steepenPitchRad(basePitchRad, maxPitchRad, 2 / 5) * RAD_TO_DEG;
+    expect(pitchDeg).toBeCloseTo(54.024, 2);
+  });
+
+  it("3/5 (smoothstep(0.6) = 0.648) produces ~64.98 deg", () => {
+    const pitchDeg = steepenPitchRad(basePitchRad, maxPitchRad, 3 / 5) * RAD_TO_DEG;
+    expect(pitchDeg).toBeCloseTo(64.976, 2);
+  });
+
+  it("4/5 (smoothstep(0.8) = 0.896) produces ~74.15 deg", () => {
+    const pitchDeg = steepenPitchRad(basePitchRad, maxPitchRad, 4 / 5) * RAD_TO_DEG;
+    expect(pitchDeg).toBeCloseTo(74.152, 2);
+  });
+
+  it("5/5 (smoothstep(1) = 1) produces exactly maxPitchDeg (78 deg)", () => {
+    const pitchDeg = steepenPitchRad(basePitchRad, maxPitchRad, 5 / 5) * RAD_TO_DEG;
+    expect(pitchDeg).toBeCloseTo(78, 6);
+  });
+});
+
 describe("fanOffsetsRad", () => {
   const HALF_SPREAD_RAD = Math.PI / 6;
 
