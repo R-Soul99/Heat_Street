@@ -47,8 +47,11 @@ import { mapSurface, type SurfaceCoverageReport, surfaceCoverage } from "./surfa
 
 /** Single exported semver constant naming which compiler build produced an artifact. Bump this
  * in any later plan that changes emitted geometry or attribute resolution — the field exists so
- * a stale artifact is detectable (docs/schemas/road-graph.v1.md's `source.compilerVersion`). */
-export const COMPILER_VERSION = "0.1.0";
+ * a stale artifact is detectable (docs/schemas/road-graph.v1.md's `source.compilerVersion`).
+ * Bumped to 0.2.0 in plan 04-05: every node/edge point now carries real DEM-sampled, smoothed
+ * elevation instead of a flat y=0, and `lengthM` is now a real 3D length — emitted geometry has
+ * changed, so an artifact compiled under 0.1.0 is stale. */
+export const COMPILER_VERSION = "0.2.0";
 
 export interface Bbox {
   readonly south: number;

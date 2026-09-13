@@ -66,6 +66,13 @@ export interface AreaConfig {
    * Reliability").
    */
   readonly excludeHighwayClasses: readonly string[];
+  /**
+   * Per-axis pixel cap for this area's USGS 3DEP `exportImage` request
+   * (plan 04-05's D-P14). Recorded per-area (rather than only as
+   * `sources/dem.ts`'s `DEM_MAX_SIZE_PX` default) so a later, larger area can
+   * raise it deliberately without touching compiler internals.
+   */
+  readonly demSizePx: number;
 }
 
 export const julietteGaConfig: AreaConfig = {
@@ -83,4 +90,7 @@ export const julietteGaConfig: AreaConfig = {
   osmSnapshot: "2026-09-13T20:25:59.876Z",
   osmExtract: "overpass://overpass-api.de/juliette-ga",
   excludeHighwayClasses: ["service"],
+  // [VERIFIED: plan 04-05 Task 1] 512px resolves to ~5.6 m/pixel for this
+  // area's ~2.9km x 2.4km box — see sources/dem.ts's DEM_MAX_SIZE_PX comment.
+  demSizePx: 512,
 };

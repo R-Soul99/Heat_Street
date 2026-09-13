@@ -68,21 +68,54 @@ export interface ElevationReport {
   readonly steepEdges: readonly EdgeGradientReportEntry[];
 }
 
+/** Cumulative arc length (metres, over X/Z only) at every point, `arcLength[0] === 0`. */
+function cumulativeArcLengthXZ(points: readonly (readonly [number, number, number])[]): number[] {
+  const arcLength = new Array<number>(points.length);
+  arcLength[0] = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i][0] - points[i - 1][0];
+    const dz = points[i][2] - points[i - 1][2];
+    arcLength[i] = arcLength[i - 1] + Math.sqrt(dx * dx + dz * dz);
+  }
+  return arcLength;
+}
+
 /**
- * Averages `values[i]` over a symmetric window of half-width `halfWindow`,
- * shrinking near the array's ends (rather than padding or wrapping) so a
- * short edge is never smoothed against out-of-range data.
+ * Averages `values[i]` over every point within `radiusM` of point `i`'s OWN
+ * arc-length position — a distance-based window, not a point-COUNT window.
+ *
+ * [Rule 1 fix, found compiling the real Juliette artifact] Real OSM way
+ * geometry routinely mixes densely- and sparsely-spaced vertices within a
+ * single edge (extra vertices captured on a curve near a junction, few on a
+ * long straight stretch after it). A point-COUNT window on such geometry
+ * averages together points that are close in ARRAY INDEX but far apart in
+ * real distance, which silently reintroduces a sharp local artifact — the
+ * exact failure mode this smoothing pass exists to prevent. This was caught
+ * empirically on the real compiled output (edge id=36, osmWayId=446581088):
+ * three vertices spaced ~7m apart near a junction, immediately followed by
+ * vertices 50-150m apart, produced a smoothed-Y gradient of 0.566 between
+ * two points only 7.5m apart on the ground — steeper than any real road,
+ * and above this plan's own 0.5 hard ceiling. A distance-based window
+ * degrades gracefully on uneven spacing: near a cluster of close vertices it
+ * behaves like the intended point-count window; near a lone sparse vertex it
+ * naturally shrinks to just that vertex, rather than reaching across 100+
+ * metres to points with no real bearing on the local terrain.
  */
-function movingAverage(values: readonly number[], halfWindow: number): number[] {
+function arcLengthMovingAverage(
+  values: readonly number[],
+  arcLength: readonly number[],
+  radiusM: number,
+): number[] {
   const n = values.length;
   const out = new Array<number>(n);
   for (let i = 0; i < n; i++) {
-    const actualHalf = Math.min(halfWindow, i, n - 1 - i);
     let sum = 0;
     let count = 0;
-    for (let j = i - actualHalf; j <= i + actualHalf; j++) {
-      sum += values[j];
-      count++;
+    for (let j = 0; j < n; j++) {
+      if (Math.abs(arcLength[j] - arcLength[i]) <= radiusM) {
+        sum += values[j];
+        count++;
+      }
     }
     out[i] = sum / count;
   }
@@ -93,15 +126,30 @@ function movingAverage(values: readonly number[], halfWindow: number): number[] 
  * Smooths `rawY` (one raw DEM sample per centreline point, in order) and
  * then clamps both ends to the node-authoritative `fromY`/`toY` — the clamp
  * happens AFTER smoothing, per this file's header comment.
+ *
+ * The point-count `window` is converted to an equivalent arc-length radius
+ * using THIS edge's own nominal (mean) point spacing — `halfWindow *
+ * nominalSpacingM` — so behaviour is identical to a plain point-count window
+ * on evenly-spaced points (the common case, and every case this plan's own
+ * synthetic tests exercise), while degrading gracefully on the unevenly-
+ * spaced real-world geometry `arcLengthMovingAverage`'s own comment
+ * documents.
  */
 function smoothEdgeElevation(
   rawY: readonly number[],
+  points: readonly (readonly [number, number, number])[],
   fromY: number,
   toY: number,
   window: number,
 ): number[] {
   const halfWindow = Math.floor(window / 2);
-  const smoothed = movingAverage(rawY, halfWindow);
+  const n = rawY.length;
+  const arcLength = cumulativeArcLengthXZ(points);
+  const totalArcLength = arcLength[arcLength.length - 1];
+  const nominalSpacingM = n > 1 ? totalArcLength / (n - 1) : 0;
+  const radiusM = halfWindow * nominalSpacingM;
+
+  const smoothed = radiusM > 0 ? arcLengthMovingAverage(rawY, arcLength, radiusM) : rawY.slice();
   smoothed[0] = fromY;
   smoothed[smoothed.length - 1] = toY;
   return smoothed;
@@ -172,7 +220,7 @@ export function applyElevation(
       return sampler.sample(lat, lon);
     });
 
-    const smoothedY = smoothEdgeElevation(rawY, fromY, toY, SMOOTHING_WINDOW);
+    const smoothedY = smoothEdgeElevation(rawY, edge.points, fromY, toY, SMOOTHING_WINDOW);
     const points = edge.points.map((point, i) => [point[0], smoothedY[i], point[2]] as const);
     const lengthM = polylineLength3D(points);
     const maxGradient = computeMaxGradient(points);
