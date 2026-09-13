@@ -14,7 +14,7 @@ Heat Street gets built from the tire contact patch outward. The fixed-timestep l
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Engine Foundation** - Fixed-timestep loop, Rapier/Three.js wiring, profiler HUD, frozen map-data decision (completed 2026-09-08)
-- [x] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there (completed 2026-09-11)
+- [x] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there (completed 2026-09-11)
 - [x] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed (completed 2026-09-13)
 - [ ] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
@@ -181,7 +181,49 @@ Plans:
   4. No Google-sourced data exists anywhere in the shipped pipeline, and "Map data (c) OpenStreetMap contributors" appears in the credits
   5. A map validator confirms every road is reachable and pathable end to end, and reports failures loudly rather than silently
 
-**Plans**: TBD
+**Plans**: 11 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Compiler tooling seam (tsconfig, grep gate, pinned deps, CLI), RoadGraph contract and parser, OSM surface mapping (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — Overpass ingestion with Geomesh-ported queries, retry and disk cache, plus the committed Juliette, GA snapshot (wave 2)
+- [ ] 04-03-PLAN.md — Shared road geometry: offset ribbons with clamped miters and angle-sorted junction fans, proven watertight (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-04-PLAN.md — Local ENU projection, graph topology, edge attribute resolution, and the first real .map.json (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-05-PLAN.md — USGS 3DEP raster fetch and sampling, node-authoritative endpoint-clamped elevation smoothing (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 04-06-PLAN.md — Map validator: ngraph reachability and oneway pathability, geometry sanity, loud named build gate (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 04-07-PLAN.md — Package legitimacy gate, OSM building OBB prisms, glTF authoring and the .glb emit (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 04-08-PLAN.md — Collision sidecar and MapScene: per-edge trimesh colliders with FIX_INTERNAL_EDGES, SurfaceMap, spawn (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 04-09-PLAN.md — GLTFLoader map view, composition root on the compiled area, first-drive human checkpoint (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
+- [ ] 04-10-PLAN.md — DEM off-road heightfield ground, OpenStreetMap attribution credit, revised frame budget (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
+- [ ] 04-11-PLAN.md — Drive-every-road SC1 sign-off session, tuning fixes with regression tests, and the phase ADR (wave 10)
 
 ### Phase 5: Objectives, Navigation & Race Modes
 
@@ -260,7 +302,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
-| 4. Map Pipeline & First Area | 0/TBD | Not started | - |
+| 4. Map Pipeline & First Area | 0/11 | Planned | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
