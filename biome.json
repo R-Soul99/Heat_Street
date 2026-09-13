@@ -14,7 +14,8 @@
       "!**/coverage",
       "!.planning",
       "!docs",
-      "!fixtures"
+      "!fixtures",
+      "!tools/map-compiler/areas/*.raw-*.json"
     ]
   },
   "formatter": {

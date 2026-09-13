@@ -40,13 +40,21 @@ export interface AreaConfig {
    */
   readonly demSource: "usgs-3dep-1m" | "copernicus-glo30";
   /**
-   * The OSM data retrieval timestamp, ISO 8601. `null` here is an explicit
-   * placeholder — plan 04-02 fills this in with the real snapshot time once
-   * it performs the live Overpass fetch and caches the raw response
-   * (04-RESEARCH.md Pitfall 1). Left `null` rather than a guessed date so a
-   * stale placeholder can never be mistaken for a real provenance value.
+   * The OSM data retrieval timestamp, ISO 8601 — copied verbatim from the
+   * committed roads cache envelope's `fetchedAt`
+   * (`tools/map-compiler/areas/juliette-ga.raw-osm.json`), which is also
+   * what becomes the compiled map's `source.osmSnapshot`. Filled in by plan
+   * 04-02's Task 2 after the real Overpass fetch; `null` was the placeholder
+   * plan 04-01 left here.
    */
   readonly osmSnapshot: string | null;
+  /**
+   * Names the Overpass endpoint actually used to produce the committed raw
+   * snapshot, in the schema's `overpass://<host>/<areaId>` style. Becomes
+   * the compiled map's `source.osmExtract`. `null` is the placeholder until
+   * a real fetch has happened.
+   */
+  readonly osmExtract: string | null;
   /**
    * OSM `highway=*` classes to exclude from the compiled road network.
    * `service` is excluded because 04-RESEARCH.md's live Overpass query found
@@ -65,6 +73,14 @@ export const julietteGaConfig: AreaConfig = {
   name: "Juliette, Georgia",
   bbox: { south: 33.0963, west: -83.8242, north: 33.1223, east: -83.7948 },
   demSource: "usgs-3dep-1m",
-  osmSnapshot: null,
+  // [VERIFIED: tools/map-compiler/areas/juliette-ga.raw-osm.json's committed
+  // fetchedAt, captured 2026-09-13 against the primary public Overpass
+  // instance — 56 tagged ways, highway breakdown service:30/tertiary:10/
+  // residential:10/primary:3/unclassified:3, surface breakdown
+  // asphalt:10/unpaved:9/paved:8/gravel:6/concrete:1, 22/56 with no surface
+  // tag — matches 04-RESEARCH.md's live-queried sanity bounds exactly, not
+  // just within the documented factor-of-two tolerance.]
+  osmSnapshot: "2026-09-13T20:25:59.876Z",
+  osmExtract: "overpass://overpass-api.de/juliette-ga",
   excludeHighwayClasses: ["service"],
 };
