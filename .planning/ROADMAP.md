@@ -161,7 +161,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 03-11-PLAN.md — First audio system: gesture-gated listener and six crossfaded per-surface channels (wave 8)
+- [x] 03-11-PLAN.md — First audio system: gesture-gated listener and six crossfaded per-surface channels (wave 8)
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 10/12 | In Progress|  |
+| 3. Surfaces & Helicopter Camera | 11/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
