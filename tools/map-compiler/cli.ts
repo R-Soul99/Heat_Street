@@ -7,14 +7,13 @@
  * later stage together and is run, not merely imported. Invoked as
  * `npm run compile-map -- --area juliette-ga` (SC3's "one command").
  *
- * Pipeline stages, in the order later plans add them (none of this exists
- * yet beyond stage 0 — this file is deliberately a composition root from day
- * one, not a placeholder that later becomes one):
- *   1. Resolve `--area` against the known-area registry (this plan).
- *   2. Fetch/cache raw OSM data for the area's bbox (plan 04-02).
+ * Pipeline stages, in the order later plans add them:
+ *   1. Resolve `--area` against the known-area registry (plan 04-01).
+ *   2. Fetch/cache raw OSM roads + buildings data for the area's bbox,
+ *      printing a coverage summary (this plan).
  *   3. Fetch/cache the DEM raster covering the area's bbox (plan 04-03/04-04).
  *   4. Build the dense-id `RoadGraph` from OSM ways/nodes, mapping surfaces
- *      via `graph/surface-mapping.ts` (this plan) and sampling elevation.
+ *      via `graph/surface-mapping.ts` (plan 04-01) and sampling elevation.
  *   5. Author per-edge ribbon/junction geometry (`geometry/`).
  *   6. Author collision buffers and a merged glTF render mesh (`author/`).
  *   7. Validate the result (`validate/`) — fail loudly, name the offending
@@ -27,6 +26,7 @@
  * path-traversal- or arbitrary-file-read-shaped bug here.
  */
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
+import { type LoadOrFetchAreaResult, loadOrFetchArea } from "./sources/overpass.ts";
 
 /**
  * Explicit registry of every known area, keyed by `areaId`. Deliberately a
@@ -51,7 +51,69 @@ function parseAreaArg(argv: readonly string[]): string | null {
   return value === undefined ? null : value;
 }
 
-function main(argv: readonly string[]): void {
+/** A `way` element narrowed enough to read `.tags` off it — the only shape this file's summary needs. */
+interface WayElementLike {
+  readonly type: "way";
+  readonly tags?: Readonly<Record<string, string>>;
+}
+
+function isWayElement(element: unknown): element is WayElementLike {
+  return (
+    typeof element === "object" &&
+    element !== null &&
+    (element as { type?: unknown }).type === "way"
+  );
+}
+
+/** Counts how many ways carry each value of `tagKey`, ignoring ways where it is absent. */
+function tagFrequency(ways: readonly WayElementLike[], tagKey: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const way of ways) {
+    const value = way.tags?.[tagKey];
+    if (value === undefined) {
+      continue;
+    }
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Formats a frequency table as `key:count, key:count, ...`, sorted by count descending. */
+function formatFrequency(counts: Readonly<Record<string, number>>): string {
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return entries.length === 0
+    ? "(none)"
+    : entries.map(([key, count]) => `${key}:${count}`).join(", ");
+}
+
+/**
+ * Prints the build-time coverage signal 04-RESEARCH.md's "OSM Surface Tag
+ * Reliability" section asks for: total way count, a `highway=*` breakdown,
+ * a `surface=*` breakdown, the count of ways with no explicit `surface`
+ * tag, and whether each payload came from the cache or the network.
+ */
+function printFetchSummary(
+  config: AreaConfig,
+  roads: LoadOrFetchAreaResult,
+  buildings: LoadOrFetchAreaResult,
+): void {
+  const roadWays = roads.envelope.response.elements.filter(isWayElement);
+  const buildingWays = buildings.envelope.response.elements.filter(isWayElement);
+  const noSurfaceCount = roadWays.filter((way) => way.tags?.surface === undefined).length;
+
+  console.log(`compile-map: area "${config.areaId}" (${config.name})`);
+  console.log(
+    `  roads: ${roadWays.length} ways, source=${roads.source}, fetchedAt=${roads.envelope.fetchedAt}`,
+  );
+  console.log(`    highway breakdown: ${formatFrequency(tagFrequency(roadWays, "highway"))}`);
+  console.log(`    surface breakdown: ${formatFrequency(tagFrequency(roadWays, "surface"))}`);
+  console.log(`    ways with no surface tag: ${noSurfaceCount} / ${roadWays.length}`);
+  console.log(
+    `  buildings: ${buildingWays.length} ways, source=${buildings.source}, fetchedAt=${buildings.envelope.fetchedAt}`,
+  );
+}
+
+async function main(argv: readonly string[]): Promise<void> {
   const areaId = parseAreaArg(argv);
 
   if (areaId === null) {
@@ -77,8 +139,22 @@ function main(argv: readonly string[]): void {
     )}, demSource "${config.demSource}"`,
   );
 
-  // Stages 2-8 (fetch, build, author, validate, write) land in later plans —
-  // see this file's own header comment for the full pipeline order.
+  const refresh = argv.includes("--refresh");
+  const [roadsResult, buildingsResult] = await Promise.all([
+    loadOrFetchArea(config, "roads", { refresh }),
+    loadOrFetchArea(config, "buildings", { refresh }),
+  ]);
+
+  printFetchSummary(config, roadsResult, buildingsResult);
+
+  // Stages 3-8 (DEM, graph build, geometry, author, validate, write) land in
+  // later plans — see this file's own header comment for the full pipeline
+  // order.
 }
 
-main(process.argv.slice(2));
+main(process.argv.slice(2)).catch((err: unknown) => {
+  console.error(
+    `compile-map: unhandled error — ${err instanceof Error ? err.message : String(err)}`,
+  );
+  process.exit(1);
+});

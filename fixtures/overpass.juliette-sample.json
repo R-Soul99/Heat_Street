@@ -1,80 +1,305 @@
 {
-  "fetchedAt": "2026-09-13T00:00:00.000Z",
+  "fetchedAt": "2026-09-13T20:25:59.876Z",
   "endpoint": "https://overpass-api.de/api/interpreter",
-  "bbox": { "south": 33.0963, "west": -83.8242, "north": 33.1223, "east": -83.7948 },
+  "bbox": {
+    "south": 33.0963,
+    "west": -83.8242,
+    "north": 33.1223,
+    "east": -83.7948
+  },
   "query": "[out:json][timeout:25];(way[\"highway\"~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|service|living_street|track)\"](33.0963,-83.8242,33.1223,-83.7948););out body geom qt;",
   "response": {
     "elements": [
       {
         "type": "way",
-        "id": 5001,
-        "nodes": [1001, 1002, 1003],
-        "geometry": [
-          { "lat": 33.1, "lon": -83.81 },
-          { "lat": 33.101, "lon": -83.808 },
-          { "lat": 33.102, "lon": -83.806 }
+        "id": 492257482,
+        "nodes": [
+          4843064019,
+          4843064020,
+          11378545574,
+          6205693260,
+          4843064721
         ],
-        "tags": { "highway": "tertiary", "surface": "asphalt", "name": "McCrakin Street" }
+        "geometry": [
+          {
+            "lat": 33.1075964,
+            "lon": -83.7969201
+          },
+          {
+            "lat": 33.107405,
+            "lon": -83.7968492
+          },
+          {
+            "lat": 33.1073579,
+            "lon": -83.7967055
+          },
+          {
+            "lat": 33.1072795,
+            "lon": -83.7965781
+          },
+          {
+            "lat": 33.107203,
+            "lon": -83.7964759
+          }
+        ],
+        "tags": {
+          "highway": "service",
+          "surface": "gravel"
+        }
       },
       {
         "type": "way",
-        "id": 5002,
-        "nodes": [1003, 1004],
-        "geometry": [
-          { "lat": 33.102, "lon": -83.806 },
-          { "lat": 33.103, "lon": -83.804 }
+        "id": 492257483,
+        "nodes": [
+          4843064020,
+          4843064724,
+          4843064725,
+          4843064726,
+          4843064727,
+          11378545572,
+          4843064728,
+          11378545573,
+          4843064729,
+          4843064721
         ],
-        "tags": { "highway": "tertiary", "surface": "asphalt", "name": "McCrakin Street" }
+        "geometry": [
+          {
+            "lat": 33.107405,
+            "lon": -83.7968492
+          },
+          {
+            "lat": 33.1071136,
+            "lon": -83.7968913
+          },
+          {
+            "lat": 33.106894,
+            "lon": -83.7968952
+          },
+          {
+            "lat": 33.1066911,
+            "lon": -83.7968583
+          },
+          {
+            "lat": 33.1065482,
+            "lon": -83.7967937
+          },
+          {
+            "lat": 33.1064968,
+            "lon": -83.7966655
+          },
+          {
+            "lat": 33.1065949,
+            "lon": -83.7966063
+          },
+          {
+            "lat": 33.1068845,
+            "lon": -83.7965096
+          },
+          {
+            "lat": 33.1070708,
+            "lon": -83.7964754
+          },
+          {
+            "lat": 33.107203,
+            "lon": -83.7964759
+          }
+        ],
+        "tags": {
+          "highway": "service",
+          "surface": "gravel"
+        }
       },
       {
         "type": "way",
-        "id": 5003,
-        "nodes": [1004, 1005],
-        "geometry": [
-          { "lat": 33.103, "lon": -83.804 },
-          { "lat": 33.1, "lon": -83.804 }
+        "id": 1500124291,
+        "nodes": [
+          4843064721,
+          4843064722
         ],
-        "tags": { "highway": "residential" }
+        "geometry": [
+          {
+            "lat": 33.107203,
+            "lon": -83.7964759
+          },
+          {
+            "lat": 33.1072158,
+            "lon": -83.7962823
+          }
+        ],
+        "tags": {
+          "highway": "service",
+          "leisure": "slipway",
+          "service": "slipway",
+          "surface": "gravel"
+        }
       },
       {
         "type": "way",
-        "id": 5004,
-        "nodes": [1005, 1006],
-        "geometry": [
-          { "lat": 33.1, "lon": -83.804 },
-          { "lat": 33.099, "lon": -83.806 }
+        "id": 545920732,
+        "nodes": [
+          5276094969,
+          5276094974
         ],
-        "tags": { "highway": "residential", "surface": "gravel" }
+        "geometry": [
+          {
+            "lat": 33.1026312,
+            "lon": -83.8097739
+          },
+          {
+            "lat": 33.1032626,
+            "lon": -83.8102896
+          }
+        ],
+        "tags": {
+          "highway": "primary",
+          "lanes": "3",
+          "lanes:backward": "1",
+          "lanes:forward": "2",
+          "maxspeed": "55 mph",
+          "placement:forward": "left_of:1",
+          "ref": "US 23;GA 87",
+          "surface": "asphalt",
+          "tiger:cfcc": "A21",
+          "tiger:county": "Butts, GA:Monroe, GA",
+          "tiger:name_base": "Ga Highway 87:Highway 87:United States Highway 23",
+          "tiger:name_base_1": "Ga Highway 87:Highway 87:State Route 87",
+          "tiger:name_base_2": "State Route 42:State Route 87:United States Highway 23",
+          "tiger:reviewed": "no",
+          "tiger:zip_left": "31029",
+          "tiger:zip_left_1": "31029",
+          "tiger:zip_right": "31029",
+          "turn:lanes:forward": "|right"
+        }
       },
       {
         "type": "way",
-        "id": 5005,
-        "nodes": [1006, 1007],
-        "geometry": [
-          { "lat": 33.099, "lon": -83.806 },
-          { "lat": 33.0995, "lon": -83.809 }
+        "id": 1308343202,
+        "nodes": [
+          12115805974,
+          12115805977
         ],
-        "tags": { "highway": "unclassified", "surface": "unpaved" }
+        "geometry": [
+          {
+            "lat": 33.1117611,
+            "lon": -83.8175263
+          },
+          {
+            "lat": 33.1115464,
+            "lon": -83.8179069
+          }
+        ],
+        "tags": {
+          "highway": "service"
+        }
       },
       {
         "type": "way",
-        "id": 5006,
-        "nodes": [1007, 1001],
-        "geometry": [
-          { "lat": 33.0995, "lon": -83.809 },
-          { "lat": 33.1, "lon": -83.81 }
+        "id": 195682271,
+        "nodes": [
+          2061065887,
+          71523627,
+          70770336,
+          70770338
         ],
-        "tags": { "highway": "residential" }
+        "geometry": [
+          {
+            "lat": 33.1076618,
+            "lon": -83.796478
+          },
+          {
+            "lat": 33.107753,
+            "lon": -83.7959457
+          },
+          {
+            "lat": 33.1078849,
+            "lon": -83.7950576
+          },
+          {
+            "lat": 33.108097,
+            "lon": -83.7937059
+          }
+        ],
+        "tags": {
+          "bridge": "yes",
+          "highway": "tertiary",
+          "lanes": "2",
+          "layer": "1",
+          "maxspeed": "35 mph",
+          "name": "Round Oak-Juliette Road",
+          "surface": "concrete",
+          "tiger:cfcc": "A41",
+          "tiger:county": "Monroe, GA;Jones, GA",
+          "tiger:name_base": "Juliette;Round Oak Juliette",
+          "tiger:name_type": "Rd"
+        }
       },
       {
         "type": "way",
-        "id": 5007,
-        "nodes": [1003, 1008],
-        "geometry": [
-          { "lat": 33.102, "lon": -83.806 },
-          { "lat": 33.1025, "lon": -83.8065 }
+        "id": 9397085,
+        "nodes": [
+          71497771,
+          12115805989,
+          71497757
         ],
-        "tags": { "highway": "track", "surface": "dirt" }
+        "geometry": [
+          {
+            "lat": 33.1124303,
+            "lon": -83.8178452
+          },
+          {
+            "lat": 33.1126117,
+            "lon": -83.8174916
+          },
+          {
+            "lat": 33.1128267,
+            "lon": -83.8170724
+          }
+        ],
+        "tags": {
+          "highway": "residential",
+          "name": "Harvest Drive",
+          "tiger:cfcc": "A41",
+          "tiger:county": "Monroe, GA"
+        }
+      },
+      {
+        "type": "way",
+        "id": 662910646,
+        "nodes": [
+          11565842784,
+          71479099,
+          4843064019,
+          2061065887
+        ],
+        "geometry": [
+          {
+            "lat": 33.1073528,
+            "lon": -83.798431
+          },
+          {
+            "lat": 33.1073597,
+            "lon": -83.7983882
+          },
+          {
+            "lat": 33.1075964,
+            "lon": -83.7969201
+          },
+          {
+            "lat": 33.1076618,
+            "lon": -83.796478
+          }
+        ],
+        "tags": {
+          "highway": "tertiary",
+          "lanes": "2",
+          "maxspeed": "35 mph",
+          "name": "Juliette Road",
+          "surface": "asphalt",
+          "tiger:cfcc": "A41",
+          "tiger:county": "Monroe, GA",
+          "tiger:name_base": "Juliette",
+          "tiger:name_type": "Rd"
+        }
       }
     ]
   }
