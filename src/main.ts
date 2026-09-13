@@ -35,6 +35,7 @@ import {
 import type { SurfaceType } from "./core/surface-types";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
+import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTuningPanel } from "./debug/tuning-panel";
@@ -311,11 +312,21 @@ let diagFrame = 0;
 // Full key map for this phase, recorded here as the single place a reader
 // would look: Backquote = profiler HUD, G = tuning panel, T = telemetry
 // panel, C = camera rig swap, V = camera skin, O = occlusion mitigation A/B
-// (fade / steepen / off).
+// (fade / steepen / off), F = temporary free-look orbit (debug only).
 const cameraChrome = createCameraSkinChrome();
 const skin = createCameraSkin(canvas.classList, cameraChrome, "police");
 if (DEBUG_ENABLED) {
   onDebugKey("KeyV", () => skin.cycle());
+}
+
+// `src/debug/free-look-camera.ts`'s own module doc comment: a TEMPORARY
+// debug-only tool added to assist the Phase 3 plan 03-12 manual occlusion
+// playtest. Gate-free factory, gated here exactly like every other
+// `?debug`-only tool in this file — a normal build constructs nothing and
+// registers zero listeners.
+const freeLook = DEBUG_ENABLED ? createFreeLookCamera(camera, canvas) : null;
+if (freeLook) {
+  onDebugKey("KeyF", () => freeLook.toggle());
 }
 
 startLoop({
@@ -337,6 +348,14 @@ startLoop({
 
     view.updateWheels(scene.vehicle.controller);
     applyAllInterpolated(view.meshes, transforms, alpha);
+    // `freeLook?.restoreRigPose()` runs BEFORE `activeRig.update(dtMs)` —
+    // LOAD-BEARING ordering (src/debug/free-look-camera.ts's own doc
+    // comment): the rig damps `camera.position` using `camera.position`
+    // itself as its own state, so leaving last frame's free-look pose there
+    // would poison the rig's damping and make it snap on disengage. A no-op
+    // while free-look is disengaged or DEBUG_ENABLED is false (`freeLook` is
+    // `null`).
+    freeLook?.restoreRigPose();
     // `activeRig.update(dtMs)` runs AFTER `applyAllInterpolated` because the
     // rig reads `view.meshes[0]`'s just-written INTERPOLATED transform via
     // `cameraTarget`. Moving this above `applyAllInterpolated` reintroduces
@@ -352,7 +371,19 @@ startLoop({
     // `activeRig.update` (the rig reads it at the top of its own update) —
     // a one-frame lag that is imperceptible, in the same spirit as the
     // surface-friction one-tick lag documented in 03-RESEARCH.md Pitfall 2.
+    // This is also why `freeLook.apply()` (below) runs AFTER this call, not
+    // before it: occlusion must keep sampling the SHIPPING rig pose the
+    // player actually sees, never the developer's flown-to free-look pose.
     occlusion.update(camera.position, view.meshes[0].position, dtMs);
+    // `freeLook?.apply(...)` runs AFTER `occlusion.update` (see the comment
+    // above) and BEFORE `renderer.render`, so the free-look pose — if
+    // engaged — is what actually gets drawn this frame. A no-op while
+    // disengaged or `freeLook` is `null`.
+    freeLook?.apply(
+      view.meshes[0].position.x,
+      view.meshes[0].position.y,
+      view.meshes[0].position.z,
+    );
     // TEMP DIAGNOSTIC (03-12 playtest debugging) — remove before commit.
     if (DEBUG_ENABLED) {
       diagFrame++;
