@@ -297,12 +297,9 @@ const occlusion = createOcclusionController(
 );
 if (DEBUG_ENABLED) {
   onDebugKey("KeyO", () => {
-    const m = occlusion.cycle();
-    console.log("[occlusion-diag] KeyO pressed, new mode =", m);
+    occlusion.cycle();
   });
 }
-// TEMP DIAGNOSTIC (03-12 playtest debugging) — remove before commit.
-let diagFrame = 0;
 
 // The camera skin (CAM-03) is always constructed and applied — the camera is
 // permanently skinned, and Phase 5 is what will drive the choice from the
@@ -384,24 +381,6 @@ startLoop({
       view.meshes[0].position.y,
       view.meshes[0].position.z,
     );
-    // TEMP DIAGNOSTIC (03-12 playtest debugging) — remove before commit.
-    if (DEBUG_ENABLED) {
-      diagFrame++;
-      if (diagFrame % 30 === 0) {
-        const diagHits = occlusionProbe.hits(camera.position, view.meshes[0].position);
-        console.log(
-          "[occlusion-diag] mode=",
-          occlusion.mitigation(),
-          "hits=",
-          diagHits.length,
-          "camPos=",
-          camera.position.toArray().map((n) => n.toFixed(1)),
-          "carPos=",
-          view.meshes[0].position.toArray().map((n) => n.toFixed(1)),
-        );
-      }
-    }
-
     // `view.wheelMeshes[i].getWorldPosition(...)` below is only correct if
     // `matrixWorld` already reflects THIS frame's chassis pose (written by
     // `applyAllInterpolated` above) and wheel local transforms (written by
