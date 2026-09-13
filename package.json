@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "compile-map": "node tools/map-compiler/cli.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.20.0",
@@ -22,7 +23,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
+    "@types/node": "24.13.4",
     "@types/three": "0.185.4",
+    "geotiff": "3.0.5",
+    "ngraph.graph": "20.1.2",
+    "ngraph.path": "1.6.1",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "5.0.0"
