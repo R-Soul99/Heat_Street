@@ -91,4 +91,62 @@ describe("compiled map — public/maps/juliette-ga.map.json (real output)", () =
   it("contains at least one cycle (D-08's genuine loops) — edges.length >= nodes.length for a connected graph", () => {
     expect(graph.edges.length).toBeGreaterThanOrEqual(graph.nodes.length);
   });
+
+  // --- Plan 04-05: elevation (D-09, SC1's elevation failure mode) ---
+
+  it("has non-zero, varying node y values — at least 10 distinct values (a flat map would mean the DEM stage silently no-opped)", () => {
+    const distinctY = new Set(graph.nodes.map((n) => n.y));
+    expect(distinctY.size).toBeGreaterThanOrEqual(10);
+    expect(graph.nodes.some((n) => n.y !== 0)).toBe(true);
+  });
+
+  it("has at least 10m of node elevation relief and every node inside the 50-250m Georgia Piedmont plausibility band", () => {
+    const elevations = graph.nodes.map((n) => n.y);
+    const min = Math.min(...elevations);
+    const max = Math.max(...elevations);
+    const relief = max - min;
+
+    expect(relief).toBeGreaterThanOrEqual(10);
+    for (const y of elevations) {
+      expect(y).toBeGreaterThanOrEqual(50);
+      expect(y).toBeLessThanOrEqual(250);
+    }
+  });
+
+  it("matches every edge's first/last point Y to its from/to node's y with EXACT float equality (no tolerance — a junction step is SC1's named failure mode)", () => {
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    for (const edge of graph.edges) {
+      const from = byId.get(edge.from);
+      const to = byId.get(edge.to);
+      expect(from).toBeDefined();
+      expect(to).toBeDefined();
+      if (from !== undefined) {
+        expect(edge.points[0][1]).toBe(from.y);
+      }
+      if (to !== undefined) {
+        expect(edge.points[edge.points.length - 1][1]).toBe(to.y);
+      }
+    }
+  });
+
+  it("has no edge whose maximum gradient exceeds 0.5 (27 degrees — steeper than any real rural Georgia road; a misaligned DEM, not dramatic terrain)", () => {
+    for (const edge of graph.edges) {
+      let maxGradient = 0;
+      for (let i = 1; i < edge.points.length; i++) {
+        const dx = edge.points[i][0] - edge.points[i - 1][0];
+        const dz = edge.points[i][2] - edge.points[i - 1][2];
+        const dy = edge.points[i][1] - edge.points[i - 1][1];
+        const runXZ = Math.sqrt(dx * dx + dz * dz);
+        if (runXZ > 0) {
+          const gradient = Math.abs(dy) / runXZ;
+          if (gradient > maxGradient) maxGradient = gradient;
+        }
+      }
+      expect(maxGradient, `edge id=${edge.id} maxGradient=${maxGradient}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it("has source.compilerVersion 0.2.0 (elevation changed emitted geometry — plan 04-05)", () => {
+    expect(graph.source.compilerVersion).toBe("0.2.0");
+  });
 });

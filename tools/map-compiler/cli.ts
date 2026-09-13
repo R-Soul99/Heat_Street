@@ -10,10 +10,14 @@
  * Pipeline stages, in the order later plans add them:
  *   1. Resolve `--area` against the known-area registry (plan 04-01).
  *   2. Fetch/cache raw OSM roads + buildings data for the area's bbox,
- *      printing a coverage summary (this plan).
- *   3. Fetch/cache the DEM raster covering the area's bbox (plan 04-03/04-04).
- *   4. Build the dense-id `RoadGraph` from OSM ways/nodes, mapping surfaces
- *      via `graph/surface-mapping.ts` (plan 04-01) and sampling elevation.
+ *      printing a coverage summary (plan 04-02).
+ *   3. Build the dense-id `RoadGraph` from OSM ways/nodes, mapping surfaces
+ *      via `graph/surface-mapping.ts` (plan 04-01/04-04). `y` is flat (0)
+ *      at this point.
+ *   4. Fetch/cache the USGS 3DEP DEM raster covering the area's bbox, sample
+ *      real elevation for every node and edge centreline point, smooth
+ *      interior points with clamped endpoints, and recompute `lengthM`
+ *      (plan 04-05).
  *   5. Author per-edge ribbon/junction geometry (`geometry/`).
  *   6. Author collision buffers and a merged glTF render mesh (`author/`).
  *   7. Validate the result (`validate/`) — fail loudly, name the offending
@@ -27,8 +31,18 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
+import { applyElevation, type ElevationReport } from "./graph/elevation.ts";
+import { makeProjector } from "./graph/project.ts";
+import {
+  type DemRaster,
+  type LoadOrFetchDemResult,
+  loadOrFetchDem,
+  makeElevationSampler,
+  parseDemRaster,
+} from "./sources/dem.ts";
 import { type LoadOrFetchAreaResult, loadOrFetchArea } from "./sources/overpass.ts";
 
 /**
@@ -156,6 +170,45 @@ function printBuildReport(config: AreaConfig, report: BuildReport): void {
 }
 
 /**
+ * Prints the elevation stage's report: DEM source (cache/network) and byte
+ * size, the raster's own parsed elevation range, NoData substitution count,
+ * min/max/relief across the compiled graph's nodes, and every edge whose
+ * gradient exceeds `GRADIENT_WARNING_THRESHOLD` — the same "fail loud, name
+ * the offending id" discipline `printBuildReport` already applies to
+ * topology, applied here to terrain.
+ */
+function printElevationReport(
+  demResult: LoadOrFetchDemResult,
+  raster: DemRaster,
+  report: ElevationReport,
+): void {
+  let rasterMin = Number.POSITIVE_INFINITY;
+  let rasterMax = Number.NEGATIVE_INFINITY;
+  for (const value of raster.data) {
+    if (value < rasterMin) rasterMin = value;
+    if (value > rasterMax) rasterMax = value;
+  }
+
+  console.log(
+    `  DEM: source=${demResult.source} bytes=${demResult.bytes.byteLength} ` +
+      `raster=${raster.width}x${raster.height} noDataSubstitutions=${raster.noDataSubstitutions}`,
+  );
+  console.log(`  DEM raster elevation range: ${rasterMin.toFixed(2)}m to ${rasterMax.toFixed(2)}m`);
+  console.log(
+    `  compiled node elevation: min=${report.minNodeElevationM.toFixed(2)}m ` +
+      `max=${report.maxNodeElevationM.toFixed(2)}m relief=${report.reliefM.toFixed(2)}m`,
+  );
+  if (report.steepEdges.length === 0) {
+    console.log("  edges over gradient threshold: (none)");
+  } else {
+    console.log(`  edges over gradient threshold: ${report.steepEdges.length}`);
+    for (const steep of report.steepEdges) {
+      console.log(`    edge id=${steep.edgeId} maxGradient=${steep.maxGradient.toFixed(3)}`);
+    }
+  }
+}
+
+/**
  * Prints the build-time coverage signal 04-RESEARCH.md's "OSM Surface Tag
  * Reliability" section asks for: total way count, a `highway=*` breakdown,
  * a `surface=*` breakdown, the count of ways with no explicit `surface`
@@ -237,16 +290,35 @@ async function main(argv: readonly string[]): Promise<void> {
     );
   }
 
+  // Elevation stage (plan 04-05): sample real USGS 3DEP terrain for every
+  // node (authoritative, never smoothed), smooth each edge's interior
+  // centreline with both ends clamped to node height, and recompute lengthM
+  // now that y is real. Reuses the graph's OWN recorded origin (rather than
+  // recomputing it from config.bbox independently) so the projector here is
+  // guaranteed identical to the one `buildGraph` used internally.
+  const demResult = await loadOrFetchDem(config, { refresh, maxSizePx: config.demSizePx });
+  const raster = await parseDemRaster(demResult.bytes);
+  const sampler = makeElevationSampler(raster);
+  const projector = makeProjector({ lat: graph.origin.lat, lon: graph.origin.lon });
+  const { graph: elevatedGraph, report: elevationReport } = applyElevation(
+    graph,
+    sampler,
+    projector,
+  );
+  printElevationReport(demResult, raster, elevationReport);
+
+  // Self-check: mirrors buildGraph's own discipline (graph/build-graph.ts) —
+  // the compiler must never emit an artifact its own runtime parser rejects.
+  parseRoadGraph(JSON.stringify(elevatedGraph), `applyElevation(${config.areaId})`);
+
   await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
   const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
-  await writeFile(outputPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+  await writeFile(outputPath, `${JSON.stringify(elevatedGraph, null, 2)}\n`, "utf8");
   console.log(`compile-map: wrote ${outputPath}`);
 
-  // Stages 5-8 (geometry, author, validate against ngraph reachability) land
+  // Stages 5-7 (geometry, author, validate against ngraph reachability) land
   // in later plans — see this file's own header comment for the full
-  // pipeline order. Elevation (`y`) is 0 for every node/point until plan
-  // 04-05 lands DEM sampling — this artifact is a flat, schema-valid,
-  // deliberately intermediate map (D-P11).
+  // pipeline order.
 }
 
 main(process.argv.slice(2)).catch((err: unknown) => {
