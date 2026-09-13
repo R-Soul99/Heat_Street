@@ -186,7 +186,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Compiler tooling seam (tsconfig, grep gate, pinned deps, CLI), RoadGraph contract and parser, OSM surface mapping (wave 1)
+- [x] 04-01-PLAN.md — Compiler tooling seam (tsconfig, grep gate, pinned deps, CLI), RoadGraph contract and parser, OSM surface mapping (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -302,7 +302,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
-| 4. Map Pipeline & First Area | 0/11 | Planned | - |
+| 4. Map Pipeline & First Area | 1/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
