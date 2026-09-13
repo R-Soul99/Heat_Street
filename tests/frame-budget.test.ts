@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // should use `import.meta.glob(..., { query: "?raw", eager: true })` for the same
 // reason.
 import doc from "../docs/frame-budget.md?raw";
-import { BUDGET, PHASE1_DEBUG_SCENE_TARGETS } from "../src/core/frame-budget";
+import { BUDGET, SCENE_TARGETS } from "../src/core/frame-budget";
 
 /**
  * Every millisecond figure is matched WITH its unit (`"4.0 ms"`, not `"4"`), and
@@ -27,8 +27,8 @@ describe("frame budget constants (D-04)", () => {
     expect(sum).toBeCloseTo(BUDGET.frameMs, 9);
   });
 
-  it("keeps the Phase 1 debug-scene targets far under the global budget", () => {
-    expect(PHASE1_DEBUG_SCENE_TARGETS.physicsMs).toBeLessThan(BUDGET.physicsMs);
+  it("keeps the current scene targets far under the global budget", () => {
+    expect(SCENE_TARGETS.physicsMs).toBeLessThan(BUDGET.physicsMs);
   });
 });
 
@@ -51,12 +51,12 @@ describe("frame budget doc mirrors the code", () => {
     expect(doc).toContain(`${BUDGET[key].toFixed(1)} ms`);
   });
 
-  it("states every Phase 1 debug-scene target verbatim", () => {
-    expect(doc).toContain(`${PHASE1_DEBUG_SCENE_TARGETS.physicsMs.toFixed(1)} ms`);
-    expect(doc).toContain(`< ${PHASE1_DEBUG_SCENE_TARGETS.drawCalls}`);
-    expect(doc).toContain(`< ${PHASE1_DEBUG_SCENE_TARGETS.bodies}`);
+  it("states every current scene target verbatim", () => {
+    expect(doc).toContain(`${SCENE_TARGETS.physicsMs.toFixed(1)} ms`);
+    expect(doc).toContain(`< ${SCENE_TARGETS.drawCalls}`);
+    expect(doc).toContain(`< ${SCENE_TARGETS.bodies}`);
 
-    const triangles = PHASE1_DEBUG_SCENE_TARGETS.triangles;
+    const triangles = SCENE_TARGETS.triangles;
     const grouped = triangles.toLocaleString("en-US");
     expect(doc.includes(`${triangles}`) || doc.includes(grouped)).toBe(true);
   });

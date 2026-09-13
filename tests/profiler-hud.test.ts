@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUDGET, PHASE1_DEBUG_SCENE_TARGETS } from "../src/core/frame-budget";
+import { BUDGET, SCENE_TARGETS } from "../src/core/frame-budget";
 import type { FrameStats } from "../src/core/frame-stats";
 import { formatHudText, type HudInputs } from "../src/debug/profiler-hud";
 
@@ -88,14 +88,14 @@ describe("formatHudText", () => {
     expect(lineStartingWith(text, "render")).toContain("!");
   });
 
-  it("does not mark draw calls under the Phase 1 target", () => {
+  it("does not mark draw calls under the current scene target", () => {
     const text = formatHudText(makeInputs({ drawCalls: 5 }));
     expect(lineStartingWith(text, "draws")).not.toContain("!");
   });
 
-  it("marks draw calls over the Phase 1 target: 25 against PHASE1_DEBUG_SCENE_TARGETS.drawCalls 20", () => {
-    const text = formatHudText(makeInputs({ drawCalls: 25 }));
-    expect(PHASE1_DEBUG_SCENE_TARGETS.drawCalls).toBe(20);
+  it("marks draw calls over the current scene target: 75 against SCENE_TARGETS.drawCalls 70", () => {
+    const text = formatHudText(makeInputs({ drawCalls: 75 }));
+    expect(SCENE_TARGETS.drawCalls).toBe(70);
     expect(lineStartingWith(text, "draws")).toContain("!");
   });
 
@@ -106,7 +106,7 @@ describe("formatHudText", () => {
 
   it("marks triangles over target: 20000 against 10000", () => {
     const text = formatHudText(makeInputs({ triangles: 20000 }));
-    expect(PHASE1_DEBUG_SCENE_TARGETS.triangles).toBe(10000);
+    expect(SCENE_TARGETS.triangles).toBe(10000);
     expect(lineStartingWith(text, "tris")).toContain("!");
   });
 

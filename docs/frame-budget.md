@@ -37,18 +37,44 @@ not available to it: `EXT_disjoint_timer_query_webgl2` appears only under
 GPU milliseconds are ever needed, add `stats-gl` alongside the HUD rather than
 relabelling this number.
 
-## Phase 1 debug-scene targets
+## Live scene targets
 
-These are the numbers the HUD should actually be showing when Phase 1 is verified. A
-bare box-and-plane scene must sit far under the global budget, or something is already
-wrong.
+These are the numbers the HUD (`src/debug/profiler-hud.ts`) actually checks against
+right now — `SCENE_TARGETS` in `src/core/frame-budget.ts`. There is only one live
+target set (the HUD has no scene-awareness), so this section is revised forward each
+time a phase materially changes what's on screen, rather than staying a permanent
+snapshot of whichever phase first wrote it.
 
-| Metric | Phase 1 target |
+| Metric | Target |
 |--------|---------------|
 | Physics ms/frame | < 0.5 ms |
-| Draw calls | < 20 |
+| Draw calls | < 70 |
 | Triangles | < 10,000 |
-| Total bodies | < 20 |
+| Total bodies | < 30 |
+
+Originally authored for Phase 1's bare box-and-plane debug scene (draw calls < 20,
+bodies < 20) — a scene with no expectation of ever needing more. Draw calls and bodies
+are raised here in Phase 3 (plan 03-12) against a REAL measured reading (below);
+physics and triangles kept comfortable headroom over that same reading and are
+unchanged.
+
+### Real measurement, plan 03-12 (2026-09-13)
+
+Taken from the profiler HUD (`?debug`, Backquote) during a sustained slide on gravel
+with the dust particles at full — the heaviest case this phase's scene produces:
+
+| Metric | Measured | Target | Verdict |
+|--------|---------:|-------:|---------|
+| Total frame | 16.68 ms | 16.6 ms | Essentially exact 60 fps (16.667 ms is the true interval; "16.6" is a rounded-down constant) — not a real overage |
+| Physics ms/frame | 0.38 ms | < 0.5 ms | Pass, comfortable headroom |
+| Render (CPU submit) | 1.64 ms | < 6.0 ms | Pass, comfortable headroom |
+| Draw calls | 57 | < 70 (was < 20) | Pass against the revised target. Closely matches this document's own prior "heavy FX, + shadow pass" ESTIMATE of ~55-57 — the estimate held up well |
+| Triangles | 692 | < 10,000 | Pass, comfortable headroom |
+| Total bodies | 21 (1 active) | < 30 (was < 20) | Pass against the revised target |
+
+This measurement replaces the "engineering estimate" table that previously stood here
+(see git history for the superseded estimate) — the follow-up action that section's own
+text asked for is now closed.
 
 ## Grounding for the 4 ms physics budget
 
@@ -93,34 +119,17 @@ document originally described:
   (needed for plan 03-08's per-building occlusion fade), so each is its own draw call
   by default (three does not auto-batch separate `Mesh` objects sharing geometry).
 
-### Measured `renderer.info` figures — NOT YET TAKEN; this section is an estimate
+### Measured `renderer.info` figures — SUPERSEDED by a real reading
 
-This plan's own action text asks for `renderer.info.render.calls` and triangle counts
-"from a `?debug` session ... take the numbers from the profiler HUD, do not estimate
-them." That session did not happen as part of this plan: this plan was executed in a
-headless environment with no browser/WebGL/display available, so no real `?debug`
-session could be driven to read the HUD. The figures below are therefore an
-**engineering estimate from the scene's known object/material counts**, explicitly
-labelled as such rather than presented as a measured reading, with a follow-up action
-recorded in this plan's SUMMARY.md to replace them with real numbers the next time
-someone drives the game in a browser (plan 03-12's playtest already needs to do this
-for its own SC6 comparison, and is the natural place to also fill this table in for
-real).
-
-| Case | Draw calls (main pass) | Draw calls (+ shadow pass) | Estimated triangles |
-|------|------------------------|-----------------------------|----------------------|
-| Idle FX (parked on tarmac, no slide) | ~26 (1 chassis + 4 wheels + 1 grid + 6 zones + 14 buildings) | ~45 (chassis/wheels/buildings re-drawn into the shadow map) | well under 10,000 — every mesh here is a handful of boxes |
-| Heavy FX (mid-slide on gravel) | ~26 baseline + 1-2 active particle systems + up to ~10 simultaneously-fading decals | ~45 baseline + the same FX additions (particle/decal meshes are not shadow casters) | still well under 10,000 — 576 particle sprites and 48 decal quads are each a handful of vertices, not a triangle-budget concern |
-
-Both cases sit comfortably inside the existing `renderCpuMs` (6.0 ms) and `gameLogicMs`
-(2.0 ms) budgets by this estimate — a few dozen draw calls of simple boxes and sprites
-is far short of the class of workload (chunked city colliders, dense traffic) those
-budgets were sized for. Because this is reasoned from object counts rather than
-measured, the budget figures themselves are left UNCHANGED here rather than raised —
-raising a locked-looking number on an estimate would make the document describe a guess
-as settled fact, the opposite of this file's purpose. If a real `?debug` session finds
-either figure exceeded, raise the relevant budget row then, with the measured numbers
-recorded here in place of this estimate.
+This section previously carried an engineering estimate (reasoned from the scene's
+object/material counts, not measured), because the plan that added it was executed
+headless with no browser available. That estimate's own text named plan 03-12's
+playtest as the point it should be replaced with a real reading — see this document's
+"Live scene targets" section above for that measurement, taken exactly the way the
+estimate anticipated (profiler HUD, heavy-FX case: sustained slide on gravel with dust
+at full). The estimate predicted ~45-57 draw calls for that case including the shadow
+pass; the real reading came in at 57 — close enough that the estimate's reasoning is
+validated, not just superseded.
 
 ### The CSS camera-skin filter is invisible to every number above
 

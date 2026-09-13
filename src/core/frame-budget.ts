@@ -24,17 +24,28 @@ export const BUDGET = {
 } as const;
 
 /**
- * What the HUD should actually be reading in the Phase 1 debug scene. A bare
- * six-box scene must sit far under the global budget; if it does not, something is
- * already wrong and no amount of later optimisation will hide it.
+ * What the HUD should actually be reading in the CURRENT shipped scene. There is
+ * only ever one live target set — the HUD has no scene-awareness — so this is
+ * revised forward each time a phase materially changes what's on screen, rather
+ * than living as a permanent "Phase 1" snapshot after later phases have moved on.
+ *
+ * Originally authored for Phase 1's bare six-box debug scene (drawCalls 20,
+ * bodies 20). Revised in Phase 3 plan 03-12 against a REAL measured `?debug`
+ * session (profiler HUD, sustained slide on gravel with dust at full):
+ * physics 0.38 ms, 57 draw calls, 692 triangles, 21 total bodies (1 active) —
+ * see `docs/frame-budget.md`'s "Live scene targets" section for the full
+ * reading. `physicsMs` and `triangles` already had comfortable headroom over
+ * that measurement and are unchanged; `drawCalls` and `bodies` did not and are
+ * raised here, with roughly 20-40% headroom over the measured figures rather
+ * than pinned exactly to them.
  */
-export const PHASE1_DEBUG_SCENE_TARGETS = {
-  /** Physics ms per frame in the debug scene. */
+export const SCENE_TARGETS = {
+  /** Physics ms per frame. */
   physicsMs: 0.5,
   /** `renderer.info.render.calls`, read after `render()`. */
-  drawCalls: 20,
+  drawCalls: 70,
   /** `renderer.info.render.triangles`, read after `render()`. */
   triangles: 10000,
   /** `world.bodies.len()`. */
-  bodies: 20,
+  bodies: 30,
 } as const;

@@ -17,7 +17,7 @@
  */
 import type * as RAPIER from "@dimforge/rapier3d";
 import type * as THREE from "three";
-import { BUDGET, PHASE1_DEBUG_SCENE_TARGETS } from "../core/frame-budget";
+import { BUDGET, SCENE_TARGETS } from "../core/frame-budget";
 import type { FrameStats } from "../core/frame-stats";
 
 /** Inputs the pure formatter needs. Nothing here is a DOM, renderer or world type. */
@@ -54,8 +54,8 @@ export function formatHudText(inputs: HudInputs): string {
     `frame   ${avgFrameMs.toFixed(2)}ms / ${BUDGET.frameMs}ms${over(avgFrameMs, BUDGET.frameMs)}`,
     `physics ${stats.physicsMs.toFixed(2)}ms / ${BUDGET.physicsMs}ms${over(stats.physicsMs, BUDGET.physicsMs)}  (${stats.steps} step/f)`,
     `render  ${stats.renderMs.toFixed(2)}ms / ${BUDGET.renderCpuMs}ms${over(stats.renderMs, BUDGET.renderCpuMs)}  (cpu submit)`,
-    `draws   ${drawCalls} / ${PHASE1_DEBUG_SCENE_TARGETS.drawCalls}${over(drawCalls, PHASE1_DEBUG_SCENE_TARGETS.drawCalls)}`,
-    `tris    ${triangles} / ${PHASE1_DEBUG_SCENE_TARGETS.triangles}${over(triangles, PHASE1_DEBUG_SCENE_TARGETS.triangles)}`,
+    `draws   ${drawCalls} / ${SCENE_TARGETS.drawCalls}${over(drawCalls, SCENE_TARGETS.drawCalls)}`,
+    `tris    ${triangles} / ${SCENE_TARGETS.triangles}${over(triangles, SCENE_TARGETS.triangles)}`,
     `bodies  ${activeBodies} active / ${totalBodies} total`,
     `tick    ${stats.tick}   sim ${stats.simTimeSec.toFixed(3)}s   dropped ${stats.droppedTicks}`,
   ];
