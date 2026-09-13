@@ -151,3 +151,11 @@ None. Every artifact in this plan (the cached `.tif`, the recompiled `.map.json`
 ---
 *Phase: 04-map-pipeline-first-area*
 *Completed: 2026-09-13*
+
+## Self-Check: PASSED
+
+All 7 claimed files verified present on disk (`tools/map-compiler/sources/dem.ts`,
+`tools/map-compiler/sources/dem.test.ts`, `tools/map-compiler/graph/elevation.ts`,
+`tools/map-compiler/graph/elevation.test.ts`, `tools/map-compiler/areas/juliette-ga.dem.tif`,
+`public/maps/juliette-ga.map.json`, this SUMMARY itself). All 4 claimed commit hashes verified
+present in `git log --oneline --all` (`b957c94`, `c9a1d12`, `9c36678`, `3b62242`).
