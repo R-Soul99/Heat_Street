@@ -18,6 +18,7 @@
  * as a regression fixture (see the comment above `world`/`scene` below), never
  * as a second live composition path.
  */
+import * as THREE from "three";
 import {
   CAMERA_TUNING_STORAGE_KEY,
   defaultCameraTuning,
@@ -28,6 +29,7 @@ import {
   parseSavedSurfaceProfiles,
   SURFACE_TUNING_STORAGE_KEY,
 } from "./core/surface-tuning";
+import type { SurfaceType } from "./core/surface-types";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createHud } from "./debug/profiler-hud";
@@ -36,7 +38,11 @@ import { createTuningPanel } from "./debug/tuning-panel";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { startLoop } from "./loop";
-import { createSurfaceScene, SURFACE_SCENE_FLOOR_HALF_EXTENTS } from "./physics/surface-scene";
+import {
+  createSurfaceScene,
+  SURFACE_SCENE_FLOOR_HALF_EXTENTS,
+  SURFACE_ZONE_ORDER,
+} from "./physics/surface-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
 import { createCameraSkin, createCameraSkinChrome } from "./render/camera/camera-skin";
@@ -50,6 +56,7 @@ import { createOcclusionController } from "./render/camera/occlusion-controller"
 import { createOcclusionProbe } from "./render/camera/occlusion-probe";
 import { applyAllInterpolated } from "./render/interpolator";
 import { createRenderer } from "./render/renderer";
+import { createSurfaceFx } from "./render/surface-fx";
 import { createSurfaceWorld } from "./render/surface-view";
 import { createVehicleView } from "./render/vehicle-view";
 
@@ -117,6 +124,32 @@ const view = createVehicleView(
 );
 const surfaceWorld = createSurfaceWorld();
 view.scene.add(surfaceWorld.group);
+
+// SURF-02's visual half (plan 03-10): always constructed, NOT gated on
+// `DEBUG_ENABLED` -- surface FX is player-facing, exactly like the
+// speedometer and the camera. `surfaceWorld.zoneMeshes`/`SURFACE_ZONE_ORDER`
+// are the parallel arrays the skid-decal pool projects onto.
+const fx = createSurfaceFx(surfaceWorld.zoneMeshes, SURFACE_ZONE_ORDER);
+view.scene.add(fx.group);
+
+/** One render frame's mutable per-wheel FX sample -- `SurfaceFxWheelInput`'s shape, but writable at this call site (the interface itself is `readonly` for `fx.update`'s own callers). */
+interface WheelFxSample {
+  surface: SurfaceType;
+  grounded: boolean;
+  slip: number;
+  position: THREE.Vector3;
+}
+
+// Allocated ONCE, outside the render callback, and mutated in place every
+// frame -- a fresh four-object array every frame would be exactly the
+// per-frame garbage the render tier's existing scratch-object convention
+// (`vehicle-view.ts`'s `SCRATCH_AXLE` et al.) exists to avoid.
+const wheelFxInput: WheelFxSample[] = [0, 1, 2, 3].map(() => ({
+  surface: "tarmac",
+  grounded: false,
+  slip: 0,
+  position: new THREE.Vector3(),
+}));
 
 // This replaces the Phase 1 all-NEUTRAL stub with live keyboard + gamepad
 // input.
@@ -286,6 +319,28 @@ startLoop({
     // a one-frame lag that is imperceptible, in the same spirit as the
     // surface-friction one-tick lag documented in 03-RESEARCH.md Pitfall 2.
     occlusion.update(camera.position, view.meshes[0].position, dtMs);
+
+    // `view.wheelMeshes[i].getWorldPosition(...)` below is only correct if
+    // `matrixWorld` already reflects THIS frame's chassis pose (written by
+    // `applyAllInterpolated` above) and wheel local transforms (written by
+    // `view.updateWheels` above) -- neither call updates `matrixWorld`
+    // itself, and `renderer.render`'s own traversal (which normally does)
+    // has not run yet this frame. A stale read here would spawn particles/
+    // decals at last frame's wheel positions, a one-frame lag that is small
+    // but needless since forcing a fresh update is cheap for five objects
+    // (the chassis plus its four wheel children).
+    view.meshes[0].updateMatrixWorld(true);
+    for (let i = 0; i < 4; i++) {
+      const wi = wheelFxInput[i];
+      wi.surface = scene.vehicle.wheelSurfaces[i];
+      wi.grounded = scene.vehicle.controller.wheelIsInContact(i);
+      const sideImpulse = scene.vehicle.controller.wheelSideImpulse(i) ?? 0;
+      const forwardImpulse = scene.vehicle.controller.wheelForwardImpulse(i) ?? 0;
+      wi.slip = Math.hypot(sideImpulse, forwardImpulse);
+      view.wheelMeshes[i].getWorldPosition(wi.position);
+    }
+    fx.update(wheelFxInput, dtMs);
+
     renderer.render(view.scene, camera);
   },
   hud: hud ? (stats, dtMs) => hud.update(stats, dtMs) : undefined,
