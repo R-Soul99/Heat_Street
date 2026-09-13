@@ -70,17 +70,59 @@ export interface SurfaceLoopSpec {
  */
 export const SURFACE_LOOP_SPECS: { readonly [K in SurfaceType]: SurfaceLoopSpec } = {
   /** Bright, narrow-band chirp — the highest cutoff and Q of the six, deliberately thin rather than full-spectrum. */
-  tarmac: { filterType: "bandpass", cutoffHz: 3200, resonanceQ: 1.8, gain: 0.55, durationSec: 1.1, grainHz: 40 },
+  tarmac: {
+    filterType: "bandpass",
+    cutoffHz: 3200,
+    resonanceQ: 1.8,
+    gain: 0.55,
+    durationSec: 1.1,
+    grainHz: 40,
+  },
   /** Loose stone scatter — the loudest of the six (the D-05 anchor's audio half), fast grain reading as individual stones. */
-  gravel: { filterType: "bandpass", cutoffHz: 1500, resonanceQ: 0.9, gain: 0.85, durationSec: 1.4, grainHz: 95 },
+  gravel: {
+    filterType: "bandpass",
+    cutoffHz: 1500,
+    resonanceQ: 0.9,
+    gain: 0.85,
+    durationSec: 1.4,
+    grainHz: 95,
+  },
   /** Dry, dusty scrape — lowpass rather than bandpass, broader and browner than gravel's stone-scatter chirp. */
-  dirt_road: { filterType: "lowpass", cutoffHz: 1100, resonanceQ: 0.7, gain: 0.8, durationSec: 1.5, grainHz: 70 },
+  dirt_road: {
+    filterType: "lowpass",
+    cutoffHz: 1100,
+    resonanceQ: 0.7,
+    gain: 0.8,
+    durationSec: 1.5,
+    grainHz: 70,
+  },
   /** A soft swish — the shortest loop of the six, low grain rate reading as sparse blade-brush rather than a continuous texture. */
-  grass: { filterType: "lowpass", cutoffHz: 900, resonanceQ: 0.6, gain: 0.5, durationSec: 0.9, grainHz: 28 },
+  grass: {
+    filterType: "lowpass",
+    cutoffHz: 900,
+    resonanceQ: 0.6,
+    gain: 0.5,
+    durationSec: 0.9,
+    grainHz: 28,
+  },
   /** A broad, even hiss — wide and pale, the longest-but-one loop, minimal grain so it reads as smooth rather than granular. */
-  sand: { filterType: "lowpass", cutoffHz: 700, resonanceQ: 0.5, gain: 0.7, durationSec: 1.6, grainHz: 18 },
+  sand: {
+    filterType: "lowpass",
+    cutoffHz: 700,
+    resonanceQ: 0.5,
+    gain: 0.7,
+    durationSec: 1.6,
+    grainHz: 18,
+  },
   /** The muffled rumble SURF-02 names by its own words — the lowest cutoff, lowest Q and lowest grain rate of the six, and the darkest tone. */
-  mud: { filterType: "lowpass", cutoffHz: 380, resonanceQ: 0.4, gain: 0.75, durationSec: 1.2, grainHz: 12 },
+  mud: {
+    filterType: "lowpass",
+    cutoffHz: 380,
+    resonanceQ: 0.4,
+    gain: 0.75,
+    durationSec: 1.2,
+    grainHz: 12,
+  },
 };
 
 /** Fraction of `durationSec` used as the loop-point crossfade window, both ends. Small enough to be inaudible as its own event, large enough to erase the seam a naive one-second loop would otherwise have. */
@@ -211,9 +253,9 @@ function synthesizeLoop(ctx: BaseAudioContext, spec: SurfaceLoopSpec): AudioBuff
  * synthesis — no network fetch, no `public/` asset dependency — so this
  * always succeeds and always produces six audibly distinct results.
  */
-export function createSynthesizedSurfaceLoops(
-  ctx: BaseAudioContext,
-): { [K in SurfaceType]: AudioBuffer } {
+export function createSynthesizedSurfaceLoops(ctx: BaseAudioContext): {
+  [K in SurfaceType]: AudioBuffer;
+} {
   const result = {} as { [K in SurfaceType]: AudioBuffer };
   for (const surface of SURFACE_TYPES) {
     result[surface] = synthesizeLoop(ctx, SURFACE_LOOP_SPECS[surface]);

@@ -1,8 +1,9 @@
 import type * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { createAudioBootstrap } from "../src/audio/audio-bootstrap";
+import { surfaceGains } from "../src/audio/surface-audio";
 import { SURFACE_LOOP_SPECS, type SurfaceLoopSpec } from "../src/audio/surface-loops";
-import { SURFACE_TYPES } from "../src/core/surface-types";
+import { SURFACE_TYPES, type SurfaceType } from "../src/core/surface-types";
 
 /**
  * Node-safe: this file must never construct a real `AudioContext`, matching
@@ -167,5 +168,143 @@ describe("createAudioBootstrap", () => {
     expect(bootstrap.resumed()).toBe(false);
     listener.context.resume();
     expect(bootstrap.resumed()).toBe(true);
+  });
+});
+
+/** Fresh, zeroed output record for `surfaceGains` — every test builds its own so no state leaks between assertions. */
+function makeOut(): { [K in SurfaceType]: number } {
+  const out = {} as { [K in SurfaceType]: number };
+  for (const surface of SURFACE_TYPES) out[surface] = 0;
+  return out;
+}
+
+describe("surfaceGains", () => {
+  it("returns a record keyed by every SurfaceType, every value finite and in [0, 1]", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["tarmac", "tarmac", "tarmac", "tarmac"],
+      [true, true, true, true],
+      [50, 50, 50, 50],
+      out,
+    );
+    expect(Object.keys(result).sort()).toEqual([...SURFACE_TYPES].sort());
+    for (const surface of SURFACE_TYPES) {
+      expect(Number.isFinite(result[surface]), surface).toBe(true);
+      expect(result[surface], surface).toBeGreaterThanOrEqual(0);
+      expect(result[surface], surface).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("all four wheels grounded on gravel at high slip gives gravel a gain near its maximum and every other surface exactly 0", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["gravel", "gravel", "gravel", "gravel"],
+      [true, true, true, true],
+      [100, 100, 100, 100],
+      out,
+    );
+    expect(result.gravel).toBeCloseTo(1, 5);
+    for (const surface of SURFACE_TYPES) {
+      if (surface !== "gravel") expect(result[surface]).toBe(0);
+    }
+  });
+
+  it("two wheels on tarmac and two on gravel at equal slip gives each roughly half its single-surface value and every other surface 0", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["tarmac", "tarmac", "gravel", "gravel"],
+      [true, true, true, true],
+      [100, 100, 100, 100],
+      out,
+    );
+    expect(result.tarmac).toBeCloseTo(0.5, 5);
+    expect(result.gravel).toBeCloseTo(0.5, 5);
+    for (const surface of SURFACE_TYPES) {
+      if (surface !== "tarmac" && surface !== "gravel") expect(result[surface]).toBe(0);
+    }
+  });
+
+  it("fully airborne (no wheel grounded) gives every surface exactly 0", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["tarmac", "gravel", "sand", "mud"],
+      [false, false, false, false],
+      [100, 100, 100, 100],
+      out,
+    );
+    for (const surface of SURFACE_TYPES) {
+      expect(result[surface]).toBe(0);
+    }
+  });
+
+  it("slip below the audible threshold gives every surface 0 (a car rolling gently on tarmac is silent)", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["tarmac", "tarmac", "tarmac", "tarmac"],
+      [true, true, true, true],
+      [0.1, 0.1, 0.1, 0.1],
+      out,
+    );
+    for (const surface of SURFACE_TYPES) {
+      expect(result[surface]).toBe(0);
+    }
+  });
+
+  it("the six gains sum to at most 1 — straddling a boundary is never louder than being fully on one surface", () => {
+    const out = makeOut();
+    const result = surfaceGains(
+      ["tarmac", "gravel", "sand", "mud"],
+      [true, true, true, true],
+      [100, 100, 100, 100],
+      out,
+    );
+    const sum = SURFACE_TYPES.reduce((acc, surface) => acc + result[surface], 0);
+    expect(sum).toBeLessThanOrEqual(1 + 1e-9);
+  });
+
+  it("non-finite slip (NaN, Infinity) yields 0 for every surface rather than propagating into a gain node", () => {
+    const outNaN = makeOut();
+    const resultNaN = surfaceGains(
+      ["tarmac", "tarmac", "tarmac", "tarmac"],
+      [true, true, true, true],
+      [Number.NaN, Number.NaN, Number.NaN, Number.NaN],
+      outNaN,
+    );
+    for (const surface of SURFACE_TYPES) {
+      expect(resultNaN[surface]).toBe(0);
+    }
+
+    const outInfinity = makeOut();
+    const resultInfinity = surfaceGains(
+      ["tarmac", "tarmac", "tarmac", "tarmac"],
+      [true, true, true, true],
+      [
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      ],
+      outInfinity,
+    );
+    for (const surface of SURFACE_TYPES) {
+      expect(resultInfinity[surface]).toBe(0);
+    }
+  });
+
+  it("called twice with the same inputs and the same caller-supplied output record produces the same values and allocates no new object", () => {
+    const out = makeOut();
+    const wheelSurfaces: SurfaceType[] = ["tarmac", "gravel", "sand", "mud"];
+    const grounded = [true, true, true, true];
+    const slip = [50, 50, 50, 50];
+
+    const result1 = surfaceGains(wheelSurfaces, grounded, slip, out);
+    expect(result1).toBe(out);
+    const snapshot = { ...result1 };
+
+    const result2 = surfaceGains(wheelSurfaces, grounded, slip, out);
+    expect(result2).toBe(out);
+    for (const surface of SURFACE_TYPES) {
+      expect(result2[surface]).toBe(snapshot[surface]);
+    }
   });
 });
