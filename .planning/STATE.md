@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-12T12:53:59.670Z"
-last_activity: 2026-09-12 -- Phase 03 execution started
+stopped_at: Quick task 260913-epf complete; Phase 3 plan 03-12 human playtest in progress
+last_updated: "2026-09-13T09:35:00.931Z"
+last_activity: 2026-09-13 - Completed quick task 260913-epf: Add reverse gear and a temporary debug free-look camera override
 progress:
   total_phases: 8
   completed_phases: 2
@@ -163,6 +163,7 @@ None yet.
 - [01-01] 01-RESEARCH.md 'State of the Art' claims Vite 8.2.2 pre-bundles Rapier correctly — disproven at runtime (dev-only TypeError). That claim and 01-01-PLAN.md's 'no optimizeDeps.exclude anywhere' success criterion should be corrected at phase verification
 - [01-03] Six Google-Maps-pipeline references remain in .planning/ (research/STACK.md 92/212/300, research/ARCHITECTURE.md 367, research/FEATURES.md 73/247, PROJECT.md 75) — deliberately outside the decided grep scope, covered by the STACK.md supersession banner. Upgrade path if ever needed is PATTERNS.md R1 option (b).
 - [01-06] src/main.ts:21 contains the literal substring "innerHTML" inside a comment stating the DOM-XSS mitigation ("textContent only — never innerHTML"), pre-dating this plan. A repo-wide `grep -rn "innerHTML" src/` (the plan's own verification step 3) will surface this one line even though it documents a prohibition rather than a violation; src/debug/ itself is clean. Worth a note at phase verification.
+- [Quick 260913-epf] Steepen occlusion mitigation is a genuine bug, not just subtle: in `DENSE_BUILDINGS`, `occludedFanRayCount`'s outer fan rays land ~8m lateral of the car inside the 10m corridor (half-width 5m), overshooting into a building's interior; `FrontSide`-only building materials drop that as a culled back-face exit, so density reads exactly 0/5 rather than low. Every in-corridor ray genuinely has nothing to hit either way. Investigated (not fixed — occlusion tuning is plan 03-12's human-judgement territory) as part of adding reverse gear + a debug free-look camera; see `.planning/quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/260913-epf-SUMMARY.md` and `tests/occlusion.test.ts` for the full arithmetic. Worth fixing (e.g. narrower fan spread, or `DoubleSide` building materials) before or during 03-12's occlusion A/B session, since steepen cannot be fairly judged against fade while this holds.
 
 ## Deferred Items
 
@@ -172,8 +173,14 @@ Items acknowledged and carried forward from previous milestone close:
 |----------|------|--------|-------------|
 | *(none)* | | | |
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260913-epf | Add reverse gear and a temporary debug free-look camera override | 2026-09-13 | 58426be | [260913-epf-add-reverse-gear-and-a-temporary-debug-f](./quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/) |
+
 ## Session Continuity
 
-Last session: 2026-09-12T01:51:53.985Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-surfaces-helicopter-camera/03-CONTEXT.md
+Last session: 2026-09-13T09:35:00.931Z
+Stopped at: Quick task 260913-epf complete; Phase 3 plan 03-12 human playtest still in progress (surfaces + occlusion feel session)
+Resume file: .planning/phases/03-surfaces-helicopter-camera/03-12-PLAN.md
