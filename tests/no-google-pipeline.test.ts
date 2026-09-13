@@ -11,9 +11,13 @@ import {
  * retired map-extraction pipeline without pointing at the ADR that supersedes it.
  *
  * SCOPE DECISION RECORD: plan 01-03
- * (.planning/phases/01-engine-foundation/01-03-PLAN.md, <grep_scope_decision>).
- * The scope below is DECIDED there, option (a) plus one addition. Do not widen or
- * narrow it here — amend the plan and this comment together.
+ * (.planning/phases/01-engine-foundation/01-03-PLAN.md, <grep_scope_decision>),
+ * AMENDED by plan 04-01 (.planning/phases/04-map-pipeline-first-area/04-01-PLAN.md,
+ * Task 1) to add a fifth `tools` TypeScript-tree leg below — the new offline
+ * map-compiler tree is exactly the kind of file that could carry a stray "Google Maps
+ * extraction" comment (copy-pasted from an old design doc, or written while
+ * explaining what NOT to do) without this widening. Do not widen or narrow it
+ * here again — amend the plan and this comment together.
  *
  * .planning/** is deliberately OUT of scope: it is a dated audit trail, not
  * instructions to a builder. The compensating control is the supersession banner
@@ -25,7 +29,13 @@ import {
  * below one-for-one; Vite requires those to be inline literals, so this array is
  * the human-readable record and the assertion target, not the input.
  */
-const SCANNED_GLOBS = ["*.md", "docs/**/*.md", "src/**/*.ts", "tests/**/*.ts"] as const;
+const SCANNED_GLOBS = [
+  "*.md",
+  "docs/**/*.md",
+  "src/**/*.ts",
+  "tests/**/*.ts",
+  "tools/**/*.ts",
+] as const;
 
 /** Files permitted to name the retired pipeline, because naming it is their job. */
 const ALLOWLIST = [
@@ -56,6 +66,11 @@ const SCANNED: Record<string, string> = {
     eager: true,
     import: "default",
   }),
+  ...import.meta.glob<string>("../tools/**/*.ts", {
+    query: "?raw",
+    eager: true,
+    import: "default",
+  }),
 };
 
 /**
@@ -73,7 +88,7 @@ const SCANNED_PATHS = Object.keys(SCANNED).map(repoPath).sort();
 
 describe("no retired map pipeline — the scan itself", () => {
   it("declares its scope as named constants", () => {
-    expect(SCANNED_GLOBS).toHaveLength(4);
+    expect(SCANNED_GLOBS).toHaveLength(5);
     expect(ALLOWLIST).toHaveLength(2);
     expect(ALLOWLIST).toContain(ADR_POINTER);
   });
@@ -97,6 +112,9 @@ describe("no retired map pipeline — the scan itself", () => {
       // Proves the tests/**/*.ts leg of the glob resolves. This file itself is
       // excluded by Vite from its own glob, so it cannot be the witness.
       "tests/google-pipeline-matcher.ts",
+      // Proves the tools/**/*.ts leg (added by plan 04-01) resolves — a
+      // broken tools glob cannot pass this suite silently.
+      "tools/map-compiler/cli.ts",
     ]) {
       expect(SCANNED_PATHS).toContain(expected);
     }
