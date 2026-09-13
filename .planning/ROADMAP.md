@@ -157,7 +157,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 03-10-PLAN.md — Per-surface particle FX and skid decals, and a revised frame budget (wave 7)
+- [x] 03-10-PLAN.md — Per-surface particle FX and skid decals, and a revised frame budget (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -259,7 +259,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
-| 3. Surfaces & Helicopter Camera | 9/12 | In Progress|  |
+| 3. Surfaces & Helicopter Camera | 10/12 | In Progress|  |
 | 4. Map Pipeline & First Area | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
