@@ -372,6 +372,18 @@ export function createTuningPanel(
     "powerOversteerGain",
     TUNING_RANGES.drive.powerOversteerGain,
   ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "reverseEngineForcePerRearWheel",
+    TUNING_RANGES.drive.reverseEngineForcePerRearWheel,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "reverseEngageSpeedMs",
+    TUNING_RANGES.drive.reverseEngageSpeedMs,
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
