@@ -10,9 +10,9 @@
 import createGraph from "ngraph.graph";
 import { aStar } from "ngraph.path";
 import { describe, expect, it } from "vitest";
+import type { RoadGeometry } from "../../../src/core/road-geometry.ts";
 import { buildRoadGeometry } from "../../../src/core/road-geometry.ts";
 import type { RoadGraph, RoadGraphEdge, RoadGraphNode } from "../../../src/core/road-graph.ts";
-import type { RoadGeometry } from "../../../src/core/road-geometry.ts";
 import { formatValidationFailures, validateGraph } from "./validator.ts";
 
 type Vec3 = readonly [number, number, number];
@@ -168,10 +168,16 @@ describe("validateGraph — directed pathability (oneway trap)", () => {
         [10, 0, 10],
         [0, 0, 0],
       ]),
-      makeEdge(3, 2, 3, [
-        [10, 0, 10],
-        [20, 0, 10],
-      ], { oneway: true }),
+      makeEdge(
+        3,
+        2,
+        3,
+        [
+          [10, 0, 10],
+          [20, 0, 10],
+        ],
+        { oneway: true },
+      ),
     ];
     const graph = makeGraph(nodes, edges);
 
@@ -277,10 +283,18 @@ describe("validateGraph — geometry sanity", () => {
     // deliberately has the opposite sign, simulating a folded-back quad at
     // segment floor(1/2) = 0.
     const positions = new Float32Array([
-      0, 0, 0, // v0
-      1, 0, 0, // v1
-      0, 0, 1, // v2
-      1, 0, -1, // v3
+      0,
+      0,
+      0, // v0
+      1,
+      0,
+      0, // v1
+      0,
+      0,
+      1, // v2
+      1,
+      0,
+      -1, // v3
     ]);
     const indices = new Uint32Array([0, 1, 2, 2, 1, 3]);
     const geometry: RoadGeometry = {

@@ -36,8 +36,8 @@
  */
 import createGraph from "ngraph.graph";
 import { aStar } from "ngraph.path";
-import type { RoadGraph } from "../../../src/core/road-graph.ts";
 import type { EdgeGeometryEntry, RoadGeometry } from "../../../src/core/road-geometry.ts";
+import type { RoadGraph } from "../../../src/core/road-graph.ts";
 
 /** A 3-tuple of local ENU metres, matching `RoadGraphEdge.points`'s own element shape. */
 type Vec3 = readonly [number, number, number];
@@ -170,7 +170,10 @@ function buildUndirectedAdjacency(graph: RoadGraph): Map<number, Set<number>> {
   return adjacency;
 }
 
-function bfsUndirected(adjacency: ReadonlyMap<number, ReadonlySet<number>>, rootId: number): Set<number> {
+function bfsUndirected(
+  adjacency: ReadonlyMap<number, ReadonlySet<number>>,
+  rootId: number,
+): Set<number> {
   const visited = new Set<number>([rootId]);
   const queue: number[] = [rootId];
   while (queue.length > 0) {
