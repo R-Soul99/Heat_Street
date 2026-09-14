@@ -215,7 +215,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 04-09-PLAN.md — GLTFLoader map view, composition root on the compiled area, first-drive human checkpoint (wave 8)
+- [x] 04-09-PLAN.md — GLTFLoader map view, composition root on the compiled area, first-drive human checkpoint (wave 8)
 
 **Wave 9** *(blocked on Wave 8 completion)*
 
@@ -302,7 +302,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
-| 4. Map Pipeline & First Area | 8/11 | In Progress|  |
+| 4. Map Pipeline & First Area | 9/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
