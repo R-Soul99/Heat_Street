@@ -54,8 +54,12 @@ import { mapSurface, type SurfaceCoverageReport, surfaceCoverage } from "./surfa
  * Bumped to 0.3.0 in plan 04-07: `cli.ts` now also emits `public/maps/<areaId>.glb` alongside
  * `.map.json`, authored from the same road graph plus real OSM building boxes — the `.map.json`'s
  * own fields are unchanged by this bump, but the compiled ARTIFACT PAIR a given version number
- * names is now genuinely different (one file vs. two). */
-export const COMPILER_VERSION = "0.3.0";
+ * names is now genuinely different (one file vs. two).
+ * Bumped to 0.4.0 in plan 04-08: `cli.ts` now also emits `public/maps/<areaId>.collision.json`
+ * (the non-road collision sidecar, `src/core/map-collision.ts`), so the compiled ARTIFACT SET a
+ * given version number names is again genuinely different (two files vs. three) even though
+ * neither the `.map.json` nor the `.glb`'s own fields changed. */
+export const COMPILER_VERSION = "0.4.0";
 
 export interface Bbox {
   readonly south: number;

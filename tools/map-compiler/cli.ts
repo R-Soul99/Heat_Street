@@ -1,7 +1,7 @@
 /**
  * Composition root of the offline map compiler: the single entry point that
- * turns a `--area <id>` argument into a compiled `*.map.json` (and,
- * eventually, `*.glb`) artifact.
+ * turns a `--area <id>` argument into a compiled `*.map.json`, `*.glb` and
+ * `*.collision.json` artifact set.
  *
  * This is `tools/`'s equivalent of `src/main.ts` — the file that wires every
  * later stage together and is run, not merely imported. Invoked as
@@ -24,11 +24,12 @@
  *      node/edge id, never a bare stack trace. IMPLEMENTED (plan 04-06): runs
  *      `buildRoadGeometry` + `validateGraph` as a build gate between
  *      elevation and the artifact write (D-P18) — a failing map is never
- *      written. Stages 5-6's full ribbon/junction geometry PERSISTENCE into a
- *      shipped `*.glb` render/collision asset still lands in later plans;
- *      the `buildRoadGeometry` call here exists purely to feed the
- *      validator's ribbon self-intersection check.
- *   8. Write `public/maps/<areaId>.map.json` and `<areaId>.glb`.
+ *      written.
+ *   8. Write `public/maps/<areaId>.map.json` and `<areaId>.glb` (plan 04-07),
+ *      then `<areaId>.collision.json` (plan 04-08, D-P22) — the non-road
+ *      collision sidecar, self-checked through `parseMapCollision` before
+ *      being written, same discipline as the elevation stage's
+ *      `parseRoadGraph` self-check.
  *
  * `--no-validate` skips stage 7 entirely, printing a prominent self-naming
  * warning — diagnosis-only, for inspecting a broken compile; must never
@@ -41,9 +42,11 @@
  */
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { type MapCollision, parseMapCollision } from "../../src/core/map-collision.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
+import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
 import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
@@ -308,6 +311,22 @@ function printGltfSummary(
   );
 }
 
+/**
+ * Prints the collision sidecar stage's outcome (plan 04-08): the sidecar's
+ * path, byte size and building count — the same "print, don't just log a
+ * boolean" discipline every earlier stage's summary function already applies.
+ */
+function printCollisionSummary(
+  collisionPath: string,
+  byteLength: number,
+  collision: MapCollision,
+): void {
+  console.log(
+    `  wrote ${collisionPath} (${byteLength} bytes, collisionVersion ${collision.collisionVersion}, ` +
+      `${collision.buildings.length} building(s))`,
+  );
+}
+
 async function main(argv: readonly string[]): Promise<void> {
   const areaId = parseAreaArg(argv);
 
@@ -435,6 +454,20 @@ async function main(argv: readonly string[]): Promise<void> {
   await writeGlb(gltfDocument, glbPath);
   const glbStat = await stat(glbPath);
   printGltfSummary(glbPath, glbStat.size, gltfStats, buildingReport);
+
+  // Collision sidecar stage (plan 04-08, decision D-P22): non-road collision
+  // data (currently just building boxes) ships as a separate
+  // `<areaId>.collision.json` file rather than a new key on `.map.json`,
+  // since `docs/schemas/road-graph.v1.md` is normative and closed at v1 (its
+  // own "Versioning" section). Self-checks its own output by round-tripping
+  // it through `parseMapCollision` before writing — the same discipline the
+  // elevation stage's `parseRoadGraph` self-check above already applies.
+  const collision = buildMapCollision(config.areaId, boxes);
+  const collisionRaw = `${JSON.stringify(collision, null, 2)}\n`;
+  parseMapCollision(collisionRaw, config.areaId, `buildMapCollision(${config.areaId})`);
+  const collisionPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.collision.json`);
+  await writeFile(collisionPath, collisionRaw, "utf8");
+  printCollisionSummary(collisionPath, Buffer.byteLength(collisionRaw, "utf8"), collision);
 
   // Stages 5-6 (persisting authored ribbon/junction geometry into a shipped
   // collision buffer + merged glTF render mesh) land in later plans — see
