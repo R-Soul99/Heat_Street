@@ -39,11 +39,13 @@
  * see the `--area` resolution below) is the only guard against a
  * path-traversal- or arbitrary-file-read-shaped bug here.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
+import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
+import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
 import { applyElevation, type ElevationReport } from "./graph/elevation.ts";
 import { makeProjector } from "./graph/project.ts";
@@ -275,6 +277,37 @@ function printValidationSummary(failures: readonly ValidationFailure[]): void {
   console.error(`  validation: FAILED — ${failures.length} failure(s) (${categorySummary})`);
 }
 
+/**
+ * Prints the glTF authoring stage's outcome (plan 04-07): the `.glb`'s byte
+ * size, per-surface triangle counts, the building box count and total
+ * building triangle count, plus the building-footprint skip/height-source
+ * breakdown `buildingBoxes` reports — the same "print, don't just log a
+ * boolean" discipline `printBuildReport`/`printElevationReport` already
+ * apply to the earlier stages.
+ */
+function printGltfSummary(
+  glbPath: string,
+  byteLength: number,
+  stats: {
+    trianglesBySurface: Readonly<Partial<Record<string, number>>>;
+    buildingCount: number;
+    buildingTriangleCount: number;
+  },
+  buildingReport: BuildingReport,
+): void {
+  console.log(`  wrote ${glbPath} (${byteLength} bytes)`);
+  const triSummary = Object.entries(stats.trianglesBySurface)
+    .map(([surface, count]) => `${surface}:${count}`)
+    .join(", ");
+  console.log(`  road triangles by surface: ${triSummary || "(none)"}`);
+  console.log(
+    `  buildings: ${stats.buildingCount} boxes, ${stats.buildingTriangleCount} triangles ` +
+      `(skipped degenerate=${buildingReport.skipped.degenerate} tinyArea=${buildingReport.skipped.tinyArea}, ` +
+      `height source explicit=${buildingReport.heightSource.explicit} levels=${buildingReport.heightSource.levels} ` +
+      `typeDefault=${buildingReport.heightSource.typeDefault})`,
+  );
+}
+
 async function main(argv: readonly string[]): Promise<void> {
   const areaId = parseAreaArg(argv);
 
@@ -351,12 +384,18 @@ async function main(argv: readonly string[]): Promise<void> {
   // the compiler must never emit an artifact its own runtime parser rejects.
   parseRoadGraph(JSON.stringify(elevatedGraph), `applyElevation(${config.areaId})`);
 
+  // Built unconditionally (not just under the validation branch below) —
+  // plan 04-07's glTF authoring stage needs this same ribbon/junction
+  // geometry regardless of whether `--no-validate` was passed, and reusing
+  // ONE `buildRoadGeometry` call keeps the render mesh and the validator
+  // looking at the exact same geometry, never two independently-built copies.
+  const geometry = buildRoadGeometry(elevatedGraph);
+
   // Validation stage (plan 04-06, D-P18): the last gate before the artifact
-  // is written. Builds the ribbon/junction geometry `validateGraph`'s
-  // self-intersection check needs, then runs every reachability/pathability/
-  // geometry-sanity check. A failing map is NEVER written — never a partial
-  // artifact, never an exit 0 with warnings a CI run could mistake for a
-  // pass (T-04-21/T-04-22).
+  // is written. Runs every reachability/pathability/geometry-sanity check
+  // against `geometry` above. A failing map is NEVER written — never a
+  // partial artifact, never an exit 0 with warnings a CI run could mistake
+  // for a pass (T-04-21/T-04-22).
   const noValidate = argv.includes("--no-validate");
   if (noValidate) {
     console.warn(
@@ -365,7 +404,6 @@ async function main(argv: readonly string[]): Promise<void> {
         "compile); it must never appear in a committed script.",
     );
   } else {
-    const geometry = buildRoadGeometry(elevatedGraph);
     const failures = validateGraph(elevatedGraph, geometry);
     printValidationSummary(failures);
     if (failures.length > 0) {
@@ -382,6 +420,21 @@ async function main(argv: readonly string[]): Promise<void> {
   const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
   await writeFile(outputPath, `${JSON.stringify(elevatedGraph, null, 2)}\n`, "utf8");
   console.log(`compile-map: wrote ${outputPath}`);
+
+  // glTF authoring stage (plan 04-07, SC3's second artifact): building boxes
+  // from the real OSM buildings payload, then the visual .glb — one road
+  // primitive per surface PRESENT plus one buildings primitive (D-P19),
+  // built from the SAME `geometry` the validator just checked.
+  const { boxes, report: buildingReport } = buildingBoxes(
+    buildingsResult.envelope,
+    projector,
+    sampler,
+  );
+  const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(geometry, boxes);
+  const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
+  await writeGlb(gltfDocument, glbPath);
+  const glbStat = await stat(glbPath);
+  printGltfSummary(glbPath, glbStat.size, gltfStats, buildingReport);
 
   // Stages 5-6 (persisting authored ribbon/junction geometry into a shipped
   // collision buffer + merged glTF render mesh) land in later plans — see

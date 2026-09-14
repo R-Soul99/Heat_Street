@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
+    "@gltf-transform/core": "4.5.0",
+    "@gltf-transform/functions": "4.5.0",
     "@types/node": "24.13.4",
     "@types/three": "0.185.4",
     "geotiff": "3.0.5",
