@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // @dimforge/rapier3d@0.20.0's package.json has a `module` field but no `main`
 // and no `exports` map. Vite's client resolution includes `module` by default so
@@ -11,5 +11,9 @@ export default defineConfig({
   test: {
     environment: "node",
     server: { deps: { inline: ["@dimforge/rapier3d"] } },
+    // GSD worktree agents check out under .claude/worktrees/; a directory left
+    // behind by a Windows file lock after cleanup would otherwise be scanned
+    // as a second, stale copy of the whole test suite.
+    exclude: [...configDefaults.exclude, ".claude/worktrees/**"],
   },
 });
