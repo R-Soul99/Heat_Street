@@ -4,8 +4,13 @@ import { describe, expect, it } from "vitest";
 // fixture. This suite asserts against the REAL compiled output, not the
 // fixture, per plan 04-04 Task 3's own requirement.
 import compiledRaw from "../public/maps/juliette-ga.map.json?raw";
+import { buildRoadGeometry } from "../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../src/core/road-graph.ts";
 import { SURFACE_TYPES } from "../src/core/surface-types.ts";
+import {
+  formatValidationFailures,
+  validateGraph,
+} from "../tools/map-compiler/validate/validator.ts";
 
 const graph = parseRoadGraph(compiledRaw, "public/maps/juliette-ga.map.json");
 const ENDPOINT_TOLERANCE = 1e-6;
@@ -148,5 +153,45 @@ describe("compiled map — public/maps/juliette-ga.map.json (real output)", () =
 
   it("has source.compilerVersion 0.2.0 (elevation changed emitted geometry — plan 04-05)", () => {
     expect(graph.source.compilerVersion).toBe("0.2.0");
+  });
+
+  // --- Plan 04-06: validator wired as a build gate (SC5, D-P17/D-P18) ---
+
+  it("passes validateGraph with zero failures — proves the shipped gate is not trivially green: it ran against this exact artifact at compile time and this test re-runs it against the same real data", () => {
+    const geometry = buildRoadGeometry(graph);
+    const failures = validateGraph(graph, geometry);
+    expect(formatValidationFailures(failures)).toBe("");
+  });
+
+  it("paired negative case: deleting one edge from the REAL artifact to disconnect a dead-end node makes validateGraph report a failure naming that node — proving the gate is not trivially green against real data", () => {
+    // Node 18 is a real degree-1 (dead-end) node in the committed artifact,
+    // reached only via edge 34 (22 -> 18). Removing that one edge orphans
+    // node 18: no edge references it any longer, and it becomes unreachable
+    // (undirected) and unpathable (directed) from the root. Re-verify both
+    // assumptions defensively so this test fails loudly, rather than
+    // vacuously passing, if the compiled artifact's topology ever changes.
+    const disconnectedNodeId = 18;
+    const removedEdgeId = 34;
+    const removedEdge = graph.edges.find((e) => e.id === removedEdgeId);
+    expect(removedEdge).toBeDefined();
+    expect(removedEdge?.from === disconnectedNodeId || removedEdge?.to === disconnectedNodeId).toBe(
+      true,
+    );
+    const otherEdgesTouchingNode = graph.edges.filter(
+      (e) =>
+        e.id !== removedEdgeId && (e.from === disconnectedNodeId || e.to === disconnectedNodeId),
+    );
+    expect(otherEdgesTouchingNode).toHaveLength(0);
+
+    const mutatedGraph = {
+      ...graph,
+      edges: graph.edges.filter((e) => e.id !== removedEdgeId),
+    };
+    const geometry = buildRoadGeometry(mutatedGraph);
+    const failures = validateGraph(mutatedGraph, geometry);
+
+    expect(failures.length).toBeGreaterThan(0);
+    expect(failures.some((f) => f.kind === "node" && f.id === disconnectedNodeId)).toBe(true);
+    expect(formatValidationFailures(failures)).toContain(`node ${disconnectedNodeId}`);
   });
 });

@@ -21,8 +21,18 @@
  *   5. Author per-edge ribbon/junction geometry (`geometry/`).
  *   6. Author collision buffers and a merged glTF render mesh (`author/`).
  *   7. Validate the result (`validate/`) — fail loudly, name the offending
- *      node/edge id, never a bare stack trace.
+ *      node/edge id, never a bare stack trace. IMPLEMENTED (plan 04-06): runs
+ *      `buildRoadGeometry` + `validateGraph` as a build gate between
+ *      elevation and the artifact write (D-P18) — a failing map is never
+ *      written. Stages 5-6's full ribbon/junction geometry PERSISTENCE into a
+ *      shipped `*.glb` render/collision asset still lands in later plans;
+ *      the `buildRoadGeometry` call here exists purely to feed the
+ *      validator's ribbon self-intersection check.
  *   8. Write `public/maps/<areaId>.map.json` and `<areaId>.glb`.
+ *
+ * `--no-validate` skips stage 7 entirely, printing a prominent self-naming
+ * warning — diagnosis-only, for inspecting a broken compile; must never
+ * appear in a committed script (T-04-24).
  *
  * Layering: `tests/layering.test.ts` does NOT scan `tools/**` — this file's
  * own discipline (an explicit registry, never a dynamic argv-built import;
@@ -31,6 +41,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
@@ -44,6 +55,11 @@ import {
   parseDemRaster,
 } from "./sources/dem.ts";
 import { type LoadOrFetchAreaResult, loadOrFetchArea } from "./sources/overpass.ts";
+import {
+  formatValidationFailures,
+  type ValidationFailure,
+  validateGraph,
+} from "./validate/validator.ts";
 
 /**
  * Explicit registry of every known area, keyed by `areaId`. Deliberately a
@@ -235,6 +251,30 @@ function printFetchSummary(
   );
 }
 
+/**
+ * Prints the validation gate's outcome (stage 7, plan 04-06, D-P18): on
+ * success a one-line "PASSED, 0 failures" summary; on failure, the full
+ * `formatValidationFailures` output (one line per failure, naming the
+ * offending node/edge id) to stderr, followed by a one-line summary naming
+ * the failure count broken down by category — never a bare boolean, and
+ * never a log a CI run could mistake for a pass (T-04-22).
+ */
+function printValidationSummary(failures: readonly ValidationFailure[]): void {
+  if (failures.length === 0) {
+    console.log("  validation: PASSED — 0 failures (reachability, pathability, geometry sanity)");
+    return;
+  }
+  const byCategory = new Map<string, number>();
+  for (const f of failures) {
+    byCategory.set(f.category, (byCategory.get(f.category) ?? 0) + 1);
+  }
+  const categorySummary = [...byCategory.entries()]
+    .map(([category, count]) => `${category}:${count}`)
+    .join(", ");
+  console.error(formatValidationFailures(failures));
+  console.error(`  validation: FAILED — ${failures.length} failure(s) (${categorySummary})`);
+}
+
 async function main(argv: readonly string[]): Promise<void> {
   const areaId = parseAreaArg(argv);
 
@@ -311,14 +351,42 @@ async function main(argv: readonly string[]): Promise<void> {
   // the compiler must never emit an artifact its own runtime parser rejects.
   parseRoadGraph(JSON.stringify(elevatedGraph), `applyElevation(${config.areaId})`);
 
+  // Validation stage (plan 04-06, D-P18): the last gate before the artifact
+  // is written. Builds the ribbon/junction geometry `validateGraph`'s
+  // self-intersection check needs, then runs every reachability/pathability/
+  // geometry-sanity check. A failing map is NEVER written — never a partial
+  // artifact, never an exit 0 with warnings a CI run could mistake for a
+  // pass (T-04-21/T-04-22).
+  const noValidate = argv.includes("--no-validate");
+  if (noValidate) {
+    console.warn(
+      "compile-map: WARNING — --no-validate is set. Skipping the reachability/pathability/" +
+        "geometry-sanity gate (D-P18). This flag exists for DIAGNOSIS ONLY (inspecting a broken " +
+        "compile); it must never appear in a committed script.",
+    );
+  } else {
+    const geometry = buildRoadGeometry(elevatedGraph);
+    const failures = validateGraph(elevatedGraph, geometry);
+    printValidationSummary(failures);
+    if (failures.length > 0) {
+      console.error(
+        `compile-map: ABORTED — validation failed with ${failures.length} failure(s). No ` +
+          "artifact written.",
+      );
+      process.exit(1);
+      return;
+    }
+  }
+
   await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
   const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
   await writeFile(outputPath, `${JSON.stringify(elevatedGraph, null, 2)}\n`, "utf8");
   console.log(`compile-map: wrote ${outputPath}`);
 
-  // Stages 5-7 (geometry, author, validate against ngraph reachability) land
-  // in later plans — see this file's own header comment for the full
-  // pipeline order.
+  // Stages 5-6 (persisting authored ribbon/junction geometry into a shipped
+  // collision buffer + merged glTF render mesh) land in later plans — see
+  // this file's own header comment for the full pipeline order. Stage 7
+  // (validate) is wired above.
 }
 
 main(process.argv.slice(2)).catch((err: unknown) => {
