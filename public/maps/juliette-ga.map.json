@@ -6,7 +6,7 @@
     "osmExtract": "overpass://overpass-api.de/juliette-ga",
     "osmSnapshot": "2026-09-13T20:25:59.876Z",
     "demSource": "usgs-3dep-1m",
-    "compilerVersion": "0.2.0"
+    "compilerVersion": "0.3.0"
   },
   "attribution": {
     "osm": "© OpenStreetMap contributors",

@@ -151,8 +151,8 @@ describe("compiled map — public/maps/juliette-ga.map.json (real output)", () =
     }
   });
 
-  it("has source.compilerVersion 0.2.0 (elevation changed emitted geometry — plan 04-05)", () => {
-    expect(graph.source.compilerVersion).toBe("0.2.0");
+  it("has source.compilerVersion 0.3.0 (glTF authoring stage added — plan 04-07)", () => {
+    expect(graph.source.compilerVersion).toBe("0.3.0");
   });
 
   // --- Plan 04-06: validator wired as a build gate (SC5, D-P17/D-P18) ---

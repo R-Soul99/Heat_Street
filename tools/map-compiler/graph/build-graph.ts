@@ -50,8 +50,12 @@ import { mapSurface, type SurfaceCoverageReport, surfaceCoverage } from "./surfa
  * a stale artifact is detectable (docs/schemas/road-graph.v1.md's `source.compilerVersion`).
  * Bumped to 0.2.0 in plan 04-05: every node/edge point now carries real DEM-sampled, smoothed
  * elevation instead of a flat y=0, and `lengthM` is now a real 3D length — emitted geometry has
- * changed, so an artifact compiled under 0.1.0 is stale. */
-export const COMPILER_VERSION = "0.2.0";
+ * changed, so an artifact compiled under 0.1.0 is stale.
+ * Bumped to 0.3.0 in plan 04-07: `cli.ts` now also emits `public/maps/<areaId>.glb` alongside
+ * `.map.json`, authored from the same road graph plus real OSM building boxes — the `.map.json`'s
+ * own fields are unchanged by this bump, but the compiled ARTIFACT PAIR a given version number
+ * names is now genuinely different (one file vs. two). */
+export const COMPILER_VERSION = "0.3.0";
 
 export interface Bbox {
   readonly south: number;
