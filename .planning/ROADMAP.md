@@ -211,7 +211,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 04-08-PLAN.md — Collision sidecar and MapScene: per-edge trimesh colliders with FIX_INTERNAL_EDGES, SurfaceMap, spawn (wave 7)
+- [x] 04-08-PLAN.md — Collision sidecar and MapScene: per-edge trimesh colliders with FIX_INTERNAL_EDGES, SurfaceMap, spawn (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -302,7 +302,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Engine Foundation | 7/7 | Complete   | 2026-09-08 |
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
-| 4. Map Pipeline & First Area | 7/11 | In Progress|  |
+| 4. Map Pipeline & First Area | 8/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
