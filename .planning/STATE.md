@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-09-15T06:56:36.931Z"
-last_activity: 2026-09-15 -- Phase 04 execution started
+stopped_at: Phase 4 complete — plan 04-11 SC1 sign-off session, grounding fixes, ADR 0004
+last_updated: "2026-09-15T22:10:00.000Z"
+last_activity: 2026-09-15 -- Phase 04 completed (plan 04-11)
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 40
-  completed_plans: 38
-  percent: 38
+  completed_plans: 40
+  percent: 50
 ---
 
 # Project State
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 04 — map-pipeline-first-area
+**Current focus:** Phase 04 complete. Phase 05 (Objectives, Navigation & Race Modes) not yet planned — see Blockers/Concerns for the project-direction decisions to fold in before/while planning it.
 
 ## Current Position
 
-Phase: 04 (map-pipeline-first-area) — EXECUTING
-Plan: 1 of 11
-Next: Wave 6 — plan 04-07
-Last activity: 2026-09-15 -- Phase 04 execution started
+Phase: 04 (map-pipeline-first-area) — COMPLETE (11/11 plans)
+Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
+Last activity: 2026-09-15 -- Phase 04 completed via plan 04-11 (SC1 sign-off session, road-shoulder grounding fix, elevation densification fix, ADR 0004)
 
-Progress (phases 1-3 of 8, the only ones planned so far): [██████████] 100% of 29 known plans
+Progress (phases 1-4 of 8, the only ones planned so far): [██████████] 100% of 40 known plans
 
 ## Performance Metrics
 
@@ -150,6 +149,10 @@ Recent decisions affecting current work:
 - RESOLVED (Phase 3, plan 03-12 Task 1 step 2 + 03-06's automated sweep): the plan-02-10 `rearSideFriction` straight-line-instability carry-forward is now re-verified on real surfaces both ways — 03-06's headless stability sweep (worst case gravel 8.8deg, all six surfaces under the 30deg threshold) and this session's hands-on driving across all six retuned surfaces (including the gravel/dirt_road relatuning above) raised no spin-out report. Closed.
 - [Phase 04-06]: A prior session's Wave 5 executor left a stale, unmerged worktree (`.claude/worktrees/agent-a28620537f8498608`) containing a complete, passing Task 1 (`validator.ts`/`validator.test.ts`, 28/28 tests, typecheck clean) that was never committed before the worktree was abandoned. Rescued by copying into main, re-verifying, and committing (`87549bd`) before dispatching a fresh executor for Task 2 — avoided redoing ~450 lines of already-correct work. If a future wave finds a leftover `worktree-agent-*` directory before dispatch, check it for uncommitted work matching the target plan's `files_modified` before treating it as disposable.
 - [Phase 04-06]: The rescued Task 1 files had 4 pre-existing Biome formatting/import-order errors (confirmed via `git stash` diff to predate Task 2's changes) that made `npm run check` red — fixed post-merge with `biome check --write` and committed separately (`1b788a7`) rather than folded into the executor's Task 2 commit, since the executor correctly scoped its own commit to only what it touched.
+- [Phase 04-11]: SC1 sign-off session found the compiled area's roads floating above the off-road terrain (up to HEIGHTFIELD_SINK_M's own 5m worst-case gap, with no bridging geometry) — falling off the road meant a car dropped a few metres and could not climb back on. Root cause was plan 04-10's own heightfield-coarseness-vs-sink tradeoff; fixed WITHOUT touching either constant (raising heightfield resolution enough to matter would cost ~524,288 terrain triangles, >10x the whole compiled-map triangle budget) by adding `src/core/road-geometry.ts`'s `buildRoadShoulders` — a per-edge ramp from the paved rail down to the heightfield's own real (bilinearly sampled) height at that point, built identically into the runtime collider and the shipped `.glb`. See `docs/adr/0004-first-area-and-compiler-decisions.md` decision 7.
+- [Phase 04-11]: A second, unrelated finding ("the road passes through a hill then pops out the other side") traced to a real 503m OSM way segment with only two vertices — the straight-line elevation interpolation between them skipped over real intervening terrain relief. Fixed with `tools/map-compiler/graph/elevation.ts`'s new `densifyEdgePoints` (MAX_SEGMENT_LENGTH_M=25m), inserting DEM-sampled interior points before smoothing. Verified against the real compiled map: 123 terrain-above-road violations (worst case 3.25m) before the fix, 0 after.
+- [Phase 04-11]: The oblique-angle junction surface bug (gravel visible through tarmac at a non-90-degree junction) was investigated at length but NOT fixed — real acute mixed-width junctions confirmed in the compiled data, MITER_CLAMP ruled out as the mechanism, a plausible-but-unconfirmed near-duplicate-fan-corner theory found, but no safe fix isolated without direct visual re-verification. Deferred; see ADR 0004's Open Questions.
+- [Phase 04-11]: Project-direction decision (not a Phase 4 technical decision, recorded here since it shaped this plan's scope): after an honest mid-session assessment that grounding fixes alone would not close the gap to the developer's envisioned "real chase-movie town" look — every building currently shares one flat colour with no material/prop/marking variety, and no phase 5-8 currently schedules an art pass — the developer decided to (a) pause further investment in automated real-world OSM map compilation "for the moment" (Juliette, GA and the compiler stay as-built; real-world layouts may still be hand-borrowed later), (b) explicitly stay on the current Three.js/Rapier stack rather than evaluate Unity/Godot, (c) prioritise a dedicated art-direction pass once the current area's underlying structure reads as solid, and (d) separately flagged that both the permanent helicopter camera and the debug chase-cam fallback read closer than the envisioned finished-product angle (a genuinely higher, more overhead "real helicopter" view, not GTA1/2-style) — out of this plan's scope (belongs to Phase 3's `src/core/camera-tuning.ts`) but already live-tunable via the existing `?debug` panel (altitude/distance range 3-80m). **Action before/during Phase 5 planning:** decide whether an art-direction phase gets inserted into ROADMAP.md, and bake a chosen higher camera altitude into `src/core/camera-tuning.ts`'s defaults once previewed.
 
 ### Pending Todos
 
@@ -169,7 +172,12 @@ None yet.
 - [01-01] 01-RESEARCH.md 'State of the Art' claims Vite 8.2.2 pre-bundles Rapier correctly — disproven at runtime (dev-only TypeError). That claim and 01-01-PLAN.md's 'no optimizeDeps.exclude anywhere' success criterion should be corrected at phase verification
 - [01-03] Six Google-Maps-pipeline references remain in .planning/ (research/STACK.md 92/212/300, research/ARCHITECTURE.md 367, research/FEATURES.md 73/247, PROJECT.md 75) — deliberately outside the decided grep scope, covered by the STACK.md supersession banner. Upgrade path if ever needed is PATTERNS.md R1 option (b).
 - [01-06] src/main.ts:21 contains the literal substring "innerHTML" inside a comment stating the DOM-XSS mitigation ("textContent only — never innerHTML"), pre-dating this plan. A repo-wide `grep -rn "innerHTML" src/` (the plan's own verification step 3) will surface this one line even though it documents a prohibition rather than a violation; src/debug/ itself is clean. Worth a note at phase verification.
-- [Quick 260913-epf] Steepen occlusion mitigation is a genuine bug, not just subtle: in `DENSE_BUILDINGS`, `occludedFanRayCount`'s outer fan rays land ~8m lateral of the car inside the 10m corridor (half-width 5m), overshooting into a building's interior; `FrontSide`-only building materials drop that as a culled back-face exit, so density reads exactly 0/5 rather than low. Every in-corridor ray genuinely has nothing to hit either way. Investigated (not fixed — occlusion tuning is plan 03-12's human-judgement territory) as part of adding reverse gear + a debug free-look camera; see `.planning/quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/260913-epf-SUMMARY.md` and `tests/occlusion.test.ts` for the full arithmetic. Worth fixing (e.g. narrower fan spread, or `DoubleSide` building materials) before or during 03-12's occlusion A/B session, since steepen cannot be fairly judged against fade while this holds.
+- [Quick 260913-epf] Steepen occlusion mitigation is a genuine bug, not just subtle: in `DENSE_BUILDINGS`, `occludedFanRayCount`'s outer fan rays land ~8m lateral of the car inside the 10m corridor (half-width 5m), overshooting into a building's interior; `FrontSide`-only building materials drop that as a culled back-face exit, so density reads exactly 0/5 rather than low. Every in-corridor ray genuinely has nothing to hit either way. Investigated (not fixed — occlusion tuning is plan 03-12's human-judgement territory) as part of adding reverse gear + a debug free-look camera; see `.planning/quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/260913-epf-SUMMARY.md` and `tests/occlusion.test.ts` for the full arithmetic. Worth fixing (e.g. narrower fan spread, or `DoubleSide` building materials) before or during 03-12's occlusion A/B session, since steepen cannot be fairly judged against fade while this holds. RESOLVED by plan 04-09 (`DoubleSide` building materials) — but see the new 04-11 open item below: the re-run itself STILL hasn't happened, now for a different reason.
+- **[Phase 04-11, open]** Oblique-angle junction surface bug: gravel renders through tarmac at a non-90-degree mixed-surface junction (real example: node 45 in `public/maps/juliette-ga.map.json`, a 3.5m dirt road meeting a 7m tarmac road at 28-41deg). Investigated at length, not fixed — see `docs/adr/0004-first-area-and-compiler-decisions.md` Open Question 1 and `src/core/road-geometry.ts`'s `MITER_CLAMP`/`ROAD_CLASS_RANK` doc comments. Needs a direct visual re-check (drive to a flagged junction, or supply a screenshot) before attempting a fix.
+- **[Phase 04-11, open]** Road width (`LANE_WIDTH_M`/`DEFAULT_LANES_BY_CLASS`) may need retuning — "quite difficult to stay on the roads at speed" — but was left unchanged pending a re-drive now that the floating-road defect (which made every departure from the road a hard stop) is fixed. Re-test before touching these constants.
+- **[Phase 04-11, open]** The occlusion mitigation comparison (ADR 0003) still has not been fairly run on real compiled geometry — the `DoubleSide` fix landed (04-09) but this session's attempt was confounded by the (now-fixed) floating-geometry defect instead. Re-attempt the `O`-toggle fade/steepen/off comparison in a future session; both known blockers are now clear.
+- **[Phase 04-11, open, project-level]** No phase in ROADMAP.md (5 through 8, all systems-only: navigation/medals/AI/heat) currently schedules an art-direction pass, but the developer's own verdict on the compiled area ("surreal dream," not a real town) makes one necessary before the visual result matches the envisioned chase-movie look. Decide whether to insert a dedicated art-direction phase before continuing past Phase 4, or fold it into an existing phase's scope. See STATE.md's Phase 04-11 decision entry above for full context; the developer explicitly wants to stay on the current Three.js/Rapier stack, not evaluate Unity/Godot.
+- **[Phase 04-11, open, low-cost]** Both the permanent helicopter camera and the debug chase-cam fallback read closer than the developer's envisioned finished-product angle (wants a genuinely higher, more overhead "real helicopter" view). Already live-tunable via `?debug` (`src/core/camera-tuning.ts`'s `altitudeM`/`distanceM`, range 3-80m) with zero code change — preview a value, then bake it into the defaults. Cheap to do whenever, not blocking.
 
 ## Deferred Items
 
@@ -187,6 +195,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-13T13:03:56.534Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-map-pipeline-first-area/04-CONTEXT.md
+Last session: 2026-09-15T22:10:00.000Z
+Stopped at: Phase 4 complete (plan 04-11 done: SC1 sign-off session, grounding fixes, ADR 0004)
+Resume file: .planning/phases/04-map-pipeline-first-area/04-11-SUMMARY.md
+
+Before running `/gsd-plan-phase 5`, read the five open items logged under Blockers/Concerns above
+(tagged `[Phase 04-11, open]`) — in particular the art-direction-phase decision, which may change
+how Phase 5 (and later phases) get scoped.
