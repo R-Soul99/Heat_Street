@@ -151,8 +151,8 @@ describe("compiled map — public/maps/juliette-ga.map.json (real output)", () =
     }
   });
 
-  it("has source.compilerVersion 0.4.0 (collision sidecar stage added — plan 04-08)", () => {
-    expect(graph.source.compilerVersion).toBe("0.4.0");
+  it("has source.compilerVersion 0.5.0 (heightfield terrain stage added — plan 04-10)", () => {
+    expect(graph.source.compilerVersion).toBe("0.5.0");
   });
 
   // --- Plan 04-06: validator wired as a build gate (SC5, D-P17/D-P18) ---

@@ -6,7 +6,20 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RoadGeometry } from "../../../src/core/road-geometry.ts";
 import { SURFACE_TYPES } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
+import { makeProjector } from "../graph/project.ts";
+import type { ElevationSampler } from "../sources/dem.ts";
 import { buildGltfDocument, writeGlb } from "./gltf.ts";
+import { buildHeightfield, type HeightfieldGrid } from "./heightfield.ts";
+
+const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
+const TEST_PROJECTOR = makeProjector({ lat: 33.1, lon: -83.8 });
+/** A minimal, valid heightfield fixture — this file's tests exercise `buildGltfDocument`'s road/building meshes; the terrain mesh has its own dedicated coverage in `heightfield.test.ts`. */
+const TEST_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
+  FLAT_GROUND,
+  { minX: -10, minZ: -10, maxX: 10, maxZ: 10 },
+  TEST_PROJECTOR,
+  2,
+);
 
 /** A single quad (4 verts, 2 tris) as edge geometry, for a given surface. */
 function makeQuadEdge(edgeId: number, surface: (typeof SURFACE_TYPES)[number]) {
@@ -105,7 +118,7 @@ describe("buildGltfDocument", () => {
       edges: [makeQuadEdge(0, "tarmac"), makeQuadEdge(1, "gravel")],
       junctions: [],
     };
-    const { document } = buildGltfDocument(geometry, []);
+    const { document } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
 
     const meshNames = document
       .getRoot()
@@ -126,7 +139,7 @@ describe("buildGltfDocument", () => {
       edges: [makeQuadEdge(0, "tarmac")],
       junctions: [makeTriJunction(0, "tarmac")],
     };
-    const { document } = buildGltfDocument(geometry, []);
+    const { document } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
 
     const mesh = document
       .getRoot()
@@ -144,7 +157,7 @@ describe("buildGltfDocument", () => {
       edges: [makeQuadEdge(0, "tarmac"), makeQuadEdge(1, "tarmac")],
       junctions: [],
     };
-    const { document } = buildGltfDocument(geometry, []);
+    const { document } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
 
     const mesh = document
       .getRoot()
@@ -166,8 +179,8 @@ describe("buildGltfDocument", () => {
   it("emits a buildings mesh when at least one box was produced, and none when boxes is empty", () => {
     const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
 
-    const withBoxes = buildGltfDocument(geometry, [makeBuildingBox(1)]);
-    const withoutBoxes = buildGltfDocument(geometry, []);
+    const withBoxes = buildGltfDocument(geometry, [makeBuildingBox(1)], TEST_HEIGHTFIELD);
+    const withoutBoxes = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
 
     const namesWith = withBoxes.document
       .getRoot()
@@ -187,7 +200,7 @@ describe("buildGltfDocument", () => {
       edges: [makeQuadEdge(0, "tarmac"), makeQuadEdge(1, "gravel")],
       junctions: [],
     };
-    const { document } = buildGltfDocument(geometry, []);
+    const { document } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
 
     const tarmacMesh = document
       .getRoot()
@@ -207,7 +220,7 @@ describe("buildGltfDocument", () => {
 
   it("keeps every node transform at identity — geometry is authored directly in world-space local ENU metres", () => {
     const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
-    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)]);
+    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)], TEST_HEIGHTFIELD);
 
     for (const node of document.getRoot().listNodes()) {
       expect(node.getTranslation()).toEqual([0, 0, 0]);
@@ -218,18 +231,35 @@ describe("buildGltfDocument", () => {
 
   it("declares no extensions", () => {
     const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
-    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)]);
+    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)], TEST_HEIGHTFIELD);
 
     expect(document.getRoot().listExtensionsUsed()).toHaveLength(0);
   });
 
   it("names every mesh's containing node identically to the mesh", () => {
     const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
-    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)]);
+    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)], TEST_HEIGHTFIELD);
 
     for (const node of document.getRoot().listNodes()) {
       expect(node.getMesh()?.getName()).toBe(node.getName());
     }
+  });
+
+  it("emits a terrain mesh whose vertex count matches the heightfield grid and material is surface-grass", () => {
+    const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
+    const { document, stats } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD);
+
+    const terrainMesh = document
+      .getRoot()
+      .listMeshes()
+      .find((m) => m.getName() === "terrain");
+    expect(terrainMesh).toBeDefined();
+    const primitive = terrainMesh?.listPrimitives()[0];
+    const positionAccessor = primitive?.getAttribute("POSITION");
+    const expectedVertexCount = (TEST_HEIGHTFIELD.rows + 1) * (TEST_HEIGHTFIELD.cols + 1);
+    expect(positionAccessor?.getCount()).toBe(expectedVertexCount);
+    expect(stats.terrainVertexCount).toBe(expectedVertexCount);
+    expect(primitive?.getMaterial()?.getName()).toBe("surface-grass");
   });
 });
 
@@ -251,7 +281,7 @@ describe("writeGlb", () => {
       edges: [makeQuadEdge(0, "tarmac"), makeQuadEdge(1, "gravel")],
       junctions: [],
     };
-    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)]);
+    const { document } = buildGltfDocument(geometry, [makeBuildingBox(1)], TEST_HEIGHTFIELD);
 
     await writeGlb(document, outPath);
 
@@ -265,6 +295,6 @@ describe("writeGlb", () => {
       .listMeshes()
       .map((m) => m.getName())
       .sort();
-    expect(meshNames).toEqual(["buildings", "roads-gravel", "roads-tarmac"]);
+    expect(meshNames).toEqual(["buildings", "roads-gravel", "roads-tarmac", "terrain"]);
   });
 });

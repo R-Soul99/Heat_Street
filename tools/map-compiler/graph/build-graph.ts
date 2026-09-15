@@ -58,8 +58,11 @@ import { mapSurface, type SurfaceCoverageReport, surfaceCoverage } from "./surfa
  * Bumped to 0.4.0 in plan 04-08: `cli.ts` now also emits `public/maps/<areaId>.collision.json`
  * (the non-road collision sidecar, `src/core/map-collision.ts`), so the compiled ARTIFACT SET a
  * given version number names is again genuinely different (two files vs. three) even though
- * neither the `.map.json` nor the `.glb`'s own fields changed. */
-export const COMPILER_VERSION = "0.4.0";
+ * neither the `.map.json` nor the `.glb`'s own fields changed.
+ * Bumped to 0.5.0 in plan 04-10: `.collision.json` gains a DEM-derived `heightfield` block
+ * (`collisionVersion` 2) and the `.glb` gains a `terrain` mesh (D-P28/D-P29) — both existing
+ * artifacts changed shape even though `.map.json` itself did not. */
+export const COMPILER_VERSION = "0.5.0";
 
 export interface Bbox {
   readonly south: number;
