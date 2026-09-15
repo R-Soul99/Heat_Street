@@ -35,6 +35,7 @@
 import type { MapCollision, MapCollisionBuilding } from "../../../src/core/map-collision.ts";
 import { MAP_COLLISION_VERSION } from "../../../src/core/map-collision.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
+import type { HeightfieldGrid } from "./heightfield.ts";
 
 interface XZ {
   readonly x: number;
@@ -92,15 +93,36 @@ function buildingToCollisionEntry(box: BuildingBox): MapCollisionBuilding {
 
 /**
  * Builds the collision sidecar for `areaId` from `boxes` (plan 04-07's
- * `buildingBoxes(...)` output). Pure function: same `boxes` in, byte-identical
- * `MapCollision` object out — `cli.ts`'s "two consecutive compiles produce a
- * byte-identical sidecar" acceptance criterion depends on this, since
- * `buildingBoxes` itself is deterministic given the same cached OSM snapshot.
+ * `buildingBoxes(...)` output) and `heightfield` (plan 04-10's
+ * `buildHeightfield(...)` output, D-P28/D-P29). Pure function: the same
+ * `boxes`/`heightfield` in produce a byte-identical `MapCollision` object out
+ * — `cli.ts`'s "two consecutive compiles produce a byte-identical sidecar"
+ * acceptance criterion depends on this, since both `buildingBoxes` and
+ * `buildHeightfield` are themselves deterministic given the same cached
+ * OSM/DEM snapshot.
  */
-export function buildMapCollision(areaId: string, boxes: readonly BuildingBox[]): MapCollision {
+export function buildMapCollision(
+  areaId: string,
+  boxes: readonly BuildingBox[],
+  heightfield: HeightfieldGrid,
+): MapCollision {
   return {
     collisionVersion: MAP_COLLISION_VERSION,
     areaId,
     buildings: boxes.map(buildingToCollisionEntry),
+    // `Array.from` converts `HeightfieldGrid`'s internal `Float32Array` into a
+    // plain JSON-serialisable array — `JSON.stringify` does not turn a
+    // `Float32Array` into a JSON array (verified empirically; see
+    // `MapCollisionHeightfield`'s own doc comment in `src/core/map-collision.ts`).
+    heightfield: {
+      rows: heightfield.rows,
+      cols: heightfield.cols,
+      heights: Array.from(heightfield.heights),
+      originX: heightfield.originX,
+      originZ: heightfield.originZ,
+      scaleX: heightfield.scaleX,
+      scaleZ: heightfield.scaleZ,
+      sinkM: heightfield.sinkM,
+    },
   };
 }

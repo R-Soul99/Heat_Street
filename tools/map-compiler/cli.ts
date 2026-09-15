@@ -48,6 +48,7 @@ import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
+import { buildHeightfield, type HeightfieldGrid } from "./author/heightfield.ts";
 import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
 import { applyElevation, type ElevationReport } from "./graph/elevation.ts";
@@ -312,6 +313,25 @@ function printGltfSummary(
 }
 
 /**
+ * Prints the heightfield stage's outcome (plan 04-10, D-P28/D-P29): the grid
+ * resolution and the terrain's min/max height (this plan's own
+ * `<action>`/`<acceptance_criteria>` requirement), computed from the ALREADY-
+ * SUNK stored heights — the same values that land in both compiled artifacts.
+ */
+function printHeightfieldSummary(heightfield: HeightfieldGrid): void {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const h of heightfield.heights) {
+    if (h < min) min = h;
+    if (h > max) max = h;
+  }
+  console.log(
+    `  heightfield: ${heightfield.rows}x${heightfield.cols} grid, ` +
+      `height range ${min.toFixed(1)}m to ${max.toFixed(1)}m (sink ${heightfield.sinkM}m applied)`,
+  );
+}
+
+/**
  * Prints the collision sidecar stage's outcome (plan 04-08): the sidecar's
  * path, byte size and building count — the same "print, don't just log a
  * boolean" discipline every earlier stage's summary function already applies.
@@ -449,20 +469,33 @@ async function main(argv: readonly string[]): Promise<void> {
     projector,
     sampler,
   );
-  const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(geometry, boxes);
+
+  // Off-road heightfield stage (plan 04-10, D-P28/D-P29): a DEM-derived grid
+  // covering the graph's own `bounds` (the road network's actual footprint,
+  // not the raw request bbox), consumed by BOTH the collision sidecar (the
+  // physics ground) and the .glb (the visible terrain mesh) below, so the two
+  // artifacts describe the exact same grid.
+  const heightfield: HeightfieldGrid = buildHeightfield(sampler, elevatedGraph.bounds, projector);
+  printHeightfieldSummary(heightfield);
+
+  const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(
+    geometry,
+    boxes,
+    heightfield,
+  );
   const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
   await writeGlb(gltfDocument, glbPath);
   const glbStat = await stat(glbPath);
   printGltfSummary(glbPath, glbStat.size, gltfStats, buildingReport);
 
-  // Collision sidecar stage (plan 04-08, decision D-P22): non-road collision
-  // data (currently just building boxes) ships as a separate
+  // Collision sidecar stage (plan 04-08, decision D-P22; heightfield block
+  // added in plan 04-10): non-road collision data ships as a separate
   // `<areaId>.collision.json` file rather than a new key on `.map.json`,
   // since `docs/schemas/road-graph.v1.md` is normative and closed at v1 (its
   // own "Versioning" section). Self-checks its own output by round-tripping
   // it through `parseMapCollision` before writing — the same discipline the
   // elevation stage's `parseRoadGraph` self-check above already applies.
-  const collision = buildMapCollision(config.areaId, boxes);
+  const collision = buildMapCollision(config.areaId, boxes, heightfield);
   const collisionRaw = `${JSON.stringify(collision, null, 2)}\n`;
   parseMapCollision(collisionRaw, config.areaId, `buildMapCollision(${config.areaId})`);
   const collisionPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.collision.json`);

@@ -26,6 +26,18 @@
  * otherwise — the car would drive through what should be solid walls, or
  * collide with buildings that aren't really there, with no error anywhere.
  *
+ * `collisionVersion` 2 (plan 04-10) adds a `heightfield` block: the DEM-derived
+ * off-road ground grid `tools/map-compiler/author/heightfield.ts` builds
+ * (D-P28/D-P29). Version 1 sidecars (buildings only, no heightfield) are no
+ * longer accepted — `parseMapCollision` rejects them naming both versions, the
+ * same "a stale format fails loudly rather than silently under-parsing" rule
+ * `ROAD_GRAPH_SCHEMA_VERSION`'s own exact-match check already applies.
+ * `heights` is copied element-wise into a FRESH `Float32Array` with every
+ * value range-checked (finite, `-500` to `9000` metres) — never taken by
+ * reference from the parsed array (threat T-04-35) — mirroring this file's
+ * own "reconstruct field by field, never spread" discipline for the rest of
+ * the sidecar.
+ *
  * Layering: pure data, no renderer, no physics engine, no DOM, no wall clock.
  * `tests/layering.test.ts` mechanically enforces this for every file under
  * `src/core/`.
@@ -37,8 +49,13 @@
 // `src/core/road-graph.ts`'s own documented convention, kept here for
 // consistency even though this particular file has nothing to import yet.
 
-/** The only `collisionVersion` this parser accepts. Mirrors `road-graph.ts`'s `ROAD_GRAPH_SCHEMA_VERSION` pattern. */
-export const MAP_COLLISION_VERSION = 1;
+/** The only `collisionVersion` this parser accepts. Mirrors `road-graph.ts`'s `ROAD_GRAPH_SCHEMA_VERSION` pattern. Bumped 1 -> 2 in plan 04-10 for the `heightfield` block. */
+export const MAP_COLLISION_VERSION = 2;
+
+/** A height value at or below this is not a physically plausible metre elevation on Earth — reject rather than silently accepting corrupted data (threat T-04-35). */
+const HEIGHTFIELD_HEIGHT_MIN_M = -500;
+/** A height value at or above this is not a physically plausible metre elevation on Earth — see `HEIGHTFIELD_HEIGHT_MIN_M`. */
+const HEIGHTFIELD_HEIGHT_MAX_M = 9000;
 
 export interface MapCollisionVec3 {
   readonly x: number;
@@ -60,15 +77,65 @@ export interface MapCollisionBuilding {
   readonly rotationY: number;
 }
 
+/**
+ * The DEM-derived off-road heightfield grid (plan 04-10, D-P28/D-P29):
+ * `tools/map-compiler/author/heightfield.ts`'s `HeightfieldGrid`, field for
+ * field, EXCEPT `heights` — here it's a plain `number[]`, not a
+ * `Float32Array`. `JSON.stringify` on a `Float32Array` does not produce a
+ * JSON array (it serialises as an index-keyed object, `{"0":1,"1":2,...}`),
+ * verified empirically; this sidecar is a JSON artifact, and every other
+ * numeric array in this codebase's on-disk schemas (`road-graph.ts`'s node/
+ * edge geometry) is a plain array for the same reason. `heights[row + col *
+ * (rows + 1)]`, already sunk by `sinkM`, in real-world metres — the exact
+ * storage order Rapier's `ColliderDesc.heightfield` expects, verified
+ * empirically (see `heightfield.ts`'s own header comment). The one-time
+ * `Float32Array` conversion Rapier's constructor wants happens at the point
+ * of collider construction (`src/physics/map-scene.ts`), not here.
+ */
+export interface MapCollisionHeightfield {
+  readonly rows: number;
+  readonly cols: number;
+  readonly heights: readonly number[];
+  readonly originX: number;
+  readonly originZ: number;
+  readonly scaleX: number;
+  readonly scaleZ: number;
+  readonly sinkM: number;
+}
+
 export interface MapCollision {
   readonly collisionVersion: number;
   readonly areaId: string;
   readonly buildings: readonly MapCollisionBuilding[];
+  /**
+   * Optional at the TYPE level (mirroring `RoadGraph.spawns`'s own optional
+   * pattern) so a hand-built test fixture can omit it to exercise a
+   * defensive "no heightfield" runtime path (`src/physics/map-scene.ts`'s
+   * own such test) without an unsafe cast. Every REAL `collisionVersion: 2`
+   * sidecar `parseMapCollision` accepts always has one — the key is in
+   * `REQUIRED_TOP_LEVEL` below.
+   */
+  readonly heightfield?: MapCollisionHeightfield;
 }
 
+// Deliberately EXCLUDES "heightfield" — that key is checked separately, AFTER
+// the collisionVersion check below, so a version-1 sidecar (which never had a
+// "heightfield" key) fails with a message naming the version mismatch rather
+// than a "missing key" message that would not contain "2" and could not
+// satisfy this parser's own version-mismatch acceptance criterion.
 const REQUIRED_TOP_LEVEL = ["collisionVersion", "areaId", "buildings"] as const;
 const REQUIRED_VEC3 = ["x", "y", "z"] as const;
 const REQUIRED_BUILDING = ["center", "halfExtents", "rotationY"] as const;
+const REQUIRED_HEIGHTFIELD = [
+  "rows",
+  "cols",
+  "heights",
+  "originX",
+  "originZ",
+  "scaleX",
+  "scaleZ",
+  "sinkM",
+] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -128,6 +195,78 @@ function requireFiniteNumber(
     fail(sourceLabel, `${context}.${key} must be a finite number`);
   }
   return value;
+}
+
+function requireInteger(
+  sourceLabel: string,
+  obj: Record<string, unknown>,
+  key: string,
+  context: string,
+): number {
+  const value = requireFiniteNumber(sourceLabel, obj, key, context);
+  if (!Number.isInteger(value)) {
+    fail(sourceLabel, `${context}.${key} must be an integer`);
+  }
+  return value;
+}
+
+/**
+ * Parses the `heightfield` block: `rows`/`cols` as integers, `heights` as an
+ * array of EXACTLY `(rows + 1) * (cols + 1)` finite numbers each within
+ * `[HEIGHTFIELD_HEIGHT_MIN_M, HEIGHTFIELD_HEIGHT_MAX_M]`, copied element-wise
+ * into a fresh array (T-04-35 — never taken by reference from the parsed
+ * array), plus the four `originX`/`originZ`/`scaleX`/`scaleZ`/`sinkM`
+ * finite-number fields.
+ */
+function parseHeightfield(
+  sourceLabel: string,
+  raw: Record<string, unknown>,
+): MapCollisionHeightfield {
+  const context = "heightfield";
+  requireKeys(sourceLabel, raw, REQUIRED_HEIGHTFIELD, context);
+
+  const rows = requireInteger(sourceLabel, raw, "rows", context);
+  const cols = requireInteger(sourceLabel, raw, "cols", context);
+
+  const rawHeights = raw.heights;
+  if (!Array.isArray(rawHeights)) {
+    fail(sourceLabel, `${context}.heights must be an array`);
+  }
+  const expectedLength = (rows + 1) * (cols + 1);
+  if (rawHeights.length !== expectedLength) {
+    fail(
+      sourceLabel,
+      `${context}.heights length must equal (rows + 1) * (cols + 1) = ${expectedLength}, got ${rawHeights.length}`,
+    );
+  }
+
+  const heights = new Array<number>(expectedLength);
+  for (let i = 0; i < rawHeights.length; i++) {
+    const value = rawHeights[i];
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < HEIGHTFIELD_HEIGHT_MIN_M ||
+      value > HEIGHTFIELD_HEIGHT_MAX_M
+    ) {
+      fail(
+        sourceLabel,
+        `${context}.heights[${i}] must be a finite number between ${HEIGHTFIELD_HEIGHT_MIN_M} and ${HEIGHTFIELD_HEIGHT_MAX_M}, got ${JSON.stringify(value)}`,
+      );
+    }
+    heights[i] = value;
+  }
+
+  return {
+    rows,
+    cols,
+    heights,
+    originX: requireFiniteNumber(sourceLabel, raw, "originX", context),
+    originZ: requireFiniteNumber(sourceLabel, raw, "originZ", context),
+    scaleX: requireFiniteNumber(sourceLabel, raw, "scaleX", context),
+    scaleZ: requireFiniteNumber(sourceLabel, raw, "scaleZ", context),
+    sinkM: requireFiniteNumber(sourceLabel, raw, "sinkM", context),
+  };
 }
 
 function parseVec3(
@@ -210,5 +349,11 @@ export function parseMapCollision(
   }
   const buildings = rawBuildings.map((b, i) => parseBuilding(sourceLabel, b, i));
 
-  return { collisionVersion, areaId, buildings };
+  // Checked AFTER the version check above (see REQUIRED_TOP_LEVEL's own
+  // comment) — every real collisionVersion 2 sidecar has this key.
+  requireKeys(sourceLabel, parsed, ["heightfield"], "root");
+  const heightfieldRaw = requireObject(sourceLabel, parsed, "heightfield", "root");
+  const heightfield = parseHeightfield(sourceLabel, heightfieldRaw);
+
+  return { collisionVersion, areaId, buildings, heightfield };
 }

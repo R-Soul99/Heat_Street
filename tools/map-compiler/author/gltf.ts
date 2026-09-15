@@ -31,6 +31,12 @@ import type {
 } from "../../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
+import {
+  type HeightfieldGrid,
+  heightfieldHeightAt,
+  heightfieldX,
+  heightfieldZ,
+} from "./heightfield.ts";
 
 /**
  * First-pass per-surface base colours, chosen to read at helicopter-cam
@@ -80,6 +86,8 @@ export interface GltfBuildStats {
   readonly trianglesBySurface: Readonly<Partial<Record<SurfaceType, number>>>;
   readonly buildingCount: number;
   readonly buildingTriangleCount: number;
+  readonly terrainTriangleCount: number;
+  readonly terrainVertexCount: number;
 }
 
 /**
@@ -117,6 +125,57 @@ function concatGeometry(entries: readonly GeometryEntry[]): GeometryEntry {
   }
 
   return { positions, indices };
+}
+
+/**
+ * Triangulates `grid` (plan 04-10, D-P28/D-P29) into a regular lattice: one
+ * vertex per grid sample (`(rows + 1) * (cols + 1)` total, row-major —
+ * `vtx(row, col) = row * (cols + 1) + col`), two triangles per cell. Winding
+ * is chosen for an upward (+Y) face normal given `heightfieldX`/`heightfieldZ`
+ * are both monotonically increasing in col/row (D-P29's own corner-placement
+ * guarantee) — verified by the right-hand rule: for a flat cell,
+ * `(v10 - v00) x (v01 - v00)` and `(v11 - v10) x (v01 - v10)` both give
+ * `(0, +1, 0)` when x increases with col and z increases with row.
+ */
+function buildTerrainGeometry(grid: HeightfieldGrid): GeometryEntry {
+  const verticesPerRow = grid.cols + 1;
+  const vertexCount = (grid.rows + 1) * verticesPerRow;
+  const positions = new Float32Array(vertexCount * 3);
+
+  for (let row = 0; row <= grid.rows; row++) {
+    const z = heightfieldZ(grid, row);
+    for (let col = 0; col <= grid.cols; col++) {
+      const x = heightfieldX(grid, col);
+      const y = heightfieldHeightAt(grid, row, col);
+      const vertex = row * verticesPerRow + col;
+      positions[vertex * 3] = x;
+      positions[vertex * 3 + 1] = y;
+      positions[vertex * 3 + 2] = z;
+    }
+  }
+
+  const cellCount = grid.rows * grid.cols;
+  const indices = new Uint32Array(cellCount * 6);
+  let cursor = 0;
+  for (let row = 0; row < grid.rows; row++) {
+    for (let col = 0; col < grid.cols; col++) {
+      const v00 = row * verticesPerRow + col;
+      const v01 = row * verticesPerRow + col + 1;
+      const v10 = (row + 1) * verticesPerRow + col;
+      const v11 = (row + 1) * verticesPerRow + col + 1;
+      indices[cursor++] = v00;
+      indices[cursor++] = v10;
+      indices[cursor++] = v01;
+      indices[cursor++] = v10;
+      indices[cursor++] = v11;
+      indices[cursor++] = v01;
+    }
+  }
+
+  return {
+    positions: positions as Float32Array<ArrayBuffer>,
+    indices: indices as Uint32Array<ArrayBuffer>,
+  };
 }
 
 /** Groups every edge AND junction geometry entry by its own `surface`, preserving `SURFACE_TYPES` iteration order downstream. */
@@ -161,6 +220,7 @@ function groupBySurface(geometry: RoadGeometry): Map<SurfaceType, GeometryEntry[
 export function buildGltfDocument(
   geometry: RoadGeometry,
   boxes: readonly BuildingBox[],
+  heightfield: HeightfieldGrid,
 ): { document: Document; stats: GltfBuildStats } {
   const document = new Document();
   const buffer = document.createBuffer();
@@ -241,6 +301,36 @@ export function buildGltfDocument(
     buildingTriangleCount = indices.length / 3;
   }
 
+  // Off-road terrain mesh (plan 04-10, D-P28/D-P29): the DEM-derived ground
+  // safety net, one `surface-grass` material shared visually with the road
+  // grass surface so the two read as the same ground type (this plan's own
+  // `<action>` text).
+  const terrainEntry = buildTerrainGeometry(heightfield);
+  const terrainPositionAccessor = document
+    .createAccessor("terrain-position")
+    .setType(Accessor.Type.VEC3)
+    .setArray(terrainEntry.positions)
+    .setBuffer(buffer);
+  const terrainIndexAccessor = document
+    .createAccessor("terrain-index")
+    .setType(Accessor.Type.SCALAR)
+    .setArray(terrainEntry.indices)
+    .setBuffer(buffer);
+
+  const terrainMaterial = document
+    .createMaterial("surface-grass")
+    .setBaseColorFactor(hexToRgba(SURFACE_COLOR_HEX.grass));
+
+  const terrainPrimitive = document
+    .createPrimitive()
+    .setAttribute("POSITION", terrainPositionAccessor)
+    .setIndices(terrainIndexAccessor)
+    .setMaterial(terrainMaterial);
+
+  const terrainMesh = document.createMesh("terrain").addPrimitive(terrainPrimitive);
+  const terrainNode = document.createNode("terrain").setMesh(terrainMesh);
+  scene.addChild(terrainNode);
+
   document.getRoot().setDefaultScene(scene);
 
   return {
@@ -249,6 +339,8 @@ export function buildGltfDocument(
       trianglesBySurface,
       buildingCount: boxes.length,
       buildingTriangleCount,
+      terrainTriangleCount: terrainEntry.indices.length / 3,
+      terrainVertexCount: terrainEntry.positions.length / 3,
     },
   };
 }
