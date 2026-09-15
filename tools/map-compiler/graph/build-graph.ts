@@ -134,7 +134,14 @@ function attributionFor(demSource: BuildGraphConfig["demSource"]): RoadGraphAttr
   };
 }
 
-/** Task 2: lane-count defaults `[ASSUMED]` per road class, used when `tags.lanes` doesn't parse. */
+/**
+ * Task 2: lane-count defaults `[ASSUMED]` per road class, used when
+ * `tags.lanes` doesn't parse.
+ *
+ * [confirmed unchanged in plan 04-11's session] Combines with `LANE_WIDTH_M`
+ * to produce `widthM` — see that constant's own note for the road-width
+ * finding and why it's deferred rather than retuned this session.
+ */
 export const DEFAULT_LANES_BY_CLASS: Readonly<Record<string, number>> = {
   motorway: 2,
   trunk: 2,
@@ -162,7 +169,19 @@ export const DEFAULT_SPEED_KPH_BY_CLASS: Readonly<Record<string, number>> = {
   service: 20,
 };
 
-/** Task 2: per-lane carriageway width `[ASSUMED]` used to derive `widthM` when `tags.width` doesn't parse. */
+/**
+ * Task 2: per-lane carriageway width `[ASSUMED]` used to derive `widthM`
+ * when `tags.width` doesn't parse.
+ *
+ * [confirmed unchanged in plan 04-11's session] Driven and evaluated: "quite
+ * difficult to stay on the roads at speed due to the desired sliding
+ * effect... quite a challenge to stay on the road." Left unchanged rather
+ * than widened this session — falling off the road currently meant getting
+ * physically stuck (the floating-road defect this plan's Task 2 fixed with
+ * road shoulders), which plausibly compounds the felt difficulty independent
+ * of the actual carriageway width. Explicitly flagged for re-driving now
+ * that leaving the road is recoverable, before this value is retuned.
+ */
 export const LANE_WIDTH_M = 3.5;
 const MIN_WIDTH_M = 3.5;
 const MAX_WIDTH_M = 20;

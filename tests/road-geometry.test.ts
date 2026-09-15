@@ -3,6 +3,7 @@ import {
   buildJunctionFan,
   buildRibbon,
   buildRoadGeometry,
+  buildRoadShoulders,
   type IncidentEdgeAtNode,
   type RoadGeometry,
   type Vec3,
@@ -680,5 +681,78 @@ describe("buildRoadGeometry — whole-graph watertightness across every node deg
   it("has no unused RoadGeometry export left untyped (sanity import check)", () => {
     const g: RoadGeometry = geometry;
     expect(g.edges.length + g.junctions.length).toBeGreaterThan(0);
+  });
+});
+
+// Plan 04-11's grounding-fix regression tests: before this plan, a car
+// leaving the paved ribbon fell straight to the (possibly several metres
+// lower, per HEIGHTFIELD_SINK_M) off-road heightfield with nothing bridging
+// the gap -- a literal floating road edge, exactly what SC1 forbids. These
+// tests fail against the pre-fix code because `buildRoadShoulders` did not
+// exist at all (import error) -- there was no shoulder geometry to assert on.
+describe("buildRoadShoulders — grounding fix", () => {
+  const edge = makeEdge({
+    id: 1,
+    from: 0,
+    to: 1,
+    widthM: 6, // halfWidth 3
+    points: [
+      [0, 10, 0],
+      [0, 10, 10],
+    ],
+  });
+  const node0 = makeNode({ id: 0, x: 0, y: 10, z: 0 });
+  const node1 = makeNode({ id: 1, x: 0, y: 10, z: 10 });
+  const graph = makeGraph([node0, node1], [edge]);
+
+  it("outer rail lands exactly on the sampled terrain height when it is below the road", () => {
+    const shoulders = buildRoadShoulders(graph, () => 4); // terrain well below road's y=10
+    expect(shoulders.length).toBe(1);
+    const shoulder = shoulders[0];
+    expect(shoulder.edgeId).toBe(1);
+    expect(shoulder.surface).toBe(edge.surface);
+
+    // Every vertex is either the paved rail's own y (10) or the sampled
+    // terrain's y (4) -- never something in between (no accidental lerp)
+    // and never above the paved rail (the clamp).
+    for (let i = 0; i < shoulder.positions.length / 3; i++) {
+      const y = shoulder.positions[i * 3 + 1];
+      expect(y === 10 || y === 4, `vertex ${i} y=${y} should be exactly 10 or 4`).toBe(true);
+    }
+  });
+
+  it("clamps the outer rail to the paved height when the sampled terrain is ABOVE the road (never ramps upward)", () => {
+    const shoulders = buildRoadShoulders(graph, () => 50); // terrain implausibly above the road
+    const shoulder = shoulders[0];
+    for (let i = 0; i < shoulder.positions.length / 3; i++) {
+      expect(shoulder.positions[i * 3 + 1]).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("inner rail vertices are shared EXACTLY with buildRibbon's own left/right rail — no seam between the paved ribbon and its shoulder", () => {
+    const ribbon = buildRibbon(edge);
+    const shoulders = buildRoadShoulders(graph, () => 4);
+    const shoulder = shoulders[0];
+
+    const shoulderVerts = new Set<string>();
+    for (let i = 0; i < shoulder.positions.length / 3; i++) {
+      shoulderVerts.add(
+        `${shoulder.positions[i * 3]},${shoulder.positions[i * 3 + 1]},${shoulder.positions[i * 3 + 2]}`,
+      );
+    }
+
+    for (let i = 0; i < ribbon.positions.length / 3; i++) {
+      const key = `${ribbon.positions[i * 3]},${ribbon.positions[i * 3 + 1]},${ribbon.positions[i * 3 + 2]}`;
+      expect(shoulderVerts.has(key), `ribbon vertex ${i} (${key}) missing from shoulder`).toBe(
+        true,
+      );
+    }
+  });
+
+  it("winds every shoulder triangle CCW viewed from +Y, same as the paved ribbon it butts against", () => {
+    const shoulders = buildRoadShoulders(graph, () => 4);
+    for (const shoulder of shoulders) {
+      expectAllTrianglesCCW(shoulder.positions, shoulder.indices);
+    }
   });
 });

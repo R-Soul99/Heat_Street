@@ -53,6 +53,27 @@ export const SMOOTHING_WINDOW = 5;
  */
 export const GRADIENT_WARNING_THRESHOLD = 0.35;
 
+/**
+ * [Rule 1 fix, found compiling the real Juliette artifact, plan 04-11's feel
+ * session] A long, sparsely-vertexed OSM way segment (a straight rural road
+ * with no intermediate nodes for hundreds of metres — a real edge in this
+ * area's own data has a single 503m segment) gets ONLY its two endpoints
+ * sampled and smoothed; everywhere in between is a straight LINE in 3D,
+ * which cuts through real terrain relief between the endpoints rather than
+ * following it. The symptom driven and reported directly: "the road passes
+ * through a hill then pops out the other side" — confirmed by a fine-grained
+ * sweep along every real compiled edge, which found up to 3.25m of terrain
+ * rising ABOVE the (linearly-interpolated) road surface strictly BETWEEN
+ * authored vertices, never AT one. Above this per-segment length, extra
+ * points are inserted (see `densifyEdgePoints`) before DEM sampling, so the
+ * moving-average smoothing this file already does has real terrain samples
+ * to follow along the gap instead of two anchors and a straight line.
+ * [ASSUMED] chosen close to `SMOOTHING_WINDOW`'s own effective radius at
+ * typical real spacing, so a densified segment gets smoothed at the same
+ * granularity as a naturally well-vertexed one, not a separate regime.
+ */
+export const MAX_SEGMENT_LENGTH_M = 25;
+
 export interface EdgeGradientReportEntry {
   readonly edgeId: number;
   readonly maxGradient: number;
@@ -155,6 +176,38 @@ function smoothEdgeElevation(
   return smoothed;
 }
 
+/**
+ * Inserts evenly-spaced interior points into any segment of `points` whose
+ * horizontal (XZ) length exceeds `maxSegmentM`, so no gap between consecutive
+ * points is longer than that threshold. `y` on every inserted point is `0`
+ * (the same pre-elevation placeholder `graph/build-graph.ts` gives every
+ * point — see that file's own `points.push([x, 0, z])`), overwritten a few
+ * lines below this function's call site by the ordinary per-point DEM
+ * sample every point (inserted or authored) goes through identically.
+ * Authored points are never moved, dropped or reordered — only new ones are
+ * spliced in between them — so a node's own endpoint position is untouched.
+ */
+type Point3 = readonly [number, number, number];
+
+function densifyEdgePoints(points: readonly Point3[], maxSegmentM: number): Point3[] {
+  if (points.length < 2) return points.slice();
+  const out: Point3[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const dx = b[0] - a[0];
+    const dz = b[2] - a[2];
+    const segLen = Math.hypot(dx, dz);
+    const extraCount = Math.floor(segLen / maxSegmentM);
+    for (let k = 1; k <= extraCount; k++) {
+      const t = k / (extraCount + 1);
+      out.push([a[0] + dx * t, 0, a[2] + dz * t]);
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 /** Real 3D polyline length — replaces plan 04-04's flat-`y` length now that `y` is real. */
 function polylineLength3D(points: readonly (readonly [number, number, number])[]): number {
   let total = 0;
@@ -215,13 +268,15 @@ export function applyElevation(
       );
     }
 
-    const rawY = edge.points.map((point) => {
+    const densifiedPoints = densifyEdgePoints(edge.points, MAX_SEGMENT_LENGTH_M);
+
+    const rawY = densifiedPoints.map((point) => {
       const { lat, lon } = projector.unproject(point[0], point[2]);
       return sampler.sample(lat, lon);
     });
 
-    const smoothedY = smoothEdgeElevation(rawY, edge.points, fromY, toY, SMOOTHING_WINDOW);
-    const points = edge.points.map((point, i) => [point[0], smoothedY[i], point[2]] as const);
+    const smoothedY = smoothEdgeElevation(rawY, densifiedPoints, fromY, toY, SMOOTHING_WINDOW);
+    const points = densifiedPoints.map((point, i) => [point[0], smoothedY[i], point[2]] as const);
     const lengthM = polylineLength3D(points);
     const maxGradient = computeMaxGradient(points);
 

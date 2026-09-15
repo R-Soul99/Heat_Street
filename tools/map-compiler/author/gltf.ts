@@ -28,6 +28,7 @@ import type {
   EdgeGeometryEntry,
   JunctionGeometryEntry,
   RoadGeometry,
+  ShoulderGeometryEntry,
 } from "../../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
@@ -46,6 +47,16 @@ import {
  * on top of the one already shipped. Both are flagged for confirmation
  * against `src/render/surface-fx.ts`'s `SURFACE_FX_PROFILES` in the plan
  * 04-11 feel session — see this plan's own `<action>` text.
+ *
+ * [confirmed unchanged in plan 04-11's session] Driven and evaluated: the
+ * developer's verdict on the compiled area was "it doesn't read like a real
+ * town, more like some kind of surreal dream." Root-caused to every building
+ * sharing ONE flat colour (`BUILDING_COLOR_HEX` below) with no material
+ * variety, roofline, texture, props or road markings anywhere in the
+ * pipeline — a genuine art-direction gap, not a bug this plan's scope
+ * covers. Explicitly deferred to a dedicated future art-pass phase per the
+ * project owner's own direction this session; left unretouched here so that
+ * pass starts from a clean baseline rather than a half-adjusted one.
  */
 const SURFACE_COLOR_HEX: Readonly<Record<SurfaceType, number>> = {
   tarmac: 0x2b2b33,
@@ -56,7 +67,13 @@ const SURFACE_COLOR_HEX: Readonly<Record<SurfaceType, number>> = {
   mud: 0x4a3626,
 };
 
-/** [ASSUMED] identical to `src/render/surface-view.ts`'s `COLOUR_BUILDING` — see `SURFACE_COLOR_HEX`'s own comment. */
+/**
+ * [ASSUMED] identical to `src/render/surface-view.ts`'s `COLOUR_BUILDING` —
+ * see `SURFACE_COLOR_HEX`'s own comment. [confirmed unchanged in plan
+ * 04-11's session] — same deferred-to-art-pass reasoning; this single flat
+ * colour applied to every building is the clearest concrete example of that
+ * gap.
+ */
 const BUILDING_COLOR_HEX = 0x6b6f7a;
 
 function hexToRgba(hex: number): [number, number, number, number] {
@@ -178,8 +195,18 @@ function buildTerrainGeometry(grid: HeightfieldGrid): GeometryEntry {
   };
 }
 
-/** Groups every edge AND junction geometry entry by its own `surface`, preserving `SURFACE_TYPES` iteration order downstream. */
-function groupBySurface(geometry: RoadGeometry): Map<SurfaceType, GeometryEntry[]> {
+/**
+ * Groups every edge, junction AND shoulder geometry entry by its own
+ * `surface`, preserving `SURFACE_TYPES` iteration order downstream. Shoulders
+ * (plan 04-11's grounding fix) share their parent edge's surface and are
+ * folded into the exact same per-surface mesh as the paved ribbons — a
+ * shoulder is not a new visible material, just more triangles of the road it
+ * belongs to.
+ */
+function groupBySurface(
+  geometry: RoadGeometry,
+  shoulders: readonly ShoulderGeometryEntry[],
+): Map<SurfaceType, GeometryEntry[]> {
   const bySurface = new Map<SurfaceType, GeometryEntry[]>();
 
   const pushEntry = (surface: SurfaceType, entry: GeometryEntry): void => {
@@ -203,6 +230,12 @@ function groupBySurface(geometry: RoadGeometry): Map<SurfaceType, GeometryEntry[
       indices: junction.indices as Uint32Array<ArrayBuffer>,
     });
   }
+  for (const shoulder of shoulders) {
+    pushEntry(shoulder.surface, {
+      positions: shoulder.positions as Float32Array<ArrayBuffer>,
+      indices: shoulder.indices as Uint32Array<ArrayBuffer>,
+    });
+  }
 
   return bySurface;
 }
@@ -221,12 +254,13 @@ export function buildGltfDocument(
   geometry: RoadGeometry,
   boxes: readonly BuildingBox[],
   heightfield: HeightfieldGrid,
+  shoulders: readonly ShoulderGeometryEntry[] = [],
 ): { document: Document; stats: GltfBuildStats } {
   const document = new Document();
   const buffer = document.createBuffer();
   const scene = document.createScene("scene");
 
-  const bySurface = groupBySurface(geometry);
+  const bySurface = groupBySurface(geometry, shoulders);
   const trianglesBySurface: Partial<Record<SurfaceType, number>> = {};
 
   for (const surface of SURFACE_TYPES) {

@@ -88,6 +88,24 @@ export interface RoadGeometry {
   readonly junctions: readonly JunctionGeometryEntry[];
 }
 
+/**
+ * Queries the off-road heightfield at world-space `(x, z)` — the compiler's
+ * `src/core/heightfield-sample.ts` bilinear sampler bound to a concrete grid,
+ * a plain function so this module never needs to import that grid's TYPE
+ * (compiler-side `HeightfieldGrid` and runtime-side `MapCollisionHeightfield`
+ * are different types with the same shape; a function value sidesteps having
+ * to pick one, keeping this file's own "imports only road-graph/surface-types"
+ * layering rule intact).
+ */
+export type HeightSampler = (x: number, z: number) => number;
+
+export interface ShoulderGeometryEntry {
+  readonly edgeId: number;
+  readonly surface: SurfaceType;
+  readonly positions: Float32Array;
+  readonly indices: Uint32Array;
+}
+
 /** Consecutive centreline points closer than this (metres) collapse into one, per plan 04-03 Task 1. */
 const COLLAPSE_EPS = 1e-4;
 
@@ -96,8 +114,35 @@ const COLLAPSE_EPS = 1e-4;
  * [ASSUMED] a reasoned default with no external verification — past this
  * clamp a hairpin reads as a bevel rather than a spike-to-infinity, which is
  * visually correct for a road anyway. Flagged for the plan 04-10 feel session.
+ *
+ * [confirmed unchanged in plan 04-11's session] Investigated as a candidate
+ * cause of this session's "gravel juts through tarmac at an oblique
+ * tarmac/gravel junction" finding — a real hypothesis, since endpoints
+ * DON'T get a miter (see `tangentAndFactor`'s `i === 0`/`i === n - 1` early
+ * returns, both `factor: 1`), ruling out an inflated corner offset at the
+ * junction itself as the mechanism. The real compiled map does have acute
+ * (<45deg) mixed-width junctions (e.g. node 45: a 3.5m-wide dirt road
+ * meeting a 7m-wide tarmac road at ~28-41deg) that are a real geometric
+ * edge case for the bearing-sort fan algorithm, but the exact rendering
+ * defect could not be conclusively isolated and safely fixed without a
+ * direct visual re-check — deferred, see this plan's SUMMARY.
  */
 const MITER_CLAMP = 3;
+
+/**
+ * How far, in metres, `buildRoadShoulders` extends a ramp beyond each edge's
+ * paved rail before it meets the off-road heightfield's own (bilinearly
+ * sampled) height at that point. [ASSUMED] first-pass value for the plan
+ * 04-11 feel session: the compiler's own worst-case measured road-vs-terrain
+ * disagreement is ~3.95m (`tools/map-compiler/author/heightfield.ts`'s own
+ * `HEIGHTFIELD_SINK_M` doc comment) — 6m of run keeps even that worst case
+ * under a ~35 degree grade (steep, but a continuous slope a car can scrub
+ * down and climb back up, never a vertical drop it can be wedged under),
+ * while the common case (a much smaller disagreement) reads as a gentle curb
+ * rather than a ramp. Flagged for re-verification by driving, same as every
+ * other constant on this plan's own tuning-surface table.
+ */
+const SHOULDER_WIDTH_M = 6;
 
 /**
  * Road-class paving-apron ranking for junction-fan surface assignment
@@ -108,6 +153,15 @@ const MITER_CLAMP = 3;
  * any source and is a per-junction grip discontinuity at the place players
  * cross most often — flagged for the plan 04-10 feel session, exactly as
  * Phase 3's surface grip values were.
+ *
+ * [confirmed unchanged in plan 04-11's session] Driven and evaluated: an
+ * oblique tarmac/gravel junction's apron reads wrong (gravel visible where
+ * the fan should read as paved) at the SAME junctions flagged on
+ * `MITER_CLAMP`'s own note above. The rule itself (highest class wins) is
+ * not implicated by that finding — the fan surface pick is correct, single-
+ * valued, and applied to the whole fan; the defect is in the fan/ribbon
+ * BOUNDARY geometry at acute, width-mismatched junctions, not in which
+ * surface wins. Left unchanged pending the same follow-up.
  */
 const ROAD_CLASS_RANK: Record<string, number> = {
   motorway: 0,
@@ -233,11 +287,29 @@ function tangentAndFactor(points: readonly Vec3[], i: number): TangentAndFactor 
  * produces a road whose faces are culled from above, which reads as "the
  * road is invisible" and is a genuinely confusing bug to diagnose.
  */
-export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
+interface EdgeRails {
+  /** Collapsed centreline points, one per rail sample. */
+  readonly points: readonly Vec3[];
+  /** `points[i] + perp[i] * halfWidth * factor[i]` — the ribbon's own paved edge, +perpendicular side. */
+  readonly left: readonly Vec3[];
+  /** `points[i] - perp[i] * halfWidth * factor[i]` — the ribbon's own paved edge, -perpendicular side. */
+  readonly right: readonly Vec3[];
+  /** The per-point outward unit perpendicular used for `left`/`right` above, reused verbatim by `buildRoadShoulders` so a shoulder vertex lies on the exact same radial line as its paved-edge counterpart. */
+  readonly perp: readonly XZ[];
+}
+
+/**
+ * Computes the per-point rail geometry `buildRibbon` turns into triangles —
+ * factored out so `buildRoadShoulders` can extend the SAME left/right rails
+ * outward with no separately-recomputed tangent/miter math to drift from the
+ * paved ribbon it must butt against exactly (the same "one source of truth"
+ * reasoning this module's header applies to the compiler/runtime split).
+ */
+function computeEdgeRails(edge: RoadGraphEdge): EdgeRails {
   const points = collapsePoints(edge.points);
   if (points.length < 2) {
     throw new Error(
-      `buildRibbon: edge id=${edge.id} has fewer than two distinct points after collapsing near-duplicates`,
+      `computeEdgeRails: edge id=${edge.id} has fewer than two distinct points after collapsing near-duplicates`,
     );
   }
 
@@ -245,6 +317,7 @@ export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
   const n = points.length;
   const left: Vec3[] = new Array(n);
   const right: Vec3[] = new Array(n);
+  const perp: XZ[] = new Array(n);
 
   for (let i = 0; i < n; i++) {
     const { tangent, factor } = tangentAndFactor(points, i);
@@ -253,40 +326,161 @@ export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
     // point; guard anyway with a zero perpendicular rather than throwing
     // mid-loop, so a genuinely pathological input degrades to a
     // zero-width point rather than crashing the whole build.
-    const perp = tangent === null ? { x: 0, z: 0 } : { x: -tangent.z, z: tangent.x };
+    const p2 = tangent === null ? { x: 0, z: 0 } : { x: -tangent.z, z: tangent.x };
     const dist = halfWidth * factor;
     const p = points[i];
-    left[i] = [p[0] + perp.x * dist, p[1], p[2] + perp.z * dist];
-    right[i] = [p[0] - perp.x * dist, p[1], p[2] - perp.z * dist];
+    left[i] = [p[0] + p2.x * dist, p[1], p[2] + p2.z * dist];
+    right[i] = [p[0] - p2.x * dist, p[1], p[2] - p2.z * dist];
+    perp[i] = p2;
   }
 
-  const positions = new Float32Array(n * 2 * 3);
-  for (let i = 0; i < n; i++) {
-    positions.set(left[i], i * 6);
-    positions.set(right[i], i * 6 + 3);
-  }
+  return { points, left, right, perp };
+}
 
+/**
+ * Builds the two triangles for strip segment `i -> i+1` between rail arrays
+ * `a`/`b` (`a` plays the same CCW-from-+Y role `buildRibbon`'s original
+ * inline loop gave its `left` array, `b` the role it gave `right` — see this
+ * function's callers for which physical rail each argument is on a given
+ * side). Shared by `buildRibbon` and `buildRoadShoulders` so the winding
+ * convention that keeps a strip's face pointing up can never diverge between
+ * the paved ribbon and its shoulder.
+ */
+function stripIndices(n: number): Uint32Array {
   const indices = new Uint32Array((n - 1) * 6);
   for (let i = 0; i < n - 1; i++) {
     const base = i * 6;
-    const li = 2 * i;
-    const ri = 2 * i + 1;
-    const li1 = 2 * i + 2;
-    const ri1 = 2 * i + 3;
-    indices[base] = li;
-    indices[base + 1] = li1;
-    indices[base + 2] = ri;
-    indices[base + 3] = ri;
-    indices[base + 4] = li1;
-    indices[base + 5] = ri1;
+    const ai = 2 * i;
+    const bi = 2 * i + 1;
+    const ai1 = 2 * i + 2;
+    const bi1 = 2 * i + 3;
+    indices[base] = ai;
+    indices[base + 1] = ai1;
+    indices[base + 2] = bi;
+    indices[base + 3] = bi;
+    indices[base + 4] = ai1;
+    indices[base + 5] = bi1;
   }
+  return indices;
+}
+
+function stripPositions(a: readonly Vec3[], b: readonly Vec3[]): Float32Array {
+  const n = a.length;
+  const positions = new Float32Array(n * 2 * 3);
+  for (let i = 0; i < n; i++) {
+    positions.set(a[i], i * 6);
+    positions.set(b[i], i * 6 + 3);
+  }
+  return positions;
+}
+
+/**
+ * Builds the offset-ribbon geometry for a single edge: a quad strip whose
+ * left/right rails are offset `widthM / 2` from the centreline (miter-joined
+ * at interior points, clamped per D-P10), with Y copied through from the
+ * source centreline point untouched at every vertex.
+ *
+ * Winding: for centreline segment `i -> i+1` with vertices
+ * `L_i=2i, R_i=2i+1, L_{i+1}=2i+2, R_{i+1}=2i+3`, the two triangles are
+ * `(L_i, L_{i+1}, R_i)` and `(R_i, L_{i+1}, R_{i+1})` — this specific vertex
+ * order is what produces a counter-clockwise-from-+Y winding for a `left =
+ * point + rotate90CCW(tangent) * halfWidth` convention; getting it wrong
+ * produces a road whose faces are culled from above, which reads as "the
+ * road is invisible" and is a genuinely confusing bug to diagnose.
+ */
+export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
+  const { left, right } = computeEdgeRails(edge);
+  const n = left.length;
 
   return {
-    positions,
-    indices,
+    positions: stripPositions(left, right),
+    indices: stripIndices(n),
     leftCorners: [left[0], left[n - 1]],
     rightCorners: [right[0], right[n - 1]],
   };
+}
+
+/**
+ * Builds one edge's shoulder: two ramp strips (left and right) running the
+ * edge's own rail-point sequence, each strip's INNER rail sitting exactly on
+ * the paved ribbon's own left/right rail (shared vertex positions with
+ * `buildRibbon`'s output at every point, not just the two end corners — the
+ * same watertightness-by-shared-vertices discipline this module's header
+ * applies to ribbon/fan seams), and each strip's OUTER rail offset a further
+ * `SHOULDER_WIDTH_M` along the SAME per-point perpendicular, at whatever
+ * height `heightSampler` reports for that outer point — never a fixed drop,
+ * so the ramp always reaches the real (however coarse) off-road ground
+ * directly below it instead of leaving a residual gap.
+ *
+ * Winding follows `buildRibbon`'s own `(a, a+1, b)`/`(b, a+1, b+1)` rule via
+ * the shared `stripIndices` helper. On the left side the OUTER rail is
+ * further in the same `+perp` direction the paved ribbon's own `left` rail
+ * uses, so it plays the "a" role `left` plays in `buildRibbon`'s ribbon
+ * strip; the inner (paved-edge) rail plays "b". The right side is the mirror
+ * image — its outer rail is further in `-perp`, so the INNER (paved-edge)
+ * rail plays "a" and the outer rail plays "b". Getting either side backwards
+ * reproduces the exact "invisible from above" failure `buildRibbon`'s own
+ * doc comment warns about, just on the shoulder instead of the road.
+ */
+function buildEdgeShoulder(
+  edge: RoadGraphEdge,
+  heightSampler: HeightSampler,
+): ShoulderGeometryEntry {
+  const { left, right, perp } = computeEdgeRails(edge);
+  const n = left.length;
+
+  const outerLeft: Vec3[] = new Array(n);
+  const outerRight: Vec3[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const l = left[i];
+    const outerLeftX = l[0] + perp[i].x * SHOULDER_WIDTH_M;
+    const outerLeftZ = l[2] + perp[i].z * SHOULDER_WIDTH_M;
+    outerLeft[i] = [outerLeftX, Math.min(l[1], heightSampler(outerLeftX, outerLeftZ)), outerLeftZ];
+
+    const r = right[i];
+    const outerRightX = r[0] - perp[i].x * SHOULDER_WIDTH_M;
+    const outerRightZ = r[2] - perp[i].z * SHOULDER_WIDTH_M;
+    outerRight[i] = [
+      outerRightX,
+      Math.min(r[1], heightSampler(outerRightX, outerRightZ)),
+      outerRightZ,
+    ];
+  }
+
+  const leftPositions = stripPositions(outerLeft, left);
+  const leftIndices = stripIndices(n);
+  const rightPositions = stripPositions(right, outerRight);
+  const rightIndices = stripIndices(n);
+
+  const vertexOffset = leftPositions.length / 3;
+  const positions = new Float32Array(leftPositions.length + rightPositions.length);
+  positions.set(leftPositions, 0);
+  positions.set(rightPositions, leftPositions.length);
+
+  const indices = new Uint32Array(leftIndices.length + rightIndices.length);
+  indices.set(leftIndices, 0);
+  for (let i = 0; i < rightIndices.length; i++) {
+    indices[leftIndices.length + i] = rightIndices[i] + vertexOffset;
+  }
+
+  return { edgeId: edge.id, surface: edge.surface, positions, indices };
+}
+
+/**
+ * Builds every edge's shoulder ramp (see `buildEdgeShoulder`). No junction
+ * shoulders: a junction fan is already wider than any single incident road's
+ * paved width and reads as a paved apron, so the floating-edge problem
+ * `buildEdgeShoulder` fixes is concentrated along a road's run, not at the
+ * node — filling the fan's own irregular boundary with a matching ramp is a
+ * materially harder variable-radius-polygon problem for comparatively little
+ * benefit, and is deliberately left for a follow-up rather than guessed at
+ * here.
+ */
+export function buildRoadShoulders(
+  graph: RoadGraph,
+  heightSampler: HeightSampler,
+): readonly ShoulderGeometryEntry[] {
+  return graph.edges.map((edge) => buildEdgeShoulder(edge, heightSampler));
 }
 
 function normalizeAngle(rad: number): number {

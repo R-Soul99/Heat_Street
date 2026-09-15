@@ -28,13 +28,14 @@
  * `three` and must not touch the DOM or any wall clock.
  */
 import * as RAPIER from "@dimforge/rapier3d";
+import { sampleHeightfieldBilinear } from "../core/heightfield-sample";
 import type { InputFrame } from "../core/input-tape";
 import type {
   MapCollision,
   MapCollisionBuilding,
   MapCollisionHeightfield,
 } from "../core/map-collision";
-import { buildRoadGeometry } from "../core/road-geometry";
+import { buildRoadGeometry, buildRoadShoulders } from "../core/road-geometry";
 import type { RoadGraph } from "../core/road-graph";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { VehicleTuning } from "../core/vehicle-tuning";
@@ -156,7 +157,12 @@ function buildHeightfieldCollider(
  * single-collider bodies, and sharing one body avoids allocating 100 fixed
  * `RigidBody` WASM wrappers for a map this size.
  */
-function buildRoadColliders(world: RAPIER.World, surfaceMap: SurfaceMap, graph: RoadGraph): void {
+function buildRoadColliders(
+  world: RAPIER.World,
+  surfaceMap: SurfaceMap,
+  graph: RoadGraph,
+  heightfield: MapCollisionHeightfield | undefined,
+): void {
   const geometry = buildRoadGeometry(graph);
   const roadBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
@@ -182,6 +188,30 @@ function buildRoadColliders(world: RAPIER.World, surfaceMap: SurfaceMap, graph: 
       roadBody,
     );
     surfaceMap.register(collider.handle, junction.surface);
+  }
+
+  // Road-shoulder colliders (plan 04-11 grounding fix): the SAME ramp
+  // geometry the compiled `.glb` ships, built here from the identical
+  // `buildRoadShoulders` call over the identical heightfield grid, so the
+  // physics floor under a car leaving the road always matches what it sees.
+  // Skipped only when the compiled area shipped no heightfield block at all
+  // (the same defensive optionality `buildHeightfieldCollider`'s own caller
+  // above already applies).
+  if (heightfield !== undefined) {
+    const shoulders = buildRoadShoulders(graph, (x, z) =>
+      sampleHeightfieldBilinear(heightfield, x, z),
+    );
+    for (const shoulder of shoulders) {
+      const collider = world.createCollider(
+        RAPIER.ColliderDesc.trimesh(
+          shoulder.positions,
+          shoulder.indices,
+          RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES,
+        ).setFriction(ROAD_FRICTION),
+        roadBody,
+      );
+      surfaceMap.register(collider.handle, shoulder.surface);
+    }
   }
 }
 
@@ -268,7 +298,7 @@ export function createMapScene(
     buildHeightfieldCollider(world, surfaceMap, collision.heightfield);
   }
 
-  buildRoadColliders(world, surfaceMap, graph);
+  buildRoadColliders(world, surfaceMap, graph, collision.heightfield);
 
   for (const building of collision.buildings) {
     buildBuildingCollider(world, building);

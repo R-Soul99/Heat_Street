@@ -266,7 +266,10 @@ describe("applyElevation", () => {
   });
 
   it("leaves a 2-point edge unchanged beyond clamping its two endpoints to node heights", () => {
-    const points = makeStraightPoints(0, 0, 40, 0, 2);
+    // Length (20m) deliberately stays under MAX_SEGMENT_LENGTH_M (25m) so
+    // densifyEdgePoints leaves this short edge alone -- densification itself
+    // has its own dedicated test below.
+    const points = makeStraightPoints(0, 0, 20, 0, 2);
     const graph = makeTwoNodeGraph(points);
     const sampler = makeSawtoothSampler(6, 8);
 
@@ -278,6 +281,37 @@ describe("applyElevation", () => {
     expect(edge.points).toHaveLength(2);
     expect(edge.points[0][1]).toBe(fromNode?.y);
     expect(edge.points[1][1]).toBe(toNode?.y);
+  });
+
+  // Regression test for the real Juliette, GA defect found and driven in
+  // plan 04-11's feel session: "the road passes through a hill then pops out
+  // the other side" -- a fine-grained sweep of the real compiled map found
+  // up to 3.25m of terrain rising ABOVE the road strictly BETWEEN authored
+  // points on a long (503m, only 2 vertices) segment, never AT one. Fails
+  // against the pre-fix code because a 2-point edge got only its two
+  // endpoints sampled, leaving a dead-straight line across the gap that a
+  // real hill in between could rise well above.
+  it("densifies a long sparse edge so an interior hill between its two endpoints is represented, not skipped by a straight line", () => {
+    const points = makeStraightPoints(0, 0, 100, 0, 2); // 100m, only 2 vertices -- over MAX_SEGMENT_LENGTH_M
+    const graph = makeTwoNodeGraph(points);
+    // Base elevation matches both endpoints (100m); a 10m-tall bump sits at
+    // the segment's midpoint, x=50, wide enough that only points strictly
+    // between the endpoints ever see it.
+    const sampler = makeBumpSampler(50, 10, 40, 100);
+
+    const { graph: result } = applyElevation(graph, sampler, projector);
+    const edge = result.edges[0];
+
+    // The pre-fix code always returned exactly the 2 authored points.
+    expect(edge.points.length).toBeGreaterThan(2);
+
+    // A straight line between the (unchanged) endpoints would read exactly
+    // 100 at every x -- the bug this test guards against. At least one
+    // interior point must read meaningfully above that straight-line value,
+    // proving the hill survived into the smoothed result.
+    const straightLineY = 100;
+    const maxInteriorY = Math.max(...edge.points.slice(1, -1).map((p) => p[1]));
+    expect(maxInteriorY).toBeGreaterThan(straightLineY + 3);
   });
 
   it("gives every edge meeting at a shared node exactly equal Y at that node, across a synthetic 4-way junction with noisy terrain", () => {

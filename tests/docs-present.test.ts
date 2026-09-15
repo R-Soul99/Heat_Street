@@ -43,6 +43,11 @@ function read(path: string): string {
 /** Every path this phase promises exists, with its minimum size in characters. */
 const REQUIRED: ReadonlyArray<{ path: string; minChars: number }> = [
   { path: "docs/adr/0001-map-data-source.md", minChars: 1500 },
+  // Plan 04-11: records the phase's locked decisions (area, compiler shape,
+  // collision/render granularity, shared geometry, off-road ground, the
+  // osmtogeojson rejection) so a future agent finds them instead of
+  // relitigating them.
+  { path: "docs/adr/0004-first-area-and-compiler-decisions.md", minChars: 1500 },
   { path: "docs/schemas/road-graph.v1.md", minChars: 1500 },
   // OWNED BY PLAN 01-02, NOT BY 01-03. This is the deliberate cross-plan presence
   // check, and it is why plan 01-03 declares depends_on: ["01-01", "01-02"] — a

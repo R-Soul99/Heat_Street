@@ -42,8 +42,9 @@
  */
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { sampleHeightfieldBilinear } from "../../src/core/heightfield-sample.ts";
 import { type MapCollision, parseMapCollision } from "../../src/core/map-collision.ts";
-import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
+import { buildRoadGeometry, buildRoadShoulders } from "../../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../../src/core/road-graph.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
@@ -478,10 +479,24 @@ async function main(argv: readonly string[]): Promise<void> {
   const heightfield: HeightfieldGrid = buildHeightfield(sampler, elevatedGraph.bounds, projector);
   printHeightfieldSummary(heightfield);
 
+  // Road-shoulder stage (plan 04-11 grounding fix): a ramp per edge from the
+  // paved rail down to this SAME heightfield's own bilinearly-sampled height,
+  // so the compiled `.glb` never has a road floating over a gap the runtime
+  // physics collider (src/physics/map-scene.ts, built from the identical
+  // buildRoadShoulders call over the identical heightfield) doesn't also
+  // close. Built from `elevatedGraph` (not `geometry`) so this stays fully
+  // independent of the validator's own `geometry` object above -- shoulders
+  // are additive visual/collision geometry, never part of the reachability/
+  // pathability gate.
+  const shoulders = buildRoadShoulders(elevatedGraph, (x, z) =>
+    sampleHeightfieldBilinear(heightfield, x, z),
+  );
+
   const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(
     geometry,
     boxes,
     heightfield,
+    shoulders,
   );
   const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
   await writeGlb(gltfDocument, glbPath);

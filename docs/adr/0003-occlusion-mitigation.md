@@ -81,13 +81,31 @@ that gap rather than presenting a three-way comparison that didn't fully happen 
   `fanRayCount`, `fadeLambda`, `fadeFloorOpacity`, `nearTargetMarginM` all remain `[ASSUMED]`,
   unretuned. Retuning steepen before its input bug is fixed would be tuning noise.
 
+## Status update (plan 04-11, 2026-09-15)
+
+The fan-ray/back-face bug's fix landed in plan 04-09 — `src/render/surface-view.ts`'s
+(now `src/render/map-view.ts`'s) building materials moved to `DoubleSide`, exactly the
+mitigation this ADR's "what would justify revisiting" section names below. Plan 04-11's own
+feel session tried to use that fix to finally judge steepen on the real compiled area, per
+this plan's Task 1 step 8. **The re-run did not happen.** The developer's own report: *"I tried
+this but to be honest it's hard to tell what it's doing — the only way to hide the car from
+view is to drive under a floating building/road, at which point I can't tell if it's the
+occlusion type or general jank."* The floating-road/floating-building defect this same
+session's Task 2 fixed (road shoulder grounding, `src/core/road-geometry.ts`'s
+`buildRoadShoulders`) was itself confounding the only way the developer had found to trigger
+occlusion, so the observation could not be attributed to steepen versus the unrelated defect.
+
+**The fade-vs-steepen-vs-off comparison still has not been fairly run on real geometry.** The
+`DoubleSide` fix is confirmed shipped and is no longer the blocker; the blocker this session was
+the now-fixed floating geometry. `src/main.ts`'s mitigation initialiser stays `"fade"`,
+unchanged, per this plan's own instruction not to change shipped camera behaviour here. A future
+session should re-attempt the `O`-toggle comparison now that both known blockers are cleared.
+
 ## What would justify revisiting this decision
 
-- **The fan-ray/back-face bug gets fixed** (e.g. narrower fan spread that can't overshoot a
-  10 m corridor's half-width, or `DoubleSide` building materials so an embedded ray origin still
-  registers its exit as a hit). At that point steepen becomes evaluable for the first time and
-  the fade-vs-steepen-vs-off comparison should genuinely be re-run, including the relax-in-
-  open-areas check this session couldn't test.
+- ~~**The fan-ray/back-face bug gets fixed**~~ **Done (plan 04-09, `DoubleSide` materials).** See
+  "Status update" above — fixed, but the re-run itself still hasn't happened, now for an
+  unrelated reason (the floating-geometry defect, fixed by plan 04-11).
 - **Phase 4's real city geometry** lands at a scale these fourteen placeholder boxes cannot
   represent (CONTEXT.md D-03). A dense real city block may make fade's "large translucent area"
   concern (noted as a con in this plan's own options list) material in a way the placeholder

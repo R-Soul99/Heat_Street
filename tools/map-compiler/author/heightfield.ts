@@ -63,6 +63,19 @@ import type { ElevationSampler } from "../sources/dem.ts";
  */
 export const HEIGHTFIELD_RESOLUTION = 128;
 
+// [confirmed unchanged in plan 04-11's session] Driven and evaluated: the
+// floating-road/falling-off-and-stuck finding this plan's Task 2 fixed was
+// traced to this grid's coarseness combined with HEIGHTFIELD_SINK_M below —
+// but raising resolution to meaningfully shrink the disagreement (e.g. to
+// ~512, matching sources/dem.ts's own DEM_MAX_SIZE_PX) would grow the
+// terrain mesh alone to ~524,288 triangles, over 10x the entire compiled-map
+// triangle budget (docs/frame-budget.md, currently ~45,000 total, of which
+// this 128-res grid already accounts for 32,768 — the single largest
+// contributor). The fix landed instead as `src/core/road-geometry.ts`'s
+// `buildRoadShoulders`: a per-edge ramp down to this SAME grid's own
+// (bilinearly sampled) height, which closes the gap regardless of how coarse
+// the background terrain stays. Left at 128 deliberately.
+
 /**
  * Metres subtracted from every sampled height. [ASSUMED] first-pass value for
  * the plan 04-11 feel session, per D-P29: large enough to clear the observed
@@ -84,6 +97,14 @@ export const HEIGHTFIELD_RESOLUTION = 128;
  * recompile rather than loosening the assertion").
  */
 export const HEIGHTFIELD_SINK_M = 5.0;
+
+// [confirmed unchanged in plan 04-11's session] Left at 5.0m — see
+// HEIGHTFIELD_RESOLUTION's own note just above. Lowering this would only
+// re-risk terrain poking through the road at this grid's coarseness;
+// `buildRoadShoulders` (src/core/road-geometry.ts) makes the sink's exact
+// value a physics-invisible implementation detail at the road edge, since
+// the shoulder ramp always closes down to the real sampled terrain height
+// regardless of how far below the road it sits.
 
 /**
  * The heightfield block this module produces, matching

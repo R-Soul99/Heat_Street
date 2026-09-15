@@ -45,12 +45,17 @@ function buildScene() {
 }
 
 describe("createMapScene: road colliders (SC1/SC2)", () => {
-  it("creates exactly one collider per road-geometry entry — count equals geometry.edges.length + geometry.junctions.length", () => {
+  it("creates exactly one collider per road-geometry entry plus one shoulder collider per edge — count equals geometry.edges.length + geometry.junctions.length + geometry.edges.length", () => {
     const { world } = buildScene();
     const triMeshColliders = collidersInOrder(world).filter(
       (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
     );
-    expect(triMeshColliders.length).toBe(geometry.edges.length + geometry.junctions.length);
+    // plan 04-11's grounding fix adds one shoulder collider per edge
+    // (buildRoadShoulders, src/core/road-geometry.ts) whenever the compiled
+    // area ships a heightfield -- the real fixture always does.
+    expect(triMeshColliders.length).toBe(
+      geometry.edges.length + geometry.junctions.length + geometry.edges.length,
+    );
   });
 
   it("registers every road collider in the SurfaceMap with its own entry's surface, and a gravel edge resolves to gravel while a tarmac edge resolves to tarmac, on the REAL compiled map", () => {
