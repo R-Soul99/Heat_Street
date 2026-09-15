@@ -61,6 +61,7 @@ import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTuningPanel } from "./debug/tuning-panel";
+import { createMapCredit } from "./hud/map-credit";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { startLoop } from "./loop";
@@ -257,6 +258,15 @@ try {
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
   // player-facing (NAV-01).
   const speedo = createSpeedometer();
+
+  // SC4's positive half (plan 04-10, D-P30): always constructed, NOT gated
+  // on `DEBUG_ENABLED` — attribution is a licence obligation, not a
+  // developer tool, exactly like the speedometer above. Content comes
+  // entirely from the loaded map's own `attribution` block. The returned
+  // handle is intentionally discarded -- this overlay lives for the whole
+  // page lifetime, the same as the speedometer above, which no code path
+  // ever disposes either.
+  createMapCredit(graph.attribution);
 
   // The HUD is constructed only when `?debug` is present, so a normal build
   // adds zero DOM overlay and zero listeners.

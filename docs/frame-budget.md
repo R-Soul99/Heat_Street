@@ -48,17 +48,47 @@ snapshot of whichever phase first wrote it.
 | Metric | Target |
 |--------|---------------|
 | Physics ms/frame | < 0.5 ms |
-| Draw calls | < 70 |
-| Triangles | < 10,000 |
-| Total bodies | < 30 |
+| Draw calls | < 16 |
+| Triangles | < 45,000 |
+| Total bodies | < 110 |
 
 Originally authored for Phase 1's bare box-and-plane debug scene (draw calls < 20,
 bodies < 20) — a scene with no expectation of ever needing more. Draw calls and bodies
-are raised here in Phase 3 (plan 03-12) against a REAL measured reading (below);
-physics and triangles kept comfortable headroom over that same reading and are
-unchanged.
+were raised in Phase 3 (plan 03-12) against a REAL measured reading (see "Real
+measurement, plan 03-12" below, kept as a dated historical reading). All four figures
+are raised AGAIN in Phase 4 (plan 04-10) against the real compiled Juliette, GA area —
+see "Real measurement, plan 04-10" immediately below, which supersedes plan 03-12's
+reading as the current reference.
 
-### Real measurement, plan 03-12 (2026-09-13)
+### Real measurement, plan 04-10 (2026-09-15)
+
+Phase 3's fixture scene (six bands, 14 placeholder buildings) is superseded here by
+Heat Street's first real compiled map. Two inputs feed this reading: a live `?debug`
+session at the end of plan 04-09 (frame/physics/render/draws/triangles/bodies, taken
+against the map as plan 04-09 shipped it), and a direct offline count of the static map
+`.glb` after plan 04-10's own Task 1/2 additions (the off-road heightfield collider and
+terrain mesh) — the terrain mesh alone, a 128x128 grid, is 32,768 triangles, by far the
+single biggest contributor in the scene:
+
+| Metric | Measured | Target | Verdict |
+|--------|---------:|-------:|---------|
+| Total frame | 16.67 ms | 16.6 ms | Essentially exact 60 fps, not a real overage (plan 04-09's own `?debug` session) |
+| Physics ms/frame | 0.27 ms | < 0.5 ms (unchanged) | Pass, ample headroom — measured against the FULL real map's 87 bodies; plan 04-10's one extra (cheap, static) heightfield collider does not threaten this |
+| Render (CPU submit) | 0.73 ms | < 6.0 ms | Pass, comfortable headroom (plan 04-09's own `?debug` session, before the terrain mesh existed — CPU submit time tracks draw-call COUNT, not triangle count, so one more mesh moves this figure negligibly) |
+| Draw calls | 12 (11 measured + 1 new terrain mesh) | < 16 (was < 70) | Pass against the revised target |
+| Triangles | ~35,188 (2,420 measured + 32,768 new terrain) | < 45,000 (was < 10,000) | Pass against the revised target |
+| Total bodies | 88 (87 measured + 1 new heightfield) | < 110 (was < 30) | Pass against the revised target |
+
+The 87-body/2,420-triangle/11-draw/frame/physics/render figures are plan 04-09's
+checkpoint reading verbatim (see that plan's SUMMARY.md, Task 3 checkpoint). The
+34,856-triangle/5-draw static-map figure (road + building + terrain meshes, no vehicle
+geometry) is a direct offline count against the real committed `.glb`, cross-checked
+against the CLI's own printed per-surface triangle counts (1,238 road + 850 building +
+32,768 terrain = 34,856). The +1 body/+1 draw call for the new heightfield
+collider/terrain mesh are exact, not estimated — plan 04-10's own Task 1/2 additions
+are each precisely one collider and one mesh.
+
+### Real measurement, plan 03-12 (2026-09-13) — superseded by the reading above
 
 Taken from the profiler HUD (`?debug`, Backquote) during a sustained slide on gravel
 with the dust particles at full — the heaviest case this phase's scene produces:
