@@ -69,8 +69,21 @@ export const HEIGHTFIELD_RESOLUTION = 128;
  * smoothed-vs-raw elevation disagreement between the road ribbons and the raw
  * DEM, small enough that the terrain never reads as visibly sunk beneath the
  * road it borders.
+ *
+ * Raised from D-P29's original 0.35m during this plan's own Task 2
+ * verification: the real Juliette, GA map's road-network bounding box is
+ * ~5.5km x 5.7km (D-P29's "~2.9km" was a pre-data estimate), giving a
+ * 128-cell grid ~43m of spacing per cell rather than the ~23m assumed — on
+ * this area's hilliest terrain (one edge already flagged over the
+ * compiler's own gradient-sanity threshold, `cli.ts`'s printed "edges over
+ * gradient threshold" line), a single coarse cell can span several metres of
+ * real elevation change. An exhaustive raycast sweep of every point on every
+ * real compiled road edge found a worst-case terrain-above-road disagreement
+ * of ~3.95m; this constant carries a margin above that measured worst case,
+ * per this plan's own `<action>` instruction ("raise HEIGHTFIELD_SINK_M and
+ * recompile rather than loosening the assertion").
  */
-export const HEIGHTFIELD_SINK_M = 0.35;
+export const HEIGHTFIELD_SINK_M = 5.0;
 
 /**
  * The heightfield block this module produces, matching

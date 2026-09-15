@@ -99,6 +99,25 @@ describe("buildMapWorldView: buildingMeshes empty when the buildings node is abs
   });
 });
 
+describe("buildMapWorldView: terrain mesh classification (plan 04-10)", () => {
+  it("classifies a node named 'terrain' into terrainMesh, excluded from roadMeshes and buildingMeshes", () => {
+    const scene = buildSyntheticScene(["roads-tarmac", "buildings", "terrain"]);
+    const view = buildMapWorldView(scene);
+
+    expect(view.terrainMesh).toBeDefined();
+    expect(view.terrainMesh?.name).toBe("terrain");
+    expect(view.roadMeshes.map((m) => m.name)).not.toContain("terrain");
+    expect(view.buildingMeshes.map((m) => m.name)).not.toContain("terrain");
+  });
+
+  it("terrainMesh is undefined when the .glb has no terrain node", () => {
+    const scene = buildSyntheticScene(["roads-tarmac"]);
+    const view = buildMapWorldView(scene);
+
+    expect(view.terrainMesh).toBeUndefined();
+  });
+});
+
 describe("buildMapWorldView: material sidedness (behavior bullet 6)", () => {
   it("sets every road material to THREE.FrontSide and every building material to THREE.DoubleSide", () => {
     const scene = buildSyntheticScene(["roads-tarmac", "buildings"]);
@@ -134,6 +153,15 @@ describe("buildMapWorldView: against the REAL compiled juliette-ga.glb", () => {
     const view = buildMapWorldView(scene);
 
     expect(view.buildingMeshes.length).toBeGreaterThan(0);
+  });
+
+  it("produces a terrain mesh for the real compiled area, excluded from roadMeshes/buildingMeshes", async () => {
+    const scene = await loadRealGlbScene();
+    const view = buildMapWorldView(scene);
+
+    expect(view.terrainMesh).toBeDefined();
+    expect(view.roadMeshes).not.toContain(view.terrainMesh);
+    expect(view.buildingMeshes).not.toContain(view.terrainMesh);
   });
 });
 

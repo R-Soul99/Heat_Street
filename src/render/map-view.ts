@@ -55,6 +55,9 @@ const ROAD_NODE_PREFIX = "roads-";
 /** The compiler's single non-road node name (`tools/map-compiler/author/gltf.ts`). */
 const BUILDINGS_NODE_NAME = "buildings";
 
+/** The compiler's single off-road terrain node name (plan 04-10, `tools/map-compiler/author/gltf.ts`). */
+const TERRAIN_NODE_NAME = "terrain";
+
 /**
  * One compiled `.glb`, loaded and classified: `roadMeshes`/`roadSurfaces` are
  * PARALLEL arrays of equal length (mirroring `SurfaceWorldView.zoneMeshes`'
@@ -76,6 +79,16 @@ export interface MapWorldView {
   /** Every mesh found under the `buildings` node. Empty when that node is absent. */
   readonly buildingMeshes: readonly THREE.Mesh[];
 
+  /**
+   * The off-road DEM-derived terrain mesh (plan 04-10), or `undefined` when
+   * the compiled `.glb` has no `terrain` node. Excluded from both
+   * `roadMeshes` and `buildingMeshes` -- it must never become a decal
+   * projection target (skid marks belong on roads) and must never be an
+   * occlusion-probe target (terrain sits below the camera, never between
+   * camera and car).
+   */
+  readonly terrainMesh: THREE.Mesh | undefined;
+
   /** Dispose every geometry and material this module took ownership of. */
   dispose(): void;
 }
@@ -83,6 +96,7 @@ export interface MapWorldView {
 type NodeClassification =
   | { readonly kind: "road"; readonly surface: SurfaceType }
   | { readonly kind: "building" }
+  | { readonly kind: "terrain" }
   | { readonly kind: "ignored" };
 
 /**
@@ -96,6 +110,9 @@ type NodeClassification =
 function classifyName(name: string): NodeClassification {
   if (name === BUILDINGS_NODE_NAME) {
     return { kind: "building" };
+  }
+  if (name === TERRAIN_NODE_NAME) {
+    return { kind: "terrain" };
   }
   if (name.startsWith(ROAD_NODE_PREFIX)) {
     const suffix = name.slice(ROAD_NODE_PREFIX.length);
@@ -143,6 +160,7 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
   const roadMeshes: THREE.Mesh[] = [];
   const roadSurfaces: SurfaceType[] = [];
   const buildingMeshes: THREE.Mesh[] = [];
+  let terrainMesh: THREE.Mesh | undefined;
   let ignoredCount = 0;
 
   scene.traverse((obj) => {
@@ -166,6 +184,10 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
         applyMaterialSide(obj, THREE.DoubleSide);
         buildingMeshes.push(obj);
         break;
+      case "terrain":
+        applyMaterialSide(obj, THREE.FrontSide);
+        terrainMesh = obj;
+        break;
       case "ignored":
         ignoredCount++;
         break;
@@ -174,6 +196,7 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
 
   for (const mesh of roadMeshes) group.add(mesh);
   for (const mesh of buildingMeshes) group.add(mesh);
+  if (terrainMesh !== undefined) group.add(terrainMesh);
 
   if (ignoredCount > 0) {
     // One-line diagnostic report, per this plan's <action> -- never thrown,
@@ -189,10 +212,12 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
     roadMeshes,
     roadSurfaces,
     buildingMeshes,
+    terrainMesh,
 
     dispose(): void {
       for (const mesh of roadMeshes) disposeMesh(mesh);
       for (const mesh of buildingMeshes) disposeMesh(mesh);
+      if (terrainMesh !== undefined) disposeMesh(terrainMesh);
     },
   };
 }

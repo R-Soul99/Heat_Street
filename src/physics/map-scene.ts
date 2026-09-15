@@ -29,7 +29,11 @@
  */
 import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
-import type { MapCollision, MapCollisionBuilding } from "../core/map-collision";
+import type {
+  MapCollision,
+  MapCollisionBuilding,
+  MapCollisionHeightfield,
+} from "../core/map-collision";
 import { buildRoadGeometry } from "../core/road-geometry";
 import type { RoadGraph } from "../core/road-graph";
 import type { SurfaceProfiles } from "../core/surface-tuning";
@@ -98,6 +102,47 @@ export interface MapScene {
 /** Builds a Y-axis rotation quaternion for angle `rad`, in the SAME convention `src/physics/vehicle.ts`'s `rotateVec` documents (local +X maps to world `(cos rad, 0, -sin rad)`). */
 function yRotationQuat(rad: number): { x: number; y: number; z: number; w: number } {
   return { x: 0, y: Math.sin(rad / 2), z: 0, w: Math.cos(rad / 2) };
+}
+
+/**
+ * Builds the off-road ground (plan 04-10, D-P28/D-P29): one Rapier heightfield
+ * collider on its own fixed body, registered in `surfaceMap` as `grass`. Built
+ * BEFORE the road colliders (see `createMapScene` below) so the road
+ * colliders are the later, winning contacts if the two ever coincide -- the
+ * real guarantee against that is `heightfield.sinkM` (already baked into
+ * every stored height by `tools/map-compiler/author/heightfield.ts`), this
+ * ordering is belt-and-braces.
+ *
+ * Translation and scale follow `heightfield.ts`'s own documented Rapier
+ * probe findings verbatim: the body's X/Z translation is the grid's own
+ * centre (`originX + scaleX / 2`, `originZ + scaleZ / 2`), Y translation is
+ * exactly `0` (heights are used literally, not internally centred by
+ * Rapier), and `scale.y` stays `1.0` so a stored height IS its real-world
+ * metre value. `heights` is converted to a `Float32Array` here, once, at
+ * collider-construction time -- the parsed wire type is a plain `number[]`
+ * (see `MapCollisionHeightfield`'s own doc comment in `src/core/map-collision.ts`
+ * for why), and Rapier's constructor wants a typed array.
+ */
+function buildHeightfieldCollider(
+  world: RAPIER.World,
+  surfaceMap: SurfaceMap,
+  heightfield: MapCollisionHeightfield,
+): void {
+  const centerX = heightfield.originX + heightfield.scaleX / 2;
+  const centerZ = heightfield.originZ + heightfield.scaleZ / 2;
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(centerX, 0, centerZ),
+  );
+  const collider = world.createCollider(
+    RAPIER.ColliderDesc.heightfield(
+      heightfield.rows,
+      heightfield.cols,
+      new Float32Array(heightfield.heights),
+      { x: heightfield.scaleX, y: 1, z: heightfield.scaleZ },
+    ).setFriction(ROAD_FRICTION),
+    body,
+  );
+  surfaceMap.register(collider.handle, "grass");
 }
 
 /**
@@ -215,6 +260,14 @@ export function createMapScene(
   profiles: SurfaceProfiles,
 ): MapScene {
   const surfaceMap = createSurfaceMap();
+
+  // Off-road ground BEFORE road colliders (see buildHeightfieldCollider's own
+  // doc comment) -- optional at the type level so a hypothetical future area
+  // with no heightfield block still builds a scene, with road colliders only.
+  if (collision.heightfield !== undefined) {
+    buildHeightfieldCollider(world, surfaceMap, collision.heightfield);
+  }
+
   buildRoadColliders(world, surfaceMap, graph);
 
   for (const building of collision.buildings) {

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import collisionRaw from "../public/maps/juliette-ga.collision.json?raw";
 import compiledRaw from "../public/maps/juliette-ga.map.json?raw";
 import { NEUTRAL } from "../src/core/input-tape";
-import { parseMapCollision } from "../src/core/map-collision";
+import { type MapCollision, parseMapCollision } from "../src/core/map-collision";
 import { buildRoadGeometry } from "../src/core/road-geometry";
 import { parseRoadGraph, type RoadGraph } from "../src/core/road-graph";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
@@ -228,6 +228,127 @@ describe("createMapScene: structure (mirrors SurfaceScene's contract)", () => {
     expect(() => scene.setTuning(defaultTuning())).not.toThrow();
     expect(() => scene.setSurfaceProfiles(defaultSurfaceProfiles())).not.toThrow();
     expect(() => scene.dispose()).not.toThrow();
+  });
+});
+
+describe("createMapScene: off-road heightfield ground (plan 04-10, D-P28/D-P29)", () => {
+  it("creates exactly one heightfield collider on a fixed body, centred at the bounds' centre in X and Z", () => {
+    const { world } = buildScene();
+    const heightfieldColliders = collidersInOrder(world).filter(
+      (c) => c.shapeType() === RAPIER.ShapeType.HeightField,
+    );
+    expect(heightfieldColliders.length).toBe(1);
+
+    const body = heightfieldColliders[0].parent();
+    expect(body).not.toBeNull();
+    expect(body?.isFixed()).toBe(true);
+
+    const heightfield = collision.heightfield;
+    expect(heightfield).toBeDefined();
+    if (heightfield === undefined) return;
+    const expectedCenterX = heightfield.originX + heightfield.scaleX / 2;
+    const expectedCenterZ = heightfield.originZ + heightfield.scaleZ / 2;
+    const translation = body?.translation();
+    expect(translation?.x).toBeCloseTo(expectedCenterX, 1);
+    expect(translation?.y).toBeCloseTo(0, 9);
+    expect(translation?.z).toBeCloseTo(expectedCenterZ, 1);
+  });
+
+  it("registers the heightfield collider's handle in the SurfaceMap as grass", () => {
+    const { world, scene } = buildScene();
+    const heightfieldCollider = collidersInOrder(world).find(
+      (c) => c.shapeType() === RAPIER.ShapeType.HeightField,
+    );
+    expect(heightfieldCollider).toBeDefined();
+    if (heightfieldCollider === undefined) return;
+    expect(scene.surfaces.map.lookup(heightfieldCollider.handle)).toBe("grass");
+  });
+
+  it("covers the map bounds on all four sides", () => {
+    const heightfield = collision.heightfield;
+    expect(heightfield).toBeDefined();
+    if (heightfield === undefined) return;
+    expect(heightfield.originX).toBeCloseTo(graph.bounds.minX, 3);
+    expect(heightfield.originZ).toBeCloseTo(graph.bounds.minZ, 3);
+    expect(heightfield.originX + heightfield.scaleX).toBeCloseTo(graph.bounds.maxX, 3);
+    expect(heightfield.originZ + heightfield.scaleZ).toBeCloseTo(graph.bounds.maxZ, 3);
+  });
+
+  it("a downward raycast from well off the road network hits the heightfield collider and resolves to grass", () => {
+    const { world, scene } = buildScene();
+    const heightfield = collision.heightfield;
+    expect(heightfield).toBeDefined();
+    if (heightfield === undefined) return;
+
+    // A corner well inside the bounds but far from any road centreline — the
+    // bounds are the road network's own bounding box, so a point near one of
+    // its corners is, in practice, off the road.
+    const offRoadX = heightfield.originX + heightfield.scaleX * 0.02;
+    const offRoadZ = heightfield.originZ + heightfield.scaleZ * 0.02;
+
+    // A raycast query needs the broad-phase built at least once (the same
+    // precondition `heightfield.test.ts`'s own Rapier probe steps once
+    // before casting) — colliders exist immediately, but the query pipeline
+    // does not see them until the first `world.step()`.
+    world.step();
+    const ray = new RAPIER.Ray({ x: offRoadX, y: 10000, z: offRoadZ }, { x: 0, y: -1, z: 0 });
+    const hit = world.castRay(ray, 20000, true);
+    expect(hit).not.toBeNull();
+    if (hit === null) return;
+    expect(scene.surfaces.map.lookup(hit.collider.handle)).toBe("grass");
+  });
+
+  it("a downward raycast at the midpoint of at least 10 real road edges never resolves to grass — the sink offset wins every real road contact", () => {
+    const { world, scene } = buildScene();
+    const sampleEdges = graph.edges.filter((e) => e.points.length >= 2).slice(0, 15);
+    expect(sampleEdges.length).toBeGreaterThanOrEqual(10);
+
+    world.step();
+    let resolvedToOwnSurface = 0;
+    for (const edge of sampleEdges) {
+      const mid = edge.points[Math.floor(edge.points.length / 2)];
+      const ray = new RAPIER.Ray({ x: mid[0], y: mid[1] + 50, z: mid[2] }, { x: 0, y: -1, z: 0 });
+      const hit = world.castRay(ray, 200, true);
+      expect(hit).not.toBeNull();
+      if (hit === null) continue;
+      const resolved = scene.surfaces.map.lookup(hit.collider.handle);
+      expect(resolved).not.toBe("grass");
+      if (resolved === edge.surface) resolvedToOwnSurface++;
+    }
+    // Reported for the SUMMARY — every sampled point should resolve to its
+    // OWN edge's surface, not merely "not grass" (an adjacent road's
+    // trimesh would also satisfy the assertion above but would be a real,
+    // if narrower, bug).
+    console.log(
+      `map-scene.test.ts: ${resolvedToOwnSurface}/${sampleEdges.length} sampled road midpoints resolved to their own edge's surface`,
+    );
+    expect(resolvedToOwnSurface).toBe(sampleEdges.length);
+  });
+
+  it("a hypothetical sidecar with no heightfield block builds a scene with road colliders only, without throwing", () => {
+    const collisionNoHeightfield: MapCollision = {
+      collisionVersion: collision.collisionVersion,
+      areaId: collision.areaId,
+      buildings: collision.buildings,
+    };
+    const world = createWorld();
+    expect(() =>
+      createMapScene(
+        world,
+        graph,
+        collisionNoHeightfield,
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      ),
+    ).not.toThrow();
+    const heightfieldColliders = collidersInOrder(world).filter(
+      (c) => c.shapeType() === RAPIER.ShapeType.HeightField,
+    );
+    expect(heightfieldColliders.length).toBe(0);
+    const triMeshColliders = collidersInOrder(world).filter(
+      (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
+    );
+    expect(triMeshColliders.length).toBeGreaterThan(0);
   });
 });
 

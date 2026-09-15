@@ -69,10 +69,10 @@ describe("buildHeightfield", () => {
     expect(heightfieldZ(grid, resolution)).toBeCloseTo(BOUNDS.maxZ, 9);
   });
 
-  it("applies the 0.35m sink uniformly and records the offset as a named field", () => {
+  it("applies the sink uniformly and records the offset as a named field", () => {
     const grid = buildHeightfield(TILTED_PLANE, BOUNDS, projector, 4);
     expect(grid.sinkM).toBe(HEIGHTFIELD_SINK_M);
-    expect(HEIGHTFIELD_SINK_M).toBe(0.35);
+    expect(HEIGHTFIELD_SINK_M).toBe(5.0);
 
     const { lat, lon } = projector.unproject(heightfieldX(grid, 0), heightfieldZ(grid, 0));
     const rawSample = TILTED_PLANE.sample(lat, lon);
