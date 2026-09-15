@@ -4,7 +4,7 @@ import { type BuildingsEnvelopeLike, buildingBoxes } from "../geometry/building-
 import { makeProjector, type Projector } from "../graph/project.ts";
 import type { ElevationSampler } from "../sources/dem.ts";
 import { buildMapCollision } from "./collision.ts";
-import { buildHeightfield, type HeightfieldGrid } from "./heightfield.ts";
+import { buildHeightfield, HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
 
 const projector: Projector = makeProjector({ lat: 33.1, lon: -83.8 });
 const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
@@ -12,6 +12,20 @@ const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
 /** A minimal, valid heightfield fixture — this file's own tests exercise `buildMapCollision`'s building half; the heightfield half has its own dedicated suite in `heightfield.test.ts`. */
 const FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
   FLAT_GROUND,
+  { minX: -50, minZ: -50, maxX: 50, maxZ: 50 },
+  projector,
+  2,
+);
+
+/**
+ * A heightfield sampled well ABOVE every `realBoxes()`/`FLAT_GROUND` building
+ * (which all sit at groundY=100) — used by tests that want to verify the
+ * building collider's plain, unextended midpoint math (plan 04-11's
+ * `Math.min(groundY, localTerrainY)` extension never triggers when the local
+ * terrain reads higher than the building's own ground level).
+ */
+const HIGH_FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
+  { sample: () => 1000 },
   { minX: -50, minZ: -50, maxX: 50, maxZ: 50 },
   projector,
   2,
@@ -113,14 +127,41 @@ describe("buildMapCollision", () => {
     }
   });
 
-  it("center.y is the box's vertical midpoint — a collider at center +/- halfExtents.y sits exactly on the sampled ground and exactly at the roof", () => {
+  it("center.y is the box's vertical midpoint — a collider at center +/- halfExtents.y sits exactly on the sampled ground and exactly at the roof, when the local terrain is not lower than the ground", () => {
     const boxes = realBoxes();
-    const collision = buildMapCollision("juliette-ga", boxes, FLAT_HEIGHTFIELD);
+    // HIGH_FLAT_HEIGHTFIELD, not FLAT_HEIGHTFIELD: this test is about the
+    // plain midpoint math with no grounding extension in play (see the
+    // dedicated extension test below for that behaviour).
+    const collision = buildMapCollision("juliette-ga", boxes, HIGH_FLAT_HEIGHTFIELD);
     for (let i = 0; i < boxes.length; i++) {
       const groundY = boxes[i].positions[1]; // base corner 0's Y
       const roofY = groundY + boxes[i].heightM;
       const building = collision.buildings[i];
       expect(building.center.y - building.halfExtents.y).toBeCloseTo(groundY, 6);
+      expect(building.center.y + building.halfExtents.y).toBeCloseTo(roofY, 6);
+    }
+  });
+
+  // Plan 04-11: a car driving on the (sunk) off-road heightfield near a
+  // building sat at true ground level could pass clean underneath the
+  // building's collider -- "I can still pass through buildings, not sure if
+  // it's under or through". Fails against the pre-fix code, which always
+  // bottomed the collider at the building's own groundY regardless of how
+  // far below it the local terrain sat.
+  it("extends the collider's bottom down to the local (sunk) heightfield height, closing the pass-under gap", () => {
+    const boxes = realBoxes();
+    const collision = buildMapCollision("juliette-ga", boxes, FLAT_HEIGHTFIELD);
+    for (let i = 0; i < boxes.length; i++) {
+      const groundY = boxes[i].positions[1];
+      const roofY = groundY + boxes[i].heightM;
+      const building = collision.buildings[i];
+      const bottomY = building.center.y - building.halfExtents.y;
+      // FLAT_HEIGHTFIELD samples 100 everywhere, sunk by HEIGHTFIELD_SINK_M
+      // -> local terrain reads (100 - HEIGHTFIELD_SINK_M), strictly below
+      // groundY (100).
+      expect(bottomY).toBeCloseTo(100 - HEIGHTFIELD_SINK_M, 6);
+      expect(bottomY).toBeLessThan(groundY);
+      // The roof never moves -- only the bottom extends downward.
       expect(building.center.y + building.halfExtents.y).toBeCloseTo(roofY, 6);
     }
   });

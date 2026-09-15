@@ -35,8 +35,19 @@ import type {
   MapCollisionBuilding,
   MapCollisionHeightfield,
 } from "../core/map-collision";
-import { buildRoadGeometry, buildRoadShoulders } from "../core/road-geometry";
+import {
+  buildRoadGeometry,
+  buildRoadShoulders,
+  MIN_SHOULDER_WIDTH_M,
+  SHOULDER_BUILDING_SAFETY_MARGIN_M,
+  TARGET_SHOULDER_WIDTH_M,
+} from "../core/road-geometry";
 import type { RoadGraph } from "../core/road-graph";
+import {
+  buildingBoundingRadius,
+  type ClearanceBuilding,
+  resolvePointShoulderWidth,
+} from "../core/shoulder-clearance";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import { createSurfaceMap, type SurfaceContext, type SurfaceMap } from "./surface";
@@ -162,6 +173,7 @@ function buildRoadColliders(
   surfaceMap: SurfaceMap,
   graph: RoadGraph,
   heightfield: MapCollisionHeightfield | undefined,
+  buildings: readonly MapCollisionBuilding[],
 ): void {
   const geometry = buildRoadGeometry(graph);
   const roadBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
@@ -198,8 +210,24 @@ function buildRoadColliders(
   // (the same defensive optionality `buildHeightfieldCollider`'s own caller
   // above already applies).
   if (heightfield !== undefined) {
-    const shoulders = buildRoadShoulders(graph, (x, z) =>
-      sampleHeightfieldBilinear(heightfield, x, z),
+    const clearanceBuildings: ClearanceBuilding[] = buildings.map((b) => ({
+      centerX: b.center.x,
+      centerZ: b.center.z,
+      radiusM: buildingBoundingRadius(b.halfExtents.x, b.halfExtents.z),
+    }));
+    const shoulders = buildRoadShoulders(
+      graph,
+      (x, z) => sampleHeightfieldBilinear(heightfield, x, z),
+      (edge) => (x, z) =>
+        resolvePointShoulderWidth(
+          x,
+          z,
+          edge.widthM / 2,
+          clearanceBuildings,
+          TARGET_SHOULDER_WIDTH_M,
+          MIN_SHOULDER_WIDTH_M,
+          SHOULDER_BUILDING_SAFETY_MARGIN_M,
+        ),
     );
     for (const shoulder of shoulders) {
       const collider = world.createCollider(
@@ -298,7 +326,7 @@ export function createMapScene(
     buildHeightfieldCollider(world, surfaceMap, collision.heightfield);
   }
 
-  buildRoadColliders(world, surfaceMap, graph, collision.heightfield);
+  buildRoadColliders(world, surfaceMap, graph, collision.heightfield, collision.buildings);
 
   for (const building of collision.buildings) {
     buildBuildingCollider(world, building);

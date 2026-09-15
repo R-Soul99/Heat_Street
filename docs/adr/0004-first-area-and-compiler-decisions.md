@@ -103,21 +103,41 @@ decision 5 above.
 This resolves 04-RESEARCH.md's Open Question 3 ("what does the player see/drive on off the
 road?"). `tools/map-compiler/author/heightfield.ts` samples the raw DEM on a coarse
 128x128 grid spanning the compiled area's own road-network bounds, with every sampled height
-reduced by `HEIGHTFIELD_SINK_M` (5.0m) so the coarse grid can never visibly poke through a road
-ribbon built from independently-smoothed elevation. Consumed identically by
-`src/physics/map-scene.ts` (the physics floor) and `tools/map-compiler/author/gltf.ts` (the
-visible terrain mesh) — the SAME grid, never two independently-built copies, matching decision 5's
-own "one algorithm, two consumers" discipline.
+reduced by `HEIGHTFIELD_SINK_M` (4.5m, lowered from 5.0m within plan 04-11 — see below) so the
+coarse grid can never visibly poke through a road ribbon built from independently-smoothed
+elevation. Consumed identically by `src/physics/map-scene.ts` (the physics floor) and
+`tools/map-compiler/author/gltf.ts` (the visible terrain mesh) — the SAME grid, never two
+independently-built copies, matching decision 5's own "one algorithm, two consumers" discipline.
 
-**Amended by plan 04-11:** the sink, applied uniformly, created a real defect this plan's own
-SC1 driving session found — "the roads are floating above the scenery... if I veer off the road
-at any point I fall a few metres to the landscape, then cannot get back on." `HEIGHTFIELD_SINK_M`
-and `HEIGHTFIELD_RESOLUTION` were deliberately left unchanged (raising resolution to close the
-gap directly would cost ~524,288 terrain triangles at res 512, more than 10x the entire compiled
-map's ~45,000-triangle budget). The fix instead is `src/core/road-geometry.ts`'s
-`buildRoadShoulders`: a ramp per road edge, from the paved rail down to this SAME heightfield's
-own bilinearly-sampled height at that exact point (`src/core/heightfield-sample.ts`), built into
-both the collision (`src/physics/map-scene.ts`) and the visible `.glb`
+**Amended by plan 04-11, twice.** First: the sink, applied uniformly, created a real defect this
+plan's own SC1 driving session found — "the roads are floating above the scenery... if I veer off
+the road at any point I fall a few metres to the landscape, then cannot get back on." Fixed with
+`src/core/road-geometry.ts`'s `buildRoadShoulders`: a ramp per road edge, from the paved rail down
+to this SAME heightfield's own bilinearly-sampled height at that exact point
+(`src/core/heightfield-sample.ts`), built into both the collision (`src/physics/map-scene.ts`) and
+the visible `.glb` (`tools/map-compiler/author/gltf.ts`).
+
+Second (re-driving the first fix): the shoulder's initial width (6m) was reasoned from the
+compiler's WORST-CASE measured disagreement as if that were a rare spike — driving revealed the
+sink subtracts from EVERY sampled height, so the gap sits close to the sink value almost
+everywhere (measured: average 5.09m against a 5.0m sink), making every ramp read as "ridiculous
+45 degree slopes... climb back on (and if the car hasn't rolled, which happens a lot)." Corrected
+in two steps: (a) `TARGET_SHOULDER_WIDTH_M` raised to 20m, resolved per point along each edge
+(not one flat width per edge, which was tried first and found to drag an entire road's shoulder
+down to its single tightest constraint) via `src/core/shoulder-clearance.ts`'s
+`resolvePointShoulderWidth`, clamped near a building so the wider ramp never reaches far enough to
+clip through one (measured nearest building: ~6.9m from its road's paved edge); (b)
+`HEIGHTFIELD_SINK_M` lowered 5.0m -> 4.5m after re-measuring the worst-case raw disagreement
+post-densification (3.28m, down from 3.95m), keeping a verified 1.22m margin. Re-measured against
+the recompiled map: median ramp angle 12.9 degrees, 95th percentile 26.9 degrees — steep only at
+the rare, deliberately-accepted minimum-width case next to a close building.
+
+A related pass-under defect was found in the same driving session — "I can still pass through
+buildings, not sure if it's under or through" — root-caused to the same uniform sink: a car
+driving on the sunk terrain near a building sat at TRUE elevation could sit up to 6.69m below the
+building's own collider bottom. Fixed in `tools/map-compiler/author/collision.ts`'s
+`buildingToCollisionEntry`, which now extends each building collider's bottom face down to
+`min(trueGroundY, localSunkTerrainY)` — verified: 0.00m residual gap on the real compiled area.
 (`tools/map-compiler/author/gltf.ts`). This makes the sink's magnitude a physics-invisible
 implementation detail at the road edge — the car always has continuous ground to drive on, no
 matter how coarse the safety-net terrain underneath stays.
@@ -198,7 +218,9 @@ Carried forward, none blocking:
 |---|---|
 | This ADR cannot go missing or be stubbed | `tests/docs-present.test.ts` (existence plus a 1500-character floor) |
 | The road/collision geometry algorithm cannot silently fork between compiler and runtime | Single `src/core/road-geometry.ts` module, imported directly by both `tools/map-compiler/author/gltf.ts` and `src/physics/map-scene.ts` — no duplicate implementation exists anywhere else in the repo |
-| A road edge can never float above the terrain it borders, regardless of heightfield resolution or sink | `tests/road-geometry.test.ts`'s `buildRoadShoulders` suite (outer-rail-tracks-sampled-height, clamped-never-upward, shared-vertex-with-ribbon, CCW-winding) |
+| A road edge can never float above the terrain it borders, regardless of heightfield resolution or sink | `tests/road-geometry.test.ts`'s `buildRoadShoulders` suite (outer-rail-tracks-sampled-height, clamped-never-upward, shared-vertex-with-ribbon, CCW-winding, per-point width variation) |
+| A shoulder ramp can never reach far enough to clip through a nearby building | `tests/shoulder-clearance.test.ts`'s `resolvePointShoulderWidth` suite |
+| A car cannot pass under a building sat at true elevation regardless of local terrain sink | `tools/map-compiler/author/collision.test.ts`'s grounding-extension test |
 | A long, sparse OSM segment can no longer skip over real intervening terrain relief | `tools/map-compiler/graph/elevation.test.ts`'s densification regression test, plus `MAX_SEGMENT_LENGTH_M` capping every segment in the real compiled map at ≤25m |
 | No Google-sourced bytes anywhere in this compiler, including `tools/**` | `tests/no-google-pipeline.test.ts` (ADR 0001's mechanism, scoped to include `tools/**` per decision 3 above) |
 | The compiled sidecar can never ship malformed | `parseMapCollision` round-trip self-check in `tools/map-compiler/cli.ts`, before the file is written |

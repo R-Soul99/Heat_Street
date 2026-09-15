@@ -44,8 +44,19 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sampleHeightfieldBilinear } from "../../src/core/heightfield-sample.ts";
 import { type MapCollision, parseMapCollision } from "../../src/core/map-collision.ts";
-import { buildRoadGeometry, buildRoadShoulders } from "../../src/core/road-geometry.ts";
+import {
+  buildRoadGeometry,
+  buildRoadShoulders,
+  MIN_SHOULDER_WIDTH_M,
+  SHOULDER_BUILDING_SAFETY_MARGIN_M,
+  TARGET_SHOULDER_WIDTH_M,
+} from "../../src/core/road-geometry.ts";
 import { parseRoadGraph } from "../../src/core/road-graph.ts";
+import {
+  buildingBoundingRadius,
+  type ClearanceBuilding,
+  resolvePointShoulderWidth,
+} from "../../src/core/shoulder-clearance.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
@@ -479,6 +490,25 @@ async function main(argv: readonly string[]): Promise<void> {
   const heightfield: HeightfieldGrid = buildHeightfield(sampler, elevatedGraph.bounds, projector);
   printHeightfieldSummary(heightfield);
 
+  // Collision sidecar stage (plan 04-08, decision D-P22; heightfield block
+  // added in plan 04-10): non-road collision data ships as a separate
+  // `<areaId>.collision.json` file rather than a new key on `.map.json`,
+  // since `docs/schemas/road-graph.v1.md` is normative and closed at v1 (its
+  // own "Versioning" section). Self-checks its own output by round-tripping
+  // it through `parseMapCollision` before writing — the same discipline the
+  // elevation stage's `parseRoadGraph` self-check above already applies.
+  //
+  // MOVED ahead of the glTF/shoulder stage in plan 04-11: the shoulder stage
+  // below needs `collision.buildings` (not the raw `boxes`) to keep shoulder
+  // ramps clear of nearby buildings, and this stage has no dependency on
+  // gltf/shoulders of its own, so reordering costs nothing.
+  const collision = buildMapCollision(config.areaId, boxes, heightfield);
+  const collisionRaw = `${JSON.stringify(collision, null, 2)}\n`;
+  parseMapCollision(collisionRaw, config.areaId, `buildMapCollision(${config.areaId})`);
+  const collisionPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.collision.json`);
+  await writeFile(collisionPath, collisionRaw, "utf8");
+  printCollisionSummary(collisionPath, Buffer.byteLength(collisionRaw, "utf8"), collision);
+
   // Road-shoulder stage (plan 04-11 grounding fix): a ramp per edge from the
   // paved rail down to this SAME heightfield's own bilinearly-sampled height,
   // so the compiled `.glb` never has a road floating over a gap the runtime
@@ -488,8 +518,33 @@ async function main(argv: readonly string[]): Promise<void> {
   // independent of the validator's own `geometry` object above -- shoulders
   // are additive visual/collision geometry, never part of the reachability/
   // pathability gate.
-  const shoulders = buildRoadShoulders(elevatedGraph, (x, z) =>
-    sampleHeightfieldBilinear(heightfield, x, z),
+  //
+  // Width is resolved PER POINT via resolvePointShoulderWidth against the
+  // real compiled buildings (see src/core/shoulder-clearance.ts and
+  // src/core/road-geometry.ts's TARGET/MIN/SAFETY_MARGIN constants) — driven
+  // and corrected TWICE within this same plan's session: first to per-edge
+  // (a flat wide shoulder ploughs straight through the nearest building,
+  // measured ~6.9m from its road's paved edge on the real map), then to
+  // per-point (a per-edge width dragged a whole road's shoulder down to its
+  // single tightest constraint, even far from the building that caused it).
+  const clearanceBuildings: ClearanceBuilding[] = collision.buildings.map((b) => ({
+    centerX: b.center.x,
+    centerZ: b.center.z,
+    radiusM: buildingBoundingRadius(b.halfExtents.x, b.halfExtents.z),
+  }));
+  const shoulders = buildRoadShoulders(
+    elevatedGraph,
+    (x, z) => sampleHeightfieldBilinear(heightfield, x, z),
+    (edge) => (x, z) =>
+      resolvePointShoulderWidth(
+        x,
+        z,
+        edge.widthM / 2,
+        clearanceBuildings,
+        TARGET_SHOULDER_WIDTH_M,
+        MIN_SHOULDER_WIDTH_M,
+        SHOULDER_BUILDING_SAFETY_MARGIN_M,
+      ),
   );
 
   const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(
@@ -502,20 +557,6 @@ async function main(argv: readonly string[]): Promise<void> {
   await writeGlb(gltfDocument, glbPath);
   const glbStat = await stat(glbPath);
   printGltfSummary(glbPath, glbStat.size, gltfStats, buildingReport);
-
-  // Collision sidecar stage (plan 04-08, decision D-P22; heightfield block
-  // added in plan 04-10): non-road collision data ships as a separate
-  // `<areaId>.collision.json` file rather than a new key on `.map.json`,
-  // since `docs/schemas/road-graph.v1.md` is normative and closed at v1 (its
-  // own "Versioning" section). Self-checks its own output by round-tripping
-  // it through `parseMapCollision` before writing — the same discipline the
-  // elevation stage's `parseRoadGraph` self-check above already applies.
-  const collision = buildMapCollision(config.areaId, boxes, heightfield);
-  const collisionRaw = `${JSON.stringify(collision, null, 2)}\n`;
-  parseMapCollision(collisionRaw, config.areaId, `buildMapCollision(${config.areaId})`);
-  const collisionPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.collision.json`);
-  await writeFile(collisionPath, collisionRaw, "utf8");
-  printCollisionSummary(collisionPath, Buffer.byteLength(collisionRaw, "utf8"), collision);
 
   // Stages 5-6 (persisting authored ribbon/junction geometry into a shipped
   // collision buffer + merged glTF render mesh) land in later plans — see

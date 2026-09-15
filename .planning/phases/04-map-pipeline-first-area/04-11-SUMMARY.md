@@ -10,8 +10,10 @@ requires:
     provides: plan 04-10's off-road heightfield ground and the full compiled Juliette, GA area
 provides:
   - "Road-shoulder grounding fix: src/core/road-geometry.ts's buildRoadShoulders, a per-edge ramp from the paved rail down to the off-road heightfield's own bilinearly-sampled height (src/core/heightfield-sample.ts), built identically into the runtime collider (src/physics/map-scene.ts) and the shipped .glb (tools/map-compiler/author/gltf.ts)"
+  - "Building-aware, per-point shoulder width: src/core/shoulder-clearance.ts's resolvePointShoulderWidth, keeping the ramp wide (20m target) wherever there's room and narrow (3m floor) only exactly where a building forces it, resolved independently at every point along an edge"
+  - "Building pass-under fix: tools/map-compiler/author/collision.ts's buildingToCollisionEntry now extends each building collider's bottom down to the local (sunk) terrain height, closing the gap a car on off-road terrain could previously drive under"
   - "Long-segment terrain-following fix: tools/map-compiler/graph/elevation.ts's densifyEdgePoints, inserting DEM-sampled interior points into any OSM segment over MAX_SEGMENT_LENGTH_M (25m) before smoothing"
-  - "docs/adr/0004-first-area-and-compiler-decisions.md: Phase 4's eight locked decisions, plus this session's findings and dispositions"
+  - "docs/adr/0004-first-area-and-compiler-decisions.md: Phase 4's eight locked decisions, plus this session's findings, dispositions, and the two follow-up corrections below"
   - "ADR 0003 status update: DoubleSide fix confirmed shipped (plan 04-09), but the fade-vs-steepen re-run still blocked, now by the floating-geometry defect this plan fixed"
 affects: []
 
@@ -22,23 +24,29 @@ tech-stack:
     - "Shared bilinear heightfield sampling: src/core/heightfield-sample.ts's SampleableHeightfield structural interface (ArrayLike<number> heights) satisfies both the compiler's HeightfieldGrid and the runtime's parsed MapCollisionHeightfield with one function, no duplicate implementation"
     - "Additive geometry stays out of the validator's gate: buildRoadShoulders is a SEPARATE call from buildRoadGeometry, built after the heightfield exists and merged into the .glb/colliders downstream -- the validator's own `geometry` object (used for reachability/pathability) is untouched, preserving the 'ONE buildRoadGeometry call keeps the render mesh and the validator in sync' discipline cli.ts's own comment states"
     - "Winding correctness for a strip extension is provable from the XZ-only cross product (tests/road-geometry.test.ts's existing triangleNormalY helper) -- a shoulder strip's Y-height difference from its parent ribbon never affects CCW-from-+Y correctness, only its XZ layout relative to the parent rail does"
+    - "Per-point, not per-edge, resolution for any 'how wide/how much room here' question along a road -- a single value collapsed across a whole edge silently drags an unrelated stretch down to its tightest local constraint; src/core/shoulder-clearance.ts resolves independently at every rail point instead"
 
 key-files:
   created:
     - src/core/heightfield-sample.ts
     - tests/heightfield-sample.test.ts
+    - src/core/shoulder-clearance.ts
+    - tests/shoulder-clearance.test.ts
     - docs/adr/0004-first-area-and-compiler-decisions.md
   modified:
     - src/core/road-geometry.ts
     - tools/map-compiler/graph/elevation.ts
+    - tools/map-compiler/graph/elevation.test.ts
     - tools/map-compiler/graph/build-graph.ts
     - tools/map-compiler/author/heightfield.ts
+    - tools/map-compiler/author/heightfield.test.ts
     - tools/map-compiler/author/gltf.ts
+    - tools/map-compiler/author/collision.ts
+    - tools/map-compiler/author/collision.test.ts
     - tools/map-compiler/cli.ts
     - src/physics/map-scene.ts
     - tests/road-geometry.test.ts
     - tests/map-scene.test.ts
-    - tools/map-compiler/graph/elevation.test.ts
     - tests/docs-present.test.ts
     - docs/adr/0003-occlusion-mitigation.md
     - public/maps/juliette-ga.map.json
@@ -46,8 +54,12 @@ key-files:
     - public/maps/juliette-ga.collision.json
 
 key-decisions:
-  - "HEIGHTFIELD_SINK_M (5.0m) and HEIGHTFIELD_RESOLUTION (128) left UNCHANGED, deliberately, despite being the direct cause of the session's headline finding (roads floating above terrain). Raising resolution enough to meaningfully shrink the gap (~512, matching sources/dem.ts's own DEM_MAX_SIZE_PX) would cost ~524,288 terrain triangles alone -- over 10x the entire ~45,000-triangle compiled-map budget. Fixed the GEOMETRY instead: buildRoadShoulders ramps from the paved edge down to whatever the (however coarse, however sunk) heightfield actually reports at that exact point, making the sink's magnitude a physics-invisible implementation detail at the road edge rather than something the player ever falls into."
-  - "SHOULDER_WIDTH_M = 6m, chosen so even the worst-case measured road-vs-terrain disagreement (~3.95m, from plan 04-10's own sweep) ramps down at roughly a 35-degree grade -- steep, but a continuous slope a car can scrub down and climb back up, never the vertical, unclimbable cliff the pre-fix code left. [ASSUMED], flagged for re-driving like every other constant on this plan's own tuning-surface table."
+  - "CORRECTED ON RE-DRIVING (see 'Follow-up correction' below): the shoulder fix as first shipped used a flat SHOULDER_WIDTH_M=6m for every edge, reasoned from the worst-case measured disagreement as if it were a rare spike. Driving it revealed the road-to-terrain gap sits close to the FULL sink value almost everywhere (measured average 5.09m against a 5.0m sink), not just at rare worst-case points -- so a flat 6m ramp read as a near-45-degree slope basically everywhere ('ridiculous 45 degree slopes... happens a lot' -- rollovers). Superseded by TARGET_SHOULDER_WIDTH_M=20m resolved per POINT (not per edge) with building-aware clamping -- see the dedicated key-decision entries below."
+  - "HEIGHTFIELD_RESOLUTION (128) left unchanged in both passes -- raising it enough to meaningfully shrink the gap (~512, matching sources/dem.ts's own DEM_MAX_SIZE_PX) would cost ~524,288 terrain triangles alone, over 10x the entire ~45,000-triangle compiled-map budget."
+  - "HEIGHTFIELD_SINK_M lowered 5.0m -> 4.5m on the follow-up pass, after re-measuring the worst-case RAW (unsunk) road-vs-terrain disagreement post-densification: 3.28m, down from plan 04-10's original 3.95m measurement. 4.5m keeps a verified 1.22m margin (re-confirmed: 0 terrain-above-road violations on the recompiled map). Not lowered further -- ramp angle is now primarily TARGET_SHOULDER_WIDTH_M's job, and the sink still needs real margin against a coarse 128-cell grid."
+  - "TARGET_SHOULDER_WIDTH_M = 20m (up from the first pass's flat 6m), chosen so the common ~5m gap ramps at roughly a 14-degree grade and the measured worst case (~9.17m) at roughly 25 degrees -- steep only at the rare extreme. Resolved PER POINT along each edge via src/core/shoulder-clearance.ts's resolvePointShoulderWidth, clamped down to MIN_SHOULDER_WIDTH_M (3m) with a SHOULDER_BUILDING_SAFETY_MARGIN_M (2m) buffer wherever a building is close enough that 20m would clip through it (measured nearest building: ~6.9m from its road's paved edge). Re-measured on the recompiled map: median ramp angle 12.9 degrees, p90 17.3 degrees, p95 26.9 degrees, max 61.8 degrees (an isolated point hard against the closest building, where MIN_SHOULDER_WIDTH_M's own floor accepts a locally steep-but-continuous ramp over no ramp at all)."
+  - "A first version of the building-aware width resolved ONE width per EDGE (checking every point but collapsing to the tightest constraint for the whole edge) -- re-driving found this dragged an entire road's shoulder down to a close-building width even on stretches nowhere near that building. Corrected to resolve independently PER POINT instead (buildRoadShoulders's widthAtResolver now takes (x,z), not just the edge) -- this is what actually produced the median/p90 angles above, not the width increase alone."
+  - "Building pass-under fix (separate finding, same session): 'I can still pass through buildings, not sure if it's under or through' -- root-caused to the same uniform sink: a car on sunk off-road terrain near a building sat at TRUE elevation could sit up to 6.69m below the building's own collider bottom. Fixed in tools/map-compiler/author/collision.ts's buildingToCollisionEntry, extending each building collider's bottom down to min(trueGroundY, localSunkTerrainY). Verified: 0.00m residual gap on the recompiled map."
   - "Shoulders are edge-only, not junction-fan-only -- a junction fan is already wider than any incident road's paved half-width and reads as a paved apron, so the floating-edge problem is concentrated along a road's run, not at nodes. Filling a fan's own irregular boundary with a matching ramp is a materially harder variable-radius-polygon problem for comparatively little benefit; deliberately left for a follow-up rather than guessed at."
   - "The 'road passes through a hill' finding (distinct from the floating-shoulder finding) traced to a DIFFERENT root cause: a real 503m OSM way segment with only its two endpoints as vertices -- the straight-line elevation interpolation between them cut through real intervening terrain relief a fine-grained sweep confirmed (up to 3.25m of terrain rising ABOVE the linearly-interpolated road, strictly BETWEEN vertices, never AT one). Fixed with densifyEdgePoints (MAX_SEGMENT_LENGTH_M=25m) in the elevation stage, not the heightfield/shoulder stage -- verified the fix by re-running the same sweep against the recompiled map: 0 terrain-above-road points, down from 123, and the map's own max segment length is now capped at 24.9m."
   - "The oblique-angle junction surface bug (gravel visible through tarmac at a non-90-degree tarmac/gravel junction) was investigated at length -- confirmed real acute (<45deg) mixed-width junctions exist in the compiled data (node 45: 3.5m dirt road meeting 7m tarmac at 28-41deg), ruled out MITER_CLAMP as the mechanism (junction endpoints never receive a miter -- tangentAndFactor's own i===0/i===n-1 early returns are always factor:1), and found genuine near-duplicate fan corners at 'through'-road junctions (two collinear same-width edges split at a node) as a plausible but unconfirmed contributing factor -- but could NOT conclusively isolate and safely fix the exact rendering defect without direct visual re-verification. Deferred rather than shipping a speculative geometry change; recorded in ADR 0004's Open Questions and both implicated constants' own doc comments."
@@ -88,6 +100,10 @@ completed: 2026-09-15
   - **Wrote `docs/adr/0004-first-area-and-compiler-decisions.md`** (15,344 chars), recording Phase 4's eight locked decisions plus this session's findings, and registered it in `tests/docs-present.test.ts`.
   - **Amended `docs/adr/0003-occlusion-mitigation.md`** with a status update: the `DoubleSide` fix from plan 04-09 is confirmed shipped, but the fade-vs-steepen comparison still hasn't been fairly re-run — this session's attempt was confounded by the (now-fixed) floating-geometry defect instead.
   - **Recompiled** `juliette-ga.{map.json,glb,collision.json}` with both fixes. Verified two consecutive compiles produce byte-identical artifacts. `npm run check` green (typecheck, lint, 844 tests).
+- **Follow-up correction round (same session, after re-driving the first fix).** The developer re-tested and reported: *"it's now possible to transition from the road to terrain and back via those ridiculous 45 degree slopes, so can climb back onto the road if required (and if the car hasn't rolled, which happens a lot). can still pass through buildings, not sure if it passes under them or through."* Two real, distinct problems, both traced and fixed:
+  - **Shoulder ramps were too steep.** The first-pass `SHOULDER_WIDTH_M=6m` was reasoned from the worst-case measured disagreement as if it were rare — re-measuring showed the gap sits close to the FULL heightfield sink almost everywhere (average 5.09m against a 5.0m sink), so every ramp was a near-45-degree slope. Corrected in two steps: `TARGET_SHOULDER_WIDTH_M` raised to 20m, AND resolved PER POINT along each edge (`src/core/shoulder-clearance.ts`, new) rather than one flat width per edge — a per-edge version was tried first and found to drag an entire road's shoulder down to its single tightest building-proximity constraint. Building-aware clamping (min 3m, 2m safety margin) keeps the wider ramp from clipping through the nearest building (measured ~6.9m from its road's paved edge). `HEIGHTFIELD_SINK_M` also lowered 5.0m -> 4.5m after re-measuring the post-densification worst-case disagreement (3.28m, with 1.22m verified margin). Result: median ramp angle 12.9 degrees (down from a uniform ~40-45 degrees), p95 26.9 degrees.
+  - **Cars could pass under buildings.** Root-caused to the same uniform sink: off-road terrain near a building sat up to 6.69m below that building's TRUE-elevation collider bottom. Fixed in `tools/map-compiler/author/collision.ts` — each building collider now extends its bottom face down to the local (sunk) terrain height. Verified: 0.00m residual gap.
+  - Both fixes regression-tested (`tests/shoulder-clearance.test.ts` new, `tests/road-geometry.test.ts` and `tools/map-compiler/author/collision.test.ts` extended) and recompiled; two consecutive compiles verified byte-identical again. `npm run check` green, 854 tests.
 
 ## Findings (Task 1, per verification step)
 

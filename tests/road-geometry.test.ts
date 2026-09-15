@@ -755,4 +755,29 @@ describe("buildRoadShoulders — grounding fix", () => {
       expectAllTrianglesCCW(shoulder.positions, shoulder.indices);
     }
   });
+
+  // Plan 04-11's second correction: a per-EDGE width (one number for the
+  // whole edge) dragged a road's ENTIRE shoulder down to its single
+  // tightest constraint. Regression test for the per-POINT fix: two
+  // different points on the SAME edge must be able to resolve to two
+  // genuinely different widths.
+  it("resolves shoulder width independently per point along one edge, not once for the whole edge", () => {
+    const shoulders = buildRoadShoulders(
+      graph,
+      () => 4,
+      () => (_x, z) => (z < 5 ? 3 : 12), // near node0: narrow; near node1: wide
+    );
+    const shoulder = shoulders[0];
+
+    // Left strip is stripPositions(outerLeft, left): vertices alternate
+    // [outerLeft_i, left_i, outerLeft_{i+1}, left_{i+1}, ...] -- the outer
+    // (even-indexed within each pair) vertex's X offset from the ribbon's
+    // own halfWidth (3) reveals which widthAt branch was used at that point.
+    const outerLeftAtZ0 = shoulder.positions[0]; // point index 0 (z=0) -> narrow branch
+    const outerLeftAtZ10 = shoulder.positions[6]; // point index 1 (z=10) -> wide branch
+    // halfWidth 3 + resolved width: narrow -> x=-6, wide -> x=-15.
+    expect(outerLeftAtZ0).toBeCloseTo(-6, 6);
+    expect(outerLeftAtZ10).toBeCloseTo(-15, 6);
+    expect(outerLeftAtZ0).not.toBeCloseTo(outerLeftAtZ10, 1);
+  });
 });

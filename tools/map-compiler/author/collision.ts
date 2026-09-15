@@ -32,6 +32,7 @@
  * Rapier. NOT mechanically enforced — `tests/layering.test.ts` does not scan
  * `tools/**`; this file's own discipline is the only guard.
  */
+import { sampleHeightfieldBilinear } from "../../../src/core/heightfield-sample.ts";
 import type { MapCollision, MapCollisionBuilding } from "../../../src/core/map-collision.ts";
 import { MAP_COLLISION_VERSION } from "../../../src/core/map-collision.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
@@ -50,16 +51,34 @@ function xzAt(positions: Float32Array, index: number): XZ {
 /**
  * Converts one `BuildingBox` into a `MapCollisionBuilding`, per this file's
  * header comment. `box.positions[1]` is base corner 0's Y (the prism's
- * ground level — every base corner shares the same Y, per `buildPrism`), so
- * `center.y` is that ground level plus half the prism's height, matching
- * `MapCollisionBuilding.center`'s documented "vertical midpoint" contract.
+ * ground level — every base corner shares the same Y, per `buildPrism`).
+ *
+ * Plan 04-11's grounding-fix follow-up: the building's TRUE ground level and
+ * the off-road heightfield's own (sunk, coarse) sampled height at the same
+ * XZ point can disagree by several metres — measured on the real compiled
+ * area, up to 6.69m. Since the heightfield collider exists everywhere across
+ * the map's bounds, INCLUDING under every building, a car driving on that
+ * sunk terrain near a building sat at true ground level could pass clean
+ * underneath the building's collider without ever touching it — the
+ * "I can still pass through buildings, not sure if it's under or through"
+ * finding. The collider's bottom is extended down to
+ * `min(groundY, localHeightfieldY)` so it always reaches at least as low as
+ * whatever ground the player could actually be standing on nearby, closing
+ * that gap regardless of how sunk the local terrain is. `heightfield` is
+ * REQUIRED (not optional) here — a building with no heightfield to sample
+ * keeps its plain true-ground-level box, per the ternary below.
  */
-function buildingToCollisionEntry(box: BuildingBox): MapCollisionBuilding {
+function buildingToCollisionEntry(
+  box: BuildingBox,
+  heightfield: HeightfieldGrid | undefined,
+): MapCollisionBuilding {
   const c0 = xzAt(box.positions, 0);
   const c1 = xzAt(box.positions, 1);
   const c2 = xzAt(box.positions, 2);
   const c3 = xzAt(box.positions, 3);
   const groundY = box.positions[1];
+  const centerX = (c0.x + c1.x + c2.x + c3.x) / 4;
+  const centerZ = (c0.z + c1.z + c2.z + c3.z) / 4;
 
   const edge01X = c1.x - c0.x;
   const edge01Z = c1.z - c0.z;
@@ -80,13 +99,15 @@ function buildingToCollisionEntry(box: BuildingBox): MapCollisionBuilding {
   const ez = edgeLen > 0 ? edge01Z / edgeLen : 0;
   const rotationY = Math.atan2(-ez, ex);
 
+  const localTerrainY =
+    heightfield === undefined ? groundY : sampleHeightfieldBilinear(heightfield, centerX, centerZ);
+  const bottomY = Math.min(groundY, localTerrainY);
+  const topY = groundY + box.heightM;
+  const halfY = (topY - bottomY) / 2;
+
   return {
-    center: {
-      x: (c0.x + c1.x + c2.x + c3.x) / 4,
-      y: groundY + box.heightM / 2,
-      z: (c0.z + c1.z + c2.z + c3.z) / 4,
-    },
-    halfExtents: { x: halfX, y: box.heightM / 2, z: halfZ },
+    center: { x: centerX, y: bottomY + halfY, z: centerZ },
+    halfExtents: { x: halfX, y: halfY, z: halfZ },
     rotationY,
   };
 }
@@ -109,7 +130,7 @@ export function buildMapCollision(
   return {
     collisionVersion: MAP_COLLISION_VERSION,
     areaId,
-    buildings: boxes.map(buildingToCollisionEntry),
+    buildings: boxes.map((box) => buildingToCollisionEntry(box, heightfield)),
     // `Array.from` converts `HeightfieldGrid`'s internal `Float32Array` into a
     // plain JSON-serialisable array — `JSON.stringify` does not turn a
     // `Float32Array` into a JSON array (verified empirically; see

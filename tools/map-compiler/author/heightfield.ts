@@ -96,15 +96,28 @@ export const HEIGHTFIELD_RESOLUTION = 128;
  * per this plan's own `<action>` instruction ("raise HEIGHTFIELD_SINK_M and
  * recompile rather than loosening the assertion").
  */
-export const HEIGHTFIELD_SINK_M = 5.0;
+export const HEIGHTFIELD_SINK_M = 4.5;
 
-// [confirmed unchanged in plan 04-11's session] Left at 5.0m — see
-// HEIGHTFIELD_RESOLUTION's own note just above. Lowering this would only
-// re-risk terrain poking through the road at this grid's coarseness;
-// `buildRoadShoulders` (src/core/road-geometry.ts) makes the sink's exact
-// value a physics-invisible implementation detail at the road edge, since
-// the shoulder ramp always closes down to the real sampled terrain height
-// regardless of how far below the road it sits.
+// [TUNED in plan 04-11's feel session, twice] Before: 5.0m. This constant's
+// FIRST note in this session claimed lowering it was unnecessary because
+// `buildRoadShoulders` makes the sink "a physics-invisible implementation
+// detail at the road edge" — that claim was wrong, corrected on re-driving
+// the shoulder fix. Because the sink subtracts from EVERY sampled height
+// uniformly, the road-to-terrain gap sits close to the sink value almost
+// everywhere (measured on the real compiled area: average 5.09m against a
+// 5.0m sink), not just at rare worst-case points — so the sink's magnitude
+// directly sets how steep every shoulder ramp is, AND how far below true
+// grade a car sits anywhere off-road (which is why cars could drive under
+// buildings sat at true elevation: measured up to 6.69m of gap before the
+// separate building-collider fix in tools/map-compiler/author/collision.ts).
+// Lowered to 4.5m after re-measuring the worst-case RAW (unsunk)
+// terrain-above-road disagreement post-densification (this plan's own
+// elevation.ts fix): 3.28m, down from D-P29's original 3.95m measurement —
+// 4.5m keeps a 1.22m margin above that, verified by re-running the same
+// terrain-above-road sweep against the recompiled map (0 violations). Not
+// lowered further: the ramp angle is now primarily TARGET_SHOULDER_WIDTH_M's
+// job (`src/core/road-geometry.ts`), and this sink still needs real margin
+// against a coarse 128-cell grid.
 
 /**
  * The heightfield block this module produces, matching

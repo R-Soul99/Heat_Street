@@ -130,19 +130,42 @@ const COLLAPSE_EPS = 1e-4;
 const MITER_CLAMP = 3;
 
 /**
- * How far, in metres, `buildRoadShoulders` extends a ramp beyond each edge's
- * paved rail before it meets the off-road heightfield's own (bilinearly
- * sampled) height at that point. [ASSUMED] first-pass value for the plan
- * 04-11 feel session: the compiler's own worst-case measured road-vs-terrain
- * disagreement is ~3.95m (`tools/map-compiler/author/heightfield.ts`'s own
- * `HEIGHTFIELD_SINK_M` doc comment) — 6m of run keeps even that worst case
- * under a ~35 degree grade (steep, but a continuous slope a car can scrub
- * down and climb back up, never a vertical drop it can be wedged under),
- * while the common case (a much smaller disagreement) reads as a gentle curb
- * rather than a ramp. Flagged for re-verification by driving, same as every
- * other constant on this plan's own tuning-surface table.
+ * Target shoulder width, in metres, when no nearby building forces it
+ * narrower (see `resolvePointShoulderWidth` in `./shoulder-clearance.ts`).
+ *
+ * CORRECTED within plan 04-11's own session, on re-driving the first fix:
+ * the original value here was 6m, reasoned from the compiler's WORST-CASE
+ * measured road-vs-terrain disagreement (~3.95m at the time) as if that
+ * were a rare spike above an otherwise-small gap. Driving the fix revealed
+ * that reasoning was wrong — `HEIGHTFIELD_SINK_M` is subtracted from EVERY
+ * sampled height, so the road-to-terrain gap sits close to the sink value
+ * almost everywhere (measured on the real compiled area: average 5.09m,
+ * min 1.94m, max 9.17m — not a rare worst case at all). A flat 6m ramp
+ * therefore read as a near-45-degree slope basically everywhere: "ridiculous
+ * 45 degree slopes... climb back on (and if the car hasn't rolled, which
+ * happens a lot)." 20m keeps the common ~5m gap under a ~14 degree grade and
+ * the measured worst case (~9.17m) under ~25 degrees — steep only at the
+ * rare extreme, gentle everywhere else. [ASSUMED], flagged for re-driving
+ * again like every other constant on this plan's own tuning-surface table.
  */
-const SHOULDER_WIDTH_M = 6;
+export const TARGET_SHOULDER_WIDTH_M = 20;
+
+/**
+ * Shoulder width never shrinks below this, however close a building forces
+ * `resolvePointShoulderWidth` to clamp it — a short, steep ramp is still a
+ * continuous drivable surface, which is strictly better than a shoulder
+ * removed outright (back to a vertical, unclimbable cliff, the original
+ * defect this whole mechanism fixes). [ASSUMED] first-pass value.
+ */
+export const MIN_SHOULDER_WIDTH_M = 3;
+
+/**
+ * Extra clearance subtracted from the raw building-distance measurement
+ * before it becomes an available shoulder width, so the ramp's own outer
+ * edge never touches a building's footprint even at the resolved width's
+ * exact limit. [ASSUMED] first-pass value.
+ */
+export const SHOULDER_BUILDING_SAFETY_MARGIN_M = 2;
 
 /**
  * Road-class paving-apron ranking for junction-fan surface assignment
@@ -407,10 +430,15 @@ export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
  * `buildRibbon`'s output at every point, not just the two end corners — the
  * same watertightness-by-shared-vertices discipline this module's header
  * applies to ribbon/fan seams), and each strip's OUTER rail offset a further
- * `SHOULDER_WIDTH_M` along the SAME per-point perpendicular, at whatever
- * height `heightSampler` reports for that outer point — never a fixed drop,
- * so the ramp always reaches the real (however coarse) off-road ground
- * directly below it instead of leaving a residual gap.
+ * a per-point width (`widthAt(centreX, centreZ)`) along the SAME per-point
+ * perpendicular, at whatever height `heightSampler` reports for that outer
+ * point — never a fixed drop, so the ramp always reaches the real (however
+ * coarse) off-road ground directly below it instead of leaving a residual
+ * gap. The width itself is resolved PER POINT by the caller (see
+ * `buildRoadShoulders`), not a single global constant — `./shoulder-
+ * clearance.ts`'s `resolvePointShoulderWidth` narrows it near a building so
+ * the ramp itself never reaches far enough to clip through one, without
+ * dragging the rest of the same edge's ramp down too.
  *
  * Winding follows `buildRibbon`'s own `(a, a+1, b)`/`(b, a+1, b+1)` rule via
  * the shared `stripIndices` helper. On the left side the OUTER rail is
@@ -425,21 +453,28 @@ export function buildRibbon(edge: RoadGraphEdge): RibbonGeometry {
 function buildEdgeShoulder(
   edge: RoadGraphEdge,
   heightSampler: HeightSampler,
+  widthAt: (x: number, z: number) => number,
 ): ShoulderGeometryEntry {
-  const { left, right, perp } = computeEdgeRails(edge);
+  const { points, left, right, perp } = computeEdgeRails(edge);
   const n = left.length;
 
   const outerLeft: Vec3[] = new Array(n);
   const outerRight: Vec3[] = new Array(n);
   for (let i = 0; i < n; i++) {
+    // Resolved from the CENTRELINE point, not either offset rail -- one
+    // width per point, applied symmetrically to both sides (see this
+    // function's own header comment on why, and `buildRoadShoulders`'s
+    // `widthAt` doc comment for the per-point-not-per-edge rationale).
+    const widthM = widthAt(points[i][0], points[i][2]);
+
     const l = left[i];
-    const outerLeftX = l[0] + perp[i].x * SHOULDER_WIDTH_M;
-    const outerLeftZ = l[2] + perp[i].z * SHOULDER_WIDTH_M;
+    const outerLeftX = l[0] + perp[i].x * widthM;
+    const outerLeftZ = l[2] + perp[i].z * widthM;
     outerLeft[i] = [outerLeftX, Math.min(l[1], heightSampler(outerLeftX, outerLeftZ)), outerLeftZ];
 
     const r = right[i];
-    const outerRightX = r[0] - perp[i].x * SHOULDER_WIDTH_M;
-    const outerRightZ = r[2] - perp[i].z * SHOULDER_WIDTH_M;
+    const outerRightX = r[0] - perp[i].x * widthM;
+    const outerRightZ = r[2] - perp[i].z * widthM;
     outerRight[i] = [
       outerRightX,
       Math.min(r[1], heightSampler(outerRightX, outerRightZ)),
@@ -479,8 +514,29 @@ function buildEdgeShoulder(
 export function buildRoadShoulders(
   graph: RoadGraph,
   heightSampler: HeightSampler,
+  /**
+   * Resolves each edge's own shoulder width, PER POINT along the edge — not
+   * one flat width for the whole edge. [Corrected within plan 04-11's own
+   * session, on re-driving:] a per-EDGE width (checking every point but
+   * collapsing to one MINIMUM for the whole edge) meant a single close
+   * building anywhere along a long road dragged that road's ENTIRE shoulder
+   * down to the tight, close-building width — steep (measured up to ~65
+   * degrees at the resolved minimum) even on stretches nowhere near that
+   * building. Per-point resolution keeps the ramp wide wherever there is
+   * room and only narrows exactly where a building actually is.
+   *
+   * Defaults to the flat `TARGET_SHOULDER_WIDTH_M` everywhere
+   * (building-unaware) — real callers (`tools/map-compiler/cli.ts`,
+   * `src/physics/map-scene.ts`) pass `./shoulder-clearance.ts`'s
+   * `resolvePointShoulderWidth` bound to the compiled area's own buildings
+   * instead, so this module itself stays free of any building/collision
+   * import (this file's own "imports only road-graph/surface-types"
+   * layering rule).
+   */
+  widthAtResolver: (edge: RoadGraphEdge) => (x: number, z: number) => number = () => () =>
+    TARGET_SHOULDER_WIDTH_M,
 ): readonly ShoulderGeometryEntry[] {
-  return graph.edges.map((edge) => buildEdgeShoulder(edge, heightSampler));
+  return graph.edges.map((edge) => buildEdgeShoulder(edge, heightSampler, widthAtResolver(edge)));
 }
 
 function normalizeAngle(rad: number): number {
