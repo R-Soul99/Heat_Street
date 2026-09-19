@@ -111,9 +111,10 @@ export interface CameraFraming {
 
 /**
  * A low-speed -> high-speed `CameraFraming` curve. `distanceM` exists
- * separately from `altitudeM` because the helicopter rig is a high ANGLE,
- * not a top-down: both legs of the offset must scale together or the pitch
- * angle drifts with speed. `highSpeedMs` is intended to be aligned to the
+ * separately from `altitudeM` because the helicopter rig is a near-overhead
+ * "news chopper" shot, not a fixed pure top-down: both legs of the offset
+ * must scale together or the pitch angle drifts with speed. `highSpeedMs` is
+ * intended to be aligned to the
  * speedometer's existing 120 mph amber transition (53.64 m/s,
  * `src/hud/speedometer.ts`'s `REDLINE_MPH`) so the camera stops changing at
  * the same speed the gauge changes colour — the actual default VALUES for

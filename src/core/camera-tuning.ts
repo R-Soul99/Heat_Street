@@ -50,13 +50,18 @@ export interface CameraTuning {
     /**
      * Degrees. Vertical FOV at `highSpeedMs`. `[ASSUMED]`. Together with
      * the other seven `framing` leaves above, this gives a 7.0 degree FOV
-     * and 6.0 m altitude separation between 60 mph (26.82 m/s) and 110 mph
+     * and 22.5 m altitude separation between 60 mph (26.82 m/s) and 110 mph
      * (49.17 m/s) on `framingForSpeed`, and holds the pitch
-     * (`atan(altitudeM/distanceM)`) at roughly 41 degrees at both speed
-     * extremes — the shipped SC4 separation proof, asserted directly by
-     * `tests/camera-tuning.test.ts`. Corrected in plan 03-11's go/no-go
-     * playtest, exactly like `rearSideFriction`/`powerOversteerGain`/
-     * `bodyRollGain` were in Phase 2's plan 02-10.
+     * (`atan(altitudeM/distanceM)`) at a CONSTANT ~79.9 degrees across the
+     * entire speed range — `lowAltitudeM`/`lowDistanceM` and
+     * `highAltitudeM`/`highDistanceM` are exact multiples of the same 45:8
+     * ratio, so linear interpolation never drifts the pitch even between the
+     * two ends. This is the near-overhead "news helicopter" framing: the
+     * point is area/route visibility, not a chase-cam angle — the shipped
+     * SC4 separation proof, asserted directly by `tests/camera-tuning.test.ts`.
+     * Corrected in plan 03-11's go/no-go playtest, exactly like
+     * `rearSideFriction`/`powerOversteerGain`/`bodyRollGain` were in Phase
+     * 2's plan 02-10.
      */
     highFovDeg: number;
   };
@@ -89,9 +94,20 @@ export interface CameraTuning {
     fadeFloorOpacity: number;
     /** Per second. Damping lambda for the fade-opacity mitigation. `[ASSUMED]`. */
     fadeLambda: number;
-    /** Degrees. The rig's baseline (non-steepened) pitch. `[ASSUMED]`. */
+    /**
+     * Degrees. The rig's baseline (non-steepened) pitch. `[ASSUMED]`. Kept
+     * aligned to `framing`'s geometric pitch (`atan(altitudeM/distanceM)`,
+     * ~79.9 deg) — see that field's own doc comment. A few tenths of a
+     * degree of drift between this constant and the framing geometry is
+     * expected and negligible, exactly as it was at the old ~41 deg baseline.
+     */
     basePitchDeg: number;
-    /** Degrees. The steepen mitigation's near-overhead pitch ceiling. `[ASSUMED]`. */
+    /**
+     * Degrees. The steepen mitigation's near-overhead pitch ceiling.
+     * `[ASSUMED]`. Must stay above `basePitchDeg` — now that the baseline
+     * itself is near-overhead, this is the last few degrees toward vertical,
+     * not the large swing it was at the old ~41 deg baseline.
+     */
     maxPitchDeg: number;
     /** Count. Number of rays in the steepen mitigation's occlusion-density fan. `[ASSUMED]`. */
     fanRayCount: number;
@@ -132,15 +148,15 @@ export function defaultCameraTuning(): CameraTuning {
       // (REDLINE_MPH) so the camera stops changing where the gauge changes
       // colour.
       highSpeedMs: 53.64,
-      lowAltitudeM: 14,
-      lowDistanceM: 16,
+      // 45:8 pitch ratio (atan(45/8) ~= 79.9 deg) — near-overhead, held
+      // constant through `highAltitudeM`/`highDistanceM` below being an
+      // exact 2x multiple of this pair. See the `highFovDeg` doc comment on
+      // `CameraTuning` above for the full arithmetic.
+      lowAltitudeM: 45,
+      lowDistanceM: 8,
       lowFovDeg: 48,
-      // See the `highFovDeg` doc comment on `CameraTuning` above for the
-      // full arithmetic: this triple gives a 7.0 degree FOV and 6.0 m
-      // altitude separation between 60 and 110 mph, and holds the pitch at
-      // roughly 41 degrees at both ends.
-      highAltitudeM: 26,
-      highDistanceM: 30,
+      highAltitudeM: 90,
+      highDistanceM: 16,
       highFovDeg: 62,
     },
     damping: {
@@ -156,8 +172,8 @@ export function defaultCameraTuning(): CameraTuning {
       nearTargetMarginM: 2.0,
       fadeFloorOpacity: 0.15,
       fadeLambda: 8.0,
-      basePitchDeg: 41,
-      maxPitchDeg: 78,
+      basePitchDeg: 80,
+      maxPitchDeg: 88,
       fanRayCount: 5,
     },
     chaseFallback: {
@@ -219,10 +235,10 @@ export const CAMERA_TUNING_RANGES: {
   framing: {
     lowSpeedMs: { min: 0, max: 80, step: 0.5 },
     highSpeedMs: { min: 0, max: 80, step: 0.5 },
-    lowAltitudeM: { min: 3, max: 80, step: 0.5 },
+    lowAltitudeM: { min: 3, max: 120, step: 0.5 },
     lowDistanceM: { min: 3, max: 80, step: 0.5 },
     lowFovDeg: { min: 25, max: 100, step: 1 },
-    highAltitudeM: { min: 3, max: 80, step: 0.5 },
+    highAltitudeM: { min: 3, max: 120, step: 0.5 },
     highDistanceM: { min: 3, max: 80, step: 0.5 },
     highFovDeg: { min: 25, max: 100, step: 1 },
   },

@@ -128,6 +128,18 @@ describe("defaultCameraTuning — SC4 separation against the SHIPPED defaults", 
     expect(Math.abs(at110.altitudeM - at60.altitudeM)).toBeGreaterThanOrEqual(5);
   });
 
+  it("near-overhead baseline: both low and high framing pitch fall in the 75-85 degree news-helicopter band", () => {
+    const tuning = defaultCameraTuning();
+    const lowPitchDeg =
+      (Math.atan(tuning.framing.lowAltitudeM / tuning.framing.lowDistanceM) * 180) / Math.PI;
+    const highPitchDeg =
+      (Math.atan(tuning.framing.highAltitudeM / tuning.framing.highDistanceM) * 180) / Math.PI;
+    expect(lowPitchDeg).toBeGreaterThanOrEqual(75);
+    expect(lowPitchDeg).toBeLessThanOrEqual(85);
+    expect(highPitchDeg).toBeGreaterThanOrEqual(75);
+    expect(highPitchDeg).toBeLessThanOrEqual(85);
+  });
+
   it("near-constant pitch: the low and high framing angles differ by less than 3 degrees", () => {
     const tuning = defaultCameraTuning();
     const lowPitchDeg =
@@ -135,6 +147,18 @@ describe("defaultCameraTuning — SC4 separation against the SHIPPED defaults", 
     const highPitchDeg =
       (Math.atan(tuning.framing.highAltitudeM / tuning.framing.highDistanceM) * 180) / Math.PI;
     expect(Math.abs(highPitchDeg - lowPitchDeg)).toBeLessThan(3);
+  });
+
+  it("occlusion.basePitchDeg stays aligned with the framing geometry's baseline pitch", () => {
+    const tuning = defaultCameraTuning();
+    const geometricPitchDeg =
+      (Math.atan(tuning.framing.lowAltitudeM / tuning.framing.lowDistanceM) * 180) / Math.PI;
+    expect(Math.abs(tuning.occlusion.basePitchDeg - geometricPitchDeg)).toBeLessThan(1);
+  });
+
+  it("occlusion.maxPitchDeg leaves headroom above basePitchDeg for the steepen mitigation", () => {
+    const tuning = defaultCameraTuning();
+    expect(tuning.occlusion.maxPitchDeg).toBeGreaterThan(tuning.occlusion.basePitchDeg);
   });
 });
 
