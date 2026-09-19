@@ -193,7 +193,7 @@ Items acknowledged and carried forward from previous milestone close:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260913-epf | Add reverse gear and a temporary debug free-look camera override | 2026-09-13 | 58426be | [260913-epf-add-reverse-gear-and-a-temporary-debug-f](./quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/) |
-| 260919-cam | Retune helicopter camera to near-overhead (~80 deg) baseline pitch | 2026-09-19 | _pending commit_ | [260919-cam-retune-helicopter-camera-to-near-overhead](./quick/260919-cam-retune-helicopter-camera-to-near-overhead/) |
+| 260919-cam | Retune helicopter camera to near-overhead (~80 deg) baseline pitch | 2026-09-19 | 61b27d5 | [260919-cam-retune-helicopter-camera-to-near-overhead](./quick/260919-cam-retune-helicopter-camera-to-near-overhead/) |
 
 ## Session Continuity
 
