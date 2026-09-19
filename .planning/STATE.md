@@ -178,7 +178,7 @@ None yet.
 - **[Phase 04-11, open]** Road width (`LANE_WIDTH_M`/`DEFAULT_LANES_BY_CLASS`) may need retuning — "quite difficult to stay on the roads at speed" — but was left unchanged pending a re-drive now that the floating-road defect (which made every departure from the road a hard stop) is fixed. Re-test before touching these constants.
 - **[Phase 04-11, open]** The occlusion mitigation comparison (ADR 0003) still has not been fairly run on real compiled geometry — the `DoubleSide` fix landed (04-09) but this session's attempt was confounded by the (now-fixed) floating-geometry defect instead. Re-attempt the `O`-toggle fade/steepen/off comparison in a future session; both known blockers are now clear.
 - **[Phase 04-11, open, project-level]** No phase in ROADMAP.md (5 through 8, all systems-only: navigation/medals/AI/heat) currently schedules an art-direction pass, but the developer's own verdict on the compiled area ("surreal dream," not a real town) makes one necessary before the visual result matches the envisioned chase-movie look. Decide whether to insert a dedicated art-direction phase before continuing past Phase 4, or fold it into an existing phase's scope. See STATE.md's Phase 04-11 decision entry above for full context; the developer explicitly wants to stay on the current Three.js/Rapier stack, not evaluate Unity/Godot.
-- **[Phase 04-11, open, low-cost]** Both the permanent helicopter camera and the debug chase-cam fallback read closer than the developer's envisioned finished-product angle (wants a genuinely higher, more overhead "real helicopter" view). Already live-tunable via `?debug` (`src/core/camera-tuning.ts`'s `altitudeM`/`distanceM`, range 3-80m) with zero code change — preview a value, then bake it into the defaults. Cheap to do whenever, not blocking.
+- **[Phase 04-11, open, low-cost]** Both the permanent helicopter camera and the debug chase-cam fallback read closer than the developer's envisioned finished-product angle (wants a genuinely higher, more overhead "real helicopter" view). Already live-tunable via `?debug` (`src/core/camera-tuning.ts`'s `altitudeM`/`distanceM`, range 3-80m) with zero code change — preview a value, then bake it into the defaults. Cheap to do whenever, not blocking. RESOLVED by quick task 260919-cam (below): `framing.*AltitudeM`/`*DistanceM` retuned to a constant ~79.9 deg pitch (was ~41 deg), `occlusion.basePitchDeg`/`maxPitchDeg` raised to 80/88 to match; the debug chase-cam fallback (`chaseFallback`, D-12) was deliberately left untouched — it exists to reproduce Phase 2's plan 02-10 signed-off feel-session view byte-for-byte, not to match the permanent rig's angle.
 
 ## Deferred Items
 
@@ -193,6 +193,7 @@ Items acknowledged and carried forward from previous milestone close:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260913-epf | Add reverse gear and a temporary debug free-look camera override | 2026-09-13 | 58426be | [260913-epf-add-reverse-gear-and-a-temporary-debug-f](./quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/) |
+| 260919-cam | Retune helicopter camera to near-overhead (~80 deg) baseline pitch | 2026-09-19 | 61b27d5 | [260919-cam-retune-helicopter-camera-to-near-overhead](./quick/260919-cam-retune-helicopter-camera-to-near-overhead/) |
 
 ## Session Continuity
 
