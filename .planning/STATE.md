@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Phase 4 complete (plan 04-11 done: SC1 sign-off session, grounding fixes, ADR 0004)"
-last_updated: "2026-09-19T16:57:03.253Z"
+stopped_at: Phase 04.1 context gathered
+last_updated: "2026-09-19T17:24:42.344Z"
 last_activity: 2026-09-15 -- Phase 04 completed via plan 04-11 (SC1 sign-off session, road-shoulder grounding fix, elevation densification fix, ADR 0004)
 progress:
   total_phases: 9
@@ -201,9 +201,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-15T22:10:00.000Z
-Stopped at: Phase 4 complete (plan 04-11 done: SC1 sign-off session, grounding fixes, ADR 0004)
-Resume file: .planning/phases/04-map-pipeline-first-area/04-11-SUMMARY.md
+Last session: 2026-09-19T17:24:42.326Z
+Stopped at: Phase 04.1 context gathered
+Resume file: .planning/phases/04.1-flatten-terrain-remove-dem-elevation-drop-real-world-dem-der/04.1-CONTEXT.md
 
 Before running `/gsd-plan-phase 5`, read the five open items logged under Blockers/Concerns above
 (tagged `[Phase 04-11, open]`) — in particular the art-direction-phase decision, which may change
