@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Vehicle Feel Core** - One muscle car on a flat plane that feels weighty, plus the tuning harness to get it there (completed 2026-09-11)
 - [x] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed (completed 2026-09-13)
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
+- [ ] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
 - [ ] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
@@ -225,6 +226,16 @@ Plans:
 
 - [x] 04-11-PLAN.md — Drive-every-road SC1 sign-off session, tuning fixes with regression tests, and the phase ADR (wave 10)
 
+### Phase 04.1: Flatten Terrain / Remove DEM Elevation (INSERTED)
+
+**Goal:** The compiled area uses hand-authored, deterministic flat/near-flat terrain instead of real-world DEM elevation (USGS 3DEP / Copernicus), eliminating the wide road-shoulder skirts DEM forces (up to ~20m in places, via `src/core/shoulder-clearance.ts`'s `TARGET_SHOULDER_WIDTH_M`) — OpenStreetMap remains the source for road topology. Supersedes part of ADR 0001 (`docs/adr/0001-map-data-source.md`); requires a new/updated ADR, rewriting `tools/map-compiler/graph/elevation.ts`, re-deriving shoulder/grounding constants now that terrain is flat, and recompiling the reference map area (Juliette, GA). Should land before Phase 5 planning since Phase 5+ build on the compiled map.
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.1 to break down)
+
 ### Phase 5: Objectives, Navigation & Race Modes
 
 **Goal**: The player can actually play — two race modes on the real map, always knowing where to go and never more than a keypress from another attempt
@@ -295,7 +306,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -303,6 +314,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
+| 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |

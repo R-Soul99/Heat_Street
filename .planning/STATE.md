@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 complete — plan 04-11 SC1 sign-off session, grounding fixes, ADR 0004
-last_updated: "2026-09-15T22:10:00.000Z"
-last_activity: 2026-09-15 -- Phase 04 completed (plan 04-11)
+stopped_at: "Phase 4 complete (plan 04-11 done: SC1 sign-off session, grounding fixes, ADR 0004)"
+last_updated: "2026-09-19T16:57:03.253Z"
+last_activity: 2026-09-15 -- Phase 04 completed via plan 04-11 (SC1 sign-off session, road-shoulder grounding fix, elevation densification fix, ADR 0004)
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 4
   total_plans: 40
   completed_plans: 40
-  percent: 50
+  percent: 44
 ---
 
 # Project State
@@ -79,6 +79,10 @@ Progress (phases 1-4 of 8, the only ones planned so far): [███████
 | Phase 02 P09 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 4.1 inserted after Phase 4: Flatten Terrain / Remove DEM Elevation — drop real-world DEM elevation in favor of hand-authored flat/near-flat terrain, fixing oversized road-shoulder skirts; supersedes part of ADR 0001 (URGENT)
 
 ### Decisions
 
