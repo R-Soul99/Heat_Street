@@ -132,6 +132,16 @@ describe("formatHudText", () => {
     expect(formatHudText(makeInputs())).toBe(formatHudText(makeInputs()));
   });
 
+  it("omits the pos line when carPosition is not supplied", () => {
+    const text = formatHudText(makeInputs());
+    expect(text).not.toMatch(/^pos /m);
+  });
+
+  it("prints the car position when carPosition is supplied (D-06 sign-off tooling)", () => {
+    const text = formatHudText(makeInputs({ carPosition: { x: -420.001, y: 0, z: 102.229 } }));
+    expect(lineStartingWith(text, "pos")).toContain("x=-420.00  y=0.00  z=102.23");
+  });
+
   it("is pure: a plain HudInputs object is enough, no DOM/renderer/world needed", () => {
     // No `document`, no `THREE.WebGLRenderer`, no `RAPIER.World` exist in this
     // Node test environment at all — the fact that this runs and returns a

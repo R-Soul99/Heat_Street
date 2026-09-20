@@ -28,6 +28,16 @@ export interface HudInputs {
   readonly activeBodies: number;
   readonly totalBodies: number;
   readonly avgFrameMs: number;
+  /**
+   * Chassis world position (local ENU metres, matching the map compiler's own
+   * coordinate space — see `04.1-CONTEXT.md`'s crest centres for the same
+   * convention). Temporary D-06 sign-off tooling: lets a human correlate a
+   * screenshot with an exact map coordinate when reporting a defect. Optional
+   * so every existing `HudInputs` fixture keeps compiling unchanged; omitted
+   * entirely, the pos line is left out rather than printed with placeholder
+   * zeros.
+   */
+  readonly carPosition?: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /** How long the overlay stays visible between throttled DOM writes. */
@@ -48,7 +58,8 @@ function over(value: number, budget: number): string {
  * byte-identical for byte-identical inputs.
  */
 export function formatHudText(inputs: HudInputs): string {
-  const { stats, drawCalls, triangles, activeBodies, totalBodies, avgFrameMs } = inputs;
+  const { stats, drawCalls, triangles, activeBodies, totalBodies, avgFrameMs, carPosition } =
+    inputs;
 
   const lines = [
     `frame   ${avgFrameMs.toFixed(2)}ms / ${BUDGET.frameMs}ms${over(avgFrameMs, BUDGET.frameMs)}`,
@@ -59,6 +70,11 @@ export function formatHudText(inputs: HudInputs): string {
     `bodies  ${activeBodies} active / ${totalBodies} total`,
     `tick    ${stats.tick}   sim ${stats.simTimeSec.toFixed(3)}s   dropped ${stats.droppedTicks}`,
   ];
+  if (carPosition) {
+    lines.push(
+      `pos     x=${carPosition.x.toFixed(2)}  y=${carPosition.y.toFixed(2)}  z=${carPosition.z.toFixed(2)}`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -66,8 +82,13 @@ export function formatHudText(inputs: HudInputs): string {
 export interface Hud {
   /** Flip the overlay between hidden and visible. Wired to `onDebugToggle`. */
   toggle(): void;
-  /** Feed one frame's stats in. Throttled internally — safe to call every rAF. */
-  update(stats: FrameStats, dtMs: number): void;
+  /**
+   * Feed one frame's stats in. Throttled internally — safe to call every rAF.
+   * `carPosition` is optional D-06 sign-off tooling (see `HudInputs.carPosition`);
+   * the latest sample passed is what gets shown at the next throttled write,
+   * not an average like the ms/frame fields above it.
+   */
+  update(stats: FrameStats, dtMs: number, carPosition?: { x: number; y: number; z: number }): void;
   /** Remove the overlay element from the DOM. */
   dispose(): void;
 }
@@ -93,17 +114,26 @@ export function createHud(renderer: THREE.WebGLRenderer, world: RAPIER.World): H
   let samples = 0;
   let physicsSum = 0;
   let renderSum = 0;
+  // Position is NOT averaged like the ms fields above — it's the latest
+  // sample as of the throttled write, which is what a human correlating a
+  // screenshot to a map coordinate wants.
+  let lastPosition: { x: number; y: number; z: number } | undefined;
 
   return {
     toggle(): void {
       el.style.display = el.style.display === "none" ? "block" : "none";
     },
 
-    update(stats: FrameStats, dtMs: number): void {
+    update(
+      stats: FrameStats,
+      dtMs: number,
+      carPosition?: { x: number; y: number; z: number },
+    ): void {
       physicsSum += stats.physicsMs;
       renderSum += stats.renderMs;
       accMs += dtMs;
       samples++;
+      if (carPosition) lastPosition = carPosition;
 
       // ~7 Hz DOM writes, not 144 Hz — RESEARCH.md is explicit that writing the
       // DOM every frame is itself a frame-budget cost.
@@ -133,6 +163,7 @@ export function createHud(renderer: THREE.WebGLRenderer, world: RAPIER.World): H
         activeBodies: active,
         totalBodies: world.bodies.len(),
         avgFrameMs: accMs / samples,
+        carPosition: lastPosition,
       });
 
       accMs = 0;

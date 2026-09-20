@@ -58,6 +58,7 @@ import type { SurfaceType } from "./core/surface-types";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createFreeLookCamera } from "./debug/free-look-camera";
+import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTuningPanel } from "./debug/tuning-panel";
@@ -412,6 +413,22 @@ try {
     onDebugKey("KeyF", () => freeLook.toggle());
   }
 
+  // TEMPORARY D-06 sign-off tooling (see nav-pointer.ts's own doc comment):
+  // lets the operator enter a map coordinate (a crest centre, a bug
+  // screenshot's `pos` readout) and get an arrow pointing to it relative to
+  // the car's current heading. Same gate-free-factory shape as every other
+  // `?debug`-only tool above.
+  const navPointer = DEBUG_ENABLED ? createNavPointer() : null;
+  if (navPointer) {
+    onDebugKey("KeyN", () => navPointer.toggle());
+  }
+
+  // Reused scratch for `navPointer`'s forward-vector input — allocated once,
+  // never per frame (`src/render/camera/occlusion-probe.ts`'s SCRATCH
+  // convention). `applyQuaternion` duck-types its argument, so Rapier's own
+  // `{x,y,z,w}` rotation object can be passed straight in with no wrapping.
+  const navForwardScratch = new THREE.Vector3();
+
   startLoop({
     world,
     input,
@@ -428,6 +445,15 @@ try {
       // frame. Put it first.
       const v = scene.vehicle.body.linvel();
       speedo.update(Math.hypot(v.x, v.z), dtMs);
+
+      // No ordering constraint like the camera/occlusion calls below — this
+      // only reads the chassis's raw fixed-tick pose and writes its own DOM,
+      // so it's a no-op (`navPointer` is `null`) in a normal, non-`?debug` build.
+      if (navPointer) {
+        const carPos = scene.vehicle.body.translation();
+        navForwardScratch.set(0, 0, -1).applyQuaternion(scene.vehicle.body.rotation());
+        navPointer.update(carPos.x, carPos.z, navForwardScratch.x, navForwardScratch.z);
+      }
 
       view.updateWheels(scene.vehicle.controller);
       applyAllInterpolated(view.meshes, transforms, alpha);
@@ -498,7 +524,9 @@ try {
 
       renderer.render(view.scene, camera);
     },
-    hud: hud ? (stats, dtMs) => hud.update(stats, dtMs) : undefined,
+    hud: hud
+      ? (stats, dtMs) => hud.update(stats, dtMs, scene.vehicle.body.translation())
+      : undefined,
   });
 } catch (err) {
   // D-P27 / T-04-32 / T-04-33: a missing, stale or malformed map artifact
