@@ -191,7 +191,9 @@ describe("buildCrestGeometry — rim seating against a non-trivial sampler", () 
 
 describe("buildCrestGeometry — defensive invariants", () => {
   it("throws naming the offending id for radiusM <= 0", () => {
-    const bad: AuthoredCrest[] = [{ id: "bad-radius", centerX: 0, centerZ: 0, radiusM: 0, heightM: 5 }];
+    const bad: AuthoredCrest[] = [
+      { id: "bad-radius", centerX: 0, centerZ: 0, radiusM: 0, heightM: 5 },
+    ];
     expect(() => buildCrestGeometry(bad, () => 0)).toThrow(/buildCrestGeometry:.*bad-radius/);
   });
 
