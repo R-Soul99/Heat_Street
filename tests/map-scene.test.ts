@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 // `<action>` text).
 import collisionRaw from "../public/maps/juliette-ga.collision.json?raw";
 import compiledRaw from "../public/maps/juliette-ga.map.json?raw";
+import { crestsForArea } from "../src/core/crest-geometry";
+import { sampleHeightfieldBilinear } from "../src/core/heightfield-sample";
 import { NEUTRAL } from "../src/core/input-tape";
 import { type MapCollision, parseMapCollision } from "../src/core/map-collision";
 import { buildRoadGeometry } from "../src/core/road-geometry";
@@ -45,16 +47,20 @@ function buildScene() {
 }
 
 describe("createMapScene: road colliders (SC1/SC2)", () => {
-  it("creates exactly one collider per road-geometry entry plus one shoulder collider per edge — count equals geometry.edges.length + geometry.junctions.length + geometry.edges.length", () => {
+  it("creates exactly one collider per road-geometry entry plus one shoulder collider per edge plus one collider per authored crest — count equals geometry.edges.length + geometry.junctions.length + geometry.edges.length + crestsForArea(collision.areaId).length", () => {
     const { world } = buildScene();
     const triMeshColliders = collidersInOrder(world).filter(
       (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
     );
     // plan 04-11's grounding fix adds one shoulder collider per edge
     // (buildRoadShoulders, src/core/road-geometry.ts) whenever the compiled
-    // area ships a heightfield -- the real fixture always does.
+    // area ships a heightfield -- the real fixture always does. Plan 04.1-07
+    // (D-04b) adds one further collider per authored crest for this area.
     expect(triMeshColliders.length).toBe(
-      geometry.edges.length + geometry.junctions.length + geometry.edges.length,
+      geometry.edges.length +
+        geometry.junctions.length +
+        geometry.edges.length +
+        crestsForArea(collision.areaId).length,
     );
   });
 
@@ -354,6 +360,97 @@ describe("createMapScene: off-road heightfield ground (plan 04-10, D-P28/D-P29)"
       (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
     );
     expect(triMeshColliders.length).toBeGreaterThan(0);
+  });
+});
+
+describe("createMapScene: authored crest colliders (D-04b)", () => {
+  it("adds exactly crestsForArea(collision.areaId).length colliders versus a scene built with an unknown areaId", () => {
+    const knownAreaCount = collidersInOrder(buildScene().world).filter(
+      (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
+    ).length;
+
+    const unknownAreaCollision: MapCollision = { ...collision, areaId: "unknown-area-id" };
+    const worldUnknown = createWorld();
+    createMapScene(
+      worldUnknown,
+      { ...graph, areaId: "unknown-area-id" },
+      unknownAreaCollision,
+      defaultTuning(),
+      defaultSurfaceProfiles(),
+    );
+    const unknownAreaCount = collidersInOrder(worldUnknown).filter(
+      (c) => c.shapeType() === RAPIER.ShapeType.TriMesh,
+    ).length;
+
+    expect(knownAreaCount - unknownAreaCount).toBe(crestsForArea(collision.areaId).length);
+  });
+
+  it("every crest collider's handle resolves to grass in the surface map", () => {
+    const { world, scene } = buildScene();
+    const heightfield = collision.heightfield;
+    expect(heightfield).toBeDefined();
+    if (heightfield === undefined) return;
+
+    const crests = crestsForArea(collision.areaId);
+    expect(crests.length).toBeGreaterThan(0);
+
+    world.step();
+    for (const crest of crests) {
+      const groundY = sampleHeightfieldBilinear(heightfield, crest.centerX, crest.centerZ);
+      const ray = new RAPIER.Ray(
+        { x: crest.centerX, y: groundY + crest.heightM + 5, z: crest.centerZ },
+        { x: 0, y: -1, z: 0 },
+      );
+      const hit = world.castRay(ray, 100, true);
+      expect(hit).not.toBeNull();
+      if (hit === null) continue;
+      expect(scene.surfaces.map.lookup(hit.collider.handle)).toBe("grass");
+    }
+  });
+
+  it("a downward raycast above each crest's centre hits a solid collider at the authored apex height, within 0.5m", () => {
+    const { world, scene } = buildScene();
+    const heightfield = collision.heightfield;
+    expect(heightfield).toBeDefined();
+    if (heightfield === undefined) return;
+
+    const crests = crestsForArea(collision.areaId);
+    expect(crests.length).toBeGreaterThan(0);
+
+    world.step();
+    for (const crest of crests) {
+      const groundY = sampleHeightfieldBilinear(heightfield, crest.centerX, crest.centerZ);
+      const rayOriginY = groundY + crest.heightM + 5;
+      const ray = new RAPIER.Ray(
+        { x: crest.centerX, y: rayOriginY, z: crest.centerZ },
+        { x: 0, y: -1, z: 0 },
+      );
+      const hit = world.castRay(ray, 100, true);
+      expect(hit).not.toBeNull();
+      if (hit === null) continue;
+      expect(scene.surfaces.map.lookup(hit.collider.handle)).toBe("grass");
+
+      const hitY = rayOriginY - hit.timeOfImpact;
+      const expectedApexY = groundY + crest.heightM;
+      expect(Math.abs(hitY - expectedApexY)).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it("a scene built with an unknown areaId creates zero crest colliders and does not throw", () => {
+    const unknownAreaCollision: MapCollision = { ...collision, areaId: "unknown-area-id" };
+    const unknownAreaGraph: RoadGraph = { ...graph, areaId: "unknown-area-id" };
+    const world = createWorld();
+    expect(() =>
+      createMapScene(
+        world,
+        unknownAreaGraph,
+        unknownAreaCollision,
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      ),
+    ).not.toThrow();
+
+    expect(crestsForArea("unknown-area-id").length).toBe(0);
   });
 });
 
