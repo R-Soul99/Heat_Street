@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — COMPLETE (11/11 plans)
 Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
-Last activity: 2026-09-20 - Completed quick task 260920-l94: tuning-panel export/import + vehicle-tuning-guide.md
+Last activity: 2026-09-20 - Folded 260920-j4d's diagnostic routines onto main (retune itself deferred to manual tuning)
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 
@@ -169,6 +169,7 @@ None yet.
 
 [Issues that affect future work]
 
+- **[Quick 260920-j4d, open]** Vehicle handling retune in progress, hand-tuned live rather than automated. Developer is adjusting `wheels.rearSideFriction` (tried 0.25, felt better than shipped 0.2), `drive.powerOversteerGain`, and `drive.handbrakeRearSideFriction` (shipped 0.01, asked about lowering for a bigger handbrake kick-out) via the `?debug` tuning panel, and will export the final setup as JSON (via quick task 260920-l94's new Export/Import feature) for transcription into `defaultTuning()`. `src/core/vehicle-tuning.ts` is UNCHANGED in the meantime — do not assume the shipped defaults reflect the current feel. `tests/vehicle-recovery.test.ts`'s two new diagnostic routines (`powerSlideRecoveryRoutine`, `highSpeedPulseRoutine`) are ready to re-verify whatever values come back. See `.planning/quick/260920-j4d-vehicle-handling-feels-too-twitchy-unfor/260920-j4d-SUMMARY.md` for the full root-cause writeup.
 - REQUIREMENTS.md previously stated 29 v1 requirements; the actual traceability list is 30. Corrected during roadmap creation.
 - RESOLVED (Phase 2, plan 02-10): Rapier's raycast vehicle DOES reach the "arcade-realistic hybrid" feel — human-signed-off on SC1/SC5 in the plan 02-10 feel session. The residual open risk is narrower: a genuine high-speed straight-line instability was found and fixed (rearSideFriction 0.12->0.2, see the Phase 02-10 decision above); Phase 3 should re-verify it holds once real road surfaces (lower friction than the flat test ground) exist.
 - Open question (Phase 4): whether the existing extraction tool already emits usable road-graph topology, or whether the map-compiler must build it from scratch
@@ -202,6 +203,7 @@ Items acknowledged and carried forward from previous milestone close:
 |---|-------------|------|--------|-----------|
 | 260913-epf | Add reverse gear and a temporary debug free-look camera override | 2026-09-13 | 58426be | [260913-epf-add-reverse-gear-and-a-temporary-debug-f](./quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/) |
 | 260919-cam | Retune helicopter camera to near-overhead (~80 deg) baseline pitch | 2026-09-19 | 61b27d5 | [260919-cam-retune-helicopter-camera-to-near-overhead](./quick/260919-cam-retune-helicopter-camera-to-near-overhead/) |
+| 260920-j4d | **PARTIAL** — vehicle handling retune. Diagnostic tooling landed (two new telemetry routines + locked bands measuring power-on slide recovery and high-speed steering-pulse divergence); the actual `defaultTuning()` retune was deferred — developer is hand-tuning `rearSideFriction`/`handbrakeRearSideFriction`/etc. live via the `?debug` panel and will hand back a final values JSON | 2026-09-20 | 84f227e | [260920-j4d-vehicle-handling-feels-too-twitchy-unfor](./quick/260920-j4d-vehicle-handling-feels-too-twitchy-unfor/) |
 | 260920-l94 | Add tuning-panel export/import (save/reload a tuning setup to a file) plus `docs/vehicle-tuning-guide.md` documenting all 72 debug-panel controls and their interactions, with a mechanical drift gate against the panel source | 2026-09-20 | 8a85530 | [260920-l94-write-a-markdown-explainer-doc-for-the-d](./quick/260920-l94-write-a-markdown-explainer-doc-for-the-d/) |
 
 ## Session Continuity
