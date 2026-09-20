@@ -27,7 +27,6 @@
     "@gltf-transform/functions": "4.5.0",
     "@types/node": "24.13.4",
     "@types/three": "0.185.4",
-    "geotiff": "3.0.5",
     "ngraph.graph": "20.1.2",
     "ngraph.path": "1.6.1",
     "typescript": "7.0.2",
