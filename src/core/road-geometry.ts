@@ -145,10 +145,45 @@ const MITER_CLAMP = 3;
  * 45 degree slopes... climb back on (and if the car hasn't rolled, which
  * happens a lot)." 20m keeps the common ~5m gap under a ~14 degree grade and
  * the measured worst case (~9.17m) under ~25 degrees — steep only at the
- * rare extreme, gentle everywhere else. [ASSUMED], flagged for re-driving
- * again like every other constant on this plan's own tuning-surface table.
+ * rare extreme, gentle everywhere else.
+ *
+ * RE-CORRECTED (phase 04.1, back down to 6m — this is not a revert of the
+ * above, the underlying terrain model has changed): the 20m value existed
+ * ONLY because `HEIGHTFIELD_SINK_M` (4.5m at the time) was subtracted from
+ * every sampled off-road height, so the road-to-terrain gap sat near 5m
+ * almost everywhere (measured average 5.09m) and 20m was what kept that
+ * common gap under ~14 degrees. Under D-01 (roads flattened to y=0) and
+ * D-02b (off-road relief fades to exactly 0 at the paved edge) that sink is
+ * gone and the gap this ramp bridges is no longer the sink — it is only
+ * whatever residual relief the coarse compiled heightfield interpolates
+ * near the road. That residual is boundable explicitly: the compiled grid
+ * is `HEIGHTFIELD_RESOLUTION` = 128 cells over Juliette's ~5.5km bounds, i.e.
+ * ~43m grid spacing, so the nearest grid node to any road is at most ~30m
+ * away and carries at most `RELIEF_AMPLITUDE_M * smoothstep(30 /
+ * RELIEF_FALLOFF_DISTANCE_M)` = `2 * smoothstep(30/130)` ≈ 0.27m of relief
+ * (D-02a's `RELIEF_AMPLITUDE_M` = 2, `RELIEF_FALLOFF_DISTANCE_M` = 130);
+ * adding back `HEIGHTFIELD_SINK_M` (now 0.1m) gives a worst-case flat-terrain
+ * shoulder height delta of ~0.37m. Over a 6m shoulder that is ~3.5 degrees,
+ * and even at the building-clamped `MIN_SHOULDER_WIDTH_M` (3m) it is only
+ * ~7 degrees — both comfortably under the 12.9 degree median / 26.9 degree
+ * p95 measured on the DEM-era 20m shoulder above.
+ *
+ * Bracketing failure modes: raising this back toward 20m reintroduces the
+ * "ridiculous... extra road width" defect phase 04.1 exists to fix (a 20m
+ * verge on a now-flat terrain has nothing to bridge and just reads as
+ * oversized road); lowering it below `MIN_SHOULDER_WIDTH_M` would invert the
+ * clamp in `resolvePointShoulderWidth` and is forbidden by the invariant
+ * documented immediately below.
+ *
+ * [ASSUMED] — flagged for re-judging in plan 04.1-10's D-06 drive-every-road
+ * session. Note for that session: shoulders render with the ROAD's own
+ * surface material (see `groupBySurface` in `tools/map-compiler/author/
+ * gltf.ts`), so if 6m of road-coloured verge still reads as "extra road
+ * width" once driven, the options are a further width reduction or
+ * reassigning the shoulder surface — that choice belongs to the D-06
+ * session, not to a speculative change here.
  */
-export const TARGET_SHOULDER_WIDTH_M = 20;
+export const TARGET_SHOULDER_WIDTH_M = 6;
 
 /**
  * Shoulder width never shrinks below this, however close a building forces
@@ -166,6 +201,14 @@ export const MIN_SHOULDER_WIDTH_M = 3;
  * exact limit. [ASSUMED] first-pass value.
  */
 export const SHOULDER_BUILDING_SAFETY_MARGIN_M = 2;
+
+/**
+ * Invariant: `MIN_SHOULDER_WIDTH_M <= TARGET_SHOULDER_WIDTH_M`. Deliberately
+ * NOT a runtime assertion — `road-geometry.ts` sits on the per-frame-adjacent
+ * geometry-build path and this repo's convention is a mirroring test rather
+ * than a guard here. Enforced instead by `tests/road-geometry.test.ts`'s
+ * "flat-terrain grade (phase 04.1)" constants-invariant test.
+ */
 
 /**
  * Road-class paving-apron ranking for junction-fan surface assignment
