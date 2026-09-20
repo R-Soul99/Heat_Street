@@ -506,11 +506,17 @@ describe("vehicle-assists", () => {
     // DEVIATION from 02-RESEARCH.md line 1057 and 02-04-PLAN.md's stated
     // anchor of {3080, 3480, 512}: evaluating this file's formula (copied
     // verbatim from 02-04-PLAN.md's own action text) against Config A's
-    // actual shipped values (mass 1600, halfExtents {0.95, 0.5, 2.35}) gives
-    // {3078.7, 3426.7, 614.7}. See the doc comment on `boxPrincipalInertia`.
+    // originally shipped values (mass 1600, halfExtents {0.95, 0.5, 2.35})
+    // gave {3078.7, 3426.7, 614.7}. See the doc comment on
+    // `boxPrincipalInertia`.
+    //
+    // RECOMPUTED (quick task 260920-sm2): mass hand-tuned 1600 -> 1390
+    // (`defaultTuning()`'s `chassis.mass`), halfExtents unchanged. Since
+    // inertia scales linearly with mass for a fixed box shape, the anchor
+    // scales by the same 1390/1600 ratio: {2674.59, 2976.92, 533.99}.
     const tuning = defaultTuning();
     const inertia = boxPrincipalInertia(tuning.chassis.mass, tuning.chassis.halfExtents);
-    const expected = { x: 3078.67, y: 3426.67, z: 614.67 };
+    const expected = { x: 2674.59, y: 2976.92, z: 533.99 };
 
     expect(Math.abs(inertia.x - expected.x) / expected.x).toBeLessThan(0.01);
     expect(Math.abs(inertia.y - expected.y) / expected.y).toBeLessThan(0.01);
