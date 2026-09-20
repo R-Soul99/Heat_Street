@@ -28,7 +28,7 @@ All coordinates are **local ENU metres, Y-up** (three.js convention): X east, Y 
   "source": {
     "osmExtract": "geofabrik://<region>/<file>.osm.pbf",
     "osmSnapshot": "2026-09-01T00:00:00Z",
-    "demSource": "usgs-3dep-1m",            // or "copernicus-glo30"
+    "demSource": "none-flat-authored",      // or "usgs-3dep-1m" or "copernicus-glo30"
     "compilerVersion": "0.1.0"
   },
 
@@ -38,7 +38,7 @@ All coordinates are **local ENU metres, Y-up** (three.js convention): X east, Y 
     "osm": "© OpenStreetMap contributors",
     "osmLicense": "ODbL-1.0",
     "osmLicenseUrl": "https://www.openstreetmap.org/copyright",
-    "dem": "U.S. Geological Survey 3D Elevation Program (public domain)"
+    "dem": "Terrain elevation is flat and hand-authored — no DEM data is used (see docs/adr/0001-map-data-source.md)"
   },
 
   // World origin. Recording the lat/lon origin is what makes the projection
@@ -106,7 +106,7 @@ All coordinates are **local ENU metres, Y-up** (three.js convention): X east, Y 
 |---|---|---|
 | `osmExtract` | string | Which extract the road network came from. |
 | `osmSnapshot` | string (ISO 8601) | The OSM data timestamp. Without it a map cannot be diffed against a rebuild. |
-| `demSource` | string | `usgs-3dep-1m` or `copernicus-glo30`. Selection rule is in the ADR. |
+| `demSource` | string | `none-flat-authored`, `usgs-3dep-1m`, or `copernicus-glo30`. The selection rule (and the phase-04.1 amendment recording DEM elevation as retired for v1) lives in ADR 0001. |
 | `compilerVersion` | string (semver) | Which compiler build produced this artifact. |
 
 ### `attribution` (all mandatory)
@@ -204,10 +204,12 @@ These are the parts that are expensive to change later. They are recorded so a f
 knows they were chosen, not defaulted into.
 
 1. **Coordinates are local ENU metres with a recorded lat/lon origin, Y-up.** Lat/lon never
-   reaches the runtime. `y` is authored by the compiler from the DEM (sampled and smoothed
-   along each centreline), **not** sampled at runtime — SURF-01's per-wheel friction and Phase
-   4's "no bumpy junctions" both depend on the road surface being a deliberately smoothed
-   artifact rather than a raw heightfield read.
+   reaches the runtime. As of phase 04.1, `y` is authored by the compiler as a flat constant
+   (`0`) for every node and every edge point — **not** sampled from a DEM. Off-road relief and
+   authored crests are separate terrain artifacts, not road-graph `y` values; the road surface
+   itself stays a deliberately flat, bump-free artifact, which is what SURF-01's per-wheel
+   friction and Phase 4's "no bumpy junctions" both depend on. The runtime never re-derives
+   elevation — it is always read from this field, never recomputed at runtime.
 2. **Node ids are compiler-assigned dense integers, not OSM ids.** OSM ids are 64-bit and
    sparse; keeping them as the primary key forces hash maps where typed arrays would do, and
    Phase 7's AI does a lot of graph traversal. OSM ids are retained for provenance only.
@@ -245,3 +247,8 @@ knows they were chosen, not defaulted into.
 `schemaVersion` is an integer. A breaking change to any required field increments it and gets
 a new document (`road-graph.v2.md`) rather than an edit to this one. A loader encountering an
 unknown `schemaVersion` must refuse the file rather than attempt a best-effort parse.
+
+Phase 04.1's retirement of DEM elevation (this document's `demSource`/`dem` value changes and
+design decision 1's flat-`y` rewrite above) is a values-and-prose update, not a shape change —
+no field was added, removed, renamed or retyped, so this document stays at `schemaVersion: 1`
+and remains `road-graph.v1.md`.
