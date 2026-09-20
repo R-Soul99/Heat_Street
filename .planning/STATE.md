@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — COMPLETE (11/11 plans)
 Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
-Last activity: 2026-09-20 -- Phase 04.1 complete; ADR 0001 amended, ADR 0004 decision 7 superseded
+Last activity: 2026-09-20 - Completed quick task 260920-l94: tuning-panel export/import + vehicle-tuning-guide.md
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 
@@ -202,6 +202,7 @@ Items acknowledged and carried forward from previous milestone close:
 |---|-------------|------|--------|-----------|
 | 260913-epf | Add reverse gear and a temporary debug free-look camera override | 2026-09-13 | 58426be | [260913-epf-add-reverse-gear-and-a-temporary-debug-f](./quick/260913-epf-add-reverse-gear-and-a-temporary-debug-f/) |
 | 260919-cam | Retune helicopter camera to near-overhead (~80 deg) baseline pitch | 2026-09-19 | 61b27d5 | [260919-cam-retune-helicopter-camera-to-near-overhead](./quick/260919-cam-retune-helicopter-camera-to-near-overhead/) |
+| 260920-l94 | Add tuning-panel export/import (save/reload a tuning setup to a file) plus `docs/vehicle-tuning-guide.md` documenting all 72 debug-panel controls and their interactions, with a mechanical drift gate against the panel source | 2026-09-20 | 8a85530 | [260920-l94-write-a-markdown-explainer-doc-for-the-d](./quick/260920-l94-write-a-markdown-explainer-doc-for-the-d/) |
 
 ## Session Continuity
 
