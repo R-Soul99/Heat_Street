@@ -66,17 +66,43 @@ export interface CameraTuning {
     highFovDeg: number;
   };
   damping: {
-    /** Per second. `THREE.MathUtils.damp` lambda for camera position. `[ASSUMED]`. */
+    /**
+     * Per second. `THREE.MathUtils.damp` lambda for camera position.
+     *
+     * [TUNED live, 260920-sm2]: supersedes the previous `[ASSUMED]` default
+     * of 6.0 — this is no longer assumed, it is the product of the
+     * developer's own live `?debug` session, exported as JSON via quick task
+     * 260920-l94's Export feature. Lowered to 3.3: a lower `positionLambda`
+     * means the rig follows the car more loosely (slower to catch up to
+     * position changes), a deliberate looser-feeling follow the developer
+     * chose by eye.
+     */
     positionLambda: number;
     /**
      * Per second. `dampFactor`/slerp lambda for the camera's heading lag —
      * the literal implementation of D-11: the camera's lag behind a
      * changing velocity heading IS this one number, a deliberate output
      * rather than an accident, "like a real chopper pilot tracking a car,
-     * not a rigid instant lock". `[ASSUMED]`.
+     * not a rigid instant lock".
+     *
+     * [TUNED live, 260920-sm2]: supersedes the previous `[ASSUMED]` default
+     * of 2.5 — this is no longer assumed, it is the product of the
+     * developer's own live `?debug` session, exported as JSON via quick task
+     * 260920-l94's Export feature. Raised to 4.5: a higher `headingLambda`
+     * means the camera tracks a heading change more tightly, which NARROWS
+     * — but does not erase — D-11's deliberate chopper-pilot lag described
+     * above; the lag is still present, just shorter.
      */
     headingLambda: number;
-    /** Per second. `THREE.MathUtils.damp` lambda for altitude/distance/FOV. `[ASSUMED]`. */
+    /**
+     * Per second. `THREE.MathUtils.damp` lambda for altitude/distance/FOV.
+     *
+     * [TUNED live, 260920-sm2]: supersedes the previous `[ASSUMED]` default
+     * of 1.5 — this is no longer assumed, it is the product of the
+     * developer's own live `?debug` session, exported as JSON via quick task
+     * 260920-l94's Export feature. Raised to 1.9, a modest increase in how
+     * quickly the framing (altitude/distance/FOV) settles to its target.
+     */
     framingLambda: number;
   };
   heading: {
@@ -138,6 +164,14 @@ export interface CameraTuning {
  * decision. Plan 03-11's go/no-go playtest is where these get corrected,
  * exactly like `rearSideFriction`/`powerOversteerGain`/`bodyRollGain` were
  * corrected in Phase 2's plan 02-10 feel session.
+ *
+ * [TUNED live, 260920-sm2]: the three `damping` leaves below
+ * (`positionLambda`, `headingLambda`, `framingLambda`) are no longer
+ * `[ASSUMED]` — carve them out of the blanket claim above. They are now the
+ * product of the developer's own live `?debug` session (exported as JSON
+ * via quick task 260920-l94's Export feature), not an automated sweep. See
+ * the `damping` block below for why the REST of that same export was
+ * deliberately not applied.
  */
 export function defaultCameraTuning(): CameraTuning {
   return {
@@ -159,11 +193,26 @@ export function defaultCameraTuning(): CameraTuning {
       highDistanceM: 16,
       highFovDeg: 62,
     },
+    // [TUNED live, 260920-sm2]: these three damping leaves come from the
+    // developer's own live `?debug` session, exported as JSON via quick task
+    // 260920-l94's Export feature. That SAME export also contained new
+    // `framing.*AltitudeM`/`*DistanceM`/`*FovDeg`/`*SpeedMs` values, which
+    // were DELIBERATELY NOT applied here — see `CameraTuning.framing`'s
+    // `highFovDeg` doc comment above: `lowAltitudeM`/`lowDistanceM` (45:8)
+    // and `highAltitudeM`/`highDistanceM` (90:16) are exact multiples of the
+    // same ratio, which is what holds the geometric pitch CONSTANT at
+    // ~79.9deg across the whole speed range, a design invariant from quick
+    // task 260919-cam that is asserted directly by
+    // `tests/camera-tuning.test.ts`. Applying the exported framing values
+    // wholesale would have broken that invariant. The developer chose to
+    // keep the shipped framing geometry and only take the damping numbers
+    // from this export. DO NOT "helpfully" apply the remaining framing
+    // fields from the same exported JSON without re-reading this decision.
     damping: {
-      positionLambda: 6.0,
+      positionLambda: 3.3,
       // The literal implementation of D-11 — see the field's doc comment.
-      headingLambda: 2.5,
-      framingLambda: 1.5,
+      headingLambda: 4.5,
+      framingLambda: 1.9,
     },
     heading: {
       blendSpeedMs: 1.5,
