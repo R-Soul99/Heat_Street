@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 04.1 context gathered
-last_updated: "2026-09-19T19:39:38.223Z"
-last_activity: 2026-09-19 -- Phase 04.1 planning complete
+last_updated: "2026-09-20T00:03:39.324Z"
+last_activity: 2026-09-20 -- Phase 04.1 execution started
 progress:
   total_phases: 9
   completed_phases: 4
@@ -21,13 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 04 complete. Phase 05 (Objectives, Navigation & Race Modes) not yet planned — see Blockers/Concerns for the project-direction decisions to fold in before/while planning it.
+**Current focus:** Phase 04.1 — flatten-terrain-remove-dem-elevation-drop-real-world-dem-der
 
 ## Current Position
 
-Phase: 04 (map-pipeline-first-area) — COMPLETE (11/11 plans)
+Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — EXECUTING
+Plan: 1 of 11
 Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
-Last activity: 2026-09-19 -- Phase 04.1 planning complete
+Last activity: 2026-09-20 -- Phase 04.1 execution started
 
 Progress (phases 1-4 of 8, the only ones planned so far): [██████████] 100% of 40 known plans
 
