@@ -35,6 +35,17 @@
  * simulation timing — no `world.step`, no impulses, no body writes. This
  * file only writes plain numbers into a `VehicleTuning` object which the
  * physics layer reads on the next tick.
+ *
+ * Export / Import (plan 260920-l94): the "Export tuning to file" /
+ * "Import tuning from file" root controls hand every byte read back from a
+ * chosen file to `parseTuningSnapshot` (`../core/tuning-snapshot`) rather
+ * than a direct `JSON.parse`. An imported file is untrusted input on exactly
+ * the same footing as the `localStorage` blob this panel already guards
+ * (T-L94-01): a NaN mass or an Infinity friction value reaching
+ * `world.step()` would corrupt every body in the physics world, not just the
+ * vehicle's own. `parseTuningSnapshot` never throws and never hands this
+ * module a raw, unvalidated leaf — see that module's own doc comment for the
+ * full security boundary.
  */
 
 import type { KeyToValueOfType } from "three/addons/libs/lil-gui.module.min.js";
@@ -54,6 +65,7 @@ import {
   serializeSurfaceProfiles,
 } from "../core/surface-tuning";
 import { SURFACE_TYPES } from "../core/surface-types";
+import { parseTuningSnapshot, serializeTuningSnapshot } from "../core/tuning-snapshot";
 import {
   defaultTuning,
   serializeTuning,
@@ -68,6 +80,14 @@ const RESET_CONFIRM_MS = 3000;
 
 const RESET_LABEL = "Reset to defaults";
 const RESET_CONFIRM_LABEL = "Click again to confirm";
+
+const EXPORT_LABEL = "Export tuning to file";
+const IMPORT_LABEL = "Import tuning from file";
+/** Shown, then reverted after `RESET_CONFIRM_MS`, on a failed import — the
+ * reset control's own rename-then-restore-on-timeout pattern, reused rather
+ * than an `alert()` or thrown exception (see the module doc comment's
+ * Export/Import paragraph). */
+const IMPORT_FAILURE_LABEL = "Import failed — file invalid";
 
 /** Minimal storage shape the panel needs. `localStorage`-compatible, and
  * injectable so `tests/tuning-persist.test.ts`-style hostile-input tests can
@@ -98,6 +118,17 @@ function createLocalStorageAdapter(): TuningStorage {
   };
 }
 
+/** `YYYYMMDD-HHMMSS` from a wall-clock `Date`, for the Export control's
+ * downloaded filename. Wall-clock reads are permitted under `src/debug/**`
+ * per `tests/layering.test.ts`. */
+function timestampForFilename(now: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-` +
+    `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  );
+}
+
 /**
  * Bind one numeric leaf. `min`/`max`/`step` are always read from a
  * `TuningRange` — never an inline literal — so the slider bound and
@@ -114,16 +145,24 @@ function addNumber<T, K extends KeyToValueOfType<T, number>>(
 }
 
 /**
- * Writes every field of a fresh `defaultTuning()` onto `target`'s existing
- * nested objects, walking the shape of `TUNING_RANGES`. Deliberately mutates
- * leaves IN PLACE rather than replacing `target.chassis`/`target.wheels`/etc.
+ * Writes every leaf of `sourceNode` onto `target`'s existing nested objects,
+ * walking the shape of a `*_RANGES` table. Deliberately mutates leaves IN
+ * PLACE rather than replacing `target.chassis`/`target.wheels`/etc.
  * wholesale — every lil-gui controller above holds a reference to those exact
  * nested objects (e.g. `tuning.chassis.comOffset`), and replacing the object
  * would leave the controllers pointing at stale data.
+ *
+ * Two callers, one function (renamed from its old defaults-only name when the
+ * import path below was added): "Reset to defaults" passes a fresh
+ * `defaultX()` as `sourceNode`; the Import control passes an already-validated
+ * domain from `parseTuningSnapshot` instead. Both are already-trusted,
+ * fully-populated objects of the matching shape by the time they reach this
+ * function — Import's own validation happens upstream, in
+ * `../core/tuning-snapshot.ts`, not here.
  */
-function writeDefaultsOnto(
+function writeLeavesOnto(
   targetNode: Record<string, unknown>,
-  freshNode: Record<string, unknown>,
+  sourceNode: Record<string, unknown>,
   rangeNode: Record<string, unknown>,
 ): void {
   for (const key of Object.keys(rangeNode)) {
@@ -135,11 +174,11 @@ function writeDefaultsOnto(
       typeof (rangeEntry as { max?: unknown }).max === "number" &&
       typeof (rangeEntry as { step?: unknown }).step === "number";
     if (isLeaf) {
-      targetNode[key] = freshNode[key];
+      targetNode[key] = sourceNode[key];
     } else if (typeof rangeEntry === "object" && rangeEntry !== null) {
-      writeDefaultsOnto(
+      writeLeavesOnto(
         targetNode[key] as Record<string, unknown>,
-        freshNode[key] as Record<string, unknown>,
+        sourceNode[key] as Record<string, unknown>,
         rangeEntry as Record<string, unknown>,
       );
     }
@@ -624,6 +663,19 @@ export function createTuningPanel(
     CAMERA_TUNING_RANGES.chaseFallback.fovDeg,
   ).onChange(handlers.onApplyCamera);
 
+  /**
+   * D-17's three small writes, factored into one helper so both the
+   * blanket `gui.onChange` below and the Import success path (further down)
+   * share exactly one persistence call site rather than duplicating the
+   * three lines. Three separate keys, not one merged blob, is deliberate: a
+   * corrupt camera blob can never take the vehicle tuning down with it.
+   */
+  function persistAll(): void {
+    store.set(TUNING_STORAGE_KEY, serializeTuning(tuning));
+    store.set(SURFACE_TUNING_STORAGE_KEY, serializeSurfaceProfiles(surfaces));
+    store.set(CAMERA_TUNING_STORAGE_KEY, serializeCameraTuning(cameraTuning));
+  }
+
   // D-17: persist on ANY change, anywhere in the tree — a controller's
   // change bubbles to its parent GUI and on up to the root regardless of
   // whether that controller itself was bound with `.onChange` or
@@ -632,13 +684,130 @@ export function createTuningPanel(
   // `this.parent._callOnChange(this)`). Persisting the plain objects
   // (`serializeTuning`/`serializeSurfaceProfiles`/`serializeCameraTuning`),
   // not `gui.save(true)` — see the DEVIATION comment on `serializeTuning` in
-  // `src/core/vehicle-tuning.ts` for why. Three small writes on any change is
-  // deliberate: three separate keys means a corrupt camera blob can never
-  // take the vehicle tuning down with it, which a single merged blob would.
+  // `src/core/vehicle-tuning.ts` for why.
   gui.onChange(() => {
-    store.set(TUNING_STORAGE_KEY, serializeTuning(tuning));
-    store.set(SURFACE_TUNING_STORAGE_KEY, serializeSurfaceProfiles(surfaces));
-    store.set(CAMERA_TUNING_STORAGE_KEY, serializeCameraTuning(cameraTuning));
+    persistAll();
+  });
+
+  // ---- Export / Import (plan 260920-l94) ---------------------------------
+  // Both live at the ROOT, immediately BEFORE "Reset to defaults" below —
+  // "Reset to defaults" staying the LAST root control is an existing,
+  // explicit convention this plan does not disturb. Gate-free by
+  // construction, like every other control in this file: `src/main.ts`
+  // remains the sole `DEBUG_ENABLED` gate.
+  gui
+    .add(
+      {
+        exportTuning(): void {
+          // Pretty-printed, three-domain JSON, meant to be opened/diffed by
+          // hand — see `serializeTuningSnapshot`'s own doc comment.
+          const raw = serializeTuningSnapshot(tuning, surfaces, cameraTuning);
+          const blob = new Blob([raw], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          // Plain property assignment, never the DOM-injection sink this
+          // repo bans outright (T-01-28, mechanically enforced by
+          // `tests/layering.test.ts`).
+          anchor.download = `heat-street-tuning-${timestampForFilename(new Date())}.json`;
+          document.body.appendChild(anchor);
+          anchor.click();
+          document.body.removeChild(anchor);
+          URL.revokeObjectURL(url);
+        },
+      },
+      "exportTuning",
+    )
+    .name(EXPORT_LABEL);
+
+  // A hidden, never-appended-to-a-form file input is the standard way to
+  // drive the browser's native file picker from a button click — clicking it
+  // programmatically from INSIDE the button's own click handler (below)
+  // keeps the picker's `.click()` call inside the same user gesture Chrome
+  // and Firefox both require to allow it.
+  const importFileInput = document.createElement("input");
+  importFileInput.type = "file";
+  importFileInput.accept = "application/json,.json";
+  importFileInput.style.display = "none";
+  document.body.appendChild(importFileInput);
+
+  let importFailureTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const importController = gui
+    .add(
+      {
+        importTuning(): void {
+          importFileInput.click();
+        },
+      },
+      "importTuning",
+    )
+    .name(IMPORT_LABEL);
+
+  importFileInput.addEventListener("change", () => {
+    const file = importFileInput.files?.[0];
+    // Clearing the value lets the SAME file be re-selected consecutively —
+    // otherwise a second pick of an identical path never fires `change`.
+    importFileInput.value = "";
+    if (!file) {
+      return;
+    }
+
+    file.text().then((raw) => {
+      // The security boundary: every byte read back from the file goes
+      // through `parseTuningSnapshot`, never a direct `JSON.parse` — see the
+      // module doc comment's Export/Import paragraph.
+      const snapshot = parseTuningSnapshot(raw);
+
+      if (snapshot === null) {
+        // Failure is surfaced through the control's own label, exactly like
+        // the reset control's confirm-then-restore pattern — no `alert()`,
+        // no thrown exception, and nothing is mutated.
+        clearTimeout(importFailureTimeoutId);
+        importController.name(IMPORT_FAILURE_LABEL);
+        importFailureTimeoutId = setTimeout(() => {
+          importController.name(IMPORT_LABEL);
+        }, RESET_CONFIRM_MS);
+        return;
+      }
+
+      // Per-domain independence: only the domains that actually came back
+      // non-null are written and re-applied — mirrors D-17's
+      // three-separate-keys rationale (see `../core/tuning-snapshot.ts`'s
+      // module doc comment).
+      if (snapshot.vehicle !== null) {
+        writeLeavesOnto(
+          tuning as unknown as Record<string, unknown>,
+          snapshot.vehicle as unknown as Record<string, unknown>,
+          TUNING_RANGES as unknown as Record<string, unknown>,
+        );
+        handlers.onApplyVehicle();
+      }
+      if (snapshot.surfaces !== null) {
+        writeLeavesOnto(
+          surfaces as unknown as Record<string, unknown>,
+          snapshot.surfaces as unknown as Record<string, unknown>,
+          SURFACE_PROFILE_RANGES as unknown as Record<string, unknown>,
+        );
+        handlers.onApplySurfaces();
+      }
+      if (snapshot.camera !== null) {
+        writeLeavesOnto(
+          cameraTuning as unknown as Record<string, unknown>,
+          snapshot.camera as unknown as Record<string, unknown>,
+          CAMERA_TUNING_RANGES as unknown as Record<string, unknown>,
+        );
+        handlers.onApplyCamera();
+      }
+
+      for (const controller of gui.controllersRecursive()) {
+        controller.updateDisplay();
+      }
+
+      // An import is a change and must persist like one (D-17).
+      persistAll();
+    });
   });
 
   // Reset: the LAST control in the root. Two-click confirm from the
@@ -666,17 +835,17 @@ export function createTuningPanel(
           resetArmed = false;
           resetController.name(RESET_LABEL);
 
-          writeDefaultsOnto(
+          writeLeavesOnto(
             tuning as unknown as Record<string, unknown>,
             defaultTuning() as unknown as Record<string, unknown>,
             TUNING_RANGES as unknown as Record<string, unknown>,
           );
-          writeDefaultsOnto(
+          writeLeavesOnto(
             surfaces as unknown as Record<string, unknown>,
             defaultSurfaceProfiles() as unknown as Record<string, unknown>,
             SURFACE_PROFILE_RANGES as unknown as Record<string, unknown>,
           );
-          writeDefaultsOnto(
+          writeLeavesOnto(
             cameraTuning as unknown as Record<string, unknown>,
             defaultCameraTuning() as unknown as Record<string, unknown>,
             CAMERA_TUNING_RANGES as unknown as Record<string, unknown>,
@@ -717,6 +886,8 @@ export function createTuningPanel(
     },
     dispose(): void {
       clearTimeout(resetTimeoutId);
+      clearTimeout(importFailureTimeoutId);
+      importFileInput.remove();
       gui.destroy();
     },
   };

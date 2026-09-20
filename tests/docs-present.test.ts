@@ -69,6 +69,10 @@ const REQUIRED: ReadonlyArray<{ path: string; minChars: number }> = [
   // compile to 50 nodes / 64 edges pretty-printed — a stub or truncated
   // write would be nowhere near this floor.
   { path: "public/maps/juliette-ga.map.json", minChars: 5000 },
+  // Owned by quick plan 260920-l94: the live `?debug` tuning panel explainer.
+  // `tests/tuning-guide-sync.test.ts` is the companion mechanical gate that
+  // keeps this document's control list from drifting from the panel code.
+  { path: "docs/vehicle-tuning-guide.md", minChars: 8000 },
 ];
 
 describe("SC5 documents are present and substantive", () => {
