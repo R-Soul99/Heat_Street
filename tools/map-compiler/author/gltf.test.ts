@@ -8,25 +8,41 @@ import { SURFACE_TYPES } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
 import { makeProjector } from "../graph/project.ts";
 import { buildGltfDocument, writeGlb } from "./gltf.ts";
-import { buildHeightfield, type HeightfieldGrid } from "./heightfield.ts";
+import { HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
+
+/**
+ * Constructs a perfectly flat `HeightfieldGrid` fixture directly, without
+ * going through `./heightfield.ts`'s `buildOffRoadRelief` (phase 04.1 —
+ * that function now varies with seeded procedural noise; this file's tests
+ * only need a valid grid shape for road/building mesh coverage, and the
+ * relief generator has its own dedicated coverage in `heightfield.test.ts`).
+ */
+function makeFlatHeightfield(
+  valueM: number,
+  bounds: { minX: number; minZ: number; maxX: number; maxZ: number },
+  resolution: number,
+): HeightfieldGrid {
+  const samplesPerAxis = resolution + 1;
+  const heights = new Float32Array(samplesPerAxis * samplesPerAxis).fill(
+    valueM - HEIGHTFIELD_SINK_M,
+  );
+  return {
+    rows: resolution,
+    cols: resolution,
+    heights,
+    originX: bounds.minX,
+    originZ: bounds.minZ,
+    scaleX: bounds.maxX - bounds.minX,
+    scaleZ: bounds.maxZ - bounds.minZ,
+    sinkM: HEIGHTFIELD_SINK_M,
+  };
+}
 
 const TEST_PROJECTOR = makeProjector({ lat: 33.1, lon: -83.8 });
-/**
- * A minimal, valid heightfield fixture — this file's tests exercise
- * `buildGltfDocument`'s road/building meshes; the terrain mesh has its own
- * dedicated coverage in `heightfield.test.ts`. This file never calls
- * `buildingBoxes` directly (its `BuildingBox` fixtures are hand-built via
- * `makeBuildingBox` below), so there is no `GroundHeightSampler` use here;
- * `buildHeightfield` (`heightfield.ts`) is NOT touched by this plan and is
- * still lat/lon-sampler-shaped (owned by plan 04.1-04) — its sampler
- * argument is an untyped object literal (structurally satisfying that
- * shape) rather than a named import, keeping this file free of any
- * `sources/dem.ts` reference.
- */
-const TEST_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
-  { sample: () => 100 },
+/** A minimal, valid heightfield fixture — this file's tests exercise `buildGltfDocument`'s road/building meshes; the terrain mesh has its own dedicated coverage in `heightfield.test.ts`. */
+const TEST_HEIGHTFIELD: HeightfieldGrid = makeFlatHeightfield(
+  100,
   { minX: -10, minZ: -10, maxX: 10, maxZ: 10 },
-  TEST_PROJECTOR,
   2,
 );
 
