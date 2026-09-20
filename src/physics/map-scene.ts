@@ -28,6 +28,7 @@
  * `three` and must not touch the DOM or any wall clock.
  */
 import * as RAPIER from "@dimforge/rapier3d";
+import { buildCrestGeometry, crestsForArea } from "../core/crest-geometry";
 import { sampleHeightfieldBilinear } from "../core/heightfield-sample";
 import type { InputFrame } from "../core/input-tape";
 import type {
@@ -174,6 +175,7 @@ function buildRoadColliders(
   graph: RoadGraph,
   heightfield: MapCollisionHeightfield | undefined,
   buildings: readonly MapCollisionBuilding[],
+  areaId: string,
 ): void {
   const geometry = buildRoadGeometry(graph);
   const roadBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
@@ -239,6 +241,30 @@ function buildRoadColliders(
         roadBody,
       );
       surfaceMap.register(collider.handle, shoulder.surface);
+    }
+
+    // Authored crest colliders (plan 04.1-07, D-04b): this builds the SAME
+    // dome geometry, over the SAME per-area authored table and the SAME
+    // bilinear heightfield sampler, that the compiler used to bake the
+    // `.glb`'s own crest mesh -- what the player sees and what the physics
+    // uses cannot diverge, the identical argument the shoulder block's own
+    // comment above makes for road-shoulder geometry. Sits inside this
+    // heightfield guard because the rim sampler needs the grid -- an area
+    // shipping no heightfield block gets no crests, the same defensive
+    // optionality the shoulder block already applies.
+    const crests = buildCrestGeometry(crestsForArea(areaId), (x, z) =>
+      sampleHeightfieldBilinear(heightfield, x, z),
+    );
+    for (const crest of crests) {
+      const collider = world.createCollider(
+        RAPIER.ColliderDesc.trimesh(
+          crest.positions,
+          crest.indices,
+          RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES,
+        ).setFriction(ROAD_FRICTION),
+        roadBody,
+      );
+      surfaceMap.register(collider.handle, crest.surface);
     }
   }
 }
@@ -326,7 +352,14 @@ export function createMapScene(
     buildHeightfieldCollider(world, surfaceMap, collision.heightfield);
   }
 
-  buildRoadColliders(world, surfaceMap, graph, collision.heightfield, collision.buildings);
+  buildRoadColliders(
+    world,
+    surfaceMap,
+    graph,
+    collision.heightfield,
+    collision.buildings,
+    collision.areaId,
+  );
 
   for (const building of collision.buildings) {
     buildBuildingCollider(world, building);
