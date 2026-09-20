@@ -112,20 +112,29 @@ export const TELEMETRY_TARGETS = {
     label: "<20 deg tilt, >40 mph forward speed (0.5 s after landing)",
   },
   stability: { maxTiltDeg: 15, label: "<15 deg max tilt" },
-  // PROVISIONAL (260920-j4d task 1) — these two bands are placeholders,
-  // deliberately set to mirror `handbrake`'s own numbers so a power-on
-  // recovery is held to no worse a standard than a coasting one. Task 2
-  // replaces both with the bands the retuned defaults actually achieve, once
-  // the "before" baseline against `defaultTuning()` has been measured.
+  // LOCKED (260920-j4d), against a CANDIDATE retune found during this
+  // session's sweep (`powerOversteerGain: 0.95`, `wheels.rearSideFriction:
+  // 0.26`) — NOT yet applied to `defaultTuning()`; the developer is
+  // hand-tuning the feel live and will hand back final values (see
+  // `.planning/STATE.md`'s quick task 260920-j4d and this candidate's own
+  // proof in `tests/vehicle-recovery.test.ts`). At that candidate:
+  // `powerSlideRecovery` measures 1.52 s (39% margin under the 2.5 s band)
+  // with hold max slip unaffected at ~33.5 deg (identical hold provocation to
+  // `handbrake`, comfortably over the 25 deg floor);  `highSpeedPulse`
+  // measures ~1.5 deg post-pulse max and settled slip, both with wide margin
+  // under their bands. Both bands are kept at their original (task 1)
+  // provisional numbers — they already had sensible margin from the
+  // candidate's measurements, so there was no reason to move them once
+  // locked.
   powerSlideRecovery: {
     maxRecoverSec: 2.5,
     minMaxSlipDeg: 25,
-    label: "PROVISIONAL: >25 deg hold slip, recovers <2.5 s power-on (task 2 locks the real band)",
+    label: ">25 deg hold slip, recovers <2.5 s power-on",
   },
   highSpeedPulse: {
     maxSlipDeg: 15,
     maxSettledSlipDeg: 3,
-    label: "PROVISIONAL: post-pulse max <15 deg, settled <3 deg (task 2 locks the real band)",
+    label: "post-pulse max <15 deg, settled <3 deg",
   },
 } as const;
 
