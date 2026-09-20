@@ -1,0 +1,116 @@
+{
+  "kind": "heat-street.tuning-snapshot",
+  "version": 1,
+  "vehicle": {
+    "chassis": {
+      "mass": 1600,
+      "comOffset": {
+        "x": 0,
+        "y": -0.15,
+        "z": 0
+      },
+      "halfExtents": {
+        "x": 0.95,
+        "y": 0.5,
+        "z": 2.35
+      },
+      "linearDamping": 0.03,
+      "angularDamping": 0.3
+    },
+    "wheels": {
+      "halfTrack": 0.85,
+      "halfWheelbase": 1.55,
+      "connectionY": -0.3,
+      "radius": 0.36,
+      "suspensionRestLength": 0.45,
+      "maxSuspensionTravel": 0.3,
+      "suspensionStiffness": 14,
+      "suspensionCompression": 1.3,
+      "suspensionRelaxation": 1.4,
+      "maxSuspensionForce": 20000,
+      "frictionSlip": 1.2,
+      "frontSideFriction": 1,
+      "rearSideFriction": 0.2
+    },
+    "drive": {
+      "engineForcePerRearWheel": 3650,
+      "brakeImpulsePerWheel": 60,
+      "maxSteerLock": 0.7853981633974483,
+      "steerRampPerSec": 2.5,
+      "steerReturnPerSec": 4,
+      "handbrakeRearSideFriction": 0.01,
+      "powerOversteerGain": 1.1,
+      "reverseEngineForcePerRearWheel": 1500,
+      "reverseEngageSpeedMs": 0.1
+    },
+    "assists": {
+      "autoLevelGain": 0.4,
+      "autoLevelDamping": 0.6,
+      "bodyRollGain": 0.12,
+      "bodyRollDamping": 1.2,
+      "bodyRollMaxDeg": 15,
+      "slideCatchGain": 0.12,
+      "slideCatchDamping": 0.35,
+      "downforcePerSpeed2": 0
+    }
+  },
+  "surfaces": {
+    "tarmac": {
+      "forwardGrip": 1,
+      "lateralGrip": 1
+    },
+    "gravel": {
+      "forwardGrip": 0.75,
+      "lateralGrip": 0.6
+    },
+    "dirt_road": {
+      "forwardGrip": 0.78,
+      "lateralGrip": 0.5
+    },
+    "grass": {
+      "forwardGrip": 0.55,
+      "lateralGrip": 0.6
+    },
+    "sand": {
+      "forwardGrip": 0.45,
+      "lateralGrip": 0.55
+    },
+    "mud": {
+      "forwardGrip": 0.4,
+      "lateralGrip": 0.5
+    }
+  },
+  "camera": {
+    "framing": {
+      "lowSpeedMs": 8.94,
+      "highSpeedMs": 53.64,
+      "lowAltitudeM": 45,
+      "lowDistanceM": 8,
+      "lowFovDeg": 48,
+      "highAltitudeM": 90,
+      "highDistanceM": 16,
+      "highFovDeg": 62
+    },
+    "damping": {
+      "positionLambda": 6,
+      "headingLambda": 2.5,
+      "framingLambda": 1.5
+    },
+    "heading": {
+      "blendSpeedMs": 1.5
+    },
+    "occlusion": {
+      "nearTargetMarginM": 2,
+      "fadeFloorOpacity": 0.15,
+      "fadeLambda": 8,
+      "basePitchDeg": 80,
+      "maxPitchDeg": 88,
+      "fanRayCount": 5
+    },
+    "chaseFallback": {
+      "altitudeM": 8,
+      "distanceM": 16,
+      "fovDeg": 55
+    }
+  }
+}
