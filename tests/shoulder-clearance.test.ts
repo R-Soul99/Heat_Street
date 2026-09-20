@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  MIN_SHOULDER_WIDTH_M,
+  SHOULDER_BUILDING_SAFETY_MARGIN_M,
+  TARGET_SHOULDER_WIDTH_M,
+} from "../src/core/road-geometry";
+import {
   buildingBoundingRadius,
   type ClearanceBuilding,
   resolvePointShoulderWidth,
@@ -61,5 +66,52 @@ describe("resolvePointShoulderWidth", () => {
     const narrowWidth = resolvePointShoulderWidth(0, 10, 3, building, 20, 3, 2);
     const wideWidth = resolvePointShoulderWidth(0, 10, 10, building, 20, 3, 2);
     expect(wideWidth).toBeLessThan(narrowWidth);
+  });
+});
+
+describe("resolvePointShoulderWidth — at the shipped constants (phase 04.1)", () => {
+  it("with no buildings, resolves to exactly TARGET_SHOULDER_WIDTH_M", () => {
+    const width = resolvePointShoulderWidth(
+      0,
+      10,
+      HALF_WIDTH,
+      [],
+      TARGET_SHOULDER_WIDTH_M,
+      MIN_SHOULDER_WIDTH_M,
+      SHOULDER_BUILDING_SAFETY_MARGIN_M,
+    );
+    expect(width).toBe(TARGET_SHOULDER_WIDTH_M);
+  });
+
+  it("with a building leaving less than TARGET_SHOULDER_WIDTH_M + SHOULDER_BUILDING_SAFETY_MARGIN_M clearance, resolves strictly narrower than TARGET_SHOULDER_WIDTH_M -- the clamp still ENGAGES at the smaller shipped target (RESEARCH.md Assumption A4: not dead code)", () => {
+    // centerDistance 10, edgeDistance = 10 - radius(1) - halfWidth(3) = 6,
+    // available = 6 - safetyMargin(2) = 4 -- between MIN and TARGET, so this
+    // proves the clamp narrows the width without collapsing it to the floor.
+    const closeBuilding: ClearanceBuilding[] = [{ centerX: 10, centerZ: 10, radiusM: 1 }];
+    const width = resolvePointShoulderWidth(
+      0,
+      10,
+      HALF_WIDTH,
+      closeBuilding,
+      TARGET_SHOULDER_WIDTH_M,
+      MIN_SHOULDER_WIDTH_M,
+      SHOULDER_BUILDING_SAFETY_MARGIN_M,
+    );
+    expect(width).toBeLessThan(TARGET_SHOULDER_WIDTH_M);
+    expect(width).toBeGreaterThan(MIN_SHOULDER_WIDTH_M);
+  });
+
+  it("with a building overlapping the paved edge, resolves to exactly MIN_SHOULDER_WIDTH_M", () => {
+    const overlappingBuilding: ClearanceBuilding[] = [{ centerX: 3, centerZ: 10, radiusM: 0 }];
+    const width = resolvePointShoulderWidth(
+      0,
+      10,
+      HALF_WIDTH,
+      overlappingBuilding,
+      TARGET_SHOULDER_WIDTH_M,
+      MIN_SHOULDER_WIDTH_M,
+      SHOULDER_BUILDING_SAFETY_MARGIN_M,
+    );
+    expect(width).toBe(MIN_SHOULDER_WIDTH_M);
   });
 });

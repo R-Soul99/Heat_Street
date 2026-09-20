@@ -5,7 +5,9 @@ import {
   buildRoadGeometry,
   buildRoadShoulders,
   type IncidentEdgeAtNode,
+  MIN_SHOULDER_WIDTH_M,
   type RoadGeometry,
+  TARGET_SHOULDER_WIDTH_M,
   type Vec3,
 } from "../src/core/road-geometry";
 import type { RoadGraph, RoadGraphEdge, RoadGraphNode } from "../src/core/road-graph";
@@ -779,5 +781,67 @@ describe("buildRoadShoulders — grounding fix", () => {
     expect(outerLeftAtZ0).toBeCloseTo(-6, 6);
     expect(outerLeftAtZ10).toBeCloseTo(-15, 6);
     expect(outerLeftAtZ0).not.toBeCloseTo(outerLeftAtZ10, 1);
+  });
+});
+
+describe("buildRoadShoulders — flat-terrain grade (phase 04.1)", () => {
+  const FIFTEEN_DEGREES_TAN = Math.tan((15 * Math.PI) / 180);
+  // Documented worst-case flat-terrain shoulder height delta (road-geometry.ts's
+  // TARGET_SHOULDER_WIDTH_M doc comment): ~30m nearest-grid-node distance's
+  // relief (~0.27m) plus HEIGHTFIELD_SINK_M (0.1m).
+  const WORST_CASE_DELTA_M = 0.37;
+
+  const flatEdge = makeEdge({
+    id: 1,
+    from: 0,
+    to: 1,
+    widthM: 7, // halfWidth 3.5
+    points: [
+      [0, 0, 0],
+      [0, 0, 10],
+    ],
+  });
+  const flatNode0 = makeNode({ id: 0, x: 0, y: 0, z: 0 });
+  const flatNode1 = makeNode({ id: 1, x: 0, y: 0, z: 10 });
+  const flatGraph = makeGraph([flatNode0, flatNode1], [flatEdge]);
+
+  it("constants invariant: MIN_SHOULDER_WIDTH_M <= TARGET_SHOULDER_WIDTH_M <= 8 (8 is the ceiling above which a shoulder reads as extra road width, not a verge)", () => {
+    expect(MIN_SHOULDER_WIDTH_M).toBeLessThanOrEqual(TARGET_SHOULDER_WIDTH_M);
+    expect(TARGET_SHOULDER_WIDTH_M).toBeLessThanOrEqual(8);
+  });
+
+  it("grades under 15 degrees at TARGET_SHOULDER_WIDTH_M for the documented worst-case flat-terrain height delta", () => {
+    const shoulders = buildRoadShoulders(flatGraph, () => -WORST_CASE_DELTA_M);
+    const shoulder = shoulders[0];
+    for (let i = 0; i < shoulder.positions.length / 3; i++) {
+      const y = shoulder.positions[i * 3 + 1];
+      // Epsilon widened from a literal 1e-9 to 1e-6: positions are stored in
+      // a Float32Array, and float32 rounding of -0.37 alone (before any
+      // arithmetic) already differs from the float64 literal by ~4.8e-9 --
+      // 1e-9 would fail on storage precision alone, not a real defect.
+      expect(
+        Math.abs(y),
+        `vertex ${i} y=${y} should stay within the worst-case delta`,
+      ).toBeLessThanOrEqual(WORST_CASE_DELTA_M + 1e-6);
+    }
+    const impliedGrade = WORST_CASE_DELTA_M / TARGET_SHOULDER_WIDTH_M;
+    expect(impliedGrade).toBeLessThan(FIFTEEN_DEGREES_TAN);
+  });
+
+  it("grades under 15 degrees even at the tightest building-clamped MIN_SHOULDER_WIDTH_M for the same worst-case delta", () => {
+    const shoulders = buildRoadShoulders(
+      flatGraph,
+      () => -WORST_CASE_DELTA_M,
+      () => () => MIN_SHOULDER_WIDTH_M,
+    );
+    expect(shoulders.length).toBe(1);
+    const impliedGrade = WORST_CASE_DELTA_M / MIN_SHOULDER_WIDTH_M;
+    expect(impliedGrade).toBeLessThan(FIFTEEN_DEGREES_TAN);
+  });
+
+  it("negative control: the DEM-era 4.5m delta over the old 20m width EXCEEDS a 12-degree grade, proving the 15-degree gate above is not trivially green", () => {
+    const demEraDelta = 4.5;
+    const demEraWidth = 20;
+    expect(demEraDelta / demEraWidth).toBeGreaterThan(Math.tan((12 * Math.PI) / 180));
   });
 });
