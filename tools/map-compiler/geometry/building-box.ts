@@ -164,12 +164,12 @@ export interface BuildingBoxesConfig {
 
 /**
  * Returns the terrain height in metres at a LOCAL-ENU `(x, z)`, which is what
- * the compiler's own off-road relief grid speaks natively. The previous
- * `ElevationSampler` took `(lat, lon)` only because a DEM raster is
- * geographic, and no DEM exists after phase 04.1. The real caller binds
- * `sampleHeightfieldBilinear` over the compiled relief grid, so a building's
- * base lands on exactly the terrain the player sees and the shipped collider
- * extends down to.
+ * the compiler's own off-road relief grid speaks natively. This module's
+ * prior lat/lon-shaped ground sampler took a geographic coordinate pair only
+ * because a DEM raster is geographic, and no DEM exists after phase 04.1.
+ * The real caller binds `sampleHeightfieldBilinear` over the compiled relief
+ * grid, so a building's base lands on exactly the terrain the player sees
+ * and the shipped collider extends down to.
  */
 export type GroundHeightSampler = (x: number, z: number) => number;
 

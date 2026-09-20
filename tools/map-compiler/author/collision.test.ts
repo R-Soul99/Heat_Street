@@ -1,17 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { MAP_COLLISION_VERSION, parseMapCollision } from "../../../src/core/map-collision.ts";
-import { type BuildingsEnvelopeLike, buildingBoxes } from "../geometry/building-box.ts";
+import {
+  type BuildingsEnvelopeLike,
+  buildingBoxes,
+  type GroundHeightSampler,
+} from "../geometry/building-box.ts";
 import { makeProjector, type Projector } from "../graph/project.ts";
-import type { ElevationSampler } from "../sources/dem.ts";
 import { buildMapCollision } from "./collision.ts";
 import { buildHeightfield, HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
 
 const projector: Projector = makeProjector({ lat: 33.1, lon: -83.8 });
-const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
+const FLAT_GROUND: GroundHeightSampler = () => 100;
 
-/** A minimal, valid heightfield fixture — this file's own tests exercise `buildMapCollision`'s building half; the heightfield half has its own dedicated suite in `heightfield.test.ts`. */
+/**
+ * A minimal, valid heightfield fixture — this file's own tests exercise
+ * `buildMapCollision`'s building half; the heightfield half has its own
+ * dedicated suite in `heightfield.test.ts`. `buildHeightfield` (`heightfield.ts`)
+ * is NOT touched by this plan — it is still lat/lon-sampler-shaped, owned by
+ * plan 04.1-04 — so its sampler argument is an untyped object literal
+ * (structurally satisfying that shape) rather than a named import, keeping
+ * this file free of any `sources/dem.ts` reference. Same 100 value as
+ * `FLAT_GROUND` above, kept in sync deliberately.
+ */
 const FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
-  FLAT_GROUND,
+  { sample: () => 100 },
   { minX: -50, minZ: -50, maxX: 50, maxZ: 50 },
   projector,
   2,
