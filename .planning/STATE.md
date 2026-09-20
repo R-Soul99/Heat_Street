@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 04.1 context gathered
-last_updated: "2026-09-20T00:03:39.324Z"
-last_activity: 2026-09-20 -- Phase 04.1 execution started
+stopped_at: Phase 04.1 complete (11/11 plans)
+last_updated: "2026-09-20T10:40:00.000Z"
+last_activity: 2026-09-20 -- Phase 04.1 complete; ADR 0001 amended, ADR 0004 decision 7 superseded
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 51
-  completed_plans: 40
-  percent: 44
+  completed_plans: 51
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 04.1 — flatten-terrain-remove-dem-elevation-drop-real-world-dem-der
+**Current focus:** Phase 5 — Objectives, Navigation & Race Modes (not yet planned)
 
 ## Current Position
 
-Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — EXECUTING
-Plan: 1 of 11
+Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — COMPLETE (11/11 plans)
 Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
-Last activity: 2026-09-20 -- Phase 04.1 execution started
+Last activity: 2026-09-20 -- Phase 04.1 complete; ADR 0001 amended, ADR 0004 decision 7 superseded
 
-Progress (phases 1-4 of 8, the only ones planned so far): [██████████] 100% of 40 known plans
+Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 
 ## Performance Metrics
 
@@ -206,10 +205,14 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-19T17:24:42.326Z
-Stopped at: Phase 04.1 context gathered
-Resume file: .planning/phases/04.1-flatten-terrain-remove-dem-elevation-drop-real-world-dem-der/04.1-CONTEXT.md
+Last session: 2026-09-20T10:40:00.000Z
+Stopped at: Phase 04.1 complete (11/11 plans) — ready for Phase 5 planning
+Resume file: none — phase closed cleanly, no handoff needed
 
-Before running `/gsd-plan-phase 5`, read the five open items logged under Blockers/Concerns above
-(tagged `[Phase 04-11, open]`) — in particular the art-direction-phase decision, which may change
-how Phase 5 (and later phases) get scoped.
+Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
+the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR
+0003 occlusion comparison) plus the four new `[Phase 04.1, open]` items from plan 04.1-10
+(road-texture gap, ragged road-edge geometry near two authored crests, the node-45-class
+junction bug now confirmed on flat terrain across three junctions, and a building's
+inverted-normals-looking geometry). None of these block Phase 5, but several (the junction bug,
+the ragged-edge defect) touch geometry Phase 5's navigation/objectives work will drive through.
