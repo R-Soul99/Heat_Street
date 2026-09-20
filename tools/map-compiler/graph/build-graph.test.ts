@@ -14,7 +14,7 @@ const BASE_CONFIG: BuildGraphConfig = {
   areaId: "test-area",
   name: "Test Area",
   bbox: { south: 32.999, west: -83.002, north: 33.002, east: -82.999 },
-  demSource: "usgs-3dep-1m",
+  demSource: "none-flat-authored",
   osmSnapshot: "2026-09-13T20:25:59.876Z",
   osmExtract: "overpass://overpass-api.de/test-area",
   excludeHighwayClasses: [],
@@ -627,8 +627,61 @@ describe("buildGraph — Task 2: edge attribute resolution and artifact assembly
     expect(graph.attribution.osmLicense).toBe("ODbL-1.0");
     expect(graph.attribution.osmLicenseUrl).toBe("https://www.openstreetmap.org/copyright");
     expect(graph.attribution.dem).toBe(
-      "U.S. Geological Survey 3D Elevation Program (public domain)",
+      "Terrain elevation is flat and hand-authored — no DEM data is used (see docs/adr/0001-map-data-source.md)",
     );
+  });
+
+  it("produces a non-empty attribution.dem for every demSource union member, and none-flat-authored names no DEM programme", () => {
+    const demSources: BuildGraphConfig["demSource"][] = [
+      "usgs-3dep-1m",
+      "copernicus-glo30",
+      "none-flat-authored",
+    ];
+    const elements = [
+      way(
+        56,
+        [4501, 4502],
+        [
+          [33.0, -83.001],
+          [33.0, -83.0],
+        ],
+        { highway: "residential", surface: "asphalt" },
+      ),
+    ];
+    const attributionByDemSource = new Map<BuildGraphConfig["demSource"], string>();
+    for (const demSource of demSources) {
+      const { graph } = buildGraph(envelope(elements), { ...BASE_CONFIG, demSource });
+      expect(graph.attribution.dem.length).toBeGreaterThan(0);
+      attributionByDemSource.set(demSource, graph.attribution.dem);
+    }
+    const flatDem = attributionByDemSource.get("none-flat-authored");
+    expect(flatDem).not.toContain("3DEP");
+    expect(flatDem).not.toContain("USGS");
+    expect(flatDem).not.toContain("Copernicus");
+    // Belt-and-suspenders: the substring checks above don't catch a copy-paste of the actual
+    // USGS/Copernicus attribution VALUES (they don't literally spell "USGS"/"Copernicus"'s
+    // acronym forms), so also assert none-flat-authored's string is not byte-identical to either
+    // real DEM programme's attribution — this is what actually fails if
+    // DEM_ATTRIBUTION["none-flat-authored"] is copy-pasted from the USGS or Copernicus entry.
+    expect(flatDem).not.toBe(attributionByDemSource.get("usgs-3dep-1m"));
+    expect(flatDem).not.toBe(attributionByDemSource.get("copernicus-glo30"));
+  });
+
+  it("pins COMPILER_VERSION to 0.6.0 and mirrors it into the emitted graph.source.compilerVersion", () => {
+    expect(COMPILER_VERSION).toBe("0.6.0");
+    const elements = [
+      way(
+        57,
+        [4601, 4602],
+        [
+          [33.0, -83.001],
+          [33.0, -83.0],
+        ],
+        { highway: "residential", surface: "asphalt" },
+      ),
+    ];
+    const { graph } = buildGraph(envelope(elements), BASE_CONFIG);
+    expect(graph.source.compilerVersion).toBe(COMPILER_VERSION);
   });
 
   it("emits a default spawn at a degree>=2 node nearest the bbox centre, heading along its first incident edge", () => {

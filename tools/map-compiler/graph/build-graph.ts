@@ -61,8 +61,13 @@ import { mapSurface, type SurfaceCoverageReport, surfaceCoverage } from "./surfa
  * neither the `.map.json` nor the `.glb`'s own fields changed.
  * Bumped to 0.5.0 in plan 04-10: `.collision.json` gains a DEM-derived `heightfield` block
  * (`collisionVersion` 2) and the `.glb` gains a `terrain` mesh (D-P28/D-P29) — both existing
- * artifacts changed shape even though `.map.json` itself did not. */
-export const COMPILER_VERSION = "0.5.0";
+ * artifacts changed shape even though `.map.json` itself did not.
+ * Bumped to 0.6.0 in plan 04.1-06: the flat-terrain / procedural-off-road-relief stage set
+ * (phase 04.1) produces materially different geometry from 0.5.0 — road-graph `y` is now a flat
+ * compiler-authored constant instead of DEM-sampled elevation, and off-road relief is authored
+ * rather than derived from a DEM — so a stale DEM-era artifact must be distinguishable by this
+ * field alone. */
+export const COMPILER_VERSION = "0.6.0";
 
 export interface Bbox {
   readonly south: number;
@@ -76,7 +81,7 @@ export interface BuildGraphConfig {
   readonly areaId: string;
   readonly name: string;
   readonly bbox: Bbox;
-  readonly demSource: "usgs-3dep-1m" | "copernicus-glo30";
+  readonly demSource: "usgs-3dep-1m" | "copernicus-glo30" | "none-flat-authored";
   /** `null` is `AreaConfig`'s placeholder before plan 04-02's Overpass fetch has filled it in — `buildGraph` throws a named error rather than emitting a schema-invalid artifact if either is still null. */
   readonly osmSnapshot: string | null;
   readonly osmExtract: string | null;
@@ -122,6 +127,8 @@ const DEM_ATTRIBUTION: Readonly<Record<BuildGraphConfig["demSource"], string>> =
   "usgs-3dep-1m": "U.S. Geological Survey 3D Elevation Program (public domain)",
   "copernicus-glo30":
     "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+  "none-flat-authored":
+    "Terrain elevation is flat and hand-authored — no DEM data is used (see docs/adr/0001-map-data-source.md)",
 };
 
 /** Task 2: fixed ADR 0001 attribution strings, minus the DEM line (which is demSource-dependent). */

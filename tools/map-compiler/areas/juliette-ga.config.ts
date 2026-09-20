@@ -34,11 +34,15 @@ export interface AreaConfig {
     readonly east: number;
   };
   /**
-   * Which DEM source ADR 0001's US/non-US selection rule resolves to for
-   * this area. Recorded here explicitly rather than re-derived at compile
-   * time, so a reader can see the decision without re-running the rule.
+   * Which DEM source ADR 0001's US/non-US selection rule WOULD resolve to
+   * for this area is no longer recorded here — phase 04.1 retired DEM
+   * elevation for this area (D-01 through D-05). The value now records that
+   * terrain elevation is flat and hand-authored; ADR 0001's amendment is the
+   * normative record of why. `"usgs-3dep-1m"` and `"copernicus-glo30"`
+   * remain valid union members because D-05 records DEM elevation as
+   * retired for v1, not ruled out for a future area.
    */
-  readonly demSource: "usgs-3dep-1m" | "copernicus-glo30";
+  readonly demSource: "usgs-3dep-1m" | "copernicus-glo30" | "none-flat-authored";
   /**
    * The OSM data retrieval timestamp, ISO 8601 — copied verbatim from the
    * committed roads cache envelope's `fetchedAt`
@@ -79,7 +83,10 @@ export const julietteGaConfig: AreaConfig = {
   areaId: "juliette-ga",
   name: "Juliette, Georgia",
   bbox: { south: 33.0963, west: -83.8242, north: 33.1223, east: -83.7948 },
-  demSource: "usgs-3dep-1m",
+  // [VERIFIED: phase 04.1, plan 04.1-06] Terrain elevation is flat and
+  // hand-authored for this area — DEM elevation is retired (D-01 through
+  // D-05); see docs/adr/0001-map-data-source.md's phase-04.1 amendment.
+  demSource: "none-flat-authored",
   // [VERIFIED: tools/map-compiler/areas/juliette-ga.raw-osm.json's committed
   // fetchedAt, captured 2026-09-13 against the primary public Overpass
   // instance — 56 tagged ways, highway breakdown service:30/tertiary:10/
