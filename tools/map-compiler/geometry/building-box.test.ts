@@ -2,12 +2,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeProjector, type Projector } from "../graph/project.ts";
-import type { ElevationSampler } from "../sources/dem.ts";
 import {
   axisAlignedArea,
   type BuildingsEnvelopeLike,
   buildingBoxes,
   DEFAULT_HEIGHT_M,
+  type GroundHeightSampler,
   MIN_BUILDING_AREA_SQM,
   PER_LEVEL_HEIGHT_M,
 } from "./building-box.ts";
@@ -15,7 +15,7 @@ import {
 const projector: Projector = makeProjector({ lat: 33.1, lon: -83.8 });
 
 /** A ground sampler returning a fixed height everywhere, for tests that don't care about slope. */
-const FLAT_GROUND: ElevationSampler = { sample: () => 42 };
+const FLAT_GROUND: GroundHeightSampler = () => 42;
 
 /** Builds a synthetic Overpass "buildings" envelope from raw way payloads, matching the real shape. */
 function makeEnvelope(
@@ -190,7 +190,7 @@ describe("buildingBoxes", () => {
   it("seats a prism's base Y at the DEM ground height sampled at the footprint centroid", () => {
     const geometry = squareFootprintLatLon(5, 0);
     const envelope = makeEnvelope([{ id: 50, geometry, tags: { building: "yes", height: "4" } }]);
-    const slopedGround: ElevationSampler = { sample: () => 123.5 };
+    const slopedGround: GroundHeightSampler = () => 123.5;
 
     const { boxes } = buildingBoxes(envelope, projector, slopedGround);
     const box = boxes[0];
@@ -248,6 +248,35 @@ describe("buildingBoxes", () => {
     expect(report.heightSource.explicit).toBe(1);
     expect(report.heightSource.levels).toBe(1);
     expect(report.heightSource.typeDefault).toBe(1);
+  });
+
+  it("calls the ground sampler with the footprint centroid's own LOCAL-ENU (x, z), not lat/lon or some other point", () => {
+    // Off-origin, rotated footprint so a lat/lon-vs-ENU mix-up (or a wrong
+    // point such as the footprint's first vertex) would not accidentally
+    // land on the same value as the correct centroid.
+    const center = { x: 20, z: -10 };
+    const geometry = squareFootprintLatLon(5, 17, center);
+    const envelope = makeEnvelope([{ id: 90, geometry, tags: { building: "yes", height: "3" } }]);
+
+    // Independently recompute the footprint's own local-ENU centroid, the
+    // same way `buildingBoxes` does internally, rather than assuming it
+    // equals `center` (true here only because the footprint is a symmetric
+    // square, but recomputed anyway so this test does not encode that
+    // assumption).
+    const footprintLocal = geometry.slice(0, -1).map((ll) => projector.project(ll.lat, ll.lon));
+    const expectedCentroid = footprintLocal.reduce(
+      (acc, p) => ({
+        x: acc.x + p.x / footprintLocal.length,
+        z: acc.z + p.z / footprintLocal.length,
+      }),
+      { x: 0, z: 0 },
+    );
+
+    const varyingGround: GroundHeightSampler = (x, z) => 0.5 * x - 0.25 * z;
+    const { boxes } = buildingBoxes(envelope, projector, varyingGround);
+
+    const expectedGroundY = varyingGround(expectedCentroid.x, expectedCentroid.z);
+    expect(boxes[0].positions[1]).toBeCloseTo(expectedGroundY, 6);
   });
 
   it("produces at least 10 boxes against the real committed juliette-ga.raw-buildings.json, with a height-source breakdown", async () => {
