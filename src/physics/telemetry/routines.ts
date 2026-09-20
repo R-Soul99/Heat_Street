@@ -60,6 +60,10 @@ export interface Routine {
 const MPH_45_MS = 20.1168;
 const MPH_50_MS = 22.352;
 const MPH_60_MS = 26.8224;
+/** Added for 260920-j4d's `highSpeedPulseRoutine` — 90 mph is the speed at
+ * which the developer reported a small steering tap snowballing into a
+ * growing left-right drift. */
+const MPH_90_MS = 40.2336;
 const METERS_TO_FEET = 3.28084;
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -108,6 +112,21 @@ export const TELEMETRY_TARGETS = {
     label: "<20 deg tilt, >40 mph forward speed (0.5 s after landing)",
   },
   stability: { maxTiltDeg: 15, label: "<15 deg max tilt" },
+  // PROVISIONAL (260920-j4d task 1) — these two bands are placeholders,
+  // deliberately set to mirror `handbrake`'s own numbers so a power-on
+  // recovery is held to no worse a standard than a coasting one. Task 2
+  // replaces both with the bands the retuned defaults actually achieve, once
+  // the "before" baseline against `defaultTuning()` has been measured.
+  powerSlideRecovery: {
+    maxRecoverSec: 2.5,
+    minMaxSlipDeg: 25,
+    label: "PROVISIONAL: >25 deg hold slip, recovers <2.5 s power-on (task 2 locks the real band)",
+  },
+  highSpeedPulse: {
+    maxSlipDeg: 15,
+    maxSettledSlipDeg: 3,
+    label: "PROVISIONAL: post-pulse max <15 deg, settled <3 deg (task 2 locks the real band)",
+  },
 } as const;
 
 /**
@@ -654,6 +673,248 @@ function makeStabilityRoutine(): Routine {
  * imports and runs it directly instead.
  */
 export const handbrakeRoutine: Routine = makeHandbrakeRoutine();
+
+/**
+ * `powerSlideRecovery` (260920-j4d task 1, symptom 1: "accelerating out of a
+ * slide does not recover quickly enough"). Identical provocation to
+ * `handbrakeRoutine` — reach 60 mph, hold `HANDBRAKE_STEER_FRACTION` with the
+ * handbrake for `HANDBRAKE_HOLD_TICKS` — but the recovery phase applies FULL
+ * throttle (`1.0`) instead of `handbrakeRoutine`'s `0.2`. That single
+ * difference is the whole point: per `<root_cause>` Fact 2,
+ * `src/physics/vehicle.ts` step 4 blends rear grip toward the handbrake value
+ * by `powerOversteerGain * throttle * |steer|`, and counter-steering out of a
+ * slide under throttle has a large `|steer|` AND a large `throttle` — exactly
+ * the regime `handbrakeRoutine`'s near-coast recovery (Fact 3) never enters.
+ * Sharing `handbrakeRoutine`'s exact provocation (rather than a fresh one)
+ * keeps the two results directly comparable: the SAME slide, recovered two
+ * different ways.
+ *
+ * Deliberately NOT a member of `ROUTINES` — same reasoning as
+ * `handbrakeRoutine` above: this measures a transient, provoked behaviour for
+ * one specific retune, not one of the six steady-state pass/fail checks the
+ * browser panel iterates.
+ *
+ * `evaluate` reports recovery seconds from the moment the handbrake is
+ * released until slip falls below `HANDBRAKE_RECOVER_SLIP_DEG`, or
+ * `Number.POSITIVE_INFINITY` if the run never recovers within `MAX_TICKS` —
+ * the same never-completed-is-never-a-pass discipline `accel`/`ramp` already
+ * use (T-02-19). Also accumulates `maxSlipDeg` during the hold, so a
+ * "recovery" that is fast only because it never really slid is visible
+ * separately from the recovery time itself.
+ */
+type PowerSlideRecoveryPhase = "accel" | "hold" | "recover" | "done";
+
+function makePowerSlideRecoveryRoutine(): Routine {
+  let phase: PowerSlideRecoveryPhase = "accel";
+  let releaseTick = 0;
+
+  return {
+    id: "powerSlideRecovery",
+    label: "power-on slide recovery",
+    setup() {
+      phase = "accel";
+      releaseTick = 0;
+    },
+    drive(tick, s) {
+      if (phase === "accel") {
+        if (s.forwardSpeedMs >= MPH_60_MS) {
+          phase = "hold";
+          releaseTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (phase === "hold") {
+        if (tick - releaseTick >= HANDBRAKE_HOLD_TICKS) {
+          phase = "recover";
+          releaseTick = tick;
+        } else {
+          return { steer: HANDBRAKE_STEER_FRACTION, throttle: 0, brake: 0, handbrake: true };
+        }
+      }
+      if (phase === "recover") {
+        const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+        if (slipDeg < HANDBRAKE_RECOVER_SLIP_DEG) {
+          phase = "done";
+          return null;
+        }
+        const counterSteer = clamp(-s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
+        // The one deliberate difference from `handbrakeRoutine`: full
+        // throttle, not 0.2, while counter-steering out of the slide.
+        return { steer: counterSteer, throttle: 1.0, brake: 0, handbrake: false };
+      }
+      return null;
+    },
+    sample(tick, s, acc) {
+      const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+      if (phase === "hold") {
+        acc.maxSlipDeg = Math.max(acc.maxSlipDeg ?? 0, slipDeg);
+      }
+      if (phase === "recover" || phase === "done") {
+        if (!("recoverStartTick" in acc)) {
+          acc.recoverStartTick = releaseTick;
+        }
+        if (!("recoveredTick" in acc) && slipDeg < HANDBRAKE_RECOVER_SLIP_DEG) {
+          acc.recoveredTick = tick;
+        }
+      }
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.powerSlideRecovery;
+      const maxSlipDeg = acc.maxSlipDeg ?? 0;
+      const recoverSec =
+        "recoveredTick" in acc && "recoverStartTick" in acc
+          ? (acc.recoveredTick - acc.recoverStartTick) * DT
+          : Number.POSITIVE_INFINITY;
+      return {
+        id: "powerSlideRecovery",
+        label: "power-on slide recovery",
+        value: recoverSec,
+        unit: "s",
+        target: t.label,
+        pass: recoverSec < t.maxRecoverSec && maxSlipDeg > t.minMaxSlipDeg,
+      };
+    },
+  };
+}
+
+export const powerSlideRecoveryRoutine: Routine = makePowerSlideRecoveryRoutine();
+
+/**
+ * `highSpeedPulse` (260920-j4d task 1, symptom 2: "small steering inputs at
+ * speed snowball"). Reach 90 mph, apply a deliberately SMALL steer pulse
+ * (`0.15` of `maxSteerLock`, 6.75 deg at Config A) for 0.3 s with throttle
+ * held, then go hands-off (`steer: 0`) for 5 s while sampling `|slipAngleRad|`
+ * every tick of the settle phase. `evaluate` reports the max post-pulse slip
+ * in degrees; `pass` also requires the last-second average slip to have
+ * decayed near zero, so a run that merely peaks low but never actually
+ * settles still fails.
+ *
+ * Distance budget (`<root_cause>` Fact 6's own note): reaching 90 mph takes
+ * roughly 230 m and the 5.3 s of pulse+settle adds roughly 210 m, comfortably
+ * inside `GROUND_HALF_EXTENTS.z` (600 m, `src/physics/telemetry/run.ts`). Not
+ * relied on blindly — `sample` also watches `contacts` and `|position.z|`
+ * every tick of the `pulse`/`settle` phases (NOT the `accel` phase, whose
+ * first couple of ticks legitimately read `contacts === 0` while the chassis
+ * drops from its 1 m spawn height onto the suspension — the same transient
+ * `SETTLE_TICKS` exists to skip for `accel`/`skidpad`/`slalom` above), and
+ * `evaluate` reports `Number.POSITIVE_INFINITY` if the car was ever airborne
+ * during the actual maneuver or drove past `|z| > 550`, so a run that left
+ * the ground or ran off the end of the world can never report a spurious
+ * pass.
+ *
+ * Deliberately NOT a member of `ROUTINES` — same reasoning as
+ * `handbrakeRoutine`/`powerSlideRecoveryRoutine` above.
+ */
+type HighSpeedPulsePhase = "accel" | "pulse" | "settle" | "done";
+
+const HIGH_SPEED_PULSE_STEER_FRACTION = 0.15;
+const HIGH_SPEED_PULSE_TICKS = Math.round(0.3 / DT);
+const HIGH_SPEED_PULSE_SETTLE_TICKS = Math.round(5 / DT);
+const HIGH_SPEED_PULSE_LAST_SECOND_TICKS = Math.round(1 / DT);
+/** Mirrors `run.ts`'s `GROUND_HALF_EXTENTS.z` (600) with margin — a run that
+ * drove this far off spawn is treated as having left the measurable track. */
+const HIGH_SPEED_PULSE_MAX_ABS_Z = 550;
+
+function makeHighSpeedPulseRoutine(): Routine {
+  let phase: HighSpeedPulsePhase = "accel";
+  let pulseStartTick = 0;
+  let settleStartTick = 0;
+  let leftTrack = false;
+
+  return {
+    id: "highSpeedPulse",
+    label: "high-speed small steer pulse, post-pulse slip",
+    setup() {
+      phase = "accel";
+      pulseStartTick = 0;
+      settleStartTick = 0;
+      leftTrack = false;
+    },
+    drive(tick, s) {
+      if (phase === "accel") {
+        if (s.forwardSpeedMs >= MPH_90_MS) {
+          phase = "pulse";
+          pulseStartTick = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (phase === "pulse") {
+        if (tick - pulseStartTick >= HIGH_SPEED_PULSE_TICKS) {
+          phase = "settle";
+          settleStartTick = tick;
+        } else {
+          return {
+            steer: HIGH_SPEED_PULSE_STEER_FRACTION,
+            throttle: 1,
+            brake: 0,
+            handbrake: false,
+          };
+        }
+      }
+      if (phase === "settle") {
+        if (tick - settleStartTick >= HIGH_SPEED_PULSE_SETTLE_TICKS) {
+          phase = "done";
+          return null;
+        }
+        return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+      }
+      return null;
+    },
+    sample(tick, s, acc) {
+      if (
+        (phase === "pulse" || phase === "settle") &&
+        (s.contacts === 0 || Math.abs(s.position.z) > HIGH_SPEED_PULSE_MAX_ABS_Z)
+      ) {
+        leftTrack = true;
+      }
+      if (phase !== "settle") {
+        return;
+      }
+      if (!("settleStarted" in acc)) {
+        acc.settleStarted = 1;
+      }
+      const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+      acc.maxSlipDeg = Math.max(acc.maxSlipDeg ?? 0, slipDeg);
+      const elapsed = tick - settleStartTick;
+      if (elapsed >= HIGH_SPEED_PULSE_SETTLE_TICKS - HIGH_SPEED_PULSE_LAST_SECOND_TICKS) {
+        acc.lastSecSlipSum = (acc.lastSecSlipSum ?? 0) + slipDeg;
+        acc.lastSecSlipCount = (acc.lastSecSlipCount ?? 0) + 1;
+      }
+    },
+    evaluate(acc) {
+      const t = TELEMETRY_TARGETS.highSpeedPulse;
+      // Never reaching the settle phase, ever leaving the ground, or driving
+      // off the end of the world all report +Infinity — never a spurious
+      // pass on an incomplete or invalid run (T-02-19).
+      if (leftTrack || !("settleStarted" in acc)) {
+        return {
+          id: "highSpeedPulse",
+          label: "high-speed small steer pulse, post-pulse slip",
+          value: Number.POSITIVE_INFINITY,
+          unit: "deg",
+          target: t.label,
+          pass: false,
+        };
+      }
+      const maxSlipDeg = acc.maxSlipDeg ?? 0;
+      const lastSecCount = acc.lastSecSlipCount ?? 0;
+      const settledSlipDeg =
+        lastSecCount > 0 ? (acc.lastSecSlipSum ?? 0) / lastSecCount : Number.POSITIVE_INFINITY;
+      return {
+        id: "highSpeedPulse",
+        label: "high-speed small steer pulse, post-pulse slip",
+        value: maxSlipDeg,
+        unit: "deg",
+        target: t.label,
+        pass: maxSlipDeg <= t.maxSlipDeg && settledSlipDeg <= t.maxSettledSlipDeg,
+      };
+    },
+  };
+}
+
+export const highSpeedPulseRoutine: Routine = makeHighSpeedPulseRoutine();
 
 /**
  * The six scripted routines, in the fixed order every consumer (the Vitest
