@@ -51,7 +51,7 @@ describe("defaultTuning()", () => {
     a.wheels.frictionSlip = 999;
     a.chassis.comOffset.y = 999;
     expect(b.wheels.frictionSlip).toBe(1.2);
-    expect(b.chassis.comOffset.y).toBe(-0.15);
+    expect(b.chassis.comOffset.y).toBe(-0.25);
   });
 
   it("has the eight measured load-bearing default values, asserted by literal", () => {
@@ -61,14 +61,19 @@ describe("defaultTuning()", () => {
     // full-throttle straight-line driving spontaneously spins out at ~89 mph
     // (see the doc comment on `rearSideFriction` in src/core/vehicle-tuning.ts).
     expect(t.wheels.rearSideFriction).toBe(0.2);
-    expect(t.drive.handbrakeRearSideFriction).toBe(0.01);
+    // Tuned live 0.01 -> 0.005 in the 260920-sm2 session — developer wanted a
+    // bigger handbrake kick-out (see the doc comment on
+    // `handbrakeRearSideFriction` in src/core/vehicle-tuning.ts).
+    expect(t.drive.handbrakeRearSideFriction).toBe(0.005);
     // Corrected 0.1 -> 0.08 in plan 02-07, tuned further to 0.12 in the plan
-    // 02-10 feel session (see the doc comment on `bodyRollGain` in
-    // src/core/vehicle-tuning.ts).
-    expect(t.assists.bodyRollGain).toBe(0.12);
+    // 02-10 feel session, then tuned live to 0.075 in the 260920-sm2 session
+    // (see the doc comment on `bodyRollGain` in src/core/vehicle-tuning.ts).
+    expect(t.assists.bodyRollGain).toBe(0.075);
     expect(t.assists.autoLevelGain).toBe(0.4);
     expect(t.assists.downforcePerSpeed2).toBe(0);
-    expect(t.chassis.mass).toBe(1600);
+    // Tuned live 1600 -> 1390 in the 260920-sm2 session (see the doc comment
+    // on `mass` in src/core/vehicle-tuning.ts).
+    expect(t.chassis.mass).toBe(1390);
     expect(t.wheels.maxSuspensionForce).toBe(20000);
   });
 

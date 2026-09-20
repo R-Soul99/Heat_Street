@@ -10,6 +10,15 @@
  * comment stating the measured consequence of that value, per 02-PATTERNS.md
  * S7 ("explain the decision, not the code").
  *
+ * [TUNED live, 260920-sm2]: seven of those values (`chassis.mass`,
+ * `chassis.comOffset.y`, `wheels.frontSideFriction`,
+ * `drive.engineForcePerRearWheel`, `drive.handbrakeRearSideFriction`,
+ * `assists.bodyRollGain`, `assists.slideCatchGain`) are now SUPERSEDED by the
+ * developer's own live hand-tuning session through the `?debug` panel,
+ * exported as JSON via quick task 260920-l94's Export feature — not an
+ * automated sweep. See each field's own doc comment for the old/new values
+ * and provenance.
+ *
  * DEVIATION from CLAUDE.md's tuning table (mass 10, suspension stiffness 24,
  * frictionSlip 1000.0, engine force ±30): that table is the three.js example's
  * DEMO values, not muscle-car values, and 02-RESEARCH.md measured that
@@ -46,9 +55,25 @@ export type { TuningRange } from "./tuning-utils";
  */
 export interface VehicleTuning {
   readonly chassis: {
-    /** Kilograms. Scales every impulse the vehicle controller applies. */
+    /**
+     * Kilograms. Scales every impulse the vehicle controller applies.
+     *
+     * [TUNED live, 260920-sm2]: supersedes the previous default of 1600.
+     * Source is the developer's own hand-tuning session through the `?debug`
+     * panel (exported as JSON via quick task 260920-l94's Export feature),
+     * not an automated sweep — no measured figure to cite for this one, it
+     * was chosen by feel.
+     */
     mass: number;
-    /** Centre of mass offset from the geometric centre, metres. */
+    /**
+     * Centre of mass offset from the geometric centre, metres.
+     *
+     * [TUNED live, 260920-sm2]: `y` supersedes the previous default of -0.15
+     * with -0.25 (lower CoM). Source is the developer's own hand-tuning
+     * session through the `?debug` panel (exported as JSON via quick task
+     * 260920-l94's Export feature), not an automated sweep — no measured
+     * figure to cite, chosen by feel for a lower, heavier-feeling CoM.
+     */
     comOffset: { x: number; y: number; z: number };
     /** Chassis collider half-extents, metres. */
     halfExtents: { x: number; y: number; z: number };
@@ -99,7 +124,15 @@ export interface VehicleTuning {
      * this file's default.
      */
     frictionSlip: number;
-    /** Front-axle lateral grip multiplier, applied before the friction-circle clamp. */
+    /**
+     * Front-axle lateral grip multiplier, applied before the friction-circle
+     * clamp.
+     *
+     * [TUNED live, 260920-sm2]: supersedes the previous default of 1.0.
+     * Source is the developer's own hand-tuning session through the `?debug`
+     * panel (exported as JSON via quick task 260920-l94's Export feature),
+     * not an automated sweep — no measured figure to cite, chosen by feel.
+     */
     frontSideFriction: number;
     /**
      * Rear-axle lateral grip multiplier — the PERMANENT RWD-loose bias
@@ -142,6 +175,19 @@ export interface VehicleTuning {
      * corrections to the inertia formula and the auto-level torque sign,
      * which post-date that probe. 3650 N lands at 6.52 s, centred in D-14's
      * locked 6.0-7.0 s band; this file's default is corrected to match.
+     *
+     * TUNED live in the 260920-sm2 session; supersedes the previous default
+     * of 3650. [TUNED live, 260920-sm2]: source is the developer's own
+     * hand-tuning session through the `?debug` panel (exported as JSON via
+     * quick task 260920-l94's Export feature), not an automated sweep — no
+     * measured figure to cite here beyond the re-verification below. This
+     * value moves OFF the 6.52 s figure above and the D-14 6.0-7.0 s band it
+     * was chosen to land in — a faster 0-60 is an explicit consequence of the
+     * developer's own live feel-tuning, not a rejection of the 3650 N
+     * measurement, which stands as correct for what it measured. The
+     * regression suite (task 3 of quick task 260920-sm2) re-runs the accel
+     * routine at 4800 N and reports the new measured 0-60 time rather than
+     * silently re-anchoring D-14's band around it.
      */
     engineForcePerRearWheel: number;
     /** Brake impulse applied to each wheel at full brake, newton-seconds. */
@@ -161,6 +207,17 @@ export interface VehicleTuning {
      * default; 0.0 -> the car spins out uncontrollably rather than sliding.
      * `TUNING_RANGES.drive.handbrakeRearSideFriction` is bounded to `0..0.05`
      * (not `0..1`) specifically so this range is not lost in a linear slider.
+     *
+     * TUNED live in the 260920-sm2 session; supersedes the previous default
+     * of 0.01. [TUNED live, 260920-sm2]: source is the developer's own
+     * hand-tuning session through the `?debug` panel (exported as JSON via
+     * quick task 260920-l94's Export feature), not an automated sweep — no
+     * measured figure to cite here. 0.005 leaves 02-RESEARCH.md's stated
+     * 0.004..0.04 useful band's documented 0.01 exemplar behind but stays
+     * inside that band and above the 0.0 spin-out floor; the developer
+     * explicitly wanted a bigger handbrake kick-out than 0.01 gave (see
+     * STATE.md's `[Quick 260920-j4d, open]` blocker, now closed by this
+     * task).
      */
     handbrakeRearSideFriction: number;
     /**
@@ -248,6 +305,16 @@ export interface VehicleTuning {
      * too flat through corners at 0.08 — human-confirmed in-browser, and the
      * `tests/vehicle-telemetry.test.ts -t "roll assist stability"` gate still
      * passes at 0.12 (measured 5.42deg max tilt, well under the 15deg cutoff).
+     *
+     * TUNED FURTHER in the 260920-sm2 session; supersedes plan 02-10's 0.12.
+     * [TUNED live, 260920-sm2]: source is the developer's own hand-tuning
+     * session through the `?debug` panel (exported as JSON via quick task
+     * 260920-l94's Export feature), not an automated sweep — no measured
+     * figure to cite here. 0.075 goes BELOW plan 02-07's 0.08, which was
+     * itself chosen specifically to keep the roll-assist-stability gate under
+     * its 15deg cutoff — lowering the gain further should only make that gate
+     * easier to pass, never harder; task 3 of quick task 260920-sm2 confirms
+     * this mechanically rather than assuming it.
      */
     bodyRollGain: number;
     /** Body-roll rate damping term, as a multiple of the gain. */
@@ -275,6 +342,13 @@ export interface VehicleTuning {
      * diagnosis) made the unrelated high-speed spin trigger EARLIER, not
      * later — that instability's actual fix was `rearSideFriction` (see its
      * own doc comment), not this gain, so 0.3 was rejected and 0.12 kept.
+     *
+     * TUNED FURTHER in the 260920-sm2 session; supersedes plan 02-10's 0.12.
+     * [TUNED live, 260920-sm2]: source is the developer's own hand-tuning
+     * session through the `?debug` panel (exported as JSON via quick task
+     * 260920-l94's Export feature), not an automated sweep — no measured
+     * figure to cite here. Minor adjustment alongside the other session
+     * changes, from 0.12 down to 0.1.
      */
     slideCatchGain: number;
     /** Slide-catch yaw-rate damping term, as a multiple of the gain. */
@@ -301,12 +375,20 @@ export interface VehicleTuning {
  * Values are 02-RESEARCH.md's Config A with Config B's deltas already
  * applied. See the per-field doc comments on `VehicleTuning` above for the
  * measured rationale behind the eight load-bearing values.
+ *
+ * [TUNED live, 260920-sm2]: seven fields below (`chassis.mass`,
+ * `chassis.comOffset.y`, `wheels.frontSideFriction`,
+ * `drive.engineForcePerRearWheel`, `drive.handbrakeRearSideFriction`,
+ * `assists.bodyRollGain`, `assists.slideCatchGain`) now supersede the
+ * Config A/B values above with the developer's own live hand-tuning session
+ * through the `?debug` panel — see each field's own doc comment on
+ * `VehicleTuning` for old/new values and provenance.
  */
 export function defaultTuning(): VehicleTuning {
   return {
     chassis: {
-      mass: 1600,
-      comOffset: { x: 0, y: -0.15, z: 0 },
+      mass: 1390,
+      comOffset: { x: 0, y: -0.25, z: 0 },
       halfExtents: { x: 0.95, y: 0.5, z: 2.35 },
       linearDamping: 0.03,
       angularDamping: 0.3,
@@ -323,16 +405,16 @@ export function defaultTuning(): VehicleTuning {
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 20000,
       frictionSlip: 1.2,
-      frontSideFriction: 1.0,
+      frontSideFriction: 1.21,
       rearSideFriction: 0.2,
     },
     drive: {
-      engineForcePerRearWheel: 3650,
+      engineForcePerRearWheel: 4800,
       brakeImpulsePerWheel: 60,
       maxSteerLock: Math.PI / 4,
       steerRampPerSec: 2.5,
       steerReturnPerSec: 4.0,
-      handbrakeRearSideFriction: 0.01,
+      handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
       reverseEngineForcePerRearWheel: 1500,
       reverseEngageSpeedMs: 0.1,
@@ -340,10 +422,10 @@ export function defaultTuning(): VehicleTuning {
     assists: {
       autoLevelGain: 0.4,
       autoLevelDamping: 0.6,
-      bodyRollGain: 0.12,
+      bodyRollGain: 0.075,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
-      slideCatchGain: 0.12,
+      slideCatchGain: 0.1,
       slideCatchDamping: 0.35,
       downforcePerSpeed2: 0,
     },

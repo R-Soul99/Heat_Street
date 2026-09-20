@@ -65,11 +65,11 @@ describe("parseSavedTuning — structural rejection, never throws", () => {
 });
 
 describe("parseSavedTuning — hostile leaf values are clamped or defaulted, never propagated", () => {
-  it("replaces a null mass with the default (1600), not with the range minimum", () => {
+  it("replaces a null mass with the default (1390), not with the range minimum", () => {
     const blob = '{"chassis":{"mass":null},"wheels":{},"drive":{},"assists":{}}';
     const result = parseSavedTuning(blob);
     expect(result).not.toBeNull();
-    expect(result?.chassis.mass).toBe(1600);
+    expect(result?.chassis.mass).toBe(1390);
   });
 
   it("clamps an absurd mass of 1e9 to TUNING_RANGES.chassis.mass.max", () => {
@@ -113,7 +113,7 @@ describe("parseSavedTuning — hostile leaf values are clamped or defaulted, nev
       assists: {},
     });
     const result = parseSavedTuning(blob);
-    expect(result?.chassis.mass).toBe(1600);
+    expect(result?.chassis.mass).toBe(1390);
     expect(typeof result?.chassis.mass).toBe("number");
   });
 
