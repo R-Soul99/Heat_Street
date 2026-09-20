@@ -28,14 +28,13 @@
  * `DEFAULT_HEIGHT_M` and keeps building.
  *
  * Layering: pure geometry + math over an injected `Projector` (`graph/project.ts`)
- * and `ElevationSampler` (`sources/dem.ts`) — no `node:fs`, no network, no
+ * and a local-ENU `GroundHeightSampler` — no `node:fs`, no network, no
  * `three`, no Rapier. Mirrors `graph/elevation.ts`'s own injected-dependency
  * discipline. NOT mechanically enforced — `tests/layering.test.ts` does not
  * scan `tools/**`; this file's own discipline is the only guard.
  */
 
 import type { Projector } from "../graph/project.ts";
-import type { ElevationSampler } from "../sources/dem.ts";
 
 /** A 2D point in local ENU metres (X east, Z south), matching `graph/project.ts`'s `ProjectedPoint`. */
 interface Point2 {
@@ -162,6 +161,17 @@ export interface BuildingBoxesConfig {
   /** Overrides `MIN_BUILDING_AREA_SQM`. */
   readonly minAreaSqM?: number;
 }
+
+/**
+ * Returns the terrain height in metres at a LOCAL-ENU `(x, z)`, which is what
+ * the compiler's own off-road relief grid speaks natively. The previous
+ * `ElevationSampler` took `(lat, lon)` only because a DEM raster is
+ * geographic, and no DEM exists after phase 04.1. The real caller binds
+ * `sampleHeightfieldBilinear` over the compiled relief grid, so a building's
+ * base lands on exactly the terrain the player sees and the shipped collider
+ * extends down to.
+ */
+export type GroundHeightSampler = (x: number, z: number) => number;
 
 /** The minimal shape this module needs from an Overpass "buildings" envelope's `response.elements`. */
 interface BuildingWayElement {
@@ -489,7 +499,7 @@ function resolveBuildingType(tags: Readonly<Record<string, string>> | undefined)
 export function buildingBoxes(
   buildingsEnvelope: BuildingsEnvelopeLike,
   projector: Projector,
-  groundSampler: ElevationSampler,
+  groundHeightAt: GroundHeightSampler,
   config: BuildingBoxesConfig = {},
 ): { boxes: BuildingBox[]; report: BuildingReport } {
   const minAreaSqM = config.minAreaSqM ?? MIN_BUILDING_AREA_SQM;
@@ -523,8 +533,7 @@ export function buildingBoxes(
     }
 
     const centroid = centroid2D(footprint);
-    const { lat, lon } = projector.unproject(centroid.x, centroid.z);
-    const groundY = groundSampler.sample(lat, lon);
+    const groundY = groundHeightAt(centroid.x, centroid.z);
 
     const buildingType = resolveBuildingType(element.tags);
     const { heightM, source } = inferHeight(element.tags, buildingType);
