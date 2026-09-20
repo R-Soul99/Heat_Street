@@ -163,7 +163,7 @@ Recent decisions affecting current work:
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-None yet.
+- [physics] Support configurable drivetrain type (RWD/FWD/AWD) per car class — v1's engine force is hardcoded to rear wheels only (`engineForcePerRearWheel`), needed for future car classes. See `.planning/todos/pending/2026-09-20-support-configurable-drivetrain-type-per-car-class.md`.
 
 ### Blockers/Concerns
 
