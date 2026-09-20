@@ -4,16 +4,44 @@ import { type BuildingsEnvelopeLike, buildingBoxes } from "../geometry/building-
 import { makeProjector, type Projector } from "../graph/project.ts";
 import type { ElevationSampler } from "../sources/dem.ts";
 import { buildMapCollision } from "./collision.ts";
-import { buildHeightfield, HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
+import { HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
 
 const projector: Projector = makeProjector({ lat: 33.1, lon: -83.8 });
 const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
 
+/**
+ * Constructs a perfectly flat `HeightfieldGrid` fixture directly, without
+ * going through `./heightfield.ts`'s `buildOffRoadRelief` (phase 04.1 —
+ * that function now varies with seeded procedural noise, which would break
+ * this file's exact-value grounding-math assertions below; the relief
+ * generator has its own dedicated coverage in `heightfield.test.ts`). Plain
+ * data construction, matching `HeightfieldGrid`'s own field-for-field shape.
+ */
+function makeFlatHeightfield(
+  valueM: number,
+  bounds: { minX: number; minZ: number; maxX: number; maxZ: number },
+  resolution: number,
+): HeightfieldGrid {
+  const samplesPerAxis = resolution + 1;
+  const heights = new Float32Array(samplesPerAxis * samplesPerAxis).fill(
+    valueM - HEIGHTFIELD_SINK_M,
+  );
+  return {
+    rows: resolution,
+    cols: resolution,
+    heights,
+    originX: bounds.minX,
+    originZ: bounds.minZ,
+    scaleX: bounds.maxX - bounds.minX,
+    scaleZ: bounds.maxZ - bounds.minZ,
+    sinkM: HEIGHTFIELD_SINK_M,
+  };
+}
+
 /** A minimal, valid heightfield fixture — this file's own tests exercise `buildMapCollision`'s building half; the heightfield half has its own dedicated suite in `heightfield.test.ts`. */
-const FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
-  FLAT_GROUND,
+const FLAT_HEIGHTFIELD: HeightfieldGrid = makeFlatHeightfield(
+  100,
   { minX: -50, minZ: -50, maxX: 50, maxZ: 50 },
-  projector,
   2,
 );
 
@@ -24,10 +52,9 @@ const FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
  * `Math.min(groundY, localTerrainY)` extension never triggers when the local
  * terrain reads higher than the building's own ground level).
  */
-const HIGH_FLAT_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
-  { sample: () => 1000 },
+const HIGH_FLAT_HEIGHTFIELD: HeightfieldGrid = makeFlatHeightfield(
+  1000,
   { minX: -50, minZ: -50, maxX: 50, maxZ: 50 },
-  projector,
   2,
 );
 
@@ -159,7 +186,14 @@ describe("buildMapCollision", () => {
       // FLAT_HEIGHTFIELD samples 100 everywhere, sunk by HEIGHTFIELD_SINK_M
       // -> local terrain reads (100 - HEIGHTFIELD_SINK_M), strictly below
       // groundY (100).
-      expect(bottomY).toBeCloseTo(100 - HEIGHTFIELD_SINK_M, 6);
+      // Precision 4, not 6 (phase 04.1 lowered HEIGHTFIELD_SINK_M 4.5 -> 0.1,
+      // shifting this expected value from 95.5, exactly representable in
+      // Float32Array, to 99.9, which is not): `heights` is a Float32Array
+      // (this module's own header comment), and f32's ~7-digit relative
+      // precision only guarantees ~4-5 decimal places of ABSOLUTE precision
+      // for a value in the hundreds -- same rounding note heightfield.test.ts
+      // and tests/map-scene.test.ts already document for this reason.
+      expect(bottomY).toBeCloseTo(100 - HEIGHTFIELD_SINK_M, 4);
       expect(bottomY).toBeLessThan(groundY);
       // The roof never moves -- only the bottom extends downward.
       expect(building.center.y + building.halfExtents.y).toBeCloseTo(roofY, 6);

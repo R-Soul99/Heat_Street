@@ -6,18 +6,41 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RoadGeometry } from "../../../src/core/road-geometry.ts";
 import { SURFACE_TYPES } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
-import { makeProjector } from "../graph/project.ts";
-import type { ElevationSampler } from "../sources/dem.ts";
 import { buildGltfDocument, writeGlb } from "./gltf.ts";
-import { buildHeightfield, type HeightfieldGrid } from "./heightfield.ts";
+import { HEIGHTFIELD_SINK_M, type HeightfieldGrid } from "./heightfield.ts";
 
-const FLAT_GROUND: ElevationSampler = { sample: () => 100 };
-const TEST_PROJECTOR = makeProjector({ lat: 33.1, lon: -83.8 });
+/**
+ * Constructs a perfectly flat `HeightfieldGrid` fixture directly, without
+ * going through `./heightfield.ts`'s `buildOffRoadRelief` (phase 04.1 —
+ * that function now varies with seeded procedural noise; this file's tests
+ * only need a valid grid shape for road/building mesh coverage, and the
+ * relief generator has its own dedicated coverage in `heightfield.test.ts`).
+ */
+function makeFlatHeightfield(
+  valueM: number,
+  bounds: { minX: number; minZ: number; maxX: number; maxZ: number },
+  resolution: number,
+): HeightfieldGrid {
+  const samplesPerAxis = resolution + 1;
+  const heights = new Float32Array(samplesPerAxis * samplesPerAxis).fill(
+    valueM - HEIGHTFIELD_SINK_M,
+  );
+  return {
+    rows: resolution,
+    cols: resolution,
+    heights,
+    originX: bounds.minX,
+    originZ: bounds.minZ,
+    scaleX: bounds.maxX - bounds.minX,
+    scaleZ: bounds.maxZ - bounds.minZ,
+    sinkM: HEIGHTFIELD_SINK_M,
+  };
+}
+
 /** A minimal, valid heightfield fixture — this file's tests exercise `buildGltfDocument`'s road/building meshes; the terrain mesh has its own dedicated coverage in `heightfield.test.ts`. */
-const TEST_HEIGHTFIELD: HeightfieldGrid = buildHeightfield(
-  FLAT_GROUND,
+const TEST_HEIGHTFIELD: HeightfieldGrid = makeFlatHeightfield(
+  100,
   { minX: -10, minZ: -10, maxX: 10, maxZ: 10 },
-  TEST_PROJECTOR,
   2,
 );
 
