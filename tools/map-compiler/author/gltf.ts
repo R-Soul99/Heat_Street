@@ -7,6 +7,15 @@
  * address each surface's mesh by name (plan 04-09's loader, and Phase 3's
  * `createSurfaceFx`'s `(meshes[], surfaces[])` skid-decal contract).
  *
+ * The document also carries a `terrain` mesh (the off-road heightfield safety
+ * net, plan 04-10) and, when the compiled area authors any
+ * (`src/core/crest-geometry.ts`), a `crests` mesh (plan 04.1-07, D-04b): a
+ * small number of hand-picked off-road launch domes. Crests are their own
+ * mesh rather than baked into `terrain` because the heightfield grid is
+ * ~43m of spacing per cell (`tools/map-compiler/author/heightfield.ts`) and
+ * physically cannot represent a 28-45m-radius crest, let alone the apex
+ * curvature a launch depends on reading as smooth.
+ *
  * D-P21 — no mesh compression in v1: only `@gltf-transform/core` is used to
  * ASSEMBLE and SERIALISE the document; `@gltf-transform/functions` (also
  * installed, per this plan's Task 1 checkpoint) is not called anywhere in
@@ -24,6 +33,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { Accessor, Document, NodeIO } from "@gltf-transform/core";
+import type { CrestGeometryEntry } from "../../../src/core/crest-geometry.ts";
 import type {
   EdgeGeometryEntry,
   JunctionGeometryEntry,
@@ -105,6 +115,12 @@ export interface GltfBuildStats {
   readonly buildingTriangleCount: number;
   readonly terrainTriangleCount: number;
   readonly terrainVertexCount: number;
+  /** Number of authored crests baked into the `crests` mesh (plan 04.1-07, D-04b). `0` when no crests were passed. */
+  readonly crestCount: number;
+  /** Total triangle count across every authored crest's dome. `0` when no crests were passed. */
+  readonly crestTriangleCount: number;
+  /** Total vertex count across every authored crest's dome. `0` when no crests were passed. */
+  readonly crestVertexCount: number;
 }
 
 /**
@@ -243,7 +259,8 @@ function groupBySurface(
 /**
  * Builds the full glTF `Document`: one `roads-<surface>` mesh per surface
  * type PRESENT in `geometry` (never one for an absent surface), plus one
- * `buildings` mesh when `boxes` is non-empty. Every mesh's containing node
+ * `buildings` mesh when `boxes` is non-empty, plus one `crests` mesh when
+ * `crests` is non-empty (plan 04.1-07, D-04b). Every mesh's containing node
  * shares its exact name (D-P19's own reasoning — `GLTFLoader` surfaces node
  * names, and plan 04-09's loader looks meshes up by name). All node
  * transforms stay at their default identity — geometry is authored directly
@@ -255,6 +272,7 @@ export function buildGltfDocument(
   boxes: readonly BuildingBox[],
   heightfield: HeightfieldGrid,
   shoulders: readonly ShoulderGeometryEntry[] = [],
+  crests: readonly CrestGeometryEntry[] = [],
 ): { document: Document; stats: GltfBuildStats } {
   const document = new Document();
   const buffer = document.createBuffer();
@@ -365,6 +383,53 @@ export function buildGltfDocument(
   const terrainNode = document.createNode("terrain").setMesh(terrainMesh);
   scene.addChild(terrainNode);
 
+  // Authored crest domes (plan 04.1-07, D-04b): mirrors the terrain block
+  // above exactly, skipped entirely when the compiled area authors none.
+  // Merges every entry's positions/indices through the EXISTING
+  // `concatGeometry` helper — the same error-prone index-rebasing step the
+  // road/building/terrain blocks all reuse it for — rather than a second,
+  // hand-rolled rebasing loop.
+  let crestCount = 0;
+  let crestTriangleCount = 0;
+  let crestVertexCount = 0;
+  if (crests.length > 0) {
+    const { positions, indices } = concatGeometry(
+      crests.map((crest) => ({
+        positions: crest.positions as Float32Array<ArrayBuffer>,
+        indices: crest.indices as Uint32Array<ArrayBuffer>,
+      })),
+    );
+
+    const crestsPositionAccessor = document
+      .createAccessor("crests-position")
+      .setType(Accessor.Type.VEC3)
+      .setArray(positions)
+      .setBuffer(buffer);
+    const crestsIndexAccessor = document
+      .createAccessor("crests-index")
+      .setType(Accessor.Type.SCALAR)
+      .setArray(indices)
+      .setBuffer(buffer);
+
+    const crestsMaterial = document
+      .createMaterial("crests")
+      .setBaseColorFactor(hexToRgba(SURFACE_COLOR_HEX.grass));
+
+    const crestsPrimitive = document
+      .createPrimitive()
+      .setAttribute("POSITION", crestsPositionAccessor)
+      .setIndices(crestsIndexAccessor)
+      .setMaterial(crestsMaterial);
+
+    const crestsMesh = document.createMesh("crests").addPrimitive(crestsPrimitive);
+    const crestsNode = document.createNode("crests").setMesh(crestsMesh);
+    scene.addChild(crestsNode);
+
+    crestCount = crests.length;
+    crestTriangleCount = indices.length / 3;
+    crestVertexCount = positions.length / 3;
+  }
+
   document.getRoot().setDefaultScene(scene);
 
   return {
@@ -375,6 +440,9 @@ export function buildGltfDocument(
       buildingTriangleCount,
       terrainTriangleCount: terrainEntry.indices.length / 3,
       terrainVertexCount: terrainEntry.positions.length / 3,
+      crestCount,
+      crestTriangleCount,
+      crestVertexCount,
     },
   };
 }

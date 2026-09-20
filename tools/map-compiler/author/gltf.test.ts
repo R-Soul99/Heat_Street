@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { NodeIO } from "@gltf-transform/core";
 import { afterEach, describe, expect, it } from "vitest";
+import { buildCrestGeometry, JULIETTE_GA_CRESTS } from "../../../src/core/crest-geometry.ts";
 import type { RoadGeometry } from "../../../src/core/road-geometry.ts";
 import { SURFACE_TYPES } from "../../../src/core/surface-types.ts";
 import type { BuildingBox } from "../geometry/building-box.ts";
@@ -269,6 +270,84 @@ describe("buildGltfDocument", () => {
     expect(positionAccessor?.getCount()).toBe(expectedVertexCount);
     expect(stats.terrainVertexCount).toBe(expectedVertexCount);
     expect(primitive?.getMaterial()?.getName()).toBe("surface-grass");
+  });
+});
+
+describe("buildGltfDocument — authored crests (D-04b)", () => {
+  it("with no crests passed, the document contains no mesh named crests and all three crest stats are 0", () => {
+    const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
+    const { document, stats } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD, []);
+
+    const meshNames = document
+      .getRoot()
+      .listMeshes()
+      .map((m) => m.getName());
+    expect(meshNames).not.toContain("crests");
+    expect(stats.crestCount).toBe(0);
+    expect(stats.crestTriangleCount).toBe(0);
+    expect(stats.crestVertexCount).toBe(0);
+  });
+
+  it("with real authored crests passed, emits a crests mesh/node at identity transform and reports the right crest count", () => {
+    const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
+    const crestEntries = buildCrestGeometry(JULIETTE_GA_CRESTS, () => 0);
+    const { document, stats } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD, [], crestEntries);
+
+    const crestsMesh = document
+      .getRoot()
+      .listMeshes()
+      .find((m) => m.getName() === "crests");
+    expect(crestsMesh).toBeDefined();
+
+    const crestsNode = document
+      .getRoot()
+      .listNodes()
+      .find((n) => n.getName() === "crests");
+    expect(crestsNode).toBeDefined();
+    expect(crestsNode?.getMesh()?.getName()).toBe("crests");
+    expect(crestsNode?.getTranslation()).toEqual([0, 0, 0]);
+    expect(crestsNode?.getRotation()).toEqual([0, 0, 0, 1]);
+    expect(crestsNode?.getScale()).toEqual([1, 1, 1]);
+
+    expect(stats.crestCount).toBe(3);
+  });
+
+  it("reports crestTriangleCount/crestVertexCount as the sum across every entry's own indices/positions", () => {
+    const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
+    const crestEntries = buildCrestGeometry(JULIETTE_GA_CRESTS, () => 0);
+    const { stats } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD, [], crestEntries);
+
+    const expectedTriangleCount = crestEntries.reduce(
+      (sum, entry) => sum + entry.indices.length / 3,
+      0,
+    );
+    const expectedVertexCount = crestEntries.reduce(
+      (sum, entry) => sum + entry.positions.length / 3,
+      0,
+    );
+    expect(stats.crestTriangleCount).toBe(expectedTriangleCount);
+    expect(stats.crestVertexCount).toBe(expectedVertexCount);
+  });
+
+  it("rebases crest indices correctly when merged: the primitive's maximum index equals its vertex count minus one", () => {
+    const geometry: RoadGeometry = { edges: [makeQuadEdge(0, "tarmac")], junctions: [] };
+    const crestEntries = buildCrestGeometry(JULIETTE_GA_CRESTS, () => 0);
+    const { document } = buildGltfDocument(geometry, [], TEST_HEIGHTFIELD, [], crestEntries);
+
+    const crestsMesh = document
+      .getRoot()
+      .listMeshes()
+      .find((m) => m.getName() === "crests");
+    const primitive = crestsMesh?.listPrimitives()[0];
+    const positionAccessor = primitive?.getAttribute("POSITION");
+    const indexAccessor = primitive?.getIndices();
+    const indexArray = indexAccessor?.getArray();
+
+    let maxIndex = -1;
+    for (const value of indexArray ?? []) {
+      if (value > maxIndex) maxIndex = value;
+    }
+    expect(maxIndex).toBe((positionAccessor?.getCount() ?? 0) - 1);
   });
 });
 
