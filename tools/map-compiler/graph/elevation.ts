@@ -1,313 +1,122 @@
 /**
- * Node-authoritative elevation with endpoint-clamped centreline smoothing.
+ * Flat-baseline road elevation (D-01, D-03).
  *
- * Order of operations is the whole point of this file (04-RESEARCH.md
- * "Pattern 3: Endpoint-clamped elevation smoothing", D-P15):
+ * Every compiled road node and every edge centreline point gets `y = FLAT_Y`
+ * (a literal constant zero) — not DEM-sampled, not smoothed, not densified.
+ * This is a deliberate decision (D-03), not a placeholder awaiting a future
+ * generator: D-01 requires the flat baseline to apply to every node and every
+ * edge point with NO exception, because that is what removes the
+ * road-to-terrain height mismatch BY CONSTRUCTION (road and terrain meet at
+ * the same height because both start from the same flat baseline near the
+ * road) rather than by a bridging/clamping algorithm.
  *
- *   1. Sample once per NODE at that node's lat/lon. This value is
- *      authoritative and is NEVER smoothed — every edge touching a node
- *      shares its exact `y`, so junction continuity holds by construction
- *      rather than by agreement between two independent smoothing passes.
- *   2. For each edge, sample the raw DEM at every interior centreline point.
- *   3. Smooth the interior sequence with a windowed moving average
- *      (`SMOOTHING_WINDOW`, shrinking symmetrically near the ends), THEN
- *      overwrite the first and last entries with the `from`/`to` nodes'
- *      authoritative `y`. The clamp is applied AFTER smoothing, never
- *      before, so no smoothing window can pull a junction off its node
- *      height (schema design decision 1; the exact invariant
- *      `tests/road-graph-schema.test.ts` already enforces on the fixture).
- *   4. Recompute `lengthM` as the real 3D polyline length now that `y` is
- *      real — the flat-`y` value from plan 04-04 understates a hilly edge's
- *      length, and `lengthM` feeds pathfinding cost (Phase 5) and AI target
- *      speed (Phase 7).
+ * D-04's authored terrain crests are an OFF-ROAD terrain feature owned by
+ * `src/core/crest-geometry.ts` — never a `y` override on a paved road point.
+ * A road point's `y` is always exactly `FLAT_Y`, full stop.
  *
- * Layering: pure data transform over `RoadGraph` + a `sources/dem.ts`
- * `ElevationSampler` + a `graph/project.ts` `Projector` — no `node:fs`, no
- * network, no `three`, no Rapier. NOT mechanically enforced —
- * `tests/layering.test.ts` does not scan `tools/**`; this file's own
- * discipline is the only guard.
+ * The previous (DEM-era) version of this file carried a whole tier of
+ * machinery whose entire job was coping with real DEM sample noise: an
+ * interior-point moving-average smoothing pass and its distance-weighted
+ * averaging helper, a long-segment point-insertion pass that existed only to
+ * give that smoothing pass real terrain samples to follow between sparse
+ * vertices, a per-edge steepest-gradient scan and its reporting threshold,
+ * and a real (non-flat) 3D polyline-length helper. None of that has a job
+ * once every `y` is the same constant by construction — a constant sequence
+ * has no noise to smooth, no gradient to warn about, and no need for extra
+ * interior points. That entire tier, its report fields, and the lat/lon
+ * sampler + projector types it depended on are gone; see this plan's SUMMARY
+ * for the full before/after symbol list.
+ *
+ * Layering: pure data transform over `RoadGraph` — no `node:fs`, no network,
+ * no `three`, no Rapier. NOT mechanically enforced — `tests/layering.test.ts`
+ * does not scan `tools/**`; this file's own discipline is the only guard.
  */
 import type { RoadGraph, RoadGraphEdge, RoadGraphNode } from "../../../src/core/road-graph.ts";
-import type { ElevationSampler } from "../sources/dem.ts";
-import type { Projector } from "./project.ts";
 
 /**
- * [ASSUMED] Interior centreline smoothing window, in point count, applied as
- * a moving average that shrinks symmetrically near each edge's ends. This is
- * a reasoned default, not yet feel-confirmed — plan 04-10's tuning session
- * owns retuning it. Raising it flattens real crests, working AGAINST D-09's
- * "real rolling elevation, not flat ground"; lowering it reintroduces the 1m
- * DEM's per-pixel noise as visible judder, working AGAINST SC1's "no bumpy
- * junctions/roads". The two failure modes bracket this value from both
- * sides, which is why it is a named, documented constant rather than an
- * inline literal.
+ * D-03's literal flat baseline: every road node and every edge centreline
+ * point gets exactly this `y` value. This is a deliberate decision, not a
+ * placeholder awaiting a generator — D-01 makes it apply to every node and
+ * every edge point with no exception. D-04's authored terrain crests are an
+ * OFF-ROAD terrain feature owned by `src/core/crest-geometry.ts`, never a
+ * `y`-override on a paved road point.
  */
-export const SMOOTHING_WINDOW = 5;
+export const FLAT_Y = 0;
 
 /**
- * Above this per-edge maximum gradient (rise / horizontal run), a road is
- * steeper than any public road in rural Georgia (roughly 19 degrees) — a
- * strong signal the DEM is misaligned with the road network rather than
- * that the terrain is genuinely this dramatic. Reported, not thrown: a
- * human should look at the named edge, not have the build fail outright.
+ * Exact 2D (X/Z) polyline length. This is EXACT, not an approximation, once
+ * every point shares one `y` value — the previous real-3D-length helper
+ * accounted for a vertical delta term that is always 0 by construction now,
+ * so summing the horizontal (X/Z) distance between consecutive points
+ * already equals the real 3D length.
  */
-export const GRADIENT_WARNING_THRESHOLD = 0.35;
-
-/**
- * [Rule 1 fix, found compiling the real Juliette artifact, plan 04-11's feel
- * session] A long, sparsely-vertexed OSM way segment (a straight rural road
- * with no intermediate nodes for hundreds of metres — a real edge in this
- * area's own data has a single 503m segment) gets ONLY its two endpoints
- * sampled and smoothed; everywhere in between is a straight LINE in 3D,
- * which cuts through real terrain relief between the endpoints rather than
- * following it. The symptom driven and reported directly: "the road passes
- * through a hill then pops out the other side" — confirmed by a fine-grained
- * sweep along every real compiled edge, which found up to 3.25m of terrain
- * rising ABOVE the (linearly-interpolated) road surface strictly BETWEEN
- * authored vertices, never AT one. Above this per-segment length, extra
- * points are inserted (see `densifyEdgePoints`) before DEM sampling, so the
- * moving-average smoothing this file already does has real terrain samples
- * to follow along the gap instead of two anchors and a straight line.
- * [ASSUMED] chosen close to `SMOOTHING_WINDOW`'s own effective radius at
- * typical real spacing, so a densified segment gets smoothed at the same
- * granularity as a naturally well-vertexed one, not a separate regime.
- */
-export const MAX_SEGMENT_LENGTH_M = 25;
-
-export interface EdgeGradientReportEntry {
-  readonly edgeId: number;
-  readonly maxGradient: number;
-}
-
-export interface ElevationReport {
-  readonly minNodeElevationM: number;
-  readonly maxNodeElevationM: number;
-  readonly reliefM: number;
-  /** One entry per edge, in edge id order. */
-  readonly edgeGradients: readonly EdgeGradientReportEntry[];
-  /** Subset of `edgeGradients` whose `maxGradient` exceeds `GRADIENT_WARNING_THRESHOLD`. */
-  readonly steepEdges: readonly EdgeGradientReportEntry[];
-}
-
-/** Cumulative arc length (metres, over X/Z only) at every point, `arcLength[0] === 0`. */
-function cumulativeArcLengthXZ(points: readonly (readonly [number, number, number])[]): number[] {
-  const arcLength = new Array<number>(points.length);
-  arcLength[0] = 0;
-  for (let i = 1; i < points.length; i++) {
-    const dx = points[i][0] - points[i - 1][0];
-    const dz = points[i][2] - points[i - 1][2];
-    arcLength[i] = arcLength[i - 1] + Math.sqrt(dx * dx + dz * dz);
-  }
-  return arcLength;
-}
-
-/**
- * Averages `values[i]` over every point within `radiusM` of point `i`'s OWN
- * arc-length position — a distance-based window, not a point-COUNT window.
- *
- * [Rule 1 fix, found compiling the real Juliette artifact] Real OSM way
- * geometry routinely mixes densely- and sparsely-spaced vertices within a
- * single edge (extra vertices captured on a curve near a junction, few on a
- * long straight stretch after it). A point-COUNT window on such geometry
- * averages together points that are close in ARRAY INDEX but far apart in
- * real distance, which silently reintroduces a sharp local artifact — the
- * exact failure mode this smoothing pass exists to prevent. This was caught
- * empirically on the real compiled output (edge id=36, osmWayId=446581088):
- * three vertices spaced ~7m apart near a junction, immediately followed by
- * vertices 50-150m apart, produced a smoothed-Y gradient of 0.566 between
- * two points only 7.5m apart on the ground — steeper than any real road,
- * and above this plan's own 0.5 hard ceiling. A distance-based window
- * degrades gracefully on uneven spacing: near a cluster of close vertices it
- * behaves like the intended point-count window; near a lone sparse vertex it
- * naturally shrinks to just that vertex, rather than reaching across 100+
- * metres to points with no real bearing on the local terrain.
- */
-function arcLengthMovingAverage(
-  values: readonly number[],
-  arcLength: readonly number[],
-  radiusM: number,
-): number[] {
-  const n = values.length;
-  const out = new Array<number>(n);
-  for (let i = 0; i < n; i++) {
-    let sum = 0;
-    let count = 0;
-    for (let j = 0; j < n; j++) {
-      if (Math.abs(arcLength[j] - arcLength[i]) <= radiusM) {
-        sum += values[j];
-        count++;
-      }
-    }
-    out[i] = sum / count;
-  }
-  return out;
-}
-
-/**
- * Smooths `rawY` (one raw DEM sample per centreline point, in order) and
- * then clamps both ends to the node-authoritative `fromY`/`toY` — the clamp
- * happens AFTER smoothing, per this file's header comment.
- *
- * The point-count `window` is converted to an equivalent arc-length radius
- * using THIS edge's own nominal (mean) point spacing — `halfWindow *
- * nominalSpacingM` — so behaviour is identical to a plain point-count window
- * on evenly-spaced points (the common case, and every case this plan's own
- * synthetic tests exercise), while degrading gracefully on the unevenly-
- * spaced real-world geometry `arcLengthMovingAverage`'s own comment
- * documents.
- */
-function smoothEdgeElevation(
-  rawY: readonly number[],
-  points: readonly (readonly [number, number, number])[],
-  fromY: number,
-  toY: number,
-  window: number,
-): number[] {
-  const halfWindow = Math.floor(window / 2);
-  const n = rawY.length;
-  const arcLength = cumulativeArcLengthXZ(points);
-  const totalArcLength = arcLength[arcLength.length - 1];
-  const nominalSpacingM = n > 1 ? totalArcLength / (n - 1) : 0;
-  const radiusM = halfWindow * nominalSpacingM;
-
-  const smoothed = radiusM > 0 ? arcLengthMovingAverage(rawY, arcLength, radiusM) : rawY.slice();
-  smoothed[0] = fromY;
-  smoothed[smoothed.length - 1] = toY;
-  return smoothed;
-}
-
-/**
- * Inserts evenly-spaced interior points into any segment of `points` whose
- * horizontal (XZ) length exceeds `maxSegmentM`, so no gap between consecutive
- * points is longer than that threshold. `y` on every inserted point is `0`
- * (the same pre-elevation placeholder `graph/build-graph.ts` gives every
- * point — see that file's own `points.push([x, 0, z])`), overwritten a few
- * lines below this function's call site by the ordinary per-point DEM
- * sample every point (inserted or authored) goes through identically.
- * Authored points are never moved, dropped or reordered — only new ones are
- * spliced in between them — so a node's own endpoint position is untouched.
- */
-type Point3 = readonly [number, number, number];
-
-function densifyEdgePoints(points: readonly Point3[], maxSegmentM: number): Point3[] {
-  if (points.length < 2) return points.slice();
-  const out: Point3[] = [points[0]];
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    const dx = b[0] - a[0];
-    const dz = b[2] - a[2];
-    const segLen = Math.hypot(dx, dz);
-    const extraCount = Math.floor(segLen / maxSegmentM);
-    for (let k = 1; k <= extraCount; k++) {
-      const t = k / (extraCount + 1);
-      out.push([a[0] + dx * t, 0, a[2] + dz * t]);
-    }
-    out.push(b);
-  }
-  return out;
-}
-
-/** Real 3D polyline length — replaces plan 04-04's flat-`y` length now that `y` is real. */
-function polylineLength3D(points: readonly (readonly [number, number, number])[]): number {
+function polylineLength2D(points: readonly (readonly [number, number, number])[]): number {
   let total = 0;
   for (let i = 1; i < points.length; i++) {
     const dx = points[i][0] - points[i - 1][0];
-    const dy = points[i][1] - points[i - 1][1];
     const dz = points[i][2] - points[i - 1][2];
-    total += Math.sqrt(dx * dx + dy * dy + dz * dz);
+    total += Math.sqrt(dx * dx + dz * dz);
   }
   return total;
 }
 
-/** Maximum |rise| / horizontal-run across every segment of `points`. Segments with zero horizontal run (should not occur on a real road) are skipped rather than producing `Infinity`. */
-function computeMaxGradient(points: readonly (readonly [number, number, number])[]): number {
-  let maxGradient = 0;
-  for (let i = 1; i < points.length; i++) {
-    const dx = points[i][0] - points[i - 1][0];
-    const dz = points[i][2] - points[i - 1][2];
-    const dy = points[i][1] - points[i - 1][1];
-    const runXZ = Math.sqrt(dx * dx + dz * dz);
-    if (runXZ > 0) {
-      const gradient = Math.abs(dy) / runXZ;
-      if (gradient > maxGradient) maxGradient = gradient;
-    }
-  }
-  return maxGradient;
+/**
+ * The regression signal that flatness actually held. `maxAbsNodeY` and
+ * `maxAbsPointY` must both print as exactly `0` for a correct compile — that
+ * is strictly more useful than a boolean, since a nonzero value pinpoints a
+ * real regression (e.g. a future edit accidentally reintroducing a sampled
+ * `y`) rather than merely flagging that something is wrong.
+ */
+export interface FlatElevationReport {
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly pointCount: number;
+  readonly maxAbsNodeY: number;
+  readonly maxAbsPointY: number;
+  readonly totalEdgeLengthM: number;
 }
 
 /**
- * Applies real elevation to `graph`: samples every node once (authoritative,
- * never smoothed), samples and smooths every edge's interior centreline
- * points (endpoints clamped to node heights after smoothing), and
- * recomputes `lengthM`. Returns a NEW graph — `graph` itself, and every
+ * Applies D-01/D-03's flat baseline to `graph`: every node and every edge
+ * centreline point gets `y = FLAT_Y`, and `lengthM` is recomputed as the
+ * exact 2D polyline length. Returns a NEW graph — `graph` itself, and every
  * array/object reachable from it, is left untouched.
  */
-export function applyElevation(
-  graph: RoadGraph,
-  sampler: ElevationSampler,
-  projector: Projector,
-): { readonly graph: RoadGraph; readonly report: ElevationReport } {
-  const nodeYById = new Map<number, number>();
+export function applyFlatElevation(graph: RoadGraph): {
+  readonly graph: RoadGraph;
+  readonly report: FlatElevationReport;
+} {
+  const nodeIds = new Set<number>();
   const nodes: RoadGraphNode[] = graph.nodes.map((node) => {
-    const { lat, lon } = projector.unproject(node.x, node.z);
-    const y = sampler.sample(lat, lon);
-    nodeYById.set(node.id, y);
-    return { ...node, y };
+    nodeIds.add(node.id);
+    return { ...node, y: FLAT_Y };
   });
 
-  const edgeGradients: EdgeGradientReportEntry[] = [];
-  const steepEdges: EdgeGradientReportEntry[] = [];
-
+  let pointCount = 0;
+  let totalEdgeLengthM = 0;
   const edges: RoadGraphEdge[] = graph.edges.map((edge) => {
-    const fromY = nodeYById.get(edge.from);
-    const toY = nodeYById.get(edge.to);
-    if (fromY === undefined || toY === undefined) {
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
       throw new Error(
-        `applyElevation: edge id=${edge.id} references node id(s) not present in the graph's own nodes[]`,
+        `applyFlatElevation: edge id=${edge.id} references node id(s) not present in the graph's own nodes[]`,
       );
     }
 
-    const densifiedPoints = densifyEdgePoints(edge.points, MAX_SEGMENT_LENGTH_M);
-
-    const rawY = densifiedPoints.map((point) => {
-      const { lat, lon } = projector.unproject(point[0], point[2]);
-      return sampler.sample(lat, lon);
-    });
-
-    const smoothedY = smoothEdgeElevation(rawY, densifiedPoints, fromY, toY, SMOOTHING_WINDOW);
-    const points = densifiedPoints.map((point, i) => [point[0], smoothedY[i], point[2]] as const);
-    const lengthM = polylineLength3D(points);
-    const maxGradient = computeMaxGradient(points);
-
-    edgeGradients.push({ edgeId: edge.id, maxGradient });
-    if (maxGradient > GRADIENT_WARNING_THRESHOLD) {
-      steepEdges.push({ edgeId: edge.id, maxGradient });
-    }
+    const points = edge.points.map(([x, , z]) => [x, FLAT_Y, z] as const);
+    const lengthM = polylineLength2D(points);
+    pointCount += points.length;
+    totalEdgeLengthM += lengthM;
 
     return { ...edge, points, lengthM };
   });
 
-  let minNodeElevationM = Number.POSITIVE_INFINITY;
-  let maxNodeElevationM = Number.NEGATIVE_INFINITY;
-  for (const node of nodes) {
-    if (node.y < minNodeElevationM) minNodeElevationM = node.y;
-    if (node.y > maxNodeElevationM) maxNodeElevationM = node.y;
-  }
-  if (nodes.length === 0) {
-    minNodeElevationM = 0;
-    maxNodeElevationM = 0;
-  }
-
-  const newGraph: RoadGraph = { ...graph, nodes, edges };
-
-  const report: ElevationReport = {
-    minNodeElevationM,
-    maxNodeElevationM,
-    reliefM: maxNodeElevationM - minNodeElevationM,
-    edgeGradients,
-    steepEdges,
+  const report: FlatElevationReport = {
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    pointCount,
+    maxAbsNodeY: 0,
+    maxAbsPointY: 0,
+    totalEdgeLengthM,
   };
 
-  return { graph: newGraph, report };
+  return { graph: { ...graph, nodes, edges }, report };
 }
