@@ -14,12 +14,18 @@
  *   3. Build the dense-id `RoadGraph` from OSM ways/nodes, mapping surfaces
  *      via `graph/surface-mapping.ts` (plan 04-01/04-04). `y` is flat (0)
  *      at this point.
- *   4. Fetch/cache the USGS 3DEP DEM raster covering the area's bbox, sample
- *      real elevation for every node and edge centreline point, smooth
- *      interior points with clamped endpoints, and recompute `lengthM`
- *      (plan 04-05).
+ *   4. Apply D-01/D-03's flat baseline to every road node and edge centreline
+ *      point (`applyFlatElevation`, phase 04.1 plan 04.1-01) — `y = 0` by
+ *      construction, not DEM-sampled, not smoothed. Replaces the retired
+ *      USGS 3DEP fetch/parse/sample/smooth pipeline entirely; see
+ *      `docs/adr/0001-map-data-source.md`'s phase-04.1 amendment.
  *   5. Author per-edge ribbon/junction geometry (`geometry/`).
- *   6. Author collision buffers and a merged glTF render mesh (`author/`).
+ *   6. Build the off-road relief heightfield grid (phase 04.1 plan 04.1-04)
+ *      BEFORE building boxes — buildings now seat themselves on this grid via
+ *      a `GroundHeightSampler`, so the grid must exist first. Author building
+ *      OBB prisms, collision buffers, road shoulders, authored terrain crests
+ *      (phase 04.1 plan 04.1-03/04.1-07) and a merged glTF render mesh
+ *      (`author/`).
  *   7. Validate the result (`validate/`) — fail loudly, name the offending
  *      node/edge id, never a bare stack trace. IMPLEMENTED (plan 04-06): runs
  *      `buildRoadGeometry` + `validateGraph` as a build gate between
@@ -42,6 +48,7 @@
  */
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { buildCrestGeometry, crestsForArea } from "../../src/core/crest-geometry.ts";
 import { sampleHeightfieldBilinear } from "../../src/core/heightfield-sample.ts";
 import { type MapCollision, parseMapCollision } from "../../src/core/map-collision.ts";
 import {
@@ -60,18 +67,11 @@ import {
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
-import { buildHeightfield, type HeightfieldGrid } from "./author/heightfield.ts";
+import { buildOffRoadRelief, type HeightfieldGrid } from "./author/heightfield.ts";
 import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
-import { applyElevation, type ElevationReport } from "./graph/elevation.ts";
+import { applyFlatElevation, type FlatElevationReport } from "./graph/elevation.ts";
 import { makeProjector } from "./graph/project.ts";
-import {
-  type DemRaster,
-  type LoadOrFetchDemResult,
-  loadOrFetchDem,
-  makeElevationSampler,
-  parseDemRaster,
-} from "./sources/dem.ts";
 import { type LoadOrFetchAreaResult, loadOrFetchArea } from "./sources/overpass.ts";
 import {
   formatValidationFailures,
@@ -204,41 +204,29 @@ function printBuildReport(config: AreaConfig, report: BuildReport): void {
 }
 
 /**
- * Prints the elevation stage's report: DEM source (cache/network) and byte
- * size, the raster's own parsed elevation range, NoData substitution count,
- * min/max/relief across the compiled graph's nodes, and every edge whose
- * gradient exceeds `GRADIENT_WARNING_THRESHOLD` — the same "fail loud, name
- * the offending id" discipline `printBuildReport` already applies to
- * topology, applied here to terrain.
+ * Prints the flat-elevation stage's report (phase 04.1 plan 04.1-01,
+ * D-01/D-03): node/edge/point counts and `totalEdgeLengthM`, plus
+ * `maxAbsNodeY`/`maxAbsPointY` — both formatted to 3 decimals — which must
+ * print as exactly `0.000` for a correct compile. This is the regression
+ * signal that replaces the old DEM-era gradient-threshold report: a nonzero
+ * value here means something authored a non-flat road `y`, which D-01
+ * forbids with no exception.
  */
-function printElevationReport(
-  demResult: LoadOrFetchDemResult,
-  raster: DemRaster,
-  report: ElevationReport,
-): void {
-  let rasterMin = Number.POSITIVE_INFINITY;
-  let rasterMax = Number.NEGATIVE_INFINITY;
-  for (const value of raster.data) {
-    if (value < rasterMin) rasterMin = value;
-    if (value > rasterMax) rasterMax = value;
-  }
-
+function printFlatElevationReport(report: FlatElevationReport): void {
   console.log(
-    `  DEM: source=${demResult.source} bytes=${demResult.bytes.byteLength} ` +
-      `raster=${raster.width}x${raster.height} noDataSubstitutions=${raster.noDataSubstitutions}`,
+    `  flat elevation: nodes=${report.nodeCount} edges=${report.edgeCount} ` +
+      `points=${report.pointCount} totalEdgeLengthM=${report.totalEdgeLengthM.toFixed(3)}`,
   );
-  console.log(`  DEM raster elevation range: ${rasterMin.toFixed(2)}m to ${rasterMax.toFixed(2)}m`);
   console.log(
-    `  compiled node elevation: min=${report.minNodeElevationM.toFixed(2)}m ` +
-      `max=${report.maxNodeElevationM.toFixed(2)}m relief=${report.reliefM.toFixed(2)}m`,
+    `  flatness check: maxAbsNodeY=${report.maxAbsNodeY.toFixed(3)} ` +
+      `maxAbsPointY=${report.maxAbsPointY.toFixed(3)}`,
   );
-  if (report.steepEdges.length === 0) {
-    console.log("  edges over gradient threshold: (none)");
-  } else {
-    console.log(`  edges over gradient threshold: ${report.steepEdges.length}`);
-    for (const steep of report.steepEdges) {
-      console.log(`    edge id=${steep.edgeId} maxGradient=${steep.maxGradient.toFixed(3)}`);
-    }
+  if (report.maxAbsNodeY > 0 || report.maxAbsPointY > 0) {
+    console.warn(
+      "  WARNING: D-01 requires every road node/point to be exactly flat (y=0), but " +
+        `maxAbsNodeY=${report.maxAbsNodeY.toFixed(3)} maxAbsPointY=${report.maxAbsPointY.toFixed(3)} — ` +
+        "something authored a non-zero road y. Investigate applyFlatElevation's caller before shipping this build.",
+    );
   }
 }
 
@@ -308,6 +296,8 @@ function printGltfSummary(
     trianglesBySurface: Readonly<Partial<Record<string, number>>>;
     buildingCount: number;
     buildingTriangleCount: number;
+    crestCount: number;
+    crestTriangleCount: number;
   },
   buildingReport: BuildingReport,
 ): void {
@@ -322,6 +312,7 @@ function printGltfSummary(
       `height source explicit=${buildingReport.heightSource.explicit} levels=${buildingReport.heightSource.levels} ` +
       `typeDefault=${buildingReport.heightSource.typeDefault})`,
   );
+  console.log(`  crests: ${stats.crestCount} crest(s), ${stats.crestTriangleCount} triangles`);
 }
 
 /**
@@ -382,7 +373,7 @@ async function main(argv: readonly string[]): Promise<void> {
   console.log(
     `compile-map: resolved area "${config.areaId}" (${config.name}) — bbox ${JSON.stringify(
       config.bbox,
-    )}, demSource "${config.demSource}"`,
+    )}, terrain "flat-authored"`,
   );
 
   const refresh = argv.includes("--refresh");
@@ -414,33 +405,29 @@ async function main(argv: readonly string[]): Promise<void> {
     );
   }
 
-  // Elevation stage (plan 04-05): sample real USGS 3DEP terrain for every
-  // node (authoritative, never smoothed), smooth each edge's interior
-  // centreline with both ends clamped to node height, and recompute lengthM
-  // now that y is real. Reuses the graph's OWN recorded origin (rather than
-  // recomputing it from config.bbox independently) so the projector here is
-  // guaranteed identical to the one `buildGraph` used internally.
-  const demResult = await loadOrFetchDem(config, { refresh, maxSizePx: config.demSizePx });
-  const raster = await parseDemRaster(demResult.bytes);
-  const sampler = makeElevationSampler(raster);
+  // Reuses the graph's OWN recorded origin (rather than recomputing it from
+  // config.bbox independently) so the projector here is guaranteed identical
+  // to the one `buildGraph` used internally. `buildingBoxes` still needs this
+  // for `projectRing`.
   const projector = makeProjector({ lat: graph.origin.lat, lon: graph.origin.lon });
-  const { graph: elevatedGraph, report: elevationReport } = applyElevation(
-    graph,
-    sampler,
-    projector,
-  );
-  printElevationReport(demResult, raster, elevationReport);
+
+  // Flat elevation stage (phase 04.1 plan 04.1-01, D-01/D-03): every road
+  // node and edge centreline point gets y = 0 by construction — not
+  // DEM-sampled, not smoothed. Replaces the retired USGS 3DEP fetch/parse/
+  // sample/smooth pipeline entirely.
+  const { graph: flatGraph, report: elevationReport } = applyFlatElevation(graph);
+  printFlatElevationReport(elevationReport);
 
   // Self-check: mirrors buildGraph's own discipline (graph/build-graph.ts) —
   // the compiler must never emit an artifact its own runtime parser rejects.
-  parseRoadGraph(JSON.stringify(elevatedGraph), `applyElevation(${config.areaId})`);
+  parseRoadGraph(JSON.stringify(flatGraph), `applyFlatElevation(${config.areaId})`);
 
   // Built unconditionally (not just under the validation branch below) —
   // plan 04-07's glTF authoring stage needs this same ribbon/junction
   // geometry regardless of whether `--no-validate` was passed, and reusing
   // ONE `buildRoadGeometry` call keeps the render mesh and the validator
   // looking at the exact same geometry, never two independently-built copies.
-  const geometry = buildRoadGeometry(elevatedGraph);
+  const geometry = buildRoadGeometry(flatGraph);
 
   // Validation stage (plan 04-06, D-P18): the last gate before the artifact
   // is written. Runs every reachability/pathability/geometry-sanity check
@@ -455,7 +442,7 @@ async function main(argv: readonly string[]): Promise<void> {
         "compile); it must never appear in a committed script.",
     );
   } else {
-    const failures = validateGraph(elevatedGraph, geometry);
+    const failures = validateGraph(flatGraph, geometry);
     printValidationSummary(failures);
     if (failures.length > 0) {
       console.error(
@@ -469,26 +456,33 @@ async function main(argv: readonly string[]): Promise<void> {
 
   await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
   const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
-  await writeFile(outputPath, `${JSON.stringify(elevatedGraph, null, 2)}\n`, "utf8");
+  await writeFile(outputPath, `${JSON.stringify(flatGraph, null, 2)}\n`, "utf8");
   console.log(`compile-map: wrote ${outputPath}`);
 
+  // Off-road heightfield stage (phase 04.1 plan 04.1-04, D-02/D-02a/D-02b):
+  // a small, capped, deterministic procedural relief grid covering the
+  // graph's own `bounds` (the road network's actual footprint, not the raw
+  // request bbox) — a pure function of local-ENU (x, z), no DEM, no network.
+  // MOVED ahead of the building stage (was after it, pre-phase-04.1): the
+  // building stage now seats buildings on this grid via a
+  // `GroundHeightSampler`, whereas it previously sampled the DEM
+  // independently, so the grid must exist first. Consumed by BOTH the
+  // collision sidecar (the physics ground) and the .glb (the visible terrain
+  // mesh) below, so the two artifacts describe the exact same grid.
+  const heightfield: HeightfieldGrid = buildOffRoadRelief(flatGraph, flatGraph.bounds);
+  printHeightfieldSummary(heightfield);
+
   // glTF authoring stage (plan 04-07, SC3's second artifact): building boxes
-  // from the real OSM buildings payload, then the visual .glb — one road
-  // primitive per surface PRESENT plus one buildings primitive (D-P19),
-  // built from the SAME `geometry` the validator just checked.
+  // from the real OSM buildings payload, seated on the off-road relief grid
+  // above via a local-ENU `GroundHeightSampler` (phase 04.1 plan 04.1-05,
+  // replacing the retired DEM-backed lat/lon sampler), then the visual .glb —
+  // one road primitive per surface PRESENT plus one buildings primitive
+  // (D-P19), built from the SAME `geometry` the validator just checked.
   const { boxes, report: buildingReport } = buildingBoxes(
     buildingsResult.envelope,
     projector,
-    sampler,
+    (x, z) => sampleHeightfieldBilinear(heightfield, x, z),
   );
-
-  // Off-road heightfield stage (plan 04-10, D-P28/D-P29): a DEM-derived grid
-  // covering the graph's own `bounds` (the road network's actual footprint,
-  // not the raw request bbox), consumed by BOTH the collision sidecar (the
-  // physics ground) and the .glb (the visible terrain mesh) below, so the two
-  // artifacts describe the exact same grid.
-  const heightfield: HeightfieldGrid = buildHeightfield(sampler, elevatedGraph.bounds, projector);
-  printHeightfieldSummary(heightfield);
 
   // Collision sidecar stage (plan 04-08, decision D-P22; heightfield block
   // added in plan 04-10): non-road collision data ships as a separate
@@ -514,7 +508,7 @@ async function main(argv: readonly string[]): Promise<void> {
   // so the compiled `.glb` never has a road floating over a gap the runtime
   // physics collider (src/physics/map-scene.ts, built from the identical
   // buildRoadShoulders call over the identical heightfield) doesn't also
-  // close. Built from `elevatedGraph` (not `geometry`) so this stays fully
+  // close. Built from `flatGraph` (not `geometry`) so this stays fully
   // independent of the validator's own `geometry` object above -- shoulders
   // are additive visual/collision geometry, never part of the reachability/
   // pathability gate.
@@ -533,7 +527,7 @@ async function main(argv: readonly string[]): Promise<void> {
     radiusM: buildingBoundingRadius(b.halfExtents.x, b.halfExtents.z),
   }));
   const shoulders = buildRoadShoulders(
-    elevatedGraph,
+    flatGraph,
     (x, z) => sampleHeightfieldBilinear(heightfield, x, z),
     (edge) => (x, z) =>
       resolvePointShoulderWidth(
@@ -547,11 +541,22 @@ async function main(argv: readonly string[]): Promise<void> {
       ),
   );
 
+  // Authored terrain crests (phase 04.1 plan 04.1-03/04.1-07, D-04/D-04b):
+  // a small, hand-picked set of off-road launch domes for this area, built
+  // over the SAME bilinearly-sampled heightfield the shoulder stage above
+  // uses. `src/physics/map-scene.ts` makes the identical call over the
+  // identical table and sampler at runtime, so the shipped mesh and the
+  // runtime collider cannot diverge.
+  const crests = buildCrestGeometry(crestsForArea(config.areaId), (x, z) =>
+    sampleHeightfieldBilinear(heightfield, x, z),
+  );
+
   const { document: gltfDocument, stats: gltfStats } = buildGltfDocument(
     geometry,
     boxes,
     heightfield,
     shoulders,
+    crests,
   );
   const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
   await writeGlb(gltfDocument, glbPath);
