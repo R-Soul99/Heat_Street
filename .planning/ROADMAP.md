@@ -231,7 +231,7 @@ Plans:
 **Goal:** The compiled area uses hand-authored, deterministic flat/near-flat terrain instead of real-world DEM elevation (USGS 3DEP / Copernicus), eliminating the wide road-shoulder skirts DEM forces (up to ~20m in places, via `src/core/shoulder-clearance.ts`'s `TARGET_SHOULDER_WIDTH_M`) — OpenStreetMap remains the source for road topology. Supersedes part of ADR 0001 (`docs/adr/0001-map-data-source.md`); requires a new/updated ADR, rewriting `tools/map-compiler/graph/elevation.ts`, re-deriving shoulder/grounding constants now that terrain is flat, and recompiling the reference map area (Juliette, GA). Should land before Phase 5 planning since Phase 5+ build on the compiled map.
 **Requirements**: D-01, D-02, D-02a, D-02b, D-03, D-04, D-05, D-06, D-07, D-08 (CONTEXT.md decision IDs — no v1.0 REQUIREMENTS.md ID applies to this inserted maintenance/architecture phase)
 **Depends on:** Phase 4
-**Plans:** 7/11 plans executed
+**Plans:** 8/11 plans executed
 
 Plans:
 - [x] 04.1-01-PLAN.md — Flat road elevation stage: applyFlatElevation replaces DEM sampling/smoothing/densification (wave 1)
@@ -241,7 +241,7 @@ Plans:
 - [x] 04.1-05-PLAN.md — Building ground-seating decoupled from the DEM onto a local-ENU sampler (wave 1)
 - [x] 04.1-06-PLAN.md — Elevation provenance: none-flat-authored demSource, accurate credits line, compiler version 0.6.0 (wave 1)
 - [x] 04.1-07-PLAN.md — Authored crests into the compiled .glb and the runtime trimesh colliders (wave 2)
-- [ ] 04.1-08-PLAN.md — Compiler CLI rewired onto the flat stages; DEM module, cache and geotiff dependency deleted (wave 3)
+- [x] 04.1-08-PLAN.md — Compiler CLI rewired onto the flat stages; DEM module, cache and geotiff dependency deleted (wave 3)
 - [ ] 04.1-09-PLAN.md — Recompile Juliette, GA; invert the real-artifact suite to exact flatness; record the measurement baseline (wave 4)
 - [ ] 04.1-10-PLAN.md — D-06 drive-every-road human sign-off session and any retunes it forces (wave 5, checkpoint)
 - [ ] 04.1-11-PLAN.md — ADR 0001 amended in place; ADR 0004 decision 7 marked superseded (wave 6)
@@ -324,7 +324,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 2. Vehicle Feel Core | 10/10 | Complete   | 2026-09-11 |
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
-| 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 7/11 | In Progress|  |
+| 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 8/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 0/TBD | Not started | - |
 | 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
