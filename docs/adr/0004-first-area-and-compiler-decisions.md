@@ -100,6 +100,12 @@ decision 5 above.
 
 ### 7. Off-road ground is a DEM-derived, uniform-`grass` heightfield sunk beneath the roads (plan 04-10 D-P28)
 
+**Superseded by phase 04.1** (see `docs/adr/0001-map-data-source.md`'s "Elevation — amended
+(phase 04.1)" subsection): elevation is no longer DEM-derived at all — roads are flat (`y = 0`)
+and off-road ground is a small, capped, deterministic procedural relief. The decision body below
+is retained as history — it is the record of WHY the phase 04.1 change was needed, not a
+description of current behaviour.
+
 This resolves 04-RESEARCH.md's Open Question 3 ("what does the player see/drive on off the
 road?"). `tools/map-compiler/author/heightfield.ts` samples the raw DEM on a coarse
 128x128 grid spanning the compiled area's own road-network bounds, with every sampled height
@@ -153,6 +159,17 @@ authored vertices. Verified against the real compiled area: a fine-grained sweep
 road found up to 3.25m of terrain rising above a linearly-interpolated road surface before this
 fix, and zero such points after.
 
+**What survived phase 04.1's amendment, and what didn't.** The `HeightfieldGrid` shape, the
+verified Rapier `heights[row + col * (rows + 1)]` storage order, the `.collision.json` sidecar
+format, and the shared `buildRoadShoulders` algorithm (decision 5) all survive unchanged — phase
+04.1 replaced what FEEDS the heightfield, not the heightfield's own shape or its consumers. What
+did not survive: the DEM as the elevation source (replaced by a seeded procedural generator),
+the 4.5m sink (replaced by `HEIGHTFIELD_SINK_M = 0.1`, since flat/near-flat terrain no longer
+needs a large safety margin against a coarse real-elevation grid), and the 20m shoulder width
+(replaced by `TARGET_SHOULDER_WIDTH_M = 6`, since a near-zero relief-to-road gap no longer needs
+a wide bridging ramp). See `docs/adr/0001-map-data-source.md`'s amendment for the full record
+and the final signed-off values.
+
 ### 8. `osmtogeojson` was rejected; junction identity comes from raw OSM node IDs (plan 04-01 D-P5)
 
 GeoJSON conversion via `osmtogeojson` discards the OSM node identity that junction detection
@@ -181,9 +198,16 @@ never routing through a GeoJSON intermediate.
 
 ## Supersedes
 
-Nothing — this is Phase 4's first consolidated decision record. It does not contradict ADR 0001,
-0002 or 0003; where it touches the same ground (elevation source selection, occlusion), it cites
-rather than restates them.
+Originally nothing — this was Phase 4's first consolidated decision record, and did not
+contradict ADR 0001, 0002 or 0003 at the time; where it touched the same ground (elevation
+source selection, occlusion), it cited rather than restated them.
+
+**Phase 04.1 update:** decision 7's elevation source (a DEM-derived heightfield) is now
+superseded by `docs/adr/0001-map-data-source.md`'s "Elevation — amended (phase 04.1)"
+subsection — flat, hand-authored terrain replaces DEM sampling everywhere. Decision 7's other
+content (the `HeightfieldGrid` shape, `buildRoadShoulders`, the shoulder/grounding fix history)
+is unaffected and remains current; see decision 7's own updated text above for exactly what
+survived.
 
 ## Open Questions
 
@@ -198,6 +222,14 @@ Carried forward, none blocking:
    re-check. `src/core/road-geometry.ts`'s `MITER_CLAMP` and `ROAD_CLASS_RANK` doc comments both
    carry this session's investigation notes. Follow-up: re-drive to a flagged junction (or supply
    a screenshot) so the fix can target the confirmed mechanism.
+   **Phase 04.1-10 update:** the direct visual re-check happened. The artifact is confirmed
+   STILL PRESENT on the recompiled flat-terrain area — flattening elevation did not touch this
+   mechanism, as expected, since it is a surface/junction-fan defect, not an elevation one
+   (D-07). It also reproduces at THREE separate junctions, not only node 45: (1167.69, 195.84),
+   (891.84, 240.86), (1048.35, 215.10) (local ENU metres) — this is a class of oblique-junction
+   defect, not a single-node one-off. Still open; see `.planning/STATE.md`'s `[Phase 04-11,
+   open]` entry (as updated by plan 04.1-10) and
+   `.planning/phases/04.1-flatten-terrain-remove-dem-elevation-drop-real-world-dem-der/04.1-10-SUMMARY.md`.
 2. **Road width versus the car's slide radius** (finding 5: "quite difficult to stay on the
    roads at speed due to the desired sliding effect"). Deferred pending re-driving now that
    leaving the road is recoverable (decision 7's fix) — see `LANE_WIDTH_M`'s own doc comment in

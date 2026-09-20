@@ -5,6 +5,13 @@
 - **Phase:** 01 engine-foundation (plan 01-03), satisfying ROADMAP Phase 1 success criterion SC5
 - **Deciders:** Project owner (locked as a P0 legal decision at roadmap time; recorded in `.planning/STATE.md`)
 
+> **Amended in phase 04.1 (2026-09-19):** the elevation sub-decision below is retired for v1 —
+> elevation is no longer sampled from any DEM. The road-network decision, the Google
+> prohibition, and every other section of this ADR are unchanged. See the new "flat,
+> hand-authored terrain" subsection below for what changed, why, and what would justify
+> reversing it. The original DEM decision is retained immediately above it as history, not
+> deleted.
+
 > **This document is the single authoritative answer to "where does Heat Street's map data
 > come from?"** Any other document in this repository that says otherwise is superseded — see
 > the Supersedes section below. If you are an agent about to build the Phase 4 map compiler,
@@ -49,7 +56,13 @@ Practical extract sources for Phase 4 (Geofabrik regional `.osm.pbf`, BBBike cus
 extracts, or the Overpass API for small areas) are a Phase 4 implementation detail and are
 **not** fixed by this ADR. Only the licence and the prohibition are fixed here.
 
-### Elevation — an open DEM, chosen by an explicit selection rule
+### Elevation — an open DEM, chosen by an explicit selection rule (superseded, phase 04.1 — retained as history)
+
+**This subsection describes the ORIGINAL decision and is no longer how the compiler gets
+elevation.** It is retained verbatim, unabridged, because it records why an open DEM was chosen
+in the first place and remains the ready-made answer if DEM elevation is ever reinstated (see
+the amendment below for the condition under which that would happen). The current decision is
+the next subsection.
 
 Elevation comes from an open DEM. Both approved sources are recorded here with a selection
 rule, so that Phase 1 is not blocked on Phase 4's choice of real-world area.
@@ -79,6 +92,68 @@ and the Copernicus DEM `License-COPDEM-30.pdf` published at
 <https://documentation.dataspace.copernicus.eu/>.
 
 This selection rule is the recorded resolution of 01-RESEARCH.md Open Question 2.
+
+### Elevation — amended (phase 04.1): flat, hand-authored terrain
+
+**What changed.** Elevation is no longer sampled from any DEM. Every road node and every edge
+centreline point is authored at `y = 0` — a literal constant, not smoothed, not sampled
+(D-01/D-03). Off-road terrain gets a capped, deterministic, seeded procedural relief that fades
+to exactly zero at every road's paved edge, so it can never create a bridging gap between road
+and ground (D-02/D-02a/D-02b). Jumps come from Phase 2's already-proven hand-placed ramp
+mechanic (explicit convex-hull wedge ramps) plus a small number of explicitly authored off-road
+terrain crests placed at hand-picked spots — never from real-world elevation data (D-04).
+
+**Why.** The developer's own framing, verbatim: *"the elevation as it currently stands causes
+too many problems — adding skirts to the edges of the roads to meet the terrain results in
+20m extra road width in places which just looks ridiculous. Want to use flatter terrain
+throughout."* This was not a subjective complaint alone — Phase 4's own driving session (ADR
+0004 decision 7) had measured an average 5.09m road-to-terrain gap forcing a 20m
+`TARGET_SHOULDER_WIDTH_M`, with a median shoulder-ramp grade of 12.9 degrees and a 95th-percentile
+grade of 26.9 degrees. Post-amendment, the same measurement methodology (`04.1-09-SUMMARY.md`)
+recorded a median grade of 0.96 degrees and a p95 of 1.30 degrees, 0 terrain-above-road
+violations (down from 123, worst case 3.25m), and a shoulder width of 6m — and a full human
+drive-every-road re-verification (D-06, `04.1-10-SUMMARY.md`) directly confirmed the 20m-skirt
+defect is gone by observation, not only by measurement.
+
+**What is unchanged.** OpenStreetMap remains the frozen, sole source for road and building
+topology, under the same licence terms as before — see "Road network" above, untouched by this
+amendment. The Google prohibition below is untouched. `source.demSource` and
+`attribution.dem` remain mandatory schema fields (`docs/schemas/road-graph.v1.md` is unchanged)
+— only their VALUES changed, to `"none-flat-authored"` and a sentence stating terrain is flat
+and hand-authored.
+
+**Where the code lives.** `tools/map-compiler/graph/elevation.ts`'s `applyFlatElevation`
+replaces DEM sampling with the literal `y = 0` baseline. `tools/map-compiler/author/heightfield.ts`'s
+`buildOffRoadRelief` replaces DEM-grid sampling with a seeded, capped procedural generator.
+`src/core/crest-geometry.ts` holds the three hand-authored terrain crests. The final,
+human-signed-off constant values (`04.1-10-SUMMARY.md` — no retune was made during that
+session) are:
+
+| Constant | Value | File |
+|---|---|---|
+| Road/edge-point elevation | `y = 0`, exactly, everywhere | `tools/map-compiler/graph/elevation.ts` |
+| `RELIEF_AMPLITUDE_M` | 2 (± metres) | `tools/map-compiler/author/heightfield.ts` |
+| `RELIEF_FALLOFF_DISTANCE_M` | 130 | `tools/map-compiler/author/heightfield.ts` |
+| `HEIGHTFIELD_SINK_M` | 0.1 | `tools/map-compiler/author/heightfield.ts` |
+| `TARGET_SHOULDER_WIDTH_M` | 6 (was 20 pre-amendment) | `src/core/road-geometry.ts` |
+| Authored crests | `juliette-north-ridge` (-779.7, 263.2, r45m, h9m), `juliette-main-street-rise` (-420.0, 102.2, r30m, h5m), `juliette-south-approach` (-1227.2, -1062.3, r28m, h6m) | `src/core/crest-geometry.ts` |
+| `source.demSource` | `"none-flat-authored"` | compiled `*.map.json` |
+| `source.compilerVersion` | `"0.6.0"` | compiled `*.map.json` |
+
+**D-05's retirement note.** Phase 4's original area-selection criterion — favour real towns with
+genuine rolling terrain when picking a target area (04-CONTEXT.md's D-09) — is retired as the
+operative rule for v1's area. It is explicitly **not** permanently ruled out: it remains a
+possible criterion to reconsider if a future v2 area is ever added, exactly as D-09's own
+reasoning is left intact in `04-CONTEXT.md` rather than deleted.
+
+**What would justify revisiting this.** A future v2 area whose terrain character is itself the
+point (a mountain pass, a coastal cliff road) where flat ground would defeat the area's purpose;
+a heightfield resolution/authoring budget that could represent real relief without recreating
+the coarse-grid shoulder-bridging problem this amendment exists to remove; or a decision that
+real-world vertical fidelity matters more than shoulder geometry for a specific future area. If
+any of these are ever true, the retained DEM source table above (USGS 3DEP / Copernicus GLO-30,
+selection rule, mandatory-notice text, citations) is the ready-made answer — it was kept
+verbatim for exactly this reason, not deleted when this amendment was written.
 
 ### Prohibition — no Google-derived bytes, anywhere
 
@@ -119,6 +194,11 @@ the build if a scanned file recommends the Google Maps pipeline without pointing
   gameplay change, not a maintenance chore.
 - **Phase 4 cannot start map compilation without naming its area**, because the area selects
   the DEM. That is a deliberate, recorded dependency rather than a surprise.
+- **(Phase 04.1 amendment)** No network dependency and no third-party GeoTIFF parser
+  (`geotiff`) remain in the compiler build — one fewer fetched-and-parsed external input.
+  Compiles are now fully reproducible offline (verified byte-identical across consecutive runs,
+  `04.1-09-SUMMARY.md`). The accepted trade is the loss of real-world vertical fidelity: the
+  compiled area's elevation is now a designer's approximation, not a survey.
 
 ## Supersedes
 
@@ -145,6 +225,13 @@ is the decision record for that scope, and `.planning/research/STACK.md` carries
 the compensating control. The **root** `PROJECT.md` contains no Google reference and needed no
 change; `.planning/PROJECT.md` does, and is out of scope as historical record.
 
+**Phase 04.1 self-supersession, of a different kind from the four above:** this ADR's own
+elevation sub-decision ("Elevation — an open DEM…") is superseded IN PLACE by the "Elevation —
+amended (phase 04.1)" subsection directly below it, rather than by an external document being
+pointed here. `docs/adr/0004-first-area-and-compiler-decisions.md`'s decision 7 (the
+DEM-derived, sunk off-road heightfield) is likewise superseded by this same amendment — see
+that ADR's own updated decision 7 and Supersedes section.
+
 ## Open Questions
 
 Recorded here so they cannot be lost. Neither blocks Phase 1.
@@ -170,6 +257,7 @@ Recorded here so they cannot be lost. Neither blocks Phase 1.
 | The retired pipeline cannot be silently reintroduced | `tests/no-google-pipeline.test.ts` (scoped, comment-stripped grep requiring an ADR pointer within six lines of any match) |
 | A shipped map can always be traced to its inputs | Mandatory `source.osmExtract` / `source.osmSnapshot` / `source.demSource` / `source.compilerVersion`, asserted by `tests/road-graph-schema.test.ts` |
 | Licence strings ship with the data | Mandatory `attribution` block in `docs/schemas/road-graph.v1.md` |
+| A compiled artifact can no longer claim DEM provenance (phase 04.1) | `tools/map-compiler/graph/build-graph.test.ts`'s provenance-string test and `tests/compiled-map.test.ts`'s exact-flatness assertions against the real `juliette-ga` artifact |
 
 ## References
 
@@ -181,3 +269,6 @@ Recorded here so they cannot be lost. Neither blocks Phase 1.
 - <https://cloud.google.com/maps-platform/terms>
 - <https://wiki.openstreetmap.org/wiki/Key:surface>
 - `LICENSE-MAPDATA`, `docs/schemas/road-graph.v1.md`, `fixtures/road-graph.sample.json`
+- `.planning/phases/04.1-flatten-terrain-remove-dem-elevation-drop-real-world-dem-der/04.1-CONTEXT.md`, `04.1-RESEARCH.md` (phase 04.1 planning artifacts behind this amendment)
+- `.planning/phases/04.1-flatten-terrain-remove-dem-elevation-drop-real-world-dem-der/04.1-09-SUMMARY.md`, `04.1-10-SUMMARY.md` (the measurement baseline and human sign-off session this amendment cites)
+- `docs/adr/0004-first-area-and-compiler-decisions.md` (decision 7, now superseded by this amendment)

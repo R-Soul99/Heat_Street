@@ -42,7 +42,14 @@ function read(path: string): string {
 
 /** Every path this phase promises exists, with its minimum size in characters. */
 const REQUIRED: ReadonlyArray<{ path: string; minChars: number }> = [
-  { path: "docs/adr/0001-map-data-source.md", minChars: 1500 },
+  // Plan 04.1-11: raised 1500 -> 4000 after the phase 04.1 amendment (retired
+  // DEM elevation, added the "Elevation — amended" subsection) roughly
+  // doubled this document's length (~11.7k -> ~18.9k characters). 4000 stays
+  // comfortably below the real length — matching how the other floors below
+  // sit well under their own real sizes — so a routine wording edit cannot
+  // trip it, while still being high enough that reverting the amendment back
+  // toward the pre-04.1 length would fail this floor.
+  { path: "docs/adr/0001-map-data-source.md", minChars: 4000 },
   // Plan 04-11: records the phase's locked decisions (area, compiler shape,
   // collision/render granularity, shared geometry, off-road ground, the
   // osmtogeojson rejection) so a future agent finds them instead of
@@ -81,6 +88,14 @@ describe("SC5 documents are present and substantive", () => {
 
   it("the ADR records the OpenStreetMap decision", () => {
     expect(read("docs/adr/0001-map-data-source.md")).toContain("OpenStreetMap");
+  });
+
+  // Plan 04.1-11: guards the phase 04.1 amendment against silent reversion —
+  // a future edit that quietly reverted ADR 0001 back to claiming DEM
+  // provenance while the compiler still emits its post-amendment demSource
+  // value would otherwise go unnoticed by this suite.
+  it("the ADR records the phase 04.1 elevation amendment", () => {
+    expect(read("docs/adr/0001-map-data-source.md")).toContain("none-flat-authored");
   });
 
   it("the schema doc specifies schemaVersion", () => {
