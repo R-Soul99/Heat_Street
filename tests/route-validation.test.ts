@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import routesRaw from "../public/maps/juliette-ga.routes.json?raw";
 import mapRaw from "../public/maps/juliette-ga.map.json?raw";
+import routesRaw from "../public/maps/juliette-ga.routes.json?raw";
 import { parseCourseData } from "../src/core/course";
 import { validateCourseRoutes } from "../src/core/navigation";
 import { parseRoadGraph } from "../src/core/road-graph";

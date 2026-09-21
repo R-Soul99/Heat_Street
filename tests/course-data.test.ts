@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixtureRaw from "../fixtures/road-graph.sample.json?raw";
-import { parseRoadGraph } from "../src/core/road-graph";
 import { parseCourseData } from "../src/core/course";
+import { parseRoadGraph } from "../src/core/road-graph";
 
 const graph = parseRoadGraph(fixtureRaw, "fixtures/road-graph.sample.json");
 
@@ -51,34 +51,57 @@ describe("parseCourseData", () => {
   });
 
   it.each([
-    ["schemaVersion", (source: Record<string, unknown>) => (source.schemaVersion = 2)],
-    ["duplicate checkpoint id", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
-      checkpoints[1].id = checkpoints[0].id;
-    }],
-    ["checkpoint count", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      courses[0].checkpoints = (courses[0].checkpoints as unknown[]).slice(0, 4);
-    }],
-    ["coordinate", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
-      checkpoints[0].position = [Number.NaN, 0, 0];
-    }],
-    ["node reference", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
-      checkpoints[0].nodeId = 99;
-    }],
-    ["mode", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      courses[0].mode = "drift";
-    }],
-    ["laps", (source: Record<string, unknown>) => {
-      const courses = source.courses as Record<string, unknown>[];
-      courses[1].laps = 2;
-    }],
+    [
+      "schemaVersion",
+      (source: Record<string, unknown>): void => {
+        source.schemaVersion = 2;
+      },
+    ],
+    [
+      "duplicate checkpoint id",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
+        checkpoints[1].id = checkpoints[0].id;
+      },
+    ],
+    [
+      "checkpoint count",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        courses[0].checkpoints = (courses[0].checkpoints as unknown[]).slice(0, 4);
+      },
+    ],
+    [
+      "coordinate",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
+        checkpoints[0].position = [Number.NaN, 0, 0];
+      },
+    ],
+    [
+      "node reference",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        const checkpoints = courses[0].checkpoints as Record<string, unknown>[];
+        checkpoints[0].nodeId = 99;
+      },
+    ],
+    [
+      "mode",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        courses[0].mode = "drift";
+      },
+    ],
+    [
+      "laps",
+      (source: Record<string, unknown>) => {
+        const courses = source.courses as Record<string, unknown>[];
+        courses[1].laps = 2;
+      },
+    ],
   ] as const)("rejects invalid %s", (label, mutate) => {
     const source = validSource();
     mutate(source);

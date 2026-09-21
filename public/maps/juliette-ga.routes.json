@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "areaId": "juliette-ga",
+  "courses": [
+    {
+      "id": "juliette-backroads-run",
+      "name": "Backroads Run",
+      "mode": "p2p",
+      "checkpoints": [
+        { "id": "p2p-01", "nodeId": 15, "edgeId": 7, "position": [32.31354116644122, 0, 822.5150073162107], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-02", "nodeId": 19, "edgeId": 7, "position": [-859.1276420280709, 0, 571.2787781897142], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-03", "nodeId": 23, "edgeId": 21, "position": [-1383.1913034660072, 0, 781.6238239506761], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-04", "nodeId": 20, "edgeId": 8, "position": [-1188.227338157997, 0, 215.48001128819146], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-05", "nodeId": 17, "edgeId": 29, "position": [-580.9343738375725, 0, -58.44766377492521], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-06", "nodeId": 9, "edgeId": 30, "position": [-680.4324526465898, 0, -205.05481129745687], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "p2p-07", "nodeId": 12, "edgeId": 31, "position": [-778.9224833777694, 0, -347.17025031309436], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } }
+      ],
+      "start": { "nodeId": 16, "headingRad": -1.7419882003637046 },
+      "authoring": "Uses the west dirt-road branch (edge 7) and stays clear of the Phase 04.1 defect coordinates."
+    },
+    {
+      "id": "juliette-three-lap-loop",
+      "name": "Three-Lap Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        { "id": "circuit-01", "nodeId": 40, "edgeId": 28, "position": [-73.69951503607496, 0, 669.5861959699918], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "circuit-02", "nodeId": 39, "edgeId": 42, "position": [-25.565219311032628, 0, 739.6124861176222], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "circuit-03", "nodeId": 15, "edgeId": 48, "position": [32.31354116644122, 0, 822.5150073162107], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "circuit-04", "nodeId": 19, "edgeId": 7, "position": [-859.1276420280709, 0, 571.2787781897142], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } },
+        { "id": "circuit-05", "nodeId": 16, "edgeId": 22, "position": [-225.06540096997583, 0, 451.3778876635015], "sensor": { "widthM": 20, "depthM": 20, "heightM": 10 } }
+      ],
+      "start": { "nodeId": 16, "headingRad": -1.7419882003637046 },
+      "authoring": "Loops through the west dirt-road branch (edge 7) with five ordered checkpoints and a three-lap contract."
+    }
+  ]
+}
