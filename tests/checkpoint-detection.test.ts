@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CourseCheckpoint } from "../src/core/course";
 import { containsCheckpoint, detectCheckpointHit } from "../src/core/checkpoint-detection";
+import type { CourseCheckpoint } from "../src/core/course";
 
 const checkpoint: CourseCheckpoint = {
   id: "cp-1",

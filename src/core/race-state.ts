@@ -83,15 +83,8 @@ export function createRaceState(course: Course, navigation: NavigationGraph): Ra
     let best: { id: string; cost: number; index: number } | undefined;
     course.checkpoints.forEach((checkpoint, index) => {
       if (visitedIds.includes(checkpoint.id)) return;
-      const cost = pathCost(
-        navigation,
-        findRoadPath(navigation, currentNodeId, checkpoint.nodeId),
-      );
-      if (
-        best === undefined ||
-        cost < best.cost ||
-        (cost === best.cost && index < best.index)
-      ) {
+      const cost = pathCost(navigation, findRoadPath(navigation, currentNodeId, checkpoint.nodeId));
+      if (best === undefined || cost < best.cost || (cost === best.cost && index < best.index)) {
         best = { id: checkpoint.id, cost, index };
       }
     });
@@ -103,7 +96,8 @@ export function createRaceState(course: Course, navigation: NavigationGraph): Ra
       wrongWay = false;
       return;
     }
-    const nextCheckpoint = course.checkpoints[course.checkpoints.findIndex((item) => item.id === currentTargetId)];
+    const nextCheckpoint =
+      course.checkpoints[course.checkpoints.findIndex((item) => item.id === currentTargetId)];
     if (nextCheckpoint === undefined) {
       wrongWay = false;
       return;
@@ -114,9 +108,7 @@ export function createRaceState(course: Course, navigation: NavigationGraph): Ra
       return;
     }
     const difference = angleDifference(headingRad, desiredHeading);
-    wrongWay = wrongWay
-      ? difference >= WRONG_WAY_EXIT_RAD
-      : difference >= WRONG_WAY_ENTER_RAD;
+    wrongWay = wrongWay ? difference >= WRONG_WAY_EXIT_RAD : difference >= WRONG_WAY_ENTER_RAD;
   }
 
   function snapshot(): RaceSnapshot {

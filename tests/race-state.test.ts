@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Course, CourseCheckpoint } from "../src/core/course";
 import { buildNavigationGraph } from "../src/core/navigation";
-import type { RoadGraph } from "../src/core/road-graph";
 import { createRaceState } from "../src/core/race-state";
+import type { RoadGraph } from "../src/core/road-graph";
 
 const graph: RoadGraph = {
   schemaVersion: 1,
