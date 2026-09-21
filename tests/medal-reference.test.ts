@@ -14,27 +14,13 @@ const routeIdentity: readonly MedalReferenceCourseExpectation[] = [
     courseId: "juliette-backroads-run",
     mode: "p2p",
     laps: 1,
-    checkpointIds: [
-      "p2p-01",
-      "p2p-02",
-      "p2p-03",
-      "p2p-04",
-      "p2p-05",
-      "p2p-06",
-      "p2p-07",
-    ],
+    checkpointIds: ["p2p-01", "p2p-02", "p2p-03", "p2p-04", "p2p-05", "p2p-06", "p2p-07"],
   },
   {
     courseId: "juliette-three-lap-loop",
     mode: "circuit",
     laps: 3,
-    checkpointIds: [
-      "circuit-01",
-      "circuit-02",
-      "circuit-03",
-      "circuit-04",
-      "circuit-05",
-    ],
+    checkpointIds: ["circuit-01", "circuit-02", "circuit-03", "circuit-04", "circuit-05"],
   },
 ];
 
