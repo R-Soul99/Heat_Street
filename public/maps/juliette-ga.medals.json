@@ -1,0 +1,47 @@
+{
+  "kind": "heat-street.medal-reference",
+  "version": 1,
+  "areaId": "juliette-ga",
+  "contractVersion": 1,
+  "handlingContentVersion": "260920-sm2",
+  "courses": [
+    {
+      "courseId": "juliette-backroads-run",
+      "mode": "p2p",
+      "laps": 1,
+      "totalTimeSec": 180,
+      "splits": [
+        { "checkpointId": "p2p-01", "lap": 1, "authoredIndex": 0, "hitOrder": 0, "cumulativeTimeSec": 24 },
+        { "checkpointId": "p2p-02", "lap": 1, "authoredIndex": 1, "hitOrder": 1, "cumulativeTimeSec": 52 },
+        { "checkpointId": "p2p-03", "lap": 1, "authoredIndex": 2, "hitOrder": 2, "cumulativeTimeSec": 79 },
+        { "checkpointId": "p2p-04", "lap": 1, "authoredIndex": 3, "hitOrder": 3, "cumulativeTimeSec": 108 },
+        { "checkpointId": "p2p-05", "lap": 1, "authoredIndex": 4, "hitOrder": 4, "cumulativeTimeSec": 133 },
+        { "checkpointId": "p2p-06", "lap": 1, "authoredIndex": 5, "hitOrder": 5, "cumulativeTimeSec": 157 },
+        { "checkpointId": "p2p-07", "lap": 1, "authoredIndex": 6, "hitOrder": 6, "cumulativeTimeSec": 180 }
+      ]
+    },
+    {
+      "courseId": "juliette-three-lap-loop",
+      "mode": "circuit",
+      "laps": 3,
+      "totalTimeSec": 420,
+      "splits": [
+        { "checkpointId": "circuit-01", "lap": 1, "authoredIndex": 0, "hitOrder": 0, "cumulativeTimeSec": 24 },
+        { "checkpointId": "circuit-02", "lap": 1, "authoredIndex": 1, "hitOrder": 1, "cumulativeTimeSec": 49 },
+        { "checkpointId": "circuit-03", "lap": 1, "authoredIndex": 2, "hitOrder": 2, "cumulativeTimeSec": 76 },
+        { "checkpointId": "circuit-04", "lap": 1, "authoredIndex": 3, "hitOrder": 3, "cumulativeTimeSec": 104 },
+        { "checkpointId": "circuit-05", "lap": 1, "authoredIndex": 4, "hitOrder": 4, "cumulativeTimeSec": 140 },
+        { "checkpointId": "circuit-01", "lap": 2, "authoredIndex": 0, "hitOrder": 5, "cumulativeTimeSec": 164 },
+        { "checkpointId": "circuit-02", "lap": 2, "authoredIndex": 1, "hitOrder": 6, "cumulativeTimeSec": 189 },
+        { "checkpointId": "circuit-03", "lap": 2, "authoredIndex": 2, "hitOrder": 7, "cumulativeTimeSec": 216 },
+        { "checkpointId": "circuit-04", "lap": 2, "authoredIndex": 3, "hitOrder": 8, "cumulativeTimeSec": 244 },
+        { "checkpointId": "circuit-05", "lap": 2, "authoredIndex": 4, "hitOrder": 9, "cumulativeTimeSec": 280 },
+        { "checkpointId": "circuit-01", "lap": 3, "authoredIndex": 0, "hitOrder": 10, "cumulativeTimeSec": 304 },
+        { "checkpointId": "circuit-02", "lap": 3, "authoredIndex": 1, "hitOrder": 11, "cumulativeTimeSec": 329 },
+        { "checkpointId": "circuit-03", "lap": 3, "authoredIndex": 2, "hitOrder": 12, "cumulativeTimeSec": 356 },
+        { "checkpointId": "circuit-04", "lap": 3, "authoredIndex": 3, "hitOrder": 13, "cumulativeTimeSec": 384 },
+        { "checkpointId": "circuit-05", "lap": 3, "authoredIndex": 4, "hitOrder": 14, "cumulativeTimeSec": 420 }
+      ]
+    }
+  ]
+}
