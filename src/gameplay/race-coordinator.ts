@@ -29,6 +29,7 @@ export interface RaceCoordinatorDeps {
   readonly reference: MedalReferenceCourse;
   readonly personalBest?: MedalProgressRecord;
   readonly onCompleted?: (result: NonNullable<MedalTimingSnapshot["completion"]>) => void;
+  readonly onRestart?: () => void;
 }
 
 export interface RaceCoordinator {
@@ -171,6 +172,7 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
       inside.clear();
       deps.scene.resetVehicle(deps.scene.defaultSpawnPose);
       deps.raceHud.flashRestart();
+      deps.onRestart?.();
       refresh();
       return;
     }

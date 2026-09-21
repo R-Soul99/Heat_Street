@@ -34,42 +34,13 @@ export function createRaceHud(): RaceHud {
   const split = document.createElement("div");
   split.style.cssText = "margin-top:10px;color:#7ee8ff;font-size:12px;min-height:15px";
   timingPanel.append(timer, thresholds, split);
-  const results = document.createElement("div");
-  results.style.cssText =
-    "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 40px));max-height:70vh;overflow:auto;padding:18px 22px;background:rgba(7,16,21,.92);border:1px solid rgba(126,232,255,.7);box-shadow:0 0 24px rgba(0,0,0,.55);visibility:hidden;pointer-events:none";
-  root.append(status, timingPanel, results, wrongWay, tint, flash);
+  root.append(status, timingPanel, wrongWay, tint, flash);
 
   function formatTime(seconds: number): string {
     const safe = Number.isFinite(seconds) && seconds >= 0 ? seconds : 0;
     return `${Math.floor(safe / 60)}:${(safe % 60).toFixed(2).padStart(5, "0")}`;
   }
 
-  function renderResults(snapshot: RaceSnapshot, timing: MedalTimingSnapshot): void {
-    const completion = timing.completion;
-    if (completion === null) {
-      results.style.visibility = "hidden";
-      return;
-    }
-    results.replaceChildren();
-    const heading = document.createElement("div");
-    heading.textContent = `${snapshot.mode === "circuit" ? "CIRCUIT COMPLETE" : "RUN COMPLETE"}  ${completion.medal.toUpperCase()}`;
-    heading.style.cssText = "font-size:18px;color:#ffd447;margin-bottom:8px";
-    const finalTime = document.createElement("div");
-    finalTime.textContent = `FINAL ${formatTime(completion.effectiveTimeSec)}`;
-    finalTime.style.cssText = "font-size:22px;margin-bottom:12px";
-    const table = document.createElement("div");
-    for (const sector of completion.sectors) {
-      const row = document.createElement("div");
-      row.textContent = `L${sector.lap} ${sector.fromCheckpointId ?? "START"}->${sector.checkpointId}  ${formatTime(sector.sectorElapsedSec)}  ${formatTime(sector.cumulativeElapsedSec)}  ${sector.deltaSec === null ? "--" : `${sector.deltaSec >= 0 ? "+" : ""}${sector.deltaSec.toFixed(2)}s`}`;
-      row.style.cssText =
-        sector.ordinal === completion.slowestSectorOrdinal
-          ? "color:#ff8b73;background:rgba(255,102,92,.16);padding:3px 4px"
-          : "padding:3px 4px";
-      table.appendChild(row);
-    }
-    results.append(heading, finalTime, table);
-    results.style.visibility = "visible";
-  }
   document.body.appendChild(root);
   return {
     update(snapshot, timing): void {
@@ -91,7 +62,6 @@ export function createRaceHud(): RaceHud {
         last === undefined || last.deltaSec === null
           ? ""
           : `${last.comparisonSource === "personal-best" ? "BEST" : last.comparisonSource === "target-medal" ? "TARGET" : "REFERENCE"} ${last.deltaSec >= 0 ? "+" : ""}${last.deltaSec.toFixed(2)}s`;
-      renderResults(snapshot, timing);
     },
     flashRestart(): void {
       flash.style.opacity = "0.78";

@@ -74,6 +74,7 @@ import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
 import { createNavigationArrow } from "./hud/navigation-arrow";
 import { createRaceHud } from "./hud/race-hud";
+import { createResultsView } from "./hud/results-view";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
@@ -305,6 +306,12 @@ try {
     },
     routes.courses.map((candidate) => candidate.id),
   );
+  const resultsView = createResultsView(
+    routes.courses,
+    medalReference.courses,
+    course.id,
+    medalProgress.courses,
+  );
   let loopClock: LoopHandle | null = null;
   const raceState = createRaceState(course, navigation);
   const timing = createMedalTiming({ referenceTimeSec: reference.totalTimeSec });
@@ -323,7 +330,7 @@ try {
     reference,
     personalBest: medalProgress.courses[course.id],
     onCompleted: (completion) => {
-      saveMedalResult(
+      const saved = saveMedalResult(
         {
           get: (key) => localStorage.getItem(key),
           set: (key, value) => localStorage.setItem(key, value),
@@ -332,7 +339,20 @@ try {
         { complete: true, effectiveTimeSec: completion.effectiveTimeSec, medal: completion.medal },
         routes.courses.map((candidate) => candidate.id),
       );
+      if (saved) {
+        resultsView.updateCards(
+          loadMedalProgress(
+            {
+              get: (key) => localStorage.getItem(key),
+              set: (key, value) => localStorage.setItem(key, value),
+            },
+            routes.courses.map((candidate) => candidate.id),
+          ).courses,
+        );
+      }
+      resultsView.showCompletion(completion);
     },
+    onRestart: () => resultsView.clearCompletion(),
   });
 
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
