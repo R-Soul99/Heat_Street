@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-20T12:40:19.327Z"
-last_activity: 2026-09-20 -- Phase 04.1 complete; ADR 0001 amended, ADR 0004 decision 7 superseded
+stopped_at: Phase 5 plan 02 complete
+last_updated: "2026-09-21T20:39:00Z"
+last_activity: 2026-09-21 - Completed 05-02 pure checkpoint detection and race-state implementation
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 51
-  completed_plans: 51
+  total_plans: 55
+  completed_plans: 53
   percent: 56
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 5 — Objectives, Navigation & Race Modes (not yet planned)
+**Current focus:** Phase 5 — Objectives, Navigation & Race Modes (plans 01-02 complete)
 
 ## Current Position
 
-Phase: 04.1 (flatten-terrain-remove-dem-elevation-drop-real-world-dem-der) — COMPLETE (11/11 plans)
-Next: `/gsd-plan-phase 5` (Objectives, Navigation & Race Modes) — not yet planned
-Last activity: 2026-09-20 - Applied developer's hand-tuned vehicle/camera JSON to defaultTuning() (D-14 bands knowingly deferred)
+Phase: 05 (objectives-navigation-race-modes) — IN PROGRESS (2/4 plans)
+Next: 05-03-PLAN.md (respawn and restart integration)
+Last activity: 2026-09-21 - Completed 05-02 pure checkpoint detection and race-state implementation
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 
@@ -89,6 +89,9 @@ Progress (phases 1-4.1 of 9, the only ones planned so far): [██████�
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 05-02]: Checkpoint sensors use finite post-step full-width/tall volume checks with fixed-tick occupancy debouncing.
+- [Phase 05-02]: P2P accepts any unvisited checkpoint and suggests remaining targets by directed weighted road cost; Circuit advances in authored order for exactly three laps.
+- [Phase 05-02]: Wrong-way uses hysteresis against the next directed road segment, and respawn adds a flat five-second penalty without rewinding simulation time.
 - [Roadmap]: Map data source is OpenStreetMap + open DEM — no Google-sourced bytes may enter the shipped pipeline (P0 legal decision, must be frozen in Phase 1)
 - [Roadmap]: Fixed-timestep physics from Phase 1, non-negotiable — variable timestep would invalidate the entire medal system
 - [Roadmap]: Helicopter camera is prototyped in Phase 3 with an explicit go/no-go "does 100mph read as fast?" gate, with a low chase-cam fallback kept alive
@@ -210,9 +213,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-20T12:40:19.312Z
+Last session: 2026-09-21T19:39:02.421Z
 Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-objectives-navigation-race-modes/05-CONTEXT.md
+Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR

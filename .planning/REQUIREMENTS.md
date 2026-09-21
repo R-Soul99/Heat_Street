@@ -31,18 +31,18 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 - [x] **NAV-01**: Player sees a live speedometer (needle + digital readout)
 - [ ] **NAV-02**: Player sees a live run timer with medal thresholds visible before and during the run
 - [ ] **NAV-03**: Player sees an always-on minimap showing remaining checkpoints and their own position
-- [ ] **NAV-04**: Player is guided to the next objective via a world-space beacon (where) plus a road-aware directional arrow (how)
-- [ ] **NAV-05**: In unordered checkpoint modes the arrow targets the nearest unvisited checkpoint; in ordered modes it targets the next checkpoint in sequence
+- [x] **NAV-04**: Player is guided to the next objective via a world-space beacon (where) plus a road-aware directional arrow (how)
+- [x] **NAV-05**: In unordered checkpoint modes the arrow targets the nearest unvisited checkpoint; in ordered modes it targets the next checkpoint in sequence
 - [ ] **NAV-06**: Player can respawn at the last checkpoint on a dedicated key, upright and facing the correct direction, with a small time penalty
 - [ ] **NAV-07**: Player can instantly restart the current level with a single key press, well under a second, no confirmation dialog or loading screen
 
 ### Point-to-Point Mode
 
-- [ ] **P2P-01**: Player can complete a Point-to-Point level by hitting all checkpoints in any order via any route
+- [x] **P2P-01**: Player can complete a Point-to-Point level by hitting all checkpoints in any order via any route
 
 ### Circuit Mode
 
-- [ ] **CIRC-01**: Player can complete a Circuit level as an ordered checkpoint loop across N laps
+- [x] **CIRC-01**: Player can complete a Circuit level as an ordered checkpoint loop across N laps
 - [ ] **CIRC-02**: AI racers compete in Circuit mode at a fixed difficulty with no rubber-banding
 
 ### Getaway Mode (Heat System)
@@ -129,12 +129,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NAV-01 | Phase 2 | Complete |
 | NAV-02 | Phase 6 | Pending |
 | NAV-03 | Phase 5 | Pending |
-| NAV-04 | Phase 5 | Pending |
-| NAV-05 | Phase 5 | Pending |
+| NAV-04 | Phase 5 | Complete |
+| NAV-05 | Phase 5 | Complete |
 | NAV-06 | Phase 5 | Pending |
 | NAV-07 | Phase 5 | Pending |
-| P2P-01 | Phase 5 | Pending |
-| CIRC-01 | Phase 5 | Pending |
+| P2P-01 | Phase 5 | Complete |
+| CIRC-01 | Phase 5 | Complete |
 | CIRC-02 | Phase 7 | Pending |
 | GET-01 | Phase 8 | Pending |
 | GET-02 | Phase 8 | Pending |
