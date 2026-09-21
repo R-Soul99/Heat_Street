@@ -32,9 +32,9 @@ export interface RaceCoordinator {
 }
 
 function headingFromRotation(rotation: { x: number; y: number; z: number; w: number }): number {
-  const forwardX = 2 * (rotation.x * rotation.z + rotation.w * rotation.y);
-  const forwardZ = 1 - 2 * (rotation.x * rotation.x + rotation.y * rotation.y);
-  return Math.atan2(forwardX, -forwardZ);
+  const forwardX = 2 * (rotation.x * rotation.z - rotation.w * rotation.y);
+  const forwardZ = 2 * (rotation.x * rotation.x + rotation.y * rotation.y) - 1;
+  return Math.atan2(forwardZ, forwardX);
 }
 
 function poseForCheckpoint(
