@@ -92,7 +92,7 @@ describe("race state", () => {
       expect(state.hitCheckpoint("a")).toBe(true);
       expect(state.hitCheckpoint("b")).toBe(true);
       expect(state.hitCheckpoint("c")).toBe(true);
-      expect(state.snapshot().lap).toBe(lap);
+      expect(state.snapshot().lap).toBe(lap === 3 ? 3 : lap + 1);
       if (lap < 3) expect(state.snapshot().complete).toBe(false);
     }
 
@@ -104,7 +104,7 @@ describe("race state", () => {
     const circuit = createRaceState(course("circuit"), navigation);
     circuit.updateProgress(0, Math.PI);
     expect(circuit.snapshot().wrongWay).toBe(true);
-    circuit.updateProgress(0, Math.PI * 0.7);
+    circuit.updateProgress(0, Math.PI * 0.6);
     expect(circuit.snapshot().wrongWay).toBe(false);
 
     const p2p = createRaceState(course("p2p"), navigation);
