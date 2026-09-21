@@ -72,6 +72,8 @@ Each task was committed atomically:
 1. **Task 1: Integrate timing at the fixed-tick coordinator boundary** - `9eece86` (feat)
 2. **Task 2: Extend the race HUD with live timing and sector results** - `155871f` (feat)
 
+**Plan metadata:** `aa4c34d` (docs: complete plan)
+
 ## Files Created/Modified
 
 - [src/gameplay/race-coordinator.ts](../../../src/gameplay/race-coordinator.ts) - Fixed-tick timing updates, accepted split capture, retry lifecycle, and completion sink.

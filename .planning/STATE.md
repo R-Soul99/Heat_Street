@@ -169,8 +169,8 @@ Recent decisions affecting current work:
 - [Phase 04-11]: Project-direction decision (not a Phase 4 technical decision, recorded here since it shaped this plan's scope): after an honest mid-session assessment that grounding fixes alone would not close the gap to the developer's envisioned "real chase-movie town" look — every building currently shares one flat colour with no material/prop/marking variety, and no phase 5-8 currently schedules an art pass — the developer decided to (a) pause further investment in automated real-world OSM map compilation "for the moment" (Juliette, GA and the compiler stay as-built; real-world layouts may still be hand-borrowed later), (b) explicitly stay on the current Three.js/Rapier stack rather than evaluate Unity/Godot, (c) prioritise a dedicated art-direction pass once the current area's underlying structure reads as solid, and (d) separately flagged that both the permanent helicopter camera and the debug chase-cam fallback read closer than the envisioned finished-product angle (a genuinely higher, more overhead "real helicopter" view, not GTA1/2-style) — out of this plan's scope (belongs to Phase 3's `src/core/camera-tuning.ts`) but already live-tunable via the existing `?debug` panel (altitude/distance range 3-80m). **Action before/during Phase 5 planning:** decide whether an art-direction phase gets inserted into ROADMAP.md, and bake a chosen higher camera altitude into `src/core/camera-tuning.ts`'s defaults once previewed.
 - [Phase 05-03]: KeyP respawns and KeyR restarts through fixed-tick one-shot commands.
 - [Phase 05-03]: Vehicle reset mutates the existing Rapier body and realigns interpolation buffers without rewinding SimClock.
-- [Phase ?]: Coordinator reads LoopHandle.clock.simTimeSec for medal timing.
-- [Phase ?]: HUD consumes fixed-tick timing snapshots and does not own timing or medal policy.
+- [Phase 06-04]: Coordinator reads LoopHandle.clock.simTimeSec for medal timing.
+- [Phase 06-04]: HUD consumes fixed-tick timing snapshots and does not own timing or medal policy.
 
 ### Pending Todos
 
