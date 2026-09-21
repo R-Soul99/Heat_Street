@@ -4,12 +4,12 @@ import {
   loadMedalProgress,
   MEDAL_PROGRESS_KIND,
   MEDAL_PROGRESS_VERSION,
+  type MedalProgress,
+  type MedalStorage,
   mergeMedalResult,
   parseMedalProgress,
   saveMedalResult,
   serializeMedalProgress,
-  type MedalProgress,
-  type MedalStorage,
 } from "../src/core/medal-persistence";
 
 const COURSES = ["course-alpha", "course-beta"] as const;
@@ -17,13 +17,10 @@ const COURSES = ["course-alpha", "course-beta"] as const;
 function progressWith(
   ...records: Array<[string, number, "ace" | "gold" | "silver" | "bronze" | "none"]>
 ): MedalProgress {
-  return records.reduce(
-    (progress, [courseId, bestTimeSec, medal]) => {
-      progress.courses[courseId] = { courseId, bestTimeSec, medal };
-      return progress;
-    },
-    emptyMedalProgress(),
-  );
+  return records.reduce((progress, [courseId, bestTimeSec, medal]) => {
+    progress.courses[courseId] = { courseId, bestTimeSec, medal };
+    return progress;
+  }, emptyMedalProgress());
 }
 
 function memoryStorage(initial: string | null = null): MedalStorage & { writes: string[] } {
@@ -93,7 +90,7 @@ describe("medal progress record validation", () => {
     });
   });
 
-  it.each(["null", '"NaN"', '"Infinity"', '"12"', "0", "-2"]) (
+  it.each(["null", '"NaN"', '"Infinity"', '"12"', "0", "-2"])(
     "drops a record with an invalid best time: %s",
     (bestTimeSec) => {
       const raw = JSON.stringify({
