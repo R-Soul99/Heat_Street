@@ -46,6 +46,9 @@ import {
 } from "./core/camera-tuning";
 import { parseCourseData } from "./core/course";
 import { parseMapCollision } from "./core/map-collision";
+import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
+import { parseMedalReference } from "./core/medal-reference";
+import { createMedalTiming } from "./core/medal-timing";
 import { buildNavigationGraph, validateCourseRoutes } from "./core/navigation";
 import { createRaceState } from "./core/race-state";
 // Explicit `.ts` extension on `road-graph.ts`'s import path is that module's
@@ -73,7 +76,7 @@ import { createNavigationArrow } from "./hud/navigation-arrow";
 import { createRaceHud } from "./hud/race-hud";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
-import { startLoop } from "./loop";
+import { type LoopHandle, startLoop } from "./loop";
 import { createMapScene } from "./physics/map-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
@@ -131,6 +134,7 @@ const MAP_GRAPH_URL = `/maps/${AREA_ID}.map.json`;
 const MAP_COLLISION_URL = `/maps/${AREA_ID}.collision.json`;
 const MAP_GLB_URL = `/maps/${AREA_ID}.glb`;
 const MAP_ROUTES_URL = `/maps/${AREA_ID}.routes.json`;
+const MAP_MEDALS_URL = `/maps/${AREA_ID}.medals.json`;
 
 /**
  * Fetches `url` as text, throwing a named error (naming `url` and the HTTP
@@ -169,6 +173,18 @@ try {
   const routeFailures = validateCourseRoutes(routes, graph);
   if (routeFailures.length > 0)
     throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
+  const medalsText = await fetchArtifactText(MAP_MEDALS_URL);
+  const medalReference = parseMedalReference(
+    medalsText,
+    MAP_MEDALS_URL,
+    routes.areaId,
+    routes.courses.map((candidate) => ({
+      courseId: candidate.id,
+      mode: candidate.mode,
+      laps: candidate.laps,
+      checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
+    })),
+  );
   const collisionText = await fetchArtifactText(MAP_COLLISION_URL);
   const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
   const mapView = await loadMapView(MAP_GLB_URL);
@@ -280,7 +296,18 @@ try {
     new URLSearchParams(location.search).get("mode") === "circuit" ? "circuit" : "p2p";
   const course = routes.courses.find((candidate) => candidate.mode === selectedMode);
   if (course === undefined) throw new Error(`no ${selectedMode} course in ${MAP_ROUTES_URL}`);
+  const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
+  if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
+  const medalProgress = loadMedalProgress(
+    {
+      get: (key) => localStorage.getItem(key),
+      set: (key, value) => localStorage.setItem(key, value),
+    },
+    routes.courses.map((candidate) => candidate.id),
+  );
+  let loopClock: LoopHandle | null = null;
   const raceState = createRaceState(course, navigation);
+  const timing = createMedalTiming({ referenceTimeSec: reference.totalTimeSec });
   const raceCoordinator = createRaceCoordinator({
     course,
     navigation,
@@ -291,7 +318,21 @@ try {
     navigationArrow: createNavigationArrow(),
     raceHud: createRaceHud(),
     chime: checkpointChime,
-    simTimeSec: () => 0,
+    simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
+    timing,
+    reference,
+    personalBest: medalProgress.courses[course.id],
+    onCompleted: (completion) => {
+      saveMedalResult(
+        {
+          get: (key) => localStorage.getItem(key),
+          set: (key, value) => localStorage.setItem(key, value),
+        },
+        course.id,
+        { complete: true, effectiveTimeSec: completion.effectiveTimeSec, medal: completion.medal },
+        routes.courses.map((candidate) => candidate.id),
+      );
+    },
   });
 
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
@@ -468,7 +509,7 @@ try {
   // `{x,y,z,w}` rotation object can be passed straight in with no wrapping.
   const navForwardScratch = new THREE.Vector3();
 
-  startLoop({
+  loopClock = startLoop({
     world,
     input,
     transforms,

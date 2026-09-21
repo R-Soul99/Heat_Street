@@ -2,10 +2,13 @@ import type { CheckpointChime } from "../audio/checkpoint-chime";
 import type { CheckpointDetectionResult } from "../core/checkpoint-detection";
 import { detectCheckpointHit } from "../core/checkpoint-detection";
 import type { Course, CourseCheckpoint } from "../core/course";
+import type { MedalProgressRecord } from "../core/medal-persistence";
+import type { MedalReferenceCourse } from "../core/medal-reference";
+import type { MedalTiming, MedalTimingSnapshot } from "../core/medal-timing";
 import { findRoadPath, type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import type { RaceSnapshot, RaceState } from "../core/race-state";
 import type { Minimap } from "../hud/minimap";
-import { type NavigationArrow, nextRoadWaypoint } from "../hud/navigation-arrow";
+import type { NavigationArrow } from "../hud/navigation-arrow";
 import type { RaceHud } from "../hud/race-hud";
 import type { RaceCommands } from "../input/race-commands";
 import type { MapScene } from "../physics/map-scene";
@@ -22,6 +25,10 @@ export interface RaceCoordinatorDeps {
   readonly raceHud: RaceHud;
   readonly chime: CheckpointChime;
   readonly simTimeSec: () => number;
+  readonly timing: MedalTiming;
+  readonly reference: MedalReferenceCourse;
+  readonly personalBest?: MedalProgressRecord;
+  readonly onCompleted?: (result: NonNullable<MedalTimingSnapshot["completion"]>) => void;
 }
 
 export interface RaceCoordinator {
@@ -59,9 +66,27 @@ function poseForCheckpoint(
   };
 }
 
+function comparisonFor(
+  reference: MedalReferenceCourse,
+  checkpointId: string,
+  lap: number,
+  personalBest: MedalProgressRecord | undefined,
+): { source: "personal-best" | "reference"; cumulativeSec: number } | undefined {
+  const split = reference.splits.find(
+    (candidate) => candidate.checkpointId === checkpointId && candidate.lap === lap,
+  );
+  if (split === undefined) return undefined;
+  return {
+    source: personalBest === undefined ? "reference" : "personal-best",
+    cumulativeSec: split.cumulativeTimeSec,
+  };
+}
+
 export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinator {
   const inside = new Map<string, boolean>();
   let latest: RaceSnapshot = deps.state.snapshot();
+  let latestTiming: MedalTimingSnapshot = deps.timing.snapshot();
+  let publishedCompletion: MedalTimingSnapshot["completion"] = null;
   let currentWaypoint: readonly [number, number, number] | null = null;
 
   function refresh(): void {
@@ -70,33 +95,24 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
     const remaining = deps.course.checkpoints
       .filter((checkpoint) => !latest.visitedIds.includes(checkpoint.id))
       .map((checkpoint) => ({ x: checkpoint.position[0], z: checkpoint.position[2] }));
-    const nodeId = nearestRoadNode(deps.navigation, [
-      bodyPosition.x,
-      bodyPosition.y,
-      bodyPosition.z,
-    ]);
     const target = deps.course.checkpoints.find(
       (checkpoint) => checkpoint.id === latest.currentTargetId,
     );
     currentWaypoint =
-      target === undefined
-        ? null
-        : nextRoadWaypoint(
-            findRoadPath(deps.navigation, nodeId, target.nodeId),
-            deps.navigation.roadGraph,
-          );
+      target === undefined ? null : [target.position[0], target.position[1], target.position[2]];
     deps.objectiveView.update(latest, deps.course.checkpoints);
     deps.minimap.update({
       player: { x: bodyPosition.x, z: bodyPosition.z },
       headingRad: headingFromRotation(deps.scene.vehicle.body.rotation()),
       remaining,
+      target: currentWaypoint === null ? null : { x: currentWaypoint[0], z: currentWaypoint[2] },
     });
     deps.navigationArrow.update({
       carHeadingRad: headingFromRotation(deps.scene.vehicle.body.rotation()),
       carPosition: [bodyPosition.x, bodyPosition.y, bodyPosition.z],
       waypoint: currentWaypoint,
     });
-    deps.raceHud.update(latest);
+    deps.raceHud.update(latest, latestTiming);
   }
 
   function onTickEnd(): void {
@@ -108,6 +124,12 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
       bodyPosition.z,
     ]);
     deps.state.updateProgress(nodeId, headingRad);
+    const beforeCheckpoint = deps.state.snapshot();
+    latestTiming = deps.timing.update({
+      simTimeSec: deps.simTimeSec(),
+      speedMs: deps.scene.vehicle.telemetry.groundSpeedMs,
+      penaltySec: beforeCheckpoint.penaltySec,
+    });
     for (const checkpoint of deps.course.checkpoints) {
       const detection: CheckpointDetectionResult = detectCheckpointHit(
         [bodyPosition.x, bodyPosition.y, bodyPosition.z],
@@ -115,7 +137,28 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
         inside.get(checkpoint.id) ?? false,
       );
       inside.set(checkpoint.id, detection.inside);
-      if (detection.hit && deps.state.hitCheckpoint(checkpoint.id)) deps.chime.play();
+      if (detection.hit && deps.state.hitCheckpoint(checkpoint.id)) {
+        latestTiming = deps.timing.recordCheckpoint(deps.simTimeSec(), {
+          checkpointId: checkpoint.id,
+          fromCheckpointId: latestTiming.sectors.at(-1)?.checkpointId ?? null,
+          lap: beforeCheckpoint.lap,
+          ordinal: latestTiming.sectors.length,
+          comparison: comparisonFor(
+            deps.reference,
+            checkpoint.id,
+            beforeCheckpoint.lap,
+            deps.personalBest,
+          ),
+        });
+        deps.chime.play();
+        if (deps.state.snapshot().complete) {
+          latestTiming = deps.timing.complete(deps.simTimeSec());
+          if (latestTiming.completion !== null && publishedCompletion === null) {
+            publishedCompletion = latestTiming.completion;
+            deps.onCompleted?.(publishedCompletion);
+          }
+        }
+      }
     }
     refresh();
   }
@@ -123,6 +166,8 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
   function onCommands(commands: RaceCommands): void {
     if (commands.restart) {
       deps.state.restart();
+      latestTiming = deps.timing.restart();
+      publishedCompletion = null;
       inside.clear();
       deps.scene.resetVehicle(deps.scene.defaultSpawnPose);
       deps.raceHud.flashRestart();
@@ -133,6 +178,12 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
       const anchorId = deps.state.snapshot().respawnAnchorId;
       const anchor = deps.course.checkpoints.find((checkpoint) => checkpoint.id === anchorId);
       deps.state.respawn();
+      const snapshot = deps.state.snapshot();
+      latestTiming = deps.timing.update({
+        simTimeSec: deps.simTimeSec(),
+        speedMs: deps.scene.vehicle.telemetry.groundSpeedMs,
+        penaltySec: snapshot.penaltySec,
+      });
       deps.scene.resetVehicle(
         anchor === undefined
           ? deps.scene.defaultSpawnPose

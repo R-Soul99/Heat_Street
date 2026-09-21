@@ -126,6 +126,7 @@ export interface VehicleSample {
 export interface Vehicle {
   readonly body: RAPIER.RigidBody;
   readonly controller: RAPIER.DynamicRayCastVehicleController;
+  readonly telemetry: VehicleSample;
   /** Cached principal inertia, kg*m^2. Recomputed by `applyTuning` when mass or halfExtents change. */
   readonly inertia: { x: number; y: number; z: number };
   /**
@@ -291,10 +292,14 @@ export function createVehicle(
   // Allocated ONCE, mutated in place every surfaced tick — never
   // reallocated. See the matching doc comment on `Vehicle.wheelSurfaces`.
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+  let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
   return {
     body,
     controller: vc,
+    get telemetry(): VehicleSample {
+      return telemetry;
+    },
     inertia,
     wheelSurfaces,
 
@@ -424,6 +429,7 @@ export function createVehicle(
       for (let i = 0; i < 4; i++) {
         if (vc.wheelIsInContact(i)) contacts++;
       }
+      telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
       // 7. Assists — impulses accumulate onto the same buffer world.step()
       // consumes next. The caller (src/loop.ts via applyInput) then calls
@@ -432,7 +438,7 @@ export function createVehicle(
     },
 
     applyTuning,
-  resetPose,
+    resetPose,
 
     dispose(): void {
       world.removeVehicleController(vc);

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Course } from "../src/core/course";
+import { createMedalTiming } from "../src/core/medal-timing";
 import { buildNavigationGraph } from "../src/core/navigation";
 import { createRaceState } from "../src/core/race-state";
 import type { RoadGraph } from "../src/core/road-graph";
 import { createRaceCoordinator } from "../src/gameplay/race-coordinator";
+import { navigationArrowRotation } from "../src/hud/navigation-arrow";
 
 const graph: RoadGraph = {
   schemaVersion: 1,
@@ -63,8 +65,10 @@ function setup() {
   const position = { x: 10, y: 0, z: 0 };
   const body = { translation: () => position, rotation: () => ({ x: 0, y: 0, z: 0, w: 1 }) };
   const state = createRaceState(course, navigation);
+  const timing = createMedalTiming({ referenceTimeSec: 100 });
+  let simTimeSec = 1;
   const scene = {
-    vehicle: { body },
+    vehicle: { body, telemetry: { groundSpeedMs: 1 } },
     defaultSpawnPose: { x: 0, y: 0, z: 0, headingRad: 0 },
     resetVehicle: vi.fn(),
   };
@@ -78,17 +82,41 @@ function setup() {
     navigationArrow: { update: vi.fn() } as never,
     raceHud: { update: vi.fn(), flashRestart: vi.fn() } as never,
     chime: { play: vi.fn() } as never,
-    simTimeSec: () => 0,
+    simTimeSec: () => simTimeSec,
+    timing,
+    reference: {
+      courseId: "p2p",
+      mode: "p2p",
+      laps: 1,
+      totalTimeSec: 100,
+      thresholds: { ace: 90, gold: 100, silver: 115, bronze: 135 },
+      splits: course.checkpoints.map((checkpoint, index) => ({
+        checkpointId: checkpoint.id,
+        lap: 1,
+        authoredIndex: index,
+        hitOrder: index,
+        cumulativeTimeSec: (index + 1) * 20,
+      })),
+    },
   });
-  return { coordinator, state, scene };
+  return {
+    coordinator,
+    state,
+    scene,
+    position,
+    timing,
+    setSimTime: (value: number) => (simTimeSec = value),
+  };
 }
 
 describe("race coordinator", () => {
   it("accepts a P2P checkpoint by post-step position and plays one chime", () => {
-    const { coordinator, state } = setup();
+    const { coordinator, state, timing } = setup();
     coordinator.onTickEnd();
     expect(state.snapshot().visitedIds).toEqual(["c0"]);
     expect(state.snapshot().currentTargetId).toBe("c1");
+    coordinator.onTickEnd();
+    expect(timing.snapshot().sectors).toHaveLength(1);
   });
 
   it("routes restart before respawn and resets the presentation", () => {
@@ -96,5 +124,40 @@ describe("race coordinator", () => {
     coordinator.onCommands({ respawn: true, restart: true });
     expect(scene.resetVehicle).toHaveBeenCalledOnce();
     expect(state.snapshot().penaltySec).toBe(0);
+  });
+
+  it("keeps respawn penalty in the active fixed-tick attempt", () => {
+    const { coordinator, timing, state, setSimTime } = setup();
+    coordinator.onTickEnd();
+    setSimTime(2);
+    coordinator.onCommands({ respawn: true, restart: false });
+
+    expect(state.snapshot().penaltySec).toBe(5);
+    expect(timing.snapshot()).toMatchObject({ phase: "active", penaltySec: 5 });
+  });
+
+  it("publishes one frozen completion and resets it on restart", () => {
+    const { coordinator, timing, position, setSimTime } = setup();
+    [10, 20, 30, 40, 0].forEach((x, index) => {
+      position.x = x;
+      setSimTime(index + 1);
+      coordinator.onTickEnd();
+    });
+
+    const completed = timing.snapshot();
+    expect(completed.phase).toBe("complete");
+    expect(completed.completion?.sectors).toHaveLength(5);
+    setSimTime(100);
+    coordinator.onTickEnd();
+    expect(timing.snapshot()).toEqual(completed);
+
+    coordinator.onCommands({ respawn: false, restart: true });
+    expect(timing.snapshot()).toMatchObject({ phase: "pre-drive", completion: null, sectors: [] });
+  });
+});
+
+describe("navigation arrow bearing", () => {
+  it("keeps a waypoint on the car's right at a right angle", () => {
+    expect(navigationArrowRotation(0, [0, 0, 0], [0, 0, 10])).toBeCloseTo(Math.PI / 2);
   });
 });
