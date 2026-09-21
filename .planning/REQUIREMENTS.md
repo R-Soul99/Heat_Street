@@ -33,8 +33,8 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 - [ ] **NAV-03**: Player sees an always-on minimap showing remaining checkpoints and their own position
 - [x] **NAV-04**: Player is guided to the next objective via a world-space beacon (where) plus a road-aware directional arrow (how)
 - [x] **NAV-05**: In unordered checkpoint modes the arrow targets the nearest unvisited checkpoint; in ordered modes it targets the next checkpoint in sequence
-- [ ] **NAV-06**: Player can respawn at the last checkpoint on a dedicated key, upright and facing the correct direction, with a small time penalty
-- [ ] **NAV-07**: Player can instantly restart the current level with a single key press, well under a second, no confirmation dialog or loading screen
+- [x] **NAV-06**: Player can respawn at the last checkpoint on a dedicated key, upright and facing the correct direction, with a small time penalty
+- [x] **NAV-07**: Player can instantly restart the current level with a single key press, well under a second, no confirmation dialog or loading screen
 
 ### Point-to-Point Mode
 
@@ -131,8 +131,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NAV-03 | Phase 5 | Pending |
 | NAV-04 | Phase 5 | Complete |
 | NAV-05 | Phase 5 | Complete |
-| NAV-06 | Phase 5 | Pending |
-| NAV-07 | Phase 5 | Pending |
+| NAV-06 | Phase 5 | Complete |
+| NAV-07 | Phase 5 | Complete |
 | P2P-01 | Phase 5 | Complete |
 | CIRC-01 | Phase 5 | Complete |
 | CIRC-02 | Phase 7 | Pending |

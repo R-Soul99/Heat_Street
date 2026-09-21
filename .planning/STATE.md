@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 plan 02 complete
-last_updated: "2026-09-21T20:39:00Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-09-21T19:42:05.119Z"
 last_activity: 2026-09-21 - Completed 05-02 pure checkpoint detection and race-state implementation
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 55
-  completed_plans: 53
+  completed_plans: 54
   percent: 56
 ---
 
@@ -77,6 +77,7 @@ Progress (phases 1-4.1 of 9, the only ones planned so far): [██████�
 | Phase 02 P07 | 55min | 3 tasks | 5 files |
 | Phase 02 P08 | 35min | 3 tasks | 3 files |
 | Phase 02 P09 | 20min | 3 tasks | 4 files |
+| Phase 05 P03 | 3 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,8 @@ Recent decisions affecting current work:
 - [Phase 04-11]: A second, unrelated finding ("the road passes through a hill then pops out the other side") traced to a real 503m OSM way segment with only two vertices — the straight-line elevation interpolation between them skipped over real intervening terrain relief. Fixed with `tools/map-compiler/graph/elevation.ts`'s new `densifyEdgePoints` (MAX_SEGMENT_LENGTH_M=25m), inserting DEM-sampled interior points before smoothing. Verified against the real compiled map: 123 terrain-above-road violations (worst case 3.25m) before the fix, 0 after.
 - [Phase 04-11]: The oblique-angle junction surface bug (gravel visible through tarmac at a non-90-degree junction) was investigated at length but NOT fixed — real acute mixed-width junctions confirmed in the compiled data, MITER_CLAMP ruled out as the mechanism, a plausible-but-unconfirmed near-duplicate-fan-corner theory found, but no safe fix isolated without direct visual re-verification. Deferred; see ADR 0004's Open Questions.
 - [Phase 04-11]: Project-direction decision (not a Phase 4 technical decision, recorded here since it shaped this plan's scope): after an honest mid-session assessment that grounding fixes alone would not close the gap to the developer's envisioned "real chase-movie town" look — every building currently shares one flat colour with no material/prop/marking variety, and no phase 5-8 currently schedules an art pass — the developer decided to (a) pause further investment in automated real-world OSM map compilation "for the moment" (Juliette, GA and the compiler stay as-built; real-world layouts may still be hand-borrowed later), (b) explicitly stay on the current Three.js/Rapier stack rather than evaluate Unity/Godot, (c) prioritise a dedicated art-direction pass once the current area's underlying structure reads as solid, and (d) separately flagged that both the permanent helicopter camera and the debug chase-cam fallback read closer than the envisioned finished-product angle (a genuinely higher, more overhead "real helicopter" view, not GTA1/2-style) — out of this plan's scope (belongs to Phase 3's `src/core/camera-tuning.ts`) but already live-tunable via the existing `?debug` panel (altitude/distance range 3-80m). **Action before/during Phase 5 planning:** decide whether an art-direction phase gets inserted into ROADMAP.md, and bake a chosen higher camera altitude into `src/core/camera-tuning.ts`'s defaults once previewed.
+- [Phase 05-03]: KeyP respawns and KeyR restarts through fixed-tick one-shot commands.
+- [Phase 05-03]: Vehicle reset mutates the existing Rapier body and realigns interpolation buffers without rewinding SimClock.
 
 ### Pending Todos
 
@@ -213,7 +216,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T19:39:02.421Z
+Last session: 2026-09-21T19:41:48.001Z
 Stopped at: Phase 5 context gathered
 Resume file: None
 
