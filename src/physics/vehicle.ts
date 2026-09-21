@@ -32,6 +32,14 @@ export const FR = 1;
 export const RL = 2;
 export const RR = 3;
 
+/** Physics-owned upright placement supplied by an authored spawn or checkpoint. */
+export interface VehiclePose {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly headingRad: number;
+}
+
 /** Suspension raycast direction: straight down in chassis-local space. */
 const DIRECTION = { x: 0, y: -1, z: 0 };
 
@@ -139,6 +147,8 @@ export interface Vehicle {
   tick(frame: InputFrame, tuning: VehicleTuning, surfaces?: SurfaceContext): void;
   /** Live retune, no rebuild. Every wheel setter is per-frame safe; mass/CoM only reapplied on change (Pitfall 10). */
   applyTuning(tuning: VehicleTuning): void;
+  /** Reset the existing chassis in place to an authored upright pose. */
+  resetPose(pose: VehiclePose): void;
   /** Remove the vehicle controller from its world. */
   dispose(): void;
 }
@@ -258,6 +268,25 @@ export function createVehicle(
   }
 
   applyTuning(tuning);
+
+  function resetPose(pose: VehiclePose): void {
+    if (
+      !Number.isFinite(pose.x) ||
+      !Number.isFinite(pose.y) ||
+      !Number.isFinite(pose.z) ||
+      !Number.isFinite(pose.headingRad)
+    ) {
+      throw new Error("Vehicle.resetPose: pose values must be finite");
+    }
+    body.setTranslation({ x: pose.x, y: pose.y, z: pose.z }, true);
+    body.setRotation(
+      { x: 0, y: Math.sin(pose.headingRad / 2), z: 0, w: Math.cos(pose.headingRad / 2) },
+      true,
+    );
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    body.wakeUp();
+  }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
   // reallocated. See the matching doc comment on `Vehicle.wheelSurfaces`.
@@ -403,6 +432,7 @@ export function createVehicle(
     },
 
     applyTuning,
+  resetPose,
 
     dispose(): void {
       world.removeVehicleController(vc);

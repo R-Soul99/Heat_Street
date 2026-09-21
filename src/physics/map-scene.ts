@@ -52,7 +52,7 @@ import {
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import { createSurfaceMap, type SurfaceContext, type SurfaceMap } from "./surface";
-import { createVehicle, type Vehicle } from "./vehicle";
+import { createVehicle, type Vehicle, type VehiclePose } from "./vehicle";
 
 /**
  * How far above the spawn node's authored `y` the chassis spawns, metres --
@@ -93,6 +93,9 @@ export interface MapScene {
   /** The one vehicle this scene drives. */
   readonly vehicle: Vehicle;
 
+  /** Authored default restart pose, including the clearance used at spawn. */
+  readonly defaultSpawnPose: VehiclePose;
+
   /** The surface map + grip-profile table `applyInput` feeds into `vehicle.tick`. */
   readonly surfaces: SurfaceContext;
 
@@ -107,6 +110,9 @@ export interface MapScene {
 
   /** Swaps the `SurfaceProfiles` object `surfaces.profiles` holds, so the tuning panel can sweep grip live with no scene rebuild. */
   setSurfaceProfiles(p: SurfaceProfiles): void;
+
+  /** Reset the existing vehicle body in place to an authored pose. */
+  resetVehicle(pose: VehiclePose): void;
 
   /** Remove the vehicle controller from its world. */
   dispose(): void;
@@ -367,7 +373,8 @@ export function createMapScene(
 
   const spawn = resolveSpawn(graph);
   const vehicle = createVehicle(world, tuning, spawn);
-  vehicle.body.setRotation(yRotationQuat(spawn.headingRad), true);
+  const defaultSpawnPose: VehiclePose = spawn;
+  vehicle.resetPose(defaultSpawnPose);
   let currentTuning = tuning;
 
   // The single mutable object `applyInput` hands to `vehicle.tick` every
@@ -388,6 +395,7 @@ export function createMapScene(
   return {
     bodies,
     vehicle,
+    defaultSpawnPose,
     surfaces: surfaceContext,
 
     preTick(_tick: number): void {
@@ -405,6 +413,10 @@ export function createMapScene(
 
     setSurfaceProfiles(p: SurfaceProfiles): void {
       surfaceContext.profiles = p;
+    },
+
+    resetVehicle(pose: VehiclePose): void {
+      vehicle.resetPose(pose);
     },
 
     dispose(): void {
