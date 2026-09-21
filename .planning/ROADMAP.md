@@ -326,7 +326,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
-| 6. Medals & Time-Attack Loop | 0/TBD | Not started | - |
+| 6. Medals & Time-Attack Loop | 4/5 | In Progress|  |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 

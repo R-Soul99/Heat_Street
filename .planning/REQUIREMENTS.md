@@ -29,7 +29,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 ### Navigation & HUD
 
 - [x] **NAV-01**: Player sees a live speedometer (needle + digital readout)
-- [ ] **NAV-02**: Player sees a live run timer with medal thresholds visible before and during the run
+- [x] **NAV-02**: Player sees a live run timer with medal thresholds visible before and during the run
 - [ ] **NAV-03**: Player sees an always-on minimap showing remaining checkpoints and their own position
 - [x] **NAV-04**: Player is guided to the next objective via a world-space beacon (where) plus a road-aware directional arrow (how)
 - [x] **NAV-05**: In unordered checkpoint modes the arrow targets the nearest unvisited checkpoint; in ordered modes it targets the next checkpoint in sequence
@@ -59,10 +59,10 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 
 ### Medals & Progression
 
-- [ ] **MEDAL-01**: Player earns one of four medal tiers per level (Bronze / Silver / Gold / Ace) based on completion time, with thresholds derived from a fixed percentage of a designer reference run
+- [x] **MEDAL-01**: Player earns one of four medal tiers per level (Bronze / Silver / Gold / Ace) based on completion time, with thresholds derived from a fixed percentage of a designer reference run
 - [ ] **MEDAL-02**: Player's best time per level persists across sessions and is visible on a medal grid at level select
-- [ ] **MEDAL-03**: Player sees a live split-time delta (vs. personal best or target medal) at each checkpoint during a run
-- [ ] **MEDAL-04**: Player sees a post-run sector breakdown table with the worst sector highlighted
+- [x] **MEDAL-03**: Player sees a live split-time delta (vs. personal best or target medal) at each checkpoint during a run
+- [x] **MEDAL-04**: Player sees a post-run sector breakdown table with the worst sector highlighted
 
 ### Narrative Framing
 
@@ -127,7 +127,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAM-03 | Phase 3 | Complete |
 | CAM-04 | Phase 3 | Pending |
 | NAV-01 | Phase 2 | Complete |
-| NAV-02 | Phase 6 | Pending |
+| NAV-02 | Phase 6 | Complete |
 | NAV-03 | Phase 5 | Pending |
 | NAV-04 | Phase 5 | Complete |
 | NAV-05 | Phase 5 | Complete |
@@ -142,10 +142,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GET-04 | Phase 8 | Pending |
 | DMG-01 | Phase 8 | Pending |
 | DMG-02 | Phase 8 | Pending |
-| MEDAL-01 | Phase 6 | Pending |
+| MEDAL-01 | Phase 6 | Complete |
 | MEDAL-02 | Phase 6 | Pending |
-| MEDAL-03 | Phase 6 | Pending |
-| MEDAL-04 | Phase 6 | Pending |
+| MEDAL-03 | Phase 6 | Complete |
+| MEDAL-04 | Phase 6 | Complete |
 | NARR-01 | Phase 8 | Pending |
 
 **Coverage:**

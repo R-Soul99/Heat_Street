@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
+current_plan: 5
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-21T19:42:05.119Z"
-last_activity: 2026-09-21 - Completed 05-02 pure checkpoint detection and race-state implementation
+stopped_at: None
+last_updated: "2026-09-21T22:15:17.851Z"
+last_activity: 2026-09-21
 progress:
   total_phases: 9
-  completed_phases: 5
-  total_plans: 55
-  completed_plans: 54
-  percent: 56
+  completed_phases: 6
+  total_plans: 60
+  completed_plans: 59
+  percent: 67
 ---
 
 # Project State
@@ -25,11 +26,14 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 ## Current Position
 
-Phase: 05 (objectives-navigation-race-modes) — IN PROGRESS (2/4 plans)
-Next: 05-03-PLAN.md (respawn and restart integration)
-Last activity: 2026-09-21 - Completed 05-02 pure checkpoint detection and race-state implementation
+Phase: 06 (medals-time-attack-loop) — IN PROGRESS (4/5 plans)
+Current Plan: 5
+Total Plans in Phase: 05
+Next: 06-05-PLAN.md (results and course-card presentation)
+Last activity: 2026-09-21
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -78,6 +82,7 @@ Progress (phases 1-4.1 of 9, the only ones planned so far): [██████�
 | Phase 02 P08 | 35min | 3 tasks | 3 files |
 | Phase 02 P09 | 20min | 3 tasks | 4 files |
 | Phase 05 P03 | 3 min | 2 tasks | 8 files |
+| Phase 06 P04 | 18 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -164,6 +169,8 @@ Recent decisions affecting current work:
 - [Phase 04-11]: Project-direction decision (not a Phase 4 technical decision, recorded here since it shaped this plan's scope): after an honest mid-session assessment that grounding fixes alone would not close the gap to the developer's envisioned "real chase-movie town" look — every building currently shares one flat colour with no material/prop/marking variety, and no phase 5-8 currently schedules an art pass — the developer decided to (a) pause further investment in automated real-world OSM map compilation "for the moment" (Juliette, GA and the compiler stay as-built; real-world layouts may still be hand-borrowed later), (b) explicitly stay on the current Three.js/Rapier stack rather than evaluate Unity/Godot, (c) prioritise a dedicated art-direction pass once the current area's underlying structure reads as solid, and (d) separately flagged that both the permanent helicopter camera and the debug chase-cam fallback read closer than the envisioned finished-product angle (a genuinely higher, more overhead "real helicopter" view, not GTA1/2-style) — out of this plan's scope (belongs to Phase 3's `src/core/camera-tuning.ts`) but already live-tunable via the existing `?debug` panel (altitude/distance range 3-80m). **Action before/during Phase 5 planning:** decide whether an art-direction phase gets inserted into ROADMAP.md, and bake a chosen higher camera altitude into `src/core/camera-tuning.ts`'s defaults once previewed.
 - [Phase 05-03]: KeyP respawns and KeyR restarts through fixed-tick one-shot commands.
 - [Phase 05-03]: Vehicle reset mutates the existing Rapier body and realigns interpolation buffers without rewinding SimClock.
+- [Phase ?]: Coordinator reads LoopHandle.clock.simTimeSec for medal timing.
+- [Phase ?]: HUD consumes fixed-tick timing snapshots and does not own timing or medal policy.
 
 ### Pending Todos
 
@@ -216,8 +223,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T19:41:48.001Z
-Stopped at: Phase 5 context gathered
+Last session: 2026-09-21T22:15:08.448Z
+Stopped at: None
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
