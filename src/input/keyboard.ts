@@ -2,10 +2,13 @@
  * Latched keyboard state for driving input: `ArrowLeft`/`KeyA`, `ArrowRight`/`KeyD`,
  * `ArrowUp`/`KeyW`, `ArrowDown`/`KeyS`, and `Space` for the handbrake (D-02:
  * keyboard handbrake is spacebar and is binary).
+ * `KeyP` is the one-shot respawn command and `KeyR` is the one-shot full
+ * restart command. Retry commands are exposed separately from driving axes.
  *
  * Layering: touches `document`/`navigator`; may import `src/core/`; never writes
  * simulation state; all smoothing advances by `DT` per fixed tick, never per frame.
  */
+import { createRaceCommandLatch, type RaceCommandSource } from "./race-commands";
 
 /** One tick's raw latched key state, before any ramping is applied. */
 export interface KeyState {
@@ -20,6 +23,8 @@ export interface KeyState {
 export interface KeyboardHandle {
   /** Snapshot of the currently latched keys. */
   read(): KeyState;
+  /** Fixed-tick one-shot retry command source. */
+  readonly raceCommands: RaceCommandSource;
   /** Remove both listeners. */
   dispose(): void;
 }
@@ -39,6 +44,7 @@ export function createKeyboard(): KeyboardHandle {
     down: false,
     handbrake: false,
   };
+  const raceCommands = createRaceCommandLatch();
 
   // Guard shaped like debug-gate.ts:32-34's `typeof location !== "undefined"`
   // check: bare Node (Vitest's `node` environment, no jsdom) has no global
@@ -53,6 +59,7 @@ export function createKeyboard(): KeyboardHandle {
       read(): KeyState {
         return { ...state };
       },
+      raceCommands,
       dispose(): void {
         /* no listeners were ever registered */
       },
@@ -85,6 +92,13 @@ export function createKeyboard(): KeyboardHandle {
     }
   }
 
+  function setRaceCommandFromCode(code: string, pressed: boolean): void {
+    const command = code === "KeyP" ? "respawn" : code === "KeyR" ? "restart" : null;
+    if (command === null) return;
+    if (pressed) raceCommands.press(command);
+    else raceCommands.release(command);
+  }
+
   const DRIVING_CODES = new Set([
     "ArrowLeft",
     "KeyA",
@@ -106,11 +120,13 @@ export function createKeyboard(): KeyboardHandle {
       // page does not scroll while driving.
       e.preventDefault();
     }
+    setRaceCommandFromCode(e.code, true);
     setFromCode(e.code, true);
   }
 
   function onKeyUp(e: KeyboardEvent): void {
     if (e.metaKey || e.ctrlKey) return;
+    setRaceCommandFromCode(e.code, false);
     setFromCode(e.code, false);
   }
 
@@ -121,6 +137,7 @@ export function createKeyboard(): KeyboardHandle {
     read(): KeyState {
       return { ...state };
     },
+    raceCommands,
     dispose(): void {
       removeEventListener("keydown", onKeyDown);
       removeEventListener("keyup", onKeyUp);

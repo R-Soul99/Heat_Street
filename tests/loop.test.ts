@@ -5,6 +5,7 @@ import { NEUTRAL } from "../src/core/input-tape";
 import { MAX_STEPS_PER_FRAME } from "../src/core/sim-clock";
 import type { LoopDeps, LoopScheduler } from "../src/loop";
 import { startLoop } from "../src/loop";
+import { createRaceCommandLatch } from "../src/input/race-commands";
 import { createDebugScene } from "../src/physics/debug-scene";
 import { TransformCache } from "../src/physics/transform-cache";
 import { createWorld } from "../src/physics/world";
@@ -173,6 +174,51 @@ describe("startLoop — step ordering", () => {
       "onTickEnd",
       "captureAsCurrent",
     ]);
+  });
+});
+
+describe("startLoop — fixed-tick retry commands", () => {
+  it("consumes a held restart once, before the step, without rebuilding the world or loop", () => {
+    const scheduler = new FakeScheduler();
+    const commands = createRaceCommandLatch();
+    const { deps, sceneDeps } = makeDeps(scheduler, {
+      raceCommands: commands,
+    });
+    const originalWorld = sceneDeps.world;
+    const commandTicks: number[] = [];
+    const calls: string[] = [];
+    const originalStep = sceneDeps.world.step.bind(sceneDeps.world);
+    vi.spyOn(sceneDeps.world, "step").mockImplementation((...args: unknown[]) => {
+      calls.push("world.step");
+      // biome-ignore lint/suspicious/noExplicitAny: forwarding Rapier's variadic step() args
+      return (originalStep as (...args: any[]) => unknown)(...args);
+    });
+
+    const handle = startLoop({
+      ...deps,
+      onTickBegin: () => calls.push("onTickBegin"),
+      onRaceCommands: (received, tick) => {
+        calls.push(received.restart ? "restart" : "respawn");
+        commandTicks.push(tick);
+        sceneDeps.scene.applyInput(NEUTRAL);
+      },
+      applyInput: (frame) => {
+        calls.push("applyInput");
+        sceneDeps.scene.applyInput(frame);
+      },
+    });
+
+    scheduler.runFrame(0);
+    commands.press("restart");
+    scheduler.runFrame(1000 / 60);
+    scheduler.runFrame((2 * 1000) / 60);
+
+    expect(commandTicks).toEqual([0]);
+    expect(calls).toEqual(["onTickBegin", "restart", "applyInput", "world.step", "onTickBegin", "applyInput", "world.step"]);
+    expect(sceneDeps.world).toBe(originalWorld);
+    expect(handle.clock.tick).toBe(2);
+    expect(scheduler.pendingCount).toBe(1);
+    expect(sceneDeps.transforms.prev[0]).toBeCloseTo(sceneDeps.scene.bodies[0].translation().x);
   });
 });
 

@@ -34,6 +34,7 @@
 import type * as RAPIER from "@dimforge/rapier3d";
 import type { FrameStats } from "./core/frame-stats";
 import type { InputFrame, InputSource } from "./core/input-tape";
+import type { RaceCommandSource, RaceCommands } from "./input/race-commands";
 import { MAX_STEPS_PER_FRAME, SimClock } from "./core/sim-clock";
 import type { TransformCache } from "./physics/transform-cache";
 
@@ -116,6 +117,10 @@ export interface LoopDeps {
   applyInput(frame: InputFrame): void;
   /** Called at the top of each fixed tick, before `applyInput`. */
   onTickBegin?(tick: number): void;
+  /** Fixed-tick retry commands, consumed before the normal vehicle step. */
+  raceCommands?: RaceCommandSource;
+  /** Gameplay coordinator mutates owned race/physics state for a command. */
+  onRaceCommands?(commands: RaceCommands, tick: number): void;
   /**
    * Called immediately after `world.step()` for this tick. The event-queue
    * parameter is always `null` in Phase 1 — nothing drains Rapier's
@@ -203,6 +208,15 @@ export function startLoop(deps: LoopDeps): LoopHandle {
       const tickIndex = clock.tick - steps + s;
       deps.transforms.captureAsPrevious();
       deps.onTickBegin?.(tickIndex);
+      const commands = deps.raceCommands?.sampleForTick(tickIndex);
+      if (commands !== undefined && (commands.respawn || commands.restart)) {
+        deps.onRaceCommands?.(commands, tickIndex);
+        // Reset commands mutate Rapier before the step. Keep both interpolation
+        // endpoints at that authored pose so the renderer never blends through
+        // the pre-reset location.
+        deps.transforms.captureAsCurrent();
+        deps.transforms.prev.set(deps.transforms.cur);
+      }
       deps.applyInput(deps.input.sampleForTick(tickIndex));
       deps.world.step();
       deps.onTickEnd?.(tickIndex, null);
