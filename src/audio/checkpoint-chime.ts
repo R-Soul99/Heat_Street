@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import type * as THREE from "three";
 
 export interface CheckpointChime {
   play(): void;
@@ -21,6 +21,8 @@ export function createCheckpointChime(listener: THREE.AudioListener): Checkpoint
       oscillator.start();
       oscillator.stop(context.currentTime + 0.12);
     },
-    dispose(): void { gain.disconnect(); },
+    dispose(): void {
+      gain.disconnect();
+    },
   };
 }

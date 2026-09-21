@@ -36,7 +36,11 @@ export function createObjectiveView(parent: THREE.Object3D): ObjectiveView {
       if (pillar === undefined) {
         pillar = new THREE.Mesh(geometry, material.clone());
         pillar.name = `checkpoint-${checkpoint.id}`;
-        pillar.position.set(checkpoint.position[0], checkpoint.position[1] + 14, checkpoint.position[2]);
+        pillar.position.set(
+          checkpoint.position[0],
+          checkpoint.position[1] + 14,
+          checkpoint.position[2],
+        );
         parent.add(pillar);
         pillars.set(checkpoint.id, pillar);
       }
