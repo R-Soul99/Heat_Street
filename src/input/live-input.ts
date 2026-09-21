@@ -11,6 +11,7 @@ import { type InputFrame, type InputSource, NEUTRAL } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
 import { type PadSnapshot, readGamepad } from "./gamepad";
 import { createKeyboard, type KeyState } from "./keyboard";
+import { createRaceCommandLatch, type RaceCommandSource } from "./race-commands";
 
 /**
  * Upper bound on how many ramp steps `sampleForTick` will advance in one call.
@@ -76,6 +77,7 @@ function approach(current: number, target: number, rate: number): number {
  * advances when the tick index actually moves forward.
  */
 export class LiveInputSource implements InputSource {
+  readonly raceCommands: RaceCommandSource;
   private readonly keys: () => KeyState;
   private readonly readPad: () => PadSnapshot | null;
   private readonly steerRampPerSec: number;
@@ -96,7 +98,14 @@ export class LiveInputSource implements InputSource {
     // — exactly as `src/loop.ts:147`'s `scheduler = deps.scheduler ??
     // createBrowserScheduler()` — so importing this module never touches
     // `document` or `navigator`.
-    this.keys = deps.keys ?? createKeyboard().read;
+    if (deps.keys !== undefined) {
+      this.keys = deps.keys;
+      this.raceCommands = createRaceCommandLatch();
+    } else {
+      const keyboard = createKeyboard();
+      this.keys = keyboard.read;
+      this.raceCommands = keyboard.raceCommands;
+    }
     this.readPad = deps.readPad ?? readGamepad;
     this.steerRampPerSec = deps.steerRampPerSec ?? DEFAULT_STEER_RAMP_PER_SEC;
     this.steerReturnPerSec = deps.steerReturnPerSec ?? DEFAULT_STEER_RETURN_PER_SEC;

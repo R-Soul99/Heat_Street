@@ -36,6 +36,7 @@
  */
 import * as THREE from "three";
 import { createAudioBootstrap } from "./audio/audio-bootstrap";
+import { createCheckpointChime } from "./audio/checkpoint-chime";
 import { createSurfaceAudio } from "./audio/surface-audio";
 import { createSynthesizedSurfaceLoops } from "./audio/surface-loops";
 import {
@@ -43,7 +44,10 @@ import {
   defaultCameraTuning,
   parseSavedCameraTuning,
 } from "./core/camera-tuning";
+import { parseCourseData } from "./core/course";
 import { parseMapCollision } from "./core/map-collision";
+import { buildNavigationGraph, validateCourseRoutes } from "./core/navigation";
+import { createRaceState } from "./core/race-state";
 // Explicit `.ts` extension on `road-graph.ts`'s import path is that module's
 // OWN convention (`tools/map-compiler/**` needs it for Node's native
 // type-stripping resolver) — this file imports it the same, ordinary,
@@ -62,7 +66,11 @@ import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTuningPanel } from "./debug/tuning-panel";
+import { createRaceCoordinator } from "./gameplay/race-coordinator";
 import { createMapCredit } from "./hud/map-credit";
+import { createMinimap } from "./hud/minimap";
+import { createNavigationArrow } from "./hud/navigation-arrow";
+import { createRaceHud } from "./hud/race-hud";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { startLoop } from "./loop";
@@ -80,6 +88,7 @@ import { createOcclusionController } from "./render/camera/occlusion-controller"
 import { createOcclusionProbe } from "./render/camera/occlusion-probe";
 import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView } from "./render/map-view";
+import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
 import { createSurfaceFx } from "./render/surface-fx";
 import { createVehicleView } from "./render/vehicle-view";
@@ -121,6 +130,7 @@ const AREA_ID = "juliette-ga";
 const MAP_GRAPH_URL = `/maps/${AREA_ID}.map.json`;
 const MAP_COLLISION_URL = `/maps/${AREA_ID}.collision.json`;
 const MAP_GLB_URL = `/maps/${AREA_ID}.glb`;
+const MAP_ROUTES_URL = `/maps/${AREA_ID}.routes.json`;
 
 /**
  * Fetches `url` as text, throwing a named error (naming `url` and the HTTP
@@ -150,6 +160,15 @@ try {
   // JSON's `parse` directly here" discipline for the localStorage trio above.
   const graphText = await fetchArtifactText(MAP_GRAPH_URL);
   const graph = parseRoadGraph(graphText, MAP_GRAPH_URL);
+  const routesText = await fetchArtifactText(MAP_ROUTES_URL);
+  const routes = parseCourseData(routesText, MAP_ROUTES_URL, graph);
+  if (routes.areaId !== graph.areaId) {
+    throw new Error(`route area mismatch: expected "${graph.areaId}", got "${routes.areaId}"`);
+  }
+  const navigation = buildNavigationGraph(graph);
+  const routeFailures = validateCourseRoutes(routes, graph);
+  if (routeFailures.length > 0)
+    throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
   const collisionText = await fetchArtifactText(MAP_COLLISION_URL);
   const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
   const mapView = await loadMapView(MAP_GLB_URL);
@@ -230,6 +249,7 @@ try {
   // DEBUG_ENABLED -- audio is player-facing, exactly like the speedometer,
   // camera and surface FX above.
   const audio = createAudioBootstrap(camera);
+  const checkpointChime = createCheckpointChime(audio.listener);
   // Synthesized loops ship as the DEFAULT and, per plan 03-11's resolved
   // checkpoint (see that plan's SUMMARY.md), the ONLY source this build
   // ships with -- no external CC0 asset was sourced or committed this
@@ -255,6 +275,24 @@ try {
   // This replaces the Phase 1 all-NEUTRAL stub with live keyboard + gamepad
   // input.
   const input = new LiveInputSource();
+
+  const selectedMode =
+    new URLSearchParams(location.search).get("mode") === "circuit" ? "circuit" : "p2p";
+  const course = routes.courses.find((candidate) => candidate.mode === selectedMode);
+  if (course === undefined) throw new Error(`no ${selectedMode} course in ${MAP_ROUTES_URL}`);
+  const raceState = createRaceState(course, navigation);
+  const raceCoordinator = createRaceCoordinator({
+    course,
+    navigation,
+    scene,
+    state: raceState,
+    objectiveView: createObjectiveView(view.scene),
+    minimap: createMinimap(graph),
+    navigationArrow: createNavigationArrow(),
+    raceHud: createRaceHud(),
+    chime: checkpointChime,
+    simTimeSec: () => 0,
+  });
 
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
   // player-facing (NAV-01).
@@ -399,6 +437,7 @@ try {
   // (fade / steepen / off), F = temporary free-look orbit (debug only).
   const cameraChrome = createCameraSkinChrome();
   const skin = createCameraSkin(canvas.classList, cameraChrome, "police");
+  skin.set("sports");
   if (DEBUG_ENABLED) {
     onDebugKey("KeyV", () => skin.cycle());
   }
@@ -435,6 +474,9 @@ try {
     transforms,
     applyInput: scene.applyInput,
     onTickBegin: scene.preTick,
+    raceCommands: input.raceCommands,
+    onRaceCommands: (commands) => raceCoordinator.onCommands(commands),
+    onTickEnd: () => raceCoordinator.onTickEnd(),
     render(alpha: number, dtMs: number): void {
       // Ground speed computed here from linvel's XZ components, never from the
       // vehicle controller's own full-3D speed getter — that includes vertical
@@ -521,6 +563,8 @@ try {
       }
       fx.update(wheelFxInput, dtMs);
       surfaceAudio.update(wheelAudioSurfaces, wheelAudioGrounded, wheelAudioSlip, dtMs);
+
+      raceCoordinator.render();
 
       renderer.render(view.scene, camera);
     },

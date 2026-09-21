@@ -2,6 +2,7 @@ import type { RoadGraph } from "../core/road-graph";
 
 export interface NavigationArrowSnapshot {
   readonly carHeadingRad: number;
+  readonly carPosition: readonly [number, number, number];
   readonly waypoint: readonly [number, number, number] | null;
 }
 
@@ -33,8 +34,8 @@ export function createNavigationArrow(): NavigationArrow {
         return;
       }
       element.style.visibility = "visible";
-      const dx = snapshot.waypoint[0];
-      const dz = snapshot.waypoint[2];
+      const dx = snapshot.waypoint[0] - snapshot.carPosition[0];
+      const dz = snapshot.waypoint[2] - snapshot.carPosition[2];
       const bearing = Math.atan2(dx, -dz);
       const relative = bearing - snapshot.carHeadingRad;
       element.style.transform = `translateX(-50%) rotate(${relative}rad)`;
