@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: None
-last_updated: "2026-09-21T22:15:17.851Z"
-last_activity: 2026-09-21
+stopped_at: Completed 06-05-PLAN.md (retroactive paperwork close-out)
+last_updated: "2026-09-22T18:28:21.242Z"
+last_activity: 2026-09-22
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 60
-  completed_plans: 59
-  percent: 67
+  completed_plans: 60
+  percent: 78
 ---
 
 # Project State
@@ -22,18 +22,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 5 — Objectives, Navigation & Race Modes (plans 01-02 complete)
+**Current focus:** Phase 6 — Medals & Time-Attack Loop (complete, 5/5 plans); Phase 7 not yet planned
 
 ## Current Position
 
-Phase: 06 (medals-time-attack-loop) — IN PROGRESS (4/5 plans)
-Current Plan: 5
-Total Plans in Phase: 05
-Next: 06-05-PLAN.md (results and course-card presentation)
-Last activity: 2026-09-21
+Phase: 06 (medals-time-attack-loop) — COMPLETE (5/5 plans)
+Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
+Last activity: 2026-09-22
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -83,6 +81,7 @@ Progress: [██████████] 98%
 | Phase 02 P09 | 20min | 3 tasks | 4 files |
 | Phase 05 P03 | 3 min | 2 tasks | 8 files |
 | Phase 06 P04 | 18 min | 2 tasks | 5 files |
+| Phase 06 P05 | not tracked | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -172,6 +171,7 @@ Recent decisions affecting current work:
 - [Phase 06-04]: Coordinator reads LoopHandle.clock.simTimeSec for medal timing.
 - [Phase 06-04]: HUD consumes fixed-tick timing snapshots and does not own timing or medal policy.
 - [Debug: minimap-arrow-moves-in-the-op]: src/hud/minimap.ts (`projectMinimapPoint`) paired screen-right=world+X with screen-up=world+Z -- the MIRRORED top-down projection for a straight-down camera (non-mirrored pairing needs screen-up=world -Z, verified via cross(forward,up)=right). The prior session's `projectCarRotation` fix (`Math.PI/2 - headingRad`) was algebraically self-consistent with that mirrored mapping, so discrete checkpoint-pointing checks passed even though a real RIGHT turn (headingRad provably increasing) swept the marker COUNTERCLOCKWISE on screen -- opposite the real car. Fixed as ONE coupled change: un-mirrored the point mapping (`y: half + dz*scale`), `angleRad` to the codebase-standard `Math.atan2(dz, dx)` (minimap.ts was the only atan2(dx,-dz) outlier in the repo), the offscreen clamp to match, and `projectCarRotation` to `Math.PI/2 + headingRad`. Lesson: rotational-SENSE correctness does not survive an axis-mirroring bug even when pointing-AT-a-target correctness does -- a discrete-point check alone can mask a sign/mirroring defect. Human-confirmed fixed 2026-09-22; see .planning/debug/resolved/minimap-arrow-moves-in-the-op.md.
+- [Phase 06]: [Phase 06-05]: Consolidated results/course-card rendering into src/hud/results-view.ts as the single surface, removing a duplicate results overlay from src/hud/race-hud.ts rather than maintaining two independent renderers that could drift out of sync on restart. — Plan's own must-have required mounting the course-card/results view "without duplicating DOM overlays on restart" — a second independent overlay in race-hud.ts would have violated that directly.
 
 ### Pending Todos
 
@@ -225,8 +225,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-09-21T22:15:08.448Z
-Stopped at: None
+Last session: 2026-09-22T18:28:21.231Z
+Stopped at: Completed 06-05-PLAN.md (retroactive paperwork close-out)
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:

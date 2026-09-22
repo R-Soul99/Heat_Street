@@ -60,7 +60,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 ### Medals & Progression
 
 - [x] **MEDAL-01**: Player earns one of four medal tiers per level (Bronze / Silver / Gold / Ace) based on completion time, with thresholds derived from a fixed percentage of a designer reference run
-- [ ] **MEDAL-02**: Player's best time per level persists across sessions and is visible on a medal grid at level select
+- [x] **MEDAL-02**: Player's best time per level persists across sessions and is visible on a medal grid at level select
 - [x] **MEDAL-03**: Player sees a live split-time delta (vs. personal best or target medal) at each checkpoint during a run
 - [x] **MEDAL-04**: Player sees a post-run sector breakdown table with the worst sector highlighted
 
@@ -143,7 +143,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DMG-01 | Phase 8 | Pending |
 | DMG-02 | Phase 8 | Pending |
 | MEDAL-01 | Phase 6 | Complete |
-| MEDAL-02 | Phase 6 | Pending |
+| MEDAL-02 | Phase 6 | Complete |
 | MEDAL-03 | Phase 6 | Complete |
 | MEDAL-04 | Phase 6 | Complete |
 | NARR-01 | Phase 8 | Pending |

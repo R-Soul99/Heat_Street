@@ -19,7 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [ ] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
-- [ ] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
+- [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
+ (completed 2026-09-22)
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 
@@ -326,7 +327,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
-| 6. Medals & Time-Attack Loop | 4/5 | In Progress|  |
+| 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
