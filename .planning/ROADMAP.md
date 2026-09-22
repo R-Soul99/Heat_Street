@@ -300,7 +300,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — One AI car laps the real circuit headlessly: racing line, pure-pursuit driver, AI fleet, Silver-pace calibration (wave 1)
+- [x] 07-01-PLAN.md — One AI car laps the real circuit headlessly: racing line, pure-pursuit driver, AI fleet, Silver-pace calibration (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -354,7 +354,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
-| 7. NPC Driving AI & Circuit Racers | 0/TBD | Not started | - |
+| 7. NPC Driving AI & Circuit Racers | 1/7 | In Progress|  |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes
