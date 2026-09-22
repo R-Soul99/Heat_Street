@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { NEUTRAL } from "../src/core/input-tape";
 import {
   AI_PAINTS,
   AI_RACER_COUNT,
-  coastFrame,
   COUNTDOWN_STEP_TICKS,
   COUNTDOWN_TICKS,
+  coastFrame,
   countdownState,
   HOLD_FRAME,
   PLAYER_GRID_SLOT,
   RACE_FIELD_SIZE,
 } from "../src/core/race-start";
-import { NEUTRAL } from "../src/core/input-tape";
 
 describe("countdownState", () => {
   it("holds each label for one COUNTDOWN_STEP_TICKS-tick step", () => {

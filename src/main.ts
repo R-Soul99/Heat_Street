@@ -39,6 +39,7 @@ import { createAudioBootstrap } from "./audio/audio-bootstrap";
 import { createCheckpointChime } from "./audio/checkpoint-chime";
 import { createSurfaceAudio } from "./audio/surface-audio";
 import { createSynthesizedSurfaceLoops } from "./audio/surface-loops";
+import { defaultAiDriverParams } from "./core/ai-driver";
 import {
   CAMERA_TUNING_STORAGE_KEY,
   defaultCameraTuning,
@@ -50,7 +51,9 @@ import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
 import { parseMedalReference } from "./core/medal-reference";
 import { createMedalTiming } from "./core/medal-timing";
 import { buildNavigationGraph, validateCourseRoutes } from "./core/navigation";
+import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
 import { createRaceState } from "./core/race-state";
+import { buildGridPoses, buildRacingLine } from "./core/racing-line";
 // Explicit `.ts` extension on `road-graph.ts`'s import path is that module's
 // OWN convention (`tools/map-compiler/**` needs it for Node's native
 // type-stripping resolver) — this file imports it the same, ordinary,
@@ -69,6 +72,7 @@ import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTuningPanel } from "./debug/tuning-panel";
+import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
 import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
@@ -78,9 +82,11 @@ import { createResultsView } from "./hud/results-view";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
+import { createAiFleet } from "./physics/ai-fleet";
 import { createMapScene } from "./physics/map-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
+import { createAiVehicleViews } from "./render/ai-vehicle-view";
 import { createCameraSkin, createCameraSkinChrome } from "./render/camera/camera-skin";
 import {
   type CameraRig,
@@ -186,12 +192,59 @@ try {
       checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
     })),
   );
+  // Mode/course selection, moved ABOVE `createMapScene` (plan 07-02) so the
+  // choice is known before `transforms` is built below — Circuit Race needs
+  // the AI fleet's bodies folded into the SAME `TransformCache` the player's
+  // body uses, which in turn needs `course`/`navigation` known first.
+  //
+  // COURSE-DATA DECISION (07-02-PLAN.md): Circuit Race is a RUNTIME VARIANT
+  // selected by `?mode=circuit-race` over the EXISTING `mode: "circuit"`
+  // course object — `parseCourseData` hardcodes exactly one p2p + one
+  // circuit course per area file, so a third course entry would fail that
+  // parser. No new course-data entry, no new medal reference; solo Time
+  // Attack's own course id, reference and saved bests are untouched (D-05).
+  const modeParam = new URLSearchParams(location.search).get("mode");
+  const selectedMode: "p2p" | "circuit" | "circuit-race" =
+    modeParam === "circuit-race" ? "circuit-race" : modeParam === "circuit" ? "circuit" : "p2p";
+  const isCircuitRace = selectedMode === "circuit-race";
+  const courseMode = isCircuitRace ? "circuit" : selectedMode;
+  const course = routes.courses.find((candidate) => candidate.mode === courseMode);
+  if (course === undefined) throw new Error(`no ${courseMode} course in ${MAP_ROUTES_URL}`);
+  const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
+  if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
+
   const collisionText = await fetchArtifactText(MAP_COLLISION_URL);
   const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
   const mapView = await loadMapView(MAP_GLB_URL);
 
   const scene = createMapScene(world, graph, collision, tuning, surfaceProfiles);
-  const transforms = new TransformCache(scene.bodies);
+
+  // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
+  // grid (player at the back, D-03), and 3 AI vehicles built through the
+  // SAME `createVehicle()` call the player uses (D-09), sharing the
+  // player's own live tune. `defaultSurfaceProfiles()`, not the developer's
+  // saved `surfaceProfiles` — AI pace must never depend on a developer's
+  // own live surface-tuning session (07-02-PLAN.md). `gridPoses` is length
+  // `RACE_FIELD_SIZE`; `fleet` gets only the AI slots (`0..AI_RACER_COUNT-1`).
+  let gridPoses: ReturnType<typeof buildGridPoses> | undefined;
+  let fleet: ReturnType<typeof createAiFleet> | undefined;
+  if (isCircuitRace) {
+    const line = buildRacingLine(course, navigation, defaultSurfaceProfiles());
+    gridPoses = buildGridPoses(line, RACE_FIELD_SIZE);
+    scene.resetVehicle(gridPoses[PLAYER_GRID_SLOT]);
+    fleet = createAiFleet(
+      world,
+      tuning,
+      scene.surfaces,
+      line,
+      gridPoses.slice(0, AI_RACER_COUNT),
+      defaultAiDriverParams(tuning),
+    );
+  }
+
+  const transforms = new TransformCache(
+    fleet === undefined ? scene.bodies : [...scene.bodies, ...fleet.bodies],
+  );
 
   // `src/physics/vehicle-scene.ts` and `src/physics/debug-scene.ts` (and their
   // render-side counterparts, including `src/render/vehicle-view.ts`'s Phase 2
@@ -233,6 +286,28 @@ try {
     { includePhase2Ground: false, groundExtents },
   );
   view.scene.add(mapView.group);
+
+  // Circuit Race only: 3 recolored AI car mesh sets added directly into THIS
+  // scene (never a 4th `createVehicleView` call — RESEARCH.md Pitfall 6),
+  // using the SAME wheel/chassis dimensions the player's own `view` was just
+  // built with. `interpolated` is the render-interpolation target array
+  // `applyAllInterpolated` writes every frame below — index 0 is always the
+  // player chassis (`view.meshes[0]`), matching `TransformCache`'s own
+  // `[...scene.bodies, ...fleet.bodies]` order above position-for-
+  // position (T-01-16).
+  const aiViews =
+    fleet === undefined
+      ? undefined
+      : createAiVehicleViews(
+          view.scene,
+          tuning.wheels.radius,
+          tuning.wheels.halfTrack,
+          tuning.wheels.halfWheelbase,
+          tuning.chassis.halfExtents,
+          AI_PAINTS.map((paint) => paint.hex),
+        );
+  const interpolated: readonly THREE.Object3D[] =
+    aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes];
 
   // SURF-02's visual half (plan 03-10): always constructed, NOT gated on
   // `DEBUG_ENABLED` -- surface FX is player-facing, exactly like the
@@ -293,12 +368,9 @@ try {
   // input.
   const input = new LiveInputSource();
 
-  const selectedMode =
-    new URLSearchParams(location.search).get("mode") === "circuit" ? "circuit" : "p2p";
-  const course = routes.courses.find((candidate) => candidate.mode === selectedMode);
-  if (course === undefined) throw new Error(`no ${selectedMode} course in ${MAP_ROUTES_URL}`);
-  const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
-  if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
+  // `selectedMode`/`course`/`reference` were already resolved above (moved
+  // ahead of `createMapScene`, plan 07-02) — this block only builds what
+  // depends on them.
   const medalProgress = loadMedalProgress(
     {
       get: (key) => localStorage.getItem(key),
@@ -313,47 +385,88 @@ try {
     medalProgress.courses,
   );
   let loopClock: LoopHandle | null = null;
-  const raceState = createRaceState(course, navigation);
-  const timing = createMedalTiming({ referenceTimeSec: reference.totalTimeSec });
-  const raceCoordinator = createRaceCoordinator({
-    course,
-    navigation,
-    scene,
-    state: raceState,
-    objectiveView: createObjectiveView(view.scene),
-    minimap: createMinimap(graph),
-    navigationArrow: createNavigationArrow(),
-    raceHud: createRaceHud(),
-    chime: checkpointChime,
-    simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
-    timing,
-    reference,
-    personalBest: medalProgress.courses[course.id],
-    onCompleted: (completion) => {
-      const saved = saveMedalResult(
-        {
-          get: (key) => localStorage.getItem(key),
-          set: (key, value) => localStorage.setItem(key, value),
-        },
-        course.id,
-        { complete: true, effectiveTimeSec: completion.effectiveTimeSec, medal: completion.medal },
-        routes.courses.map((candidate) => candidate.id),
-      );
-      if (saved) {
-        resultsView.updateCards(
-          loadMedalProgress(
-            {
-              get: (key) => localStorage.getItem(key),
-              set: (key, value) => localStorage.setItem(key, value),
-            },
-            routes.courses.map((candidate) => candidate.id),
-          ).courses,
-        );
-      }
-      resultsView.showCompletion(completion);
-    },
-    onRestart: () => resultsView.clearCompletion(),
-  });
+
+  // Shared HUD/overlay surfaces both coordinator shapes below hand off to —
+  // built ONCE regardless of mode, exactly the calls `createRaceCoordinator`
+  // made inline before this plan hoisted them (p2p/circuit are byte-for-byte
+  // unchanged).
+  const objectiveView = createObjectiveView(view.scene);
+  const minimap = createMinimap(graph);
+  const navigationArrow = createNavigationArrow();
+  const raceHud = createRaceHud();
+
+  // Circuit Race builds a `CircuitRaceCoordinator` INSTEAD of the solo
+  // coordinator and its medal-timing machinery below — nothing is saved in
+  // this mode yet (D-05/SC5: solo Time Attack's own medal path is
+  // completely untouched when `fleet`/`gridPoses` are undefined).
+  const circuitRace =
+    fleet === undefined || gridPoses === undefined
+      ? undefined
+      : createCircuitRaceCoordinator({
+          course,
+          navigation,
+          scene,
+          fleet,
+          gridPoses,
+          objectiveView,
+          minimap,
+          navigationArrow,
+          raceHud,
+          chime: checkpointChime,
+        });
+  const raceCoordinator =
+    fleet !== undefined
+      ? undefined
+      : createRaceCoordinator({
+          course,
+          navigation,
+          scene,
+          state: createRaceState(course, navigation),
+          objectiveView,
+          minimap,
+          navigationArrow,
+          raceHud,
+          chime: checkpointChime,
+          simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
+          timing: createMedalTiming({ referenceTimeSec: reference.totalTimeSec }),
+          reference,
+          personalBest: medalProgress.courses[course.id],
+          onCompleted: (completion) => {
+            const saved = saveMedalResult(
+              {
+                get: (key) => localStorage.getItem(key),
+                set: (key, value) => localStorage.setItem(key, value),
+              },
+              course.id,
+              {
+                complete: true,
+                effectiveTimeSec: completion.effectiveTimeSec,
+                medal: completion.medal,
+              },
+              routes.courses.map((candidate) => candidate.id),
+            );
+            if (saved) {
+              resultsView.updateCards(
+                loadMedalProgress(
+                  {
+                    get: (key) => localStorage.getItem(key),
+                    set: (key, value) => localStorage.setItem(key, value),
+                  },
+                  routes.courses.map((candidate) => candidate.id),
+                ).courses,
+              );
+            }
+            resultsView.showCompletion(completion);
+          },
+          onRestart: () => resultsView.clearCompletion(),
+        });
+  // Exactly one of the two is ever set (the branches above are mode-exclusive
+  // on `fleet`); `activeCoordinator` is the single dispatch point the loop
+  // wiring and render callback below use instead of re-checking the mode.
+  const activeCoordinator = circuitRace ?? raceCoordinator;
+  if (activeCoordinator === undefined) {
+    throw new Error("composition root: no race coordinator was constructed for this mode");
+  }
 
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
   // player-facing (NAV-01).
@@ -386,7 +499,10 @@ try {
   // reference the panel mutates in place, so a slider move takes effect on
   // the very next fixed tick with no rebuild. Rebuilding the vehicle on every
   // slider move would lose the car's state mid-drive (position, velocity, the
-  // tuning session itself) and make the panel unusable. `onApplySurfaces`
+  // tuning session itself) and make the panel unusable. Circuit Race also
+  // retunes every AI vehicle identically (D-02: same car, same tune — never a
+  // second, independent tuning surface); `fleet?.setTuning` is a no-op in
+  // every other mode (`fleet` is `undefined`). `onApplySurfaces`
   // mirrors this for the live `SurfaceProfiles` object. `onApplyCamera` is a
   // genuine no-op: `helicopterRig`/`chaseRig` (built below) read their shared
   // `cameraTuning` object BY REFERENCE every `update(dtMs)`, so a camera
@@ -395,7 +511,10 @@ try {
   // handler.
   const panel = DEBUG_ENABLED
     ? createTuningPanel(tuning, surfaceProfiles, cameraTuning, {
-        onApplyVehicle: () => scene.setTuning(tuning),
+        onApplyVehicle: () => {
+          scene.setTuning(tuning);
+          fleet?.setTuning(tuning);
+        },
         onApplySurfaces: () => scene.setSurfaceProfiles(surfaceProfiles),
         onApplyCamera: () => {
           // No-op — see this block's own comment above.
@@ -533,11 +652,26 @@ try {
     world,
     input,
     transforms,
-    applyInput: scene.applyInput,
-    onTickBegin: scene.preTick,
+    // Circuit Race gates the player's own input through the countdown
+    // (D-04: held at `HOLD_FRAME` until GO) via `circuitRace.gatePlayerInput`;
+    // every other mode applies the live frame straight through, unchanged.
+    applyInput:
+      circuitRace === undefined
+        ? scene.applyInput
+        : (frame) => scene.applyInput(circuitRace.gatePlayerInput(frame)),
+    // Circuit Race also ticks the AI fleet from this SAME hook, before the
+    // loop's own `world.step()` (07-RESEARCH.md Pattern 2) — `src/loop.ts`
+    // itself needs zero changes.
+    onTickBegin:
+      circuitRace === undefined
+        ? scene.preTick
+        : (tick) => {
+            scene.preTick(tick);
+            circuitRace.onTickBegin(tick);
+          },
     raceCommands: input.raceCommands,
-    onRaceCommands: (commands) => raceCoordinator.onCommands(commands),
-    onTickEnd: () => raceCoordinator.onTickEnd(),
+    onRaceCommands: (commands) => activeCoordinator.onCommands(commands),
+    onTickEnd: () => activeCoordinator.onTickEnd(),
     render(alpha: number, dtMs: number): void {
       // Ground speed computed here from linvel's XZ components, never from the
       // vehicle controller's own full-3D speed getter — that includes vertical
@@ -559,7 +693,16 @@ try {
       }
 
       view.updateWheels(scene.vehicle.controller);
-      applyAllInterpolated(view.meshes, transforms, alpha);
+      // Circuit Race only: each AI car's own wheel rig, read from that car's
+      // own controller and written to that car's own meshes (never shared
+      // state) — same per-car contract `view.updateWheels` already has for
+      // the player, generalized to N via `aiViews.updateWheels(i, vc)`.
+      if (fleet !== undefined && aiViews !== undefined) {
+        for (let i = 0; i < fleet.cars.length; i++) {
+          aiViews.updateWheels(i, fleet.cars[i].vehicle.controller);
+        }
+      }
+      applyAllInterpolated(interpolated, transforms, alpha);
       // `freeLook?.restoreRigPose()` runs BEFORE `activeRig.update(dtMs)` —
       // LOAD-BEARING ordering (src/debug/free-look-camera.ts's own doc
       // comment): the rig damps `camera.position` using `camera.position`
@@ -625,7 +768,7 @@ try {
       fx.update(wheelFxInput, dtMs);
       surfaceAudio.update(wheelAudioSurfaces, wheelAudioGrounded, wheelAudioSlip, dtMs);
 
-      raceCoordinator.render();
+      activeCoordinator.render();
 
       renderer.render(view.scene, camera);
     },

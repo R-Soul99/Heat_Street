@@ -6,10 +6,10 @@ import type { InputFrame } from "../core/input-tape";
 import { type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import {
   AI_RACER_COUNT,
-  coastFrame,
-  type CountdownLabel,
-  countdownState,
   COUNTDOWN_TICKS,
+  type CountdownLabel,
+  coastFrame,
+  countdownState,
   HOLD_FRAME,
   PLAYER_GRID_SLOT,
   RACE_FIELD_SIZE,
@@ -98,7 +98,9 @@ export interface CircuitRaceCoordinator {
   snapshot(): CircuitRaceSnapshot;
 }
 
-export function createCircuitRaceCoordinator(deps: CircuitRaceCoordinatorDeps): CircuitRaceCoordinator {
+export function createCircuitRaceCoordinator(
+  deps: CircuitRaceCoordinatorDeps,
+): CircuitRaceCoordinator {
   const races: RaceState[] = Array.from({ length: RACE_FIELD_SIZE }, () =>
     createRaceState(deps.course, deps.navigation),
   );
@@ -113,13 +115,19 @@ export function createCircuitRaceCoordinator(deps: CircuitRaceCoordinatorDeps): 
   let currentTick = 0;
 
   /** Racer `PLAYER_GRID_SLOT` reads the scene's own vehicle body; racers `0..AI_RACER_COUNT-1` read the matching fleet car, position-for-position (RACER INDEX TABLE). */
-  function racerBody(racerIndex: number): { translation(): { x: number; y: number; z: number }; rotation(): { x: number; y: number; z: number; w: number } } {
+  function racerBody(racerIndex: number): {
+    translation(): { x: number; y: number; z: number };
+    rotation(): { x: number; y: number; z: number; w: number };
+  } {
     return racerIndex === PLAYER_GRID_SLOT
       ? deps.scene.vehicle.body
       : deps.fleet.cars[racerIndex].vehicle.body;
   }
 
-  function currentCountdown(): { readonly label: CountdownLabel | null; readonly released: boolean } {
+  function currentCountdown(): {
+    readonly label: CountdownLabel | null;
+    readonly released: boolean;
+  } {
     if (armedTick === null) return countdownState(0);
     return countdownState(currentTick - armedTick);
   }

@@ -229,6 +229,127 @@ function buildReferenceGrid(
 }
 
 /**
+ * One car's chassis + four wheel meshes, with no `THREE.Scene`, ground, grid
+ * or lights of its own (plan 07-02, factored out of `createVehicleView`).
+ * `FL/FR/RL/RR = 0/1/2/3` order, mirroring `src/physics/vehicle.ts`'s wheel
+ * index constants exactly — the same T-01-16 dense-index hazard as every
+ * other wheel array in this codebase.
+ */
+export interface CarMeshes {
+  readonly chassis: THREE.Mesh;
+  /** `FL/FR/RL/RR = 0/1/2/3`. Children of `chassis` — see `createVehicleView`'s own reasoning for why wheels are parented rather than independently interpolated. */
+  readonly wheelMeshes: readonly THREE.Mesh[];
+  /** Per-frame wheel rig: suspension travel, steer angle, roll. Reads the controller, writes only meshes. */
+  updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void;
+  /** Dispose this car's own geometry and materials (never shared with another `buildCarMeshes` call). */
+  dispose(): void;
+}
+
+/**
+ * Builds ONE car's chassis + wheel meshes and nothing else — no `THREE.Scene`,
+ * ground, grid or lights (RESEARCH.md Pitfall 6 / Anti-Pattern: calling
+ * `createVehicleView` a 4th time for AI cars would build 3 more orphaned
+ * scenes). `createVehicleView` below calls this once for the player, with
+ * `COLOUR_CHASSIS`, and adds the returned `chassis` to its OWN scene;
+ * `src/render/ai-vehicle-view.ts` calls this once per AI car, with a
+ * distinct paint colour, adding each `chassis` directly into the EXISTING
+ * player scene it is handed.
+ *
+ * @param wheelRadius Wheel visual radius, metres. Must be a positive finite number.
+ * @param halfTrack Half the left-right wheel spacing, metres. Must be a positive finite number.
+ * @param halfWheelbase Half the front-rear wheel spacing, metres. Must be a positive finite number.
+ * @param chassisHalfExtents Chassis box half-extents, metres. Every component must be a positive finite number.
+ * @param chassisColor This car's chassis paint, a `0xRRGGBB` hex integer.
+ */
+export function buildCarMeshes(
+  wheelRadius: number,
+  halfTrack: number,
+  halfWheelbase: number,
+  chassisHalfExtents: { x: number; y: number; z: number },
+  chassisColor: number,
+): CarMeshes {
+  if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
+    throw new RangeError(`wheelRadius must be a positive finite number, got ${wheelRadius}`);
+  }
+  if (!Number.isFinite(halfTrack) || halfTrack <= 0) {
+    throw new RangeError(`halfTrack must be a positive finite number, got ${halfTrack}`);
+  }
+  if (!Number.isFinite(halfWheelbase) || halfWheelbase <= 0) {
+    throw new RangeError(`halfWheelbase must be a positive finite number, got ${halfWheelbase}`);
+  }
+  for (const axis of ["x", "y", "z"] as const) {
+    const v = chassisHalfExtents[axis];
+    if (!Number.isFinite(v) || v <= 0) {
+      throw new RangeError(`chassisHalfExtents.${axis} must be a positive finite number, got ${v}`);
+    }
+  }
+
+  const chassisGeometry = new THREE.BoxGeometry(
+    chassisHalfExtents.x * 2,
+    chassisHalfExtents.y * 2,
+    chassisHalfExtents.z * 2,
+  );
+  const chassisMaterial = new THREE.MeshStandardMaterial({ color: chassisColor, roughness: 0.5 });
+  const chassis = new THREE.Mesh(chassisGeometry, chassisMaterial);
+  chassis.castShadow = true;
+  chassis.receiveShadow = true;
+
+  // One shared geometry/material across THIS car's four wheels only (never
+  // shared across cars) — see `createVehicleView`'s matching comment for the
+  // frame-budget reasoning.
+  const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelRadius * 0.6, 20);
+  wheelGeometry.rotateZ(Math.PI / 2);
+  const wheelMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_WHEEL, roughness: 0.7 });
+
+  const connectionsXZ: readonly { x: number; z: number }[] = [
+    { x: -halfTrack, z: -halfWheelbase }, // FL
+    { x: halfTrack, z: -halfWheelbase }, // FR
+    { x: -halfTrack, z: halfWheelbase }, // RL
+    { x: halfTrack, z: halfWheelbase }, // RR
+  ];
+
+  const wheelMeshes: THREE.Mesh[] = [];
+  for (let i = 0; i < 4; i++) {
+    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    wheel.castShadow = true;
+    wheel.position.set(connectionsXZ[i].x, 0, connectionsXZ[i].z);
+    chassis.add(wheel);
+    wheelMeshes.push(wheel);
+  }
+
+  return {
+    chassis,
+    wheelMeshes,
+
+    updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void {
+      for (let i = 0; i < 4; i++) {
+        const connectionY = vc.wheelChassisConnectionPointCs(i)?.y ?? 0;
+        const suspensionLength = vc.wheelSuspensionLength(i) ?? 0;
+        wheelMeshes[i].position.y = connectionY - suspensionLength;
+
+        const steerRad = vc.wheelSteering(i) ?? 0;
+        const rollRad = vc.wheelRotation(i) ?? 0;
+        const axle = vc.wheelAxleCs(i);
+        SCRATCH_AXLE.set(axle?.x ?? -1, axle?.y ?? 0, axle?.z ?? 0);
+        SCRATCH_AXLE.normalize();
+
+        SCRATCH_STEER_QUAT.setFromAxisAngle(UP_AXIS, steerRad);
+        SCRATCH_ROLL_QUAT.setFromAxisAngle(SCRATCH_AXLE, rollRad);
+        SCRATCH_COMPOSED_QUAT.multiplyQuaternions(SCRATCH_STEER_QUAT, SCRATCH_ROLL_QUAT);
+        wheelMeshes[i].quaternion.copy(SCRATCH_COMPOSED_QUAT);
+      }
+    },
+
+    dispose(): void {
+      chassisGeometry.dispose();
+      chassisMaterial.dispose();
+      wheelGeometry.dispose();
+      wheelMaterial.dispose();
+    },
+  };
+}
+
+/**
  * Build the chassis mesh, four wheel meshes and static ground/ramp visuals.
  *
  * @param wheelRadius Wheel visual radius, metres. Must be a positive finite number.
@@ -345,57 +466,23 @@ export function createVehicleView(
   // ordering bug on frame one behind a plausible-looking layout
   // (`src/render/debug-scene.ts:117-120`'s rule, copied verbatim). This
   // does NOT apply to the wheel meshes below: their local transforms are
-  // owned by THIS module and written every frame by `updateWheels`.
-  const chassisGeometry = new THREE.BoxGeometry(
-    chassisHalfExtents.x * 2,
-    chassisHalfExtents.y * 2,
-    chassisHalfExtents.z * 2,
+  // owned by `buildCarMeshes` and written every frame by `updateWheels`.
+  //
+  // `buildCarMeshes` (factored out, plan 07-02) builds the chassis + four
+  // wheel meshes with no Scene/ground/grid of its own; this is the ONE call
+  // site that owns the player's paint (`COLOUR_CHASSIS`) and adds the result
+  // into THIS module's own scene. `src/render/ai-vehicle-view.ts` calls the
+  // same function 3 more times, once per AI car, into the EXISTING scene
+  // (RESEARCH.md Pitfall 6: never call `createVehicleView` a 4th time).
+  const carMeshes = buildCarMeshes(
+    wheelRadius,
+    halfTrack,
+    halfWheelbase,
+    chassisHalfExtents,
+    COLOUR_CHASSIS,
   );
-  const chassisMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_CHASSIS, roughness: 0.5 });
-  const chassis = new THREE.Mesh(chassisGeometry, chassisMaterial);
-  chassis.castShadow = true;
-  chassis.receiveShadow = true;
+  const { chassis, wheelMeshes } = carMeshes;
   scene.add(chassis);
-
-  // One shared geometry and one shared material across all four wheels,
-  // keeping the scene inside `docs/frame-budget.md`'s draw-call and
-  // triangle targets -- the same reasoning `src/render/debug-scene.ts:96-106`
-  // states for its six identical boxes. The cylinder's default axis is Y;
-  // rotating the geometry itself (baked in, not a per-mesh transform) lays
-  // it along X to match a wheel's rolling axis.
-  const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelRadius * 0.6, 20);
-  wheelGeometry.rotateZ(Math.PI / 2);
-  const wheelMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_WHEEL, roughness: 0.7 });
-
-  // Connection points in FL/FR/RL/RR = 0/1/2/3 order, mirroring
-  // `src/physics/vehicle.ts`'s `conn` array exactly -- a mismatch here draws
-  // each wheel at another wheel's transform (threat T-01-16's wheel-index
-  // analogue).
-  const connectionsXZ: readonly { x: number; z: number }[] = [
-    { x: -halfTrack, z: -halfWheelbase }, // FL
-    { x: halfTrack, z: -halfWheelbase }, // FR
-    { x: -halfTrack, z: halfWheelbase }, // RL
-    { x: halfTrack, z: halfWheelbase }, // RR
-  ];
-
-  const wheelMeshes: THREE.Mesh[] = [];
-  for (let i = 0; i < 4; i++) {
-    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    wheel.castShadow = true;
-    // Y is a placeholder -- `updateWheels` overwrites it from the
-    // controller's own suspension state on the very first call, so seeding
-    // it accurately here would be immediately discarded. X and Z are fixed
-    // for the vehicle's lifetime (steering rotates the wheel about its own
-    // connection point; it does not move the point itself), so those ARE
-    // meaningful here.
-    wheel.position.set(connectionsXZ[i].x, 0, connectionsXZ[i].z);
-    // Each wheel is a CHILD of the chassis mesh, so the chassis's own
-    // interpolated pose (written by `applyAllInterpolated`) carries every
-    // wheel along for free -- only the wheel's LOCAL transform needs
-    // updating per frame.
-    chassis.add(wheel);
-    wheelMeshes.push(wheel);
-  }
 
   const hemisphere = new THREE.HemisphereLight(0x8fa6c4, 0x2a2620, 1.1);
   scene.add(hemisphere);
@@ -420,34 +507,7 @@ export function createVehicleView(
     wheelMeshes,
 
     updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void {
-      for (let i = 0; i < 4; i++) {
-        // Every getter below returns `T | null` because Rapier returns null
-        // for an out-of-range wheel index (`rapier_wasm3d.d.ts`). This
-        // vehicle always has exactly 4 wheels (FL/FR/RL/RR), so `i` is
-        // always in range in practice -- but the fallback is `?? 0` rather
-        // than a non-null assertion, so a future index-contract bug fails
-        // as "wheel sits at the connection point" (visibly wrong) instead
-        // of a thrown TypeError.
-        const connectionY = vc.wheelChassisConnectionPointCs(i)?.y ?? 0;
-        const suspensionLength = vc.wheelSuspensionLength(i) ?? 0;
-        wheelMeshes[i].position.y = connectionY - suspensionLength;
-
-        const steerRad = vc.wheelSteering(i) ?? 0;
-        const rollRad = vc.wheelRotation(i) ?? 0;
-        const axle = vc.wheelAxleCs(i);
-        SCRATCH_AXLE.set(axle?.x ?? -1, axle?.y ?? 0, axle?.z ?? 0);
-        // `wheelAxleCs` is a unit axis by construction; normalize defensively
-        // since the `?? -1`/`?? 0` fallback path is not guaranteed unit length.
-        SCRATCH_AXLE.normalize();
-
-        SCRATCH_STEER_QUAT.setFromAxisAngle(UP_AXIS, steerRad);
-        SCRATCH_ROLL_QUAT.setFromAxisAngle(SCRATCH_AXLE, rollRad);
-        // Steer first, then roll within the steered frame -- a wheel that
-        // is turned AND spinning rolls about its own (turned) axle, not the
-        // chassis's static axle.
-        SCRATCH_COMPOSED_QUAT.multiplyQuaternions(SCRATCH_STEER_QUAT, SCRATCH_ROLL_QUAT);
-        wheelMeshes[i].quaternion.copy(SCRATCH_COMPOSED_QUAT);
-      }
+      carMeshes.updateWheels(vc);
     },
 
     dispose(): void {
@@ -457,10 +517,7 @@ export function createVehicleView(
       (grid.material as THREE.Material).dispose();
       rampGeometry?.dispose();
       rampMaterial?.dispose();
-      chassisGeometry.dispose();
-      chassisMaterial.dispose();
-      wheelGeometry.dispose();
-      wheelMaterial.dispose();
+      carMeshes.dispose();
     },
   };
 }
