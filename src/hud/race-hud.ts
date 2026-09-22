@@ -4,6 +4,8 @@ import type { RaceSnapshot } from "../core/race-state";
 export interface RaceHud {
   update(snapshot: RaceSnapshot, timing?: MedalTimingSnapshot): void;
   flashRestart(): void;
+  /** Circuit Race's 3-2-1-GO countdown text (plan 07-02, D-04). `null` hides it. */
+  showCountdown(label: string | null): void;
   dispose(): void;
 }
 
@@ -34,7 +36,14 @@ export function createRaceHud(): RaceHud {
   const split = document.createElement("div");
   split.style.cssText = "margin-top:10px;color:#7ee8ff;font-size:12px;min-height:15px";
   timingPanel.append(timer, thresholds, split);
-  root.append(status, timingPanel, wrongWay, tint, flash);
+  // Circuit Race's 3-2-1-GO countdown (plan 07-02, D-04): centred, large,
+  // hidden (not empty text) when there is nothing to show. Written with
+  // `textContent` only, matching every other DOM write in this file --
+  // `tests/layering.test.ts`'s repo-wide ban on the raw-HTML assignment path.
+  const countdown = document.createElement("div");
+  countdown.style.cssText =
+    "position:fixed;top:34%;left:50%;transform:translateX(-50%);font-size:72px;font-weight:700;color:#ffd447;text-shadow:0 3px 8px #000;visibility:hidden";
+  root.append(status, timingPanel, wrongWay, tint, flash, countdown);
 
   function formatTime(seconds: number): string {
     const safe = Number.isFinite(seconds) && seconds >= 0 ? seconds : 0;
@@ -68,6 +77,10 @@ export function createRaceHud(): RaceHud {
       setTimeout(() => {
         flash.style.opacity = "0";
       }, 125);
+    },
+    showCountdown(label: string | null): void {
+      countdown.textContent = label ?? "";
+      countdown.style.visibility = label === null ? "hidden" : "visible";
     },
     dispose(): void {
       root.remove();

@@ -40,7 +40,12 @@ export interface RaceCoordinator {
   snapshot(): RaceSnapshot;
 }
 
-function poseForCheckpoint(
+/**
+ * Exported (plan 07-02) so `circuit-race-coordinator.ts` reuses this SAME
+ * checkpoint-to-pose math for the player's respawn (D-13: "the same rule as
+ * the player's respawn") rather than re-deriving it. Body unchanged.
+ */
+export function poseForCheckpoint(
   checkpoint: CourseCheckpoint,
   course: Course,
   navigation: NavigationGraph,

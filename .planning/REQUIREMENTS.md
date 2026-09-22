@@ -43,7 +43,7 @@ Ruthless read from research: one area, three modes, one car, medals that work.
 ### Circuit Mode
 
 - [x] **CIRC-01**: Player can complete a Circuit level as an ordered checkpoint loop across N laps
-- [ ] **CIRC-02**: AI racers compete in Circuit mode at a fixed difficulty with no rubber-banding
+- [x] **CIRC-02**: AI racers compete in Circuit mode at a fixed difficulty with no rubber-banding
 
 ### Getaway Mode (Heat System)
 
@@ -135,7 +135,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NAV-07 | Phase 5 | Complete |
 | P2P-01 | Phase 5 | Complete |
 | CIRC-01 | Phase 5 | Complete |
-| CIRC-02 | Phase 7 | Pending |
+| CIRC-02 | Phase 7 | Complete |
 | GET-01 | Phase 8 | Pending |
 | GET-02 | Phase 8 | Pending |
 | GET-03 | Phase 8 | Pending |
