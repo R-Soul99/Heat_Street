@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  forwardFromYaw,
-  headingFromRotation,
-  yawFromTravelDirection,
-} from "../src/core/heading";
+import { forwardFromYaw, headingFromRotation, yawFromTravelDirection } from "../src/core/heading";
 
 /** Builds the exact rotation `src/physics/vehicle.ts`'s `resetPose` builds for `headingRad`. */
 function rotationFromYaw(headingRad: number): { x: number; y: number; z: number; w: number } {
