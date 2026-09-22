@@ -4,8 +4,8 @@ import { defaultAiDriverParams } from "../src/core/ai-driver";
 import type { RacingLine, RacingLinePoint } from "../src/core/racing-line";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { defaultTuning } from "../src/core/vehicle-tuning";
-import { createAiFleet } from "../src/physics/ai-fleet";
 import { probeForwardGapM } from "../src/physics/ai-avoidance";
+import { createAiFleet } from "../src/physics/ai-fleet";
 import { createSurfaceMap, type SurfaceContext } from "../src/physics/surface";
 import { buildTelemetryScene } from "../src/physics/telemetry/run";
 import { createWorld } from "../src/physics/world";
@@ -59,13 +59,9 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
     const world = createWorld();
     try {
       buildTelemetryScene(world);
-      const bodyA = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0),
-      );
+      const bodyA = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0));
       const colliderA = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyA);
-      const bodyB = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0),
-      );
+      const bodyB = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0));
       const colliderB = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyB);
 
       // Rapier's broad-phase only picks up newly-created colliders on the
@@ -77,7 +73,14 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
       const obstacles = new Set<number>([colliderA.handle, colliderB.handle]);
       // Origin AT A's own front bumper (its +X face, half-extent 1) — filterExcludeRigidBody
       // is what makes an origin exactly on A's own surface safe.
-      const gap = probeForwardGapM(world, bodyA, obstacles, { x: 1, y: 1, z: 0 }, { x: 1, z: 0 }, 30);
+      const gap = probeForwardGapM(
+        world,
+        bodyA,
+        obstacles,
+        { x: 1, y: 1, z: 0 },
+        { x: 1, z: 0 },
+        30,
+      );
 
       expect(gap).not.toBeNull();
       // B's near face is at x = 20 - 1 = 19; origin is at x = 1; expected gap = 18.
@@ -92,13 +95,9 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
     const world = createWorld();
     try {
       buildTelemetryScene(world);
-      const bodyA = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0),
-      );
+      const bodyA = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0));
       const colliderA = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyA);
-      const bodyB = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0),
-      );
+      const bodyB = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0));
       const colliderB = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyB);
 
       // See bullet 1's comment: one step settles the broad-phase for these
@@ -107,7 +106,14 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
 
       const obstacles = new Set<number>([colliderA.handle, colliderB.handle]);
       // Origin at A's own centre — deep inside A's collider.
-      const gap = probeForwardGapM(world, bodyA, obstacles, { x: 0, y: 1, z: 0 }, { x: 1, z: 0 }, 30);
+      const gap = probeForwardGapM(
+        world,
+        bodyA,
+        obstacles,
+        { x: 0, y: 1, z: 0 },
+        { x: 1, z: 0 },
+        30,
+      );
 
       expect(gap).not.toBeNull();
       // Must report B (near face x=19), never A (which would read ~0 or 1).
@@ -122,26 +128,27 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
     const world = createWorld();
     try {
       buildTelemetryScene(world);
-      const bodyA = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0),
-      );
+      const bodyA = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0));
       const colliderA = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyA);
-      const bodyB = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0),
-      );
+      const bodyB = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0));
       const colliderB = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyB);
       // A wall directly between A and B, deliberately excluded from the
       // obstacle set below.
-      const wallBody = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(10, 1, 0),
-      );
+      const wallBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(10, 1, 0));
       world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), wallBody);
 
       // See bullet 1's comment: one step settles the broad-phase.
       world.step();
 
       const obstacles = new Set<number>([colliderA.handle, colliderB.handle]);
-      const gap = probeForwardGapM(world, bodyA, obstacles, { x: 1, y: 1, z: 0 }, { x: 1, z: 0 }, 30);
+      const gap = probeForwardGapM(
+        world,
+        bodyA,
+        obstacles,
+        { x: 1, y: 1, z: 0 },
+        { x: 1, z: 0 },
+        30,
+      );
 
       expect(gap).not.toBeNull();
       // Same result as the ground-truth bullet 1 case — the wall (and the
@@ -156,13 +163,9 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
     const world = createWorld();
     try {
       buildTelemetryScene(world);
-      const bodyA = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0),
-      );
+      const bodyA = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1, 0));
       const colliderA = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyA);
-      const bodyB = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0),
-      );
+      const bodyB = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(20, 1, 0));
       const colliderB = world.createCollider(RAPIER.ColliderDesc.cuboid(1, 1, 1), bodyB);
 
       // See bullet 1's comment: one step settles the broad-phase.
@@ -170,7 +173,14 @@ describe("probeForwardGapM: chassis-only forward raycast (first world.castRay co
 
       const obstacles = new Set<number>([colliderA.handle, colliderB.handle]);
       // maxDistanceM (5) is far short of the real 18m gap to B.
-      const gap = probeForwardGapM(world, bodyA, obstacles, { x: 1, y: 1, z: 0 }, { x: 1, z: 0 }, 5);
+      const gap = probeForwardGapM(
+        world,
+        bodyA,
+        obstacles,
+        { x: 1, y: 1, z: 0 },
+        { x: 1, z: 0 },
+        5,
+      );
 
       expect(gap).toBeNull();
     } finally {
