@@ -20,6 +20,16 @@ export function nextRoadWaypoint(
   return node === undefined ? null : [node.x, node.y, node.z];
 }
 
+export function navigationArrowRotation(
+  carHeadingRad: number,
+  carPosition: readonly [number, number, number],
+  waypoint: readonly [number, number, number],
+): number {
+  const dx = waypoint[0] - carPosition[0];
+  const dz = waypoint[2] - carPosition[2];
+  return Math.atan2(dz, dx) - carHeadingRad;
+}
+
 export function createNavigationArrow(): NavigationArrow {
   const element = document.createElement("div");
   element.textContent = "▲";
@@ -34,10 +44,11 @@ export function createNavigationArrow(): NavigationArrow {
         return;
       }
       element.style.visibility = "visible";
-      const dx = snapshot.waypoint[0] - snapshot.carPosition[0];
-      const dz = snapshot.waypoint[2] - snapshot.carPosition[2];
-      const bearing = Math.atan2(dx, -dz);
-      const relative = bearing - snapshot.carHeadingRad;
+      const relative = navigationArrowRotation(
+        snapshot.carHeadingRad,
+        snapshot.carPosition,
+        snapshot.waypoint,
+      );
       element.style.transform = `translateX(-50%) rotate(${relative}rad)`;
     },
     dispose(): void {

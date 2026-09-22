@@ -16,6 +16,7 @@ export interface MinimapSnapshot {
   readonly player: MinimapPoint;
   readonly headingRad: number;
   readonly remaining: readonly MinimapPoint[];
+  readonly target: MinimapPoint | null;
 }
 
 export interface Minimap {
@@ -40,14 +41,19 @@ export function projectMinimapPoint(
   }
   return {
     x: half + Math.sin(angleRad) * (half - 8),
-    y: half - Math.cos(angleRad) * (half - 8),
+    y: half + Math.cos(angleRad) * (half - 8),
     offscreen: true,
     angleRad,
   };
 }
 
 export function projectCarRotation(headingRad: number): number {
-  return -headingRad;
+  // The marker is drawn pointing up; vehicle heading is measured from world +X.
+  return Math.PI / 2 - headingRad;
+}
+
+function distanceFromPlayer(point: MinimapPoint, player: MinimapPoint): number {
+  return Math.hypot(point.x - player.x, point.z - player.z);
 }
 
 export function createMinimap(graph: RoadGraph, sizePx = 196, radiusM = 420): Minimap {
@@ -71,22 +77,42 @@ export function createMinimap(graph: RoadGraph, sizePx = 196, radiusM = 420): Mi
       context.fillStyle = "#071015";
       context.fillRect(0, 0, sizePx, sizePx);
       context.strokeStyle = "rgba(120,218,238,.62)";
-      context.lineWidth = 2;
+      context.lineWidth = 1.5;
       for (const edge of graph.edges) {
         context.beginPath();
-        edge.points.forEach((point, index) => {
-          const projected = mapPoint({ x: point[0], z: point[2] }, snapshot.player);
-          if (index === 0) context.moveTo(projected.x, projected.y);
-          else context.lineTo(projected.x, projected.y);
-        });
+        let drawing = false;
+        for (const point of edge.points) {
+          const worldPoint = { x: point[0], z: point[2] };
+          if (distanceFromPlayer(worldPoint, snapshot.player) > radiusM) {
+            drawing = false;
+            continue;
+          }
+          const projected = mapPoint(worldPoint, snapshot.player);
+          if (!drawing) {
+            context.moveTo(projected.x, projected.y);
+            drawing = true;
+          } else {
+            context.lineTo(projected.x, projected.y);
+          }
+        }
         context.stroke();
       }
       for (const point of snapshot.remaining) {
         const projected = mapPoint(point, snapshot.player);
-        context.fillStyle = projected.offscreen ? "#ffd447" : "#ff7c52";
+        context.fillStyle = projected.offscreen ? "#6ed7e8" : "#ff9b78";
         context.beginPath();
-        context.arc(projected.x, projected.y, projected.offscreen ? 4 : 5, 0, Math.PI * 2);
+        context.arc(projected.x, projected.y, projected.offscreen ? 3 : 4, 0, Math.PI * 2);
         context.fill();
+      }
+      if (snapshot.target !== null) {
+        const projected = mapPoint(snapshot.target, snapshot.player);
+        context.fillStyle = "#ffd447";
+        context.strokeStyle = "#fff4b0";
+        context.lineWidth = 2;
+        context.beginPath();
+        context.arc(projected.x, projected.y, projected.offscreen ? 6 : 7, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
       }
       context.save();
       context.translate(sizePx / 2, sizePx / 2);
