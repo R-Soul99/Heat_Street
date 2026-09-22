@@ -304,8 +304,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md — Circuit Race mode in the browser: 4-car staggered grid, 3-2-1-GO, recolored AI, per-racer laps (wave 2)
-- [ ] 07-03-PLAN.md — Mild throttle-only avoidance via forward castRay; headless 3-AI field lap (wave 2)
+- [x] 07-02-PLAN.md — Circuit Race mode in the browser: 4-car staggered grid, 3-2-1-GO, recolored AI, per-racer laps (wave 2)
+- [x] 07-03-PLAN.md — Mild throttle-only avoidance via forward castRay; headless 3-AI field lap (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -354,7 +354,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | In Progress|  |
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
-| 7. NPC Driving AI & Circuit Racers | 1/7 | In Progress|  |
+| 7. NPC Driving AI & Circuit Racers | 3/7 | In Progress|  |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes
