@@ -177,6 +177,7 @@ Recent decisions affecting current work:
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 - [physics] Support configurable drivetrain type (RWD/FWD/AWD) per car class — v1's engine force is hardcoded to rear wheels only (`engineForcePerRearWheel`), needed for future car classes. See `.planning/todos/pending/2026-09-20-support-configurable-drivetrain-type-per-car-class.md`.
+- [general] Author a shorter, tighter course on the Juliette map — current circuit loop has two long legs (~650m/~943m) making it hard to navigate with the slidey car; needs a tighter route from existing checkpoints or a denser map area. See `.planning/todos/pending/2026-09-22-author-a-shorter-tighter-course-on-the-juliette-map.md`.
 
 ### Blockers/Concerns
 
