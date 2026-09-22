@@ -79,11 +79,31 @@ export interface RacingLineParams {
  * (D-09/CIRC-02). Never varied at runtime, never derived from any racer's
  * state — the entire point of a fixed-difficulty AI is that this is a single
  * constant chosen once (Task 3's calibration step) and baked into the
- * shipped build, not a live knob. Starts at 1.0; Task 3 measures the
- * uncalibrated lap time against `silverLapTargetSec` and adjusts this one
- * number until the headless lap lands within +/-6% of Silver pace.
+ * shipped build, not a live knob.
+ *
+ * [MEASURED] (plan 07-01 Task 3, `tests/ai-lap.test.ts`): started at 1.0
+ * (i.e. `DEFAULT_RACING_LINE_PARAMS.topSpeedMs` of 45 m/s / ~100 mph applied
+ * almost unscaled). At 1.0 and at an intermediate 0.75, the headless lap
+ * crashed into a roadside building on the real circuit's fast 19->16 leg
+ * (tarmac, not the dirt leg) — the pure-pursuit driver tracked the racing
+ * line closely on gentle curves but the position/steering error visibly grew
+ * across the ~100 m entering a modest bend (radius roughly 180-300 m) taken
+ * at 40-45 m/s, and the car ran wide off the ~7 m-wide carriageway into a
+ * building the map places close to the road edge there. This is an ordinary
+ * pure-pursuit limitation (bounded steering authority and a speed-scaled
+ * look-ahead that both shrink proportionally as speed drops), not a sign
+ * error or a broken formula — reducing the whole pace, which reduces
+ * `lookAheadDistanceM` at every point too, gave the controller enough margin
+ * to track the corner cleanly. 0.5 (127.4 s) and 0.47 (150.0 s / -6.8%) both
+ * completed without crashing but under-ran the +/-6% Silver band; 0.455
+ * lands the measured one-lap time at 154.40 s against a 161.00 s Silver
+ * target (-4.1%), inside the band with margin. `aLatMaxMs2` (below) was
+ * deliberately left untouched — the crash was not caused by insufficient
+ * cornering grip in the speed profile, and D-09/07-RESEARCH.md reserve that
+ * knob specifically for a car sliding or running wide on the dirt leg, which
+ * this was not.
  */
-export const AI_PACE_CALIBRATION = 1.0;
+export const AI_PACE_CALIBRATION = 0.455;
 
 export const DEFAULT_RACING_LINE_PARAMS: RacingLineParams = Object.freeze({
   spacingM: 2,
