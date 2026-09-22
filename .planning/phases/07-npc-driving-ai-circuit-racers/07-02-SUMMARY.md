@@ -160,3 +160,8 @@ None. `?mode=circuit-race` is a complete, driveable vertical slice for this plan
 ---
 *Phase: 07-npc-driving-ai-circuit-racers*
 *Completed: 2026-09-22*
+
+## Self-Check: PASSED
+
+- All created files verified present (`src/core/race-start.ts`, `src/gameplay/circuit-race-coordinator.ts`, `src/render/ai-vehicle-view.ts`, `tests/race-start.test.ts`, `tests/circuit-race-coordinator.test.ts`, `tests/ai-vehicle-view.test.ts`, this SUMMARY.md)
+- All 5 commits verified present in `git log`: `8c2fa35`, `ff7098f`, `0e016e1`, `2c8dd55`, `b7372a1`
