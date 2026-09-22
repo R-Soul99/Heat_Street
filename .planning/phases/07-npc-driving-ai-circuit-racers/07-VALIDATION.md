@@ -2,7 +2,7 @@
 phase: 07
 slug: npc-driving-ai-circuit-racers
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-09-22
 ---
@@ -38,15 +38,29 @@ created: 2026-09-22
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 07-XX-XX | TBD | TBD | CIRC-02 (SC1: identical physics, rammable/spinnable, nothing writes transforms) | — | AI vehicle built via unmodified `createVehicle()`; AI driver only returns `InputFrame` | unit | `npx vitest run tests/ai-driver.test.ts` | ❌ W0 | ⬜ pending |
-| 07-XX-XX | TBD | TBD | CIRC-02 (SC2: fixed pace, no rubber-banding/speed multipliers) | — | `AiDriver`/`RacingLine` never read player state; lap time against Silver-pace target within tolerance when run headlessly | unit (headless sim harness, mirroring `src/physics/telemetry/run.ts`'s pattern) | `npx vitest run tests/racing-line.test.ts` + headless lap-time harness test | ❌ W0 | ⬜ pending |
-| 07-XX-XX | TBD | TBD | CIRC-02 (SC3: stuck/flipped/wedged detect-and-recover) | — | `StuckDetector` state transitions on synthetic telemetry sequences | unit | `npx vitest run tests/ai-stuck-detector.test.ts` | ❌ W0 | ⬜ pending |
-| 07-XX-XX | TBD | TBD | CIRC-02 (SC4: no oscillation on straights, no corner-cutting through scenery) | — | Pure-pursuit steer output stays within a small band on a synthetic straight; racing line stays within `widthM/2` of centreline everywhere, clear of `DEFECT_COORDINATES` | unit | `npx vitest run tests/racing-line.test.ts tests/ai-driver.test.ts` | ❌ W0 | ⬜ pending |
-| 07-XX-XX | TBD | TBD | CIRC-02 (SC5: player medal time unaffected by AI presence) | — | Solo Time Attack composition path unchanged; `createRaceState` single-call-site behavior byte-identical | regression (existing) | `npx vitest run tests/race-state.test.ts tests/medal-timing.test.ts` (must stay green, unmodified expectations) | ✅ existing | ⬜ pending |
-| 07-XX-XX | TBD | TBD | D-06 (best finish persisted) | — | Extended `MedalProgressRecord`/persistence round-trips a new `bestFinish` field, corruption-tolerant | unit | `npx vitest run tests/medal-persistence.test.ts` (extended) | ✅ existing, needs extension | ⬜ pending |
-| 07-XX-XX | TBD | TBD | D-16 (HUD gap/position/lap) | — | `RaceHud` renders position/lap/gap text from a snapshot | unit (DOM-light, matching `race-hud.ts` test style) | `npx vitest run tests/race-hud.test.ts` | ❌ W0 (no existing file) | ⬜ pending |
+| 07-01-01 | 01 | 1 | CIRC-02 (SC1 e2e lap, heading conventions) | T-07-02 | Shared yaw/bearing helpers; failing headless lap test written first | unit + e2e (RED) | `npx vitest run tests/heading.test.ts tests/race-coordinator.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-01-02 | 01 | 1 | CIRC-02 (SC4 no corner-cutting) | T-07-01 | Racing line within widthM/2 - margin, on centreline near DEFECT_COORDINATES, braking-feasible, grid poses face down-course | unit | `npx vitest run tests/racing-line.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-01-03 | 01 | 1 | CIRC-02 (SC1, SC2, SC4) | T-07-02, T-07-04 | AI via unmodified createVehicle(), InputFrames only; no player/placement reads (source guard); one lap within ±6% of Silver lap 161 s; quiet straights | unit + headless sim | `npx vitest run tests/ai-driver.test.ts tests/ai-lap.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-02-01 | 02 | 2 | CIRC-02 (D-01..D-04) | T-07-06 | Countdown/hold frame (brake 0, no reverse), coordinator contract incl. SC5 source guard | unit | `npx vitest run tests/race-start.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-02-02 | 02 | 2 | CIRC-02 (SC5, D-04, D-08) | T-07-06 | N-racer coordinator never imports medal-timing/persistence | unit | `npx vitest run tests/circuit-race-coordinator.test.ts tests/race-coordinator.test.ts` | ❌ W0 (created in 07-02-01) | ⬜ pending |
+| 07-02-03 | 02 | 2 | CIRC-02 (D-02 paints, mode wiring) | T-07-05, T-07-07 | AI meshes in the shared scene (no extra Scene); `?mode=` exact-match | unit + build | `npx vitest run tests/ai-vehicle-view.test.ts && npm run typecheck && npm run build` | ❌ W0 (created by task) | ⬜ pending |
+| 07-03-01 | 03 | 2 | CIRC-02 (D-10) | T-07-09 | Avoidance is throttle-only: never steers or brakes | unit | `npx vitest run tests/ai-driver.test.ts` | ✅ (from 07-01) | ⬜ pending |
+| 07-03-02 | 03 | 2 | CIRC-02 (D-10) | T-07-10, T-07-11 | castRay probe sees chassis only, never itself | unit (headless Rapier) | `npx vitest run tests/ai-avoidance.test.ts tests/ai-lap.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-03-03 | 03 | 2 | CIRC-02 (SC1, SC2) | T-07-09 | 3-AI field laps the real map, no flips/deadlock | headless sim | `npx vitest run tests/ai-field.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-04-01 | 04 | 3 | CIRC-02 (D-13 same reset rule) | T-07-14 | Reset pose faces down-course (yaw convention); snapBody range-checked | unit | `npx vitest run tests/checkpoint-pose.test.ts tests/transform-cache.test.ts tests/determinism.test.ts` | ❌ W0 / ✅ existing | ⬜ pending |
+| 07-04-02 | 04 | 3 | CIRC-02 (SC3) | T-07-12 | Stuck/flip/no-progress detection with hysteresis and camera-aware deferral | unit | `npx vitest run tests/ai-stuck-detector.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-04-03 | 04 | 3 | CIRC-02 (SC3, D-13) | T-07-12, T-07-13 | Reset charges RaceState.respawn() 5 s; never onto another car | unit | `npx vitest run tests/circuit-race-coordinator.test.ts` | ✅ (from 07-02) | ⬜ pending |
+| 07-05-01 | 05 | 4 | CIRC-02 (SC4, D-15) | T-07-16, T-07-17 | Overlay pure label/geometry; textContent only; no internal gate | unit | `npx vitest run tests/ai-debug-overlay.test.ts tests/circuit-race-coordinator.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-05-02 | 05 | 4 | CIRC-02 (D-15) | T-07-15 | Overlay only constructed under DEBUG_ENABLED, KeyI | build + layering | `npm run typecheck && npm run build && npx vitest run tests/layering.test.ts` | ✅ | ⬜ pending |
+| 07-05-03 | 05 | 4 | CIRC-02 (SC3, SC4, D-10, D-12, frame budget) | — | Human feel session | manual (checkpoint) | `npm run check` after any retune | — | ⬜ pending |
+| 07-06-01 | 06 | 5 | CIRC-02 (D-16 placing/gap) | T-07-19 | Leg-bounded progress, standings, time-based gaps | unit | `npx vitest run tests/race-placement.test.ts` | ❌ W0 (created by task) | ⬜ pending |
+| 07-06-02 | 06 | 5 | CIRC-02 (D-14, D-16) | T-07-20 | HUD status format; minimap racer markers | unit | `npx vitest run tests/race-hud.test.ts tests/minimap.test.ts` | ❌ W0 (race-hud.test.ts new) / ✅ minimap | ⬜ pending |
+| 07-06-03 | 06 | 5 | CIRC-02 (D-14, D-16) | T-07-19 | Placing never flows into AI control | unit | `npx vitest run tests/circuit-race-coordinator.test.ts` | ✅ | ⬜ pending |
+| 07-07-01 | 07 | 6 | CIRC-02 (D-06 persistence) | T-07-22, T-07-23, T-07-24 | bestFinish range-validated in the same v1 envelope; cross-mode saves preserve each other | unit | `npx vitest run tests/medal-persistence.test.ts tests/race-placement.test.ts tests/results-view.test.ts` | ✅ existing, extended | ⬜ pending |
+| 07-07-02 | 07 | 6 | CIRC-02 (D-05, D-07, SC5) | T-07-25 | Exactly-once classification/save under `<id>.race`; solo medal path untouched | unit + build | `npx vitest run tests/circuit-race-coordinator.test.ts tests/race-coordinator.test.ts tests/medal-timing.test.ts && npm run build` | ✅ | ⬜ pending |
+| 07-07-03 | 07 | 6 | CIRC-02 (D-09 Silver pace, SC5) | — | End-of-phase human sign-off | manual (checkpoint) | `npm run check` | — | ⬜ pending |
 
-*Task IDs and plan/wave assignments will be filled once PLAN.md files exist — the planner should update this map or the gsd-plan-checker will flag it as a gap.*
+*Map filled by the planner from 07-01..07-07-PLAN.md. Wave 0 test files are created inside the tasks listed (TDD: test first). The two manual rows are blocking checkpoints; every auto task has an automated command.*
 
 ---
 
@@ -56,7 +70,8 @@ created: 2026-09-22
 - [ ] `tests/ai-driver.test.ts` — pure-pursuit steer output, velocity-scaled lookahead, `InputFrame` shape/range compliance
 - [ ] `tests/ai-stuck-detector.test.ts` — the 3-state stuck/recover/reset machine on synthetic telemetry
 - [ ] `tests/race-hud.test.ts` — does not currently exist; D-16's HUD extension needs its own test file (same DOM-light pattern `race-hud.ts`'s sibling files already use)
-- [ ] A headless lap-time harness for calibrating/verifying Silver pace — reuse `src/physics/telemetry/run.ts`'s existing "drive N ticks against a fixed tuning, measure the result" pattern rather than building a new one from scratch
+- [ ] A headless lap-time harness for calibrating/verifying Silver pace: `tests/ai-lap.test.ts` (07-01-01) and `tests/ai-field.test.ts` (07-03-03), reusing `src/physics/telemetry/run.ts`'s throwaway-world pattern
+- [ ] `tests/heading.test.ts`, `tests/race-start.test.ts`, `tests/circuit-race-coordinator.test.ts`, `tests/ai-vehicle-view.test.ts`, `tests/ai-avoidance.test.ts`, `tests/checkpoint-pose.test.ts`, `tests/ai-debug-overlay.test.ts`, `tests/race-placement.test.ts` (created by their tasks)
 
 ---
 
@@ -73,11 +88,11 @@ created: 2026-09-22
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
+- [x] No watch-mode flags
 - [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

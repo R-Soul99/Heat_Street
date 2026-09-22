@@ -295,7 +295,33 @@ Plans:
   4. AI steering shows no visible oscillation on straights or corner-cutting through scenery, verifiable via an AI debug overlay showing paths and targets
   5. Adding AI racers changes nothing about the player's medal time — the clock is still the opponent
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — One AI car laps the real circuit headlessly: racing line, pure-pursuit driver, AI fleet, Silver-pace calibration (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — Circuit Race mode in the browser: 4-car staggered grid, 3-2-1-GO, recolored AI, per-racer laps (wave 2)
+- [ ] 07-03-PLAN.md — Mild throttle-only avoidance via forward castRay; headless 3-AI field lap (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-04-PLAN.md — Stuck/flip/wedge recovery: drive-out then checkpoint reset with respawn cost; verified reset pose (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-05-PLAN.md — ?debug AI overlay (lines, targets, inputs, state, timers) + human feel-tuning checkpoint (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 07-06-PLAN.md — Live position/lap/gap HUD and colored minimap racer dots (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
