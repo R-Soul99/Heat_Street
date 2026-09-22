@@ -34,22 +34,36 @@ export function projectMinimapPoint(
   const dx = point.x - player.x;
   const dz = point.z - player.z;
   const distance = Math.hypot(dx, dz);
-  const angleRad = Math.atan2(dx, -dz);
+  // Screen-right = world +X, screen-up = world -Z. This is the NON-MIRRORED
+  // pairing for a straight-down top-down camera (cross(forward, up) = right
+  // only holds for up = world -Z when right = world +X; pairing +X with
+  // world +Z instead produces a left-right-flipped map, which was the root
+  // cause of the marker appearing to turn opposite the car — see
+  // .planning/debug/resolved/minimap-arrow-moves-in-the-op.md). `angleRad`
+  // uses the same atan2(dz, dx) axis order as every other bearing calc in
+  // the codebase (navigation-arrow.ts, race-coordinator.ts, headingFromRotation).
+  const angleRad = Math.atan2(dz, dx);
   const scale = half / radiusM;
   if (distance <= radiusM) {
-    return { x: half + dx * scale, y: half - dz * scale, offscreen: false, angleRad };
+    return { x: half + dx * scale, y: half + dz * scale, offscreen: false, angleRad };
   }
   return {
-    x: half + Math.sin(angleRad) * (half - 8),
-    y: half + Math.cos(angleRad) * (half - 8),
+    x: half + Math.cos(angleRad) * (half - 8),
+    y: half + Math.sin(angleRad) * (half - 8),
     offscreen: true,
     angleRad,
   };
 }
 
 export function projectCarRotation(headingRad: number): number {
-  // The marker is drawn pointing up; vehicle heading is measured from world +X.
-  return Math.PI / 2 - headingRad;
+  // The marker is drawn pointing up; vehicle heading is measured from world
+  // +X via atan2(forwardZ, forwardX). Paired with the non-mirrored
+  // projectMinimapPoint mapping above (screen-up = world -Z), this keeps the
+  // marker pointing at whatever is dead-ahead of the car for every heading
+  // AND sweeps clockwise on screen for a physical right turn (headingRad
+  // increasing) — both properties verified algebraically, not just at
+  // discrete heading values.
+  return Math.PI / 2 + headingRad;
 }
 
 function distanceFromPlayer(point: MinimapPoint, player: MinimapPoint): number {

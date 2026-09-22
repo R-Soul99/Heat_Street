@@ -171,6 +171,7 @@ Recent decisions affecting current work:
 - [Phase 05-03]: Vehicle reset mutates the existing Rapier body and realigns interpolation buffers without rewinding SimClock.
 - [Phase 06-04]: Coordinator reads LoopHandle.clock.simTimeSec for medal timing.
 - [Phase 06-04]: HUD consumes fixed-tick timing snapshots and does not own timing or medal policy.
+- [Debug: minimap-arrow-moves-in-the-op]: src/hud/minimap.ts (`projectMinimapPoint`) paired screen-right=world+X with screen-up=world+Z -- the MIRRORED top-down projection for a straight-down camera (non-mirrored pairing needs screen-up=world -Z, verified via cross(forward,up)=right). The prior session's `projectCarRotation` fix (`Math.PI/2 - headingRad`) was algebraically self-consistent with that mirrored mapping, so discrete checkpoint-pointing checks passed even though a real RIGHT turn (headingRad provably increasing) swept the marker COUNTERCLOCKWISE on screen -- opposite the real car. Fixed as ONE coupled change: un-mirrored the point mapping (`y: half + dz*scale`), `angleRad` to the codebase-standard `Math.atan2(dz, dx)` (minimap.ts was the only atan2(dx,-dz) outlier in the repo), the offscreen clamp to match, and `projectCarRotation` to `Math.PI/2 + headingRad`. Lesson: rotational-SENSE correctness does not survive an axis-mirroring bug even when pointing-AT-a-target correctness does -- a discrete-point check alone can mask a sign/mirroring defect. Human-confirmed fixed 2026-09-22; see .planning/debug/resolved/minimap-arrow-moves-in-the-op.md.
 
 ### Pending Todos
 
