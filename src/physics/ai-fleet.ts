@@ -14,13 +14,28 @@
  * `three` and must not touch the DOM or any wall clock.
  */
 import type * as RAPIER from "@dimforge/rapier3d";
-import { type AiDriver, type AiDriverParams, createAiDriver } from "../core/ai-driver";
+import {
+  type AiDriver,
+  type AiDriverParams,
+  avoidanceThrottleScale,
+  composeAiFrame,
+  createAiDriver,
+  followDistanceM,
+} from "../core/ai-driver";
 import { headingFromRotation } from "../core/heading";
 import { type InputFrame, NEUTRAL } from "../core/input-tape";
 import type { RacingLine } from "../core/racing-line";
 import type { VehicleTuning } from "../core/vehicle-tuning";
+import { probeForwardGapM } from "./ai-avoidance";
 import type { SurfaceContext } from "./surface";
 import { createVehicle, sampleVehicle, type Vehicle, type VehiclePose } from "./vehicle";
+
+/** Forward probe length cap, metres — the same ceiling `AVOIDANCE_PARAMS.followMaxM` uses, so the ray is never cast further than the slowdown curve could ever need (T-07-10: bounds the per-tick raycast cost). */
+const MAX_PROBE_DISTANCE_M = 30;
+/** Forward probe origin offset past the chassis's own front face, metres — keeps the ray origin just outside the car's own collider so it is never accidentally the FIRST thing the ray would hit even without the self-exclude filter. */
+const PROBE_FORWARD_MARGIN_M = 0.05;
+/** Forward probe origin height above the chassis centre, metres — keeps the ray roughly bumper-height rather than at the chassis's vertical centre. */
+const PROBE_HEIGHT_OFFSET_M = 0.1;
 
 export interface AiFleetCar {
   readonly vehicle: Vehicle;
@@ -40,6 +55,8 @@ export interface AiFleet {
   tick(tickIndex: number, shape?: (carIndex: number, base: InputFrame) => InputFrame): void;
   /** The frame actually applied to car `carIndex` on the most recent `tick()` call. `NEUTRAL` before the first tick. */
   lastFrame(carIndex: number): InputFrame;
+  /** The D-10 avoidance throttle multiplier applied to car `carIndex` on the most recent `tick()` call, in `[0, 1]`. `1` before the first tick and immediately after `resetCar`. */
+  avoidanceScale(carIndex: number): number;
   /** Resets car `carIndex`'s chassis in place and forces its driver to re-seed its nearest-line-point search next tick. */
   resetCar(carIndex: number, pose: VehiclePose): void;
   /** D-02: retunes every AI vehicle identically to the player's own live tune — never a second, independent tuning surface. */
@@ -60,6 +77,7 @@ export function createAiFleet(
   line: RacingLine,
   gridPoses: readonly VehiclePose[],
   driverParams: AiDriverParams,
+  options?: { readonly obstacleBodies?: readonly RAPIER.RigidBody[] },
 ): AiFleet {
   let currentTuning = tuning;
 
@@ -71,8 +89,23 @@ export function createAiFleet(
   });
 
   const lastFrames: InputFrame[] = cars.map(() => NEUTRAL);
+  const avoidanceScales: number[] = cars.map(() => 1);
 
   const bodies: readonly RAPIER.RigidBody[] = cars.map((car) => car.vehicle.body);
+
+  // D-10 avoidance obstacle set: every fleet chassis's own single collider
+  // (`createVehicle` always builds exactly one, index 0) plus any
+  // externally-supplied obstacle bodies (e.g. the user-controlled car,
+  // wired in by a later plan) — a plain `ColliderHandle` set, rebuilt once
+  // here since fleet membership and obstacle bodies are fixed for this
+  // `AiFleet`'s lifetime.
+  const obstacleColliderHandles = new Set<number>();
+  for (const car of cars) {
+    obstacleColliderHandles.add(car.vehicle.body.collider(0).handle);
+  }
+  for (const obstacleBody of options?.obstacleBodies ?? []) {
+    obstacleColliderHandles.add(obstacleBody.collider(0).handle);
+  }
 
   return {
     cars,
@@ -87,13 +120,39 @@ export function createAiFleet(
         // fresh here means an AI observes its true post-reset pose the very
         // same tick, not a stale pre-reset one.
         const sample = sampleVehicle(car.vehicle);
+        const headingRad = headingFromRotation(sample.rotation);
         car.driver.observe({
           x: sample.position.x,
           z: sample.position.z,
-          headingRad: headingFromRotation(sample.rotation),
+          headingRad,
           forwardSpeedMs: sample.forwardSpeedMs,
         });
-        const base = car.driver.sampleForTick(tickIndex);
+
+        const forwardSpeedMs = Math.max(0, sample.forwardSpeedMs);
+        const forward = { x: Math.cos(headingRad), z: Math.sin(headingRad) };
+        // currentTuning, not the original `tuning` parameter — D-02 requires
+        // every AI reflect the live tune after `setTuning`, and the probe
+        // origin offset (half the chassis length) must track a retuned
+        // chassis size just like every other per-tick read here does.
+        const halfChassisM = currentTuning.chassis.halfExtents.z;
+        const origin = {
+          x: sample.position.x + forward.x * (halfChassisM + PROBE_FORWARD_MARGIN_M),
+          y: sample.position.y + PROBE_HEIGHT_OFFSET_M,
+          z: sample.position.z + forward.z * (halfChassisM + PROBE_FORWARD_MARGIN_M),
+        };
+        const gapM = probeForwardGapM(
+          world,
+          car.vehicle.body,
+          obstacleColliderHandles,
+          origin,
+          forward,
+          Math.min(MAX_PROBE_DISTANCE_M, followDistanceM(forwardSpeedMs)),
+        );
+        const scale = avoidanceThrottleScale(gapM, forwardSpeedMs);
+        avoidanceScales[i] = scale;
+
+        const pursuitFrame = car.driver.sampleForTick(tickIndex);
+        const base = composeAiFrame(pursuitFrame, scale);
         const frame = shape ? shape(i, base) : base;
         car.vehicle.tick(frame, currentTuning, surfaces);
         lastFrames[i] = frame;
@@ -104,11 +163,16 @@ export function createAiFleet(
       return lastFrames[carIndex] ?? NEUTRAL;
     },
 
+    avoidanceScale(carIndex: number): number {
+      return avoidanceScales[carIndex] ?? 1;
+    },
+
     resetCar(carIndex: number, pose: VehiclePose): void {
       const car = cars[carIndex];
       if (car === undefined) return;
       car.vehicle.resetPose(pose);
       car.driver.reseed();
+      avoidanceScales[carIndex] = 1;
     },
 
     setTuning(t: VehicleTuning): void {
