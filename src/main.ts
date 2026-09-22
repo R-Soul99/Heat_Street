@@ -228,8 +228,12 @@ try {
   // `RACE_FIELD_SIZE`; `fleet` gets only the AI slots (`0..AI_RACER_COUNT-1`).
   let gridPoses: ReturnType<typeof buildGridPoses> | undefined;
   let fleet: ReturnType<typeof createAiFleet> | undefined;
+  // Hoisted alongside `gridPoses`/`fleet` (not a block-scoped `const` inside
+  // the `if` below) — plan 07-04's `CircuitRaceCoordinatorDeps.line` needs it
+  // at the `createCircuitRaceCoordinator` call site further down.
+  let line: ReturnType<typeof buildRacingLine> | undefined;
   if (isCircuitRace) {
-    const line = buildRacingLine(course, navigation, defaultSurfaceProfiles());
+    line = buildRacingLine(course, navigation, defaultSurfaceProfiles());
     gridPoses = buildGridPoses(line, RACE_FIELD_SIZE);
     scene.resetVehicle(gridPoses[PLAYER_GRID_SLOT]);
     fleet = createAiFleet(
@@ -239,6 +243,9 @@ try {
       line,
       gridPoses.slice(0, AI_RACER_COUNT),
       defaultAiDriverParams(tuning),
+      // D-10: the player's own body is an avoidance obstacle for AI too, so
+      // AI never rear-ends a slow/stopped player.
+      { obstacleBodies: [scene.vehicle.body] },
     );
   }
 
@@ -400,7 +407,7 @@ try {
   // this mode yet (D-05/SC5: solo Time Attack's own medal path is
   // completely untouched when `fleet`/`gridPoses` are undefined).
   const circuitRace =
-    fleet === undefined || gridPoses === undefined
+    fleet === undefined || gridPoses === undefined || line === undefined
       ? undefined
       : createCircuitRaceCoordinator({
           course,
@@ -408,11 +415,18 @@ try {
           scene,
           fleet,
           gridPoses,
+          line,
           objectiveView,
           minimap,
           navigationArrow,
           raceHud,
           chime: checkpointChime,
+          // RACER INDEX TABLE (circuit-race-coordinator.ts's own header
+          // comment): AI racer i is TransformCache index 1 + i (index 0 is
+          // always the player). Snapping BOTH transform buffers after a
+          // reset is what makes the car pop onto its new pose with no
+          // one-frame interpolation slide (07-RESEARCH.md Pitfall 4).
+          onCarReset: (racerIndex) => transforms.snapBody(1 + racerIndex),
         });
   const raceCoordinator =
     fleet !== undefined

@@ -1,4 +1,11 @@
 import type { CheckpointChime } from "../audio/checkpoint-chime";
+import {
+  createStuckDetector,
+  driveOutFrame,
+  type StuckDetector,
+  type StuckInput,
+  type StuckSnapshot,
+} from "../core/ai-stuck-detector";
 import { detectCheckpointHit } from "../core/checkpoint-detection";
 import { checkpointResetPose } from "../core/checkpoint-pose";
 import type { Course } from "../core/course";
@@ -16,6 +23,7 @@ import {
   RACE_FIELD_SIZE,
 } from "../core/race-start";
 import { createRaceState, type RaceSnapshot, type RaceState } from "../core/race-state";
+import type { RacingLine } from "../core/racing-line";
 import { DT } from "../core/sim-clock";
 import type { Minimap } from "../hud/minimap";
 import type { NavigationArrow } from "../hud/navigation-arrow";
@@ -25,6 +33,9 @@ import type { AiFleet } from "../physics/ai-fleet";
 import type { MapScene } from "../physics/map-scene";
 import type { VehiclePose } from "../physics/vehicle";
 import type { ObjectiveView } from "../render/objective-view";
+
+/** XZ proximity a reset pose must clear of every OTHER racer's body before a pending reset actually fires (T-07-12/T-07-13: never resets onto another car). */
+const RESET_CLEARANCE_M = 6;
 
 /**
  * N-racer (D-01: 4 total) orchestration for Circuit Race: a staggered-grid
@@ -61,14 +72,18 @@ export interface CircuitRaceCoordinatorDeps {
   readonly course: Course;
   readonly navigation: NavigationGraph;
   readonly scene: Pick<MapScene, "vehicle" | "resetVehicle">;
-  readonly fleet: Pick<AiFleet, "cars" | "tick" | "resetCar">;
+  readonly fleet: Pick<AiFleet, "cars" | "tick" | "resetCar" | "lastFrame" | "avoidanceScale">;
   /** Length `RACE_FIELD_SIZE`. Slot `PLAYER_GRID_SLOT` is the player's grid pose; slots `0..AI_RACER_COUNT-1` are the AI grid poses, index-aligned with `fleet.cars`. */
   readonly gridPoses: readonly VehiclePose[];
+  /** Shared racing line (07-01) — `lapLengthM` seeds each AI's stuck detector; `points[i].arcM` is this AI's own line-progress signal. */
+  readonly line: RacingLine;
   readonly objectiveView: ObjectiveView;
   readonly minimap: Minimap;
   readonly navigationArrow: NavigationArrow;
   readonly raceHud: RaceHud;
   readonly chime: CheckpointChime;
+  /** Called once per AI reset, AFTER `fleet.resetCar` — `src/main.ts` uses this to `TransformCache.snapBody` the reset car so it pops instantly with no one-frame interpolation slide (07-RESEARCH.md Pitfall 4). */
+  readonly onCarReset?: (racerIndex: number) => void;
 }
 
 export interface RacerSnapshot {
@@ -77,6 +92,8 @@ export interface RacerSnapshot {
   readonly race: RaceSnapshot;
   /** Sim-time seconds from GO to this racer's finish, or `null` before it finishes. Recorded once. */
   readonly finishElapsedSec: number | null;
+  /** This AI racer's own stuck/flip/recovery state (SC3, D-13), or `null` for the player (racer `PLAYER_GRID_SLOT` has no detector). */
+  readonly stuck: StuckSnapshot | null;
 }
 
 export interface CircuitRaceSnapshot {
@@ -109,6 +126,9 @@ export function createCircuitRaceCoordinator(
     () => new Map<string, boolean>(),
   );
   const finishElapsedSec: (number | null)[] = new Array(RACE_FIELD_SIZE).fill(null);
+  const detectors: StuckDetector[] = Array.from({ length: AI_RACER_COUNT }, () =>
+    createStuckDetector(deps.line.lapLengthM),
+  );
 
   let armedTick: number | null = null;
   let goTick: number | null = null;
@@ -122,6 +142,21 @@ export function createCircuitRaceCoordinator(
     return racerIndex === PLAYER_GRID_SLOT
       ? deps.scene.vehicle.body
       : deps.fleet.cars[racerIndex].vehicle.body;
+  }
+
+  /** T-07-12/T-07-13: true when any racer OTHER than `excludeIndex` is within `RESET_CLEARANCE_M` (XZ) of `pose` — the reset is postponed (retried next tick) rather than dropping a car onto another. */
+  function otherRacerBlocksPose(
+    pose: { readonly x: number; readonly z: number },
+    excludeIndex: number,
+  ): boolean {
+    for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
+      if (racerIndex === excludeIndex) continue;
+      const position = racerBody(racerIndex).translation();
+      const dx = position.x - pose.x;
+      const dz = position.z - pose.z;
+      if (Math.hypot(dx, dz) < RESET_CLEARANCE_M) return true;
+    }
+    return false;
   }
 
   function currentCountdown(): {
@@ -177,6 +212,10 @@ export function createCircuitRaceCoordinator(
         const forwardSpeedMs = deps.fleet.cars[carIndex].vehicle.telemetry.forwardSpeedMs;
         return coastFrame(base, forwardSpeedMs);
       }
+      const stuckSnapshot = detectors[carIndex].snapshot();
+      if (stuckSnapshot.phase === "recovering") {
+        return driveOutFrame(stuckSnapshot.recoverSec, base.steer);
+      }
       return base;
     });
   }
@@ -214,6 +253,53 @@ export function createCircuitRaceCoordinator(
         }
       }
     }
+
+    // SC3/D-13: stuck/flip/no-progress recovery, only after GO and only for
+    // AI racers still racing — "detectors are not updated before GO or for
+    // a finished AI" (Task 3's own behavior list).
+    if (currentCountdown().released) {
+      const playerPosition = deps.scene.vehicle.body.translation();
+      for (let carIndex = 0; carIndex < AI_RACER_COUNT; carIndex++) {
+        const race = races[carIndex];
+        if (race.snapshot().complete) continue;
+        const car = deps.fleet.cars[carIndex];
+        const carPosition = car.vehicle.body.translation();
+        const lineIndex = car.driver.debug().lineIndex;
+        const input: StuckInput = {
+          dtSec: DT,
+          groundSpeedMs: car.vehicle.telemetry.groundSpeedMs,
+          tiltDeg: car.vehicle.telemetry.tiltDeg,
+          throttleCommanded: deps.fleet.lastFrame(carIndex).throttle,
+          arcM: deps.line.points[lineIndex].arcM,
+          distanceToPlayerM: Math.hypot(
+            carPosition.x - playerPosition.x,
+            carPosition.z - playerPosition.z,
+          ),
+        };
+        const action = detectors[carIndex].update(input);
+        if (action !== "request-reset") continue;
+
+        const anchorId = race.snapshot().respawnAnchorId;
+        const anchor = deps.course.checkpoints.find((checkpoint) => checkpoint.id === anchorId);
+        const pose =
+          anchor === undefined
+            ? deps.gridPoses[carIndex]
+            : checkpointResetPose(anchor, deps.course, deps.navigation);
+        // T-07-12/T-07-13: postponed (retried next tick, the detector keeps
+        // returning "request-reset") while another racer sits on the reset
+        // pose — never resets ON TOP of another car.
+        if (otherRacerBlocksPose(pose, carIndex)) continue;
+
+        deps.fleet.resetCar(carIndex, pose);
+        // Same 5s cost as the player's own respawn (D-13's "same rule as
+        // the player's respawn"): this is recovery, not catch-up (T-07-12).
+        race.respawn();
+        insideMaps[carIndex].clear();
+        detectors[carIndex].acknowledgeReset();
+        deps.onCarReset?.(carIndex);
+      }
+    }
+
     refresh();
   }
 
@@ -227,6 +313,7 @@ export function createCircuitRaceCoordinator(
       deps.scene.resetVehicle(deps.gridPoses[PLAYER_GRID_SLOT]);
       for (let carIndex = 0; carIndex < AI_RACER_COUNT; carIndex++) {
         deps.fleet.resetCar(carIndex, deps.gridPoses[carIndex]);
+        detectors[carIndex].restart();
       }
       armedTick = null;
       goTick = null;
@@ -263,6 +350,7 @@ export function createCircuitRaceCoordinator(
             isPlayer: racerIndex === PLAYER_GRID_SLOT,
             race: races[racerIndex].snapshot(),
             finishElapsedSec: finishElapsedSec[racerIndex],
+            stuck: racerIndex === PLAYER_GRID_SLOT ? null : detectors[racerIndex].snapshot(),
           }),
         ),
       ),
