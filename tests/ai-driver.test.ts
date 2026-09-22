@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   type AiDriverParams,
+  AVOIDANCE_PARAMS,
+  avoidanceThrottleScale,
+  composeAiFrame,
   createAiDriver,
   defaultAiDriverParams,
+  followDistanceM,
   lookAheadDistanceM,
   pursuitSteer,
 } from "../src/core/ai-driver";
 import aiDriverSource from "../src/core/ai-driver.ts?raw";
+import type { InputFrame } from "../src/core/input-tape";
 import type { RacingLine, RacingLinePoint } from "../src/core/racing-line";
 import racingLineSource from "../src/core/racing-line.ts?raw";
 import { defaultTuning } from "../src/core/vehicle-tuning";
@@ -142,6 +147,98 @@ describe("createAiDriver: tracking a synthetic straight line", () => {
     driver.observe({ x: 999, z: 999, headingRad: 2, forwardSpeedMs: 99 });
     const second = driver.sampleForTick(5);
     expect(second).toEqual(first);
+  });
+});
+
+describe("followDistanceM", () => {
+  it("speed 0 clamps to followMinM (8)", () => {
+    expect(followDistanceM(0)).toBe(8);
+  });
+
+  it("speed 10 is 12 (1.2 * 10)", () => {
+    expect(followDistanceM(10)).toBeCloseTo(12, 9);
+  });
+
+  it("speed 100 clamps to followMaxM (30)", () => {
+    expect(followDistanceM(100)).toBe(30);
+  });
+});
+
+describe("avoidanceThrottleScale", () => {
+  it("null gap (clear road) is always 1, at any speed", () => {
+    expect(avoidanceThrottleScale(null, 0)).toBe(1);
+    expect(avoidanceThrottleScale(null, 30)).toBe(1);
+    expect(avoidanceThrottleScale(null, -5)).toBe(1);
+  });
+
+  it("gap at or beyond the speed-scaled following distance is 1", () => {
+    const speedMs = 10;
+    const follow = followDistanceM(speedMs);
+    expect(avoidanceThrottleScale(follow, speedMs)).toBeCloseTo(1, 9);
+    expect(avoidanceThrottleScale(follow + 5, speedMs)).toBe(1);
+  });
+
+  it("gap at or inside minGapM (3) is 0", () => {
+    const speedMs = 10;
+    expect(avoidanceThrottleScale(AVOIDANCE_PARAMS.minGapM, speedMs)).toBeCloseTo(0, 9);
+    expect(avoidanceThrottleScale(1, speedMs)).toBe(0);
+    expect(avoidanceThrottleScale(0, speedMs)).toBe(0);
+  });
+
+  it("gap halfway between minGapM and the following distance is 0.5 +/- 1e-9", () => {
+    const speedMs = 10;
+    const follow = followDistanceM(speedMs);
+    const halfway = (AVOIDANCE_PARAMS.minGapM + follow) / 2;
+    expect(avoidanceThrottleScale(halfway, speedMs)).toBeCloseTo(0.5, 9);
+  });
+
+  it("output is always within [0, 1] across a sweep of gaps and speeds", () => {
+    for (const speedMs of [0, 5, 10, 25, 50]) {
+      for (const gapM of [-10, 0, 1, 3, 5, 10, 20, 30, 50, 100]) {
+        const scale = avoidanceThrottleScale(gapM, speedMs);
+        expect(scale).toBeGreaterThanOrEqual(0);
+        expect(scale).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe("composeAiFrame", () => {
+  const base: InputFrame = Object.freeze({
+    steer: 0.4,
+    throttle: 0.8,
+    brake: 0.2,
+    handbrake: false,
+  });
+
+  it("steer, brake and handbrake are identical to base for every scale", () => {
+    for (const s of [-1, -0.5, 0, 0.3, 0.5, 1, 1.5, 2]) {
+      const frame = composeAiFrame(base, s);
+      expect(frame.steer).toBe(base.steer);
+      expect(frame.brake).toBe(base.brake);
+      expect(frame.handbrake).toBe(base.handbrake);
+    }
+  });
+
+  it("throttle = base.throttle * clamp(s, 0, 1)", () => {
+    expect(composeAiFrame(base, 0).throttle).toBeCloseTo(0, 9);
+    expect(composeAiFrame(base, 0.5).throttle).toBeCloseTo(base.throttle * 0.5, 9);
+    expect(composeAiFrame(base, 1).throttle).toBeCloseTo(base.throttle, 9);
+    // Out-of-range scales clamp, they do not extrapolate.
+    expect(composeAiFrame(base, -1).throttle).toBeCloseTo(0, 9);
+    expect(composeAiFrame(base, 2).throttle).toBeCloseTo(base.throttle, 9);
+  });
+
+  it("composeAiFrame(base, 1) deep-equals base", () => {
+    expect(composeAiFrame(base, 1)).toEqual(base);
+  });
+
+  it("avoidance never produces brake > base.brake and never changes steer, over a sweep of s in [-1, 2]", () => {
+    for (let s = -1; s <= 2; s += 0.1) {
+      const frame = composeAiFrame(base, s);
+      expect(frame.brake).toBeLessThanOrEqual(base.brake);
+      expect(frame.steer).toBe(base.steer);
+    }
   });
 });
 

@@ -84,6 +84,76 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+/**
+ * D-10 avoidance tuning (plan 07-03): a speed-scaled following distance and
+ * the minimum gap the AI will coast down to. `followTimeSec` is the number
+ * of seconds of travel at the current speed the AI wants to keep clear ahead
+ * (a standard time-headway following model), clamped to `[followMinM,
+ * followMaxM]` so a stationary or crawling car still keeps a sane minimum
+ * gap and a flat-out car does not demand an unreasonably long clear road.
+ */
+export const AVOIDANCE_PARAMS = Object.freeze({
+  followTimeSec: 1.2,
+  followMinM: 8,
+  followMaxM: 30,
+  minGapM: 3,
+});
+
+export type AvoidanceParams = typeof AVOIDANCE_PARAMS;
+
+/** Speed-scaled following distance, metres (D-10). */
+export function followDistanceM(
+  speedMs: number,
+  params: AvoidanceParams = AVOIDANCE_PARAMS,
+): number {
+  return clamp(params.followTimeSec * Math.max(0, speedMs), params.followMinM, params.followMaxM);
+}
+
+/**
+ * Given a forward gap to the nearest obstacle ahead (`gapM`, metres, or
+ * `null` when nothing is within probe range), returns the throttle
+ * multiplier in `[0, 1]` the AI should apply. `null` (clear road) is always
+ * 1. At or beyond the speed-scaled following distance the AI is also fully
+ * clear (1). At or inside `minGapM` the AI eases fully off the throttle
+ * (0) — this is a COAST, never a brake (D-10: mild avoidance, not yielding —
+ * `composeAiFrame` below only ever scales throttle, so this can never
+ * become a brake command). Between the two, the scale ramps linearly.
+ */
+export function avoidanceThrottleScale(
+  gapM: number | null,
+  speedMs: number,
+  params: AvoidanceParams = AVOIDANCE_PARAMS,
+): number {
+  if (gapM === null) return 1;
+  const followM = followDistanceM(speedMs, params);
+  const span = followM - params.minGapM;
+  if (span <= 1e-6) return gapM >= followM ? 1 : 0;
+  return clamp((gapM - params.minGapM) / span, 0, 1);
+}
+
+/**
+ * Composes an avoidance throttle multiplier onto `base` (D-10, RESEARCH.md
+ * Pattern 5 / Pitfall 1). THROTTLE-ONLY composition — mirrors
+ * `src/physics/vehicle.ts`'s own documented "COMPOSITION, not replacement"
+ * discipline for surface-grip multipliers (lines 404-412 there): `steer`,
+ * `brake` and `handbrake` are always passed through from `base` untouched.
+ * Avoidance never steers (steering always comes from pure pursuit against
+ * the fixed racing line, so the AI cannot fight its own line: RESEARCH.md
+ * Pitfall 1) and never brakes (D-10: mild avoidance, not yielding or
+ * blocking). Whichever vehicle is physically ahead — an AI car or the
+ * user-controlled car — is an obstacle only in the geometric sense to this
+ * function: it reads no race standing, placement or live racer state, so
+ * this is not a rubber-banding/catch-up mechanism (CIRC-02).
+ */
+export function composeAiFrame(base: InputFrame, throttleScale: number): InputFrame {
+  return Object.freeze({
+    steer: base.steer,
+    throttle: base.throttle * clamp(throttleScale, 0, 1),
+    brake: base.brake,
+    handbrake: base.handbrake,
+  });
+}
+
 /** Velocity-scaled look-ahead distance (RESEARCH.md Pitfall 3 fix: a fixed distance oscillates on straights). */
 export function lookAheadDistanceM(speedMs: number, params: AiDriverParams): number {
   return clamp(params.lookAheadGainSec * speedMs, params.lookAheadMinM, params.lookAheadMaxM);
