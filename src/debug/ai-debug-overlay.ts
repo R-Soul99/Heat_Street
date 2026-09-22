@@ -58,8 +58,13 @@ export function formatAiDebugLabel(
   );
 }
 
+/** The minimal shape `racingLinePositions` needs — a structural subset of `RacingLine.points`, so a plain test fixture (`{ points: [{x,y,z}, ...] }`) satisfies it with no need to fabricate a full `RacingLinePoint`. */
+export interface RacingLinePositionsInput {
+  readonly points: readonly { readonly x: number; readonly y: number; readonly z: number }[];
+}
+
 /** Flat `[x, y+0.35, z, ...]` vertex buffer for the whole racing line — a `THREE.BufferAttribute` source, built once at construction (the line is fixed for the AI's whole race). */
-export function racingLinePositions(line: Pick<RacingLine, "points">): Float32Array {
+export function racingLinePositions(line: RacingLinePositionsInput): Float32Array {
   const points = line.points;
   const positions = new Float32Array(points.length * 3);
   for (let i = 0; i < points.length; i++) {

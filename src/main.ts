@@ -66,6 +66,7 @@ import {
 } from "./core/surface-tuning";
 import type { SurfaceType } from "./core/surface-types";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
+import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createNavPointer } from "./debug/nav-pointer";
@@ -482,6 +483,23 @@ try {
     throw new Error("composition root: no race coordinator was constructed for this mode");
   }
 
+  // D-15's `?debug` AI overlay (plan 07-05): Circuit Race only — `line` is
+  // only ever defined alongside `circuitRace` (both set inside the same
+  // `if (isCircuitRace)` block above); the `line !== undefined` guard below
+  // is what makes this genuinely gated on the circuit-race branch, not
+  // merely on `DEBUG_ENABLED`. Solo Time Attack and solo Circuit both
+  // construct nothing here and register no `KeyI` listener. Hoisted `let` so
+  // the render callback further below can read it too.
+  let aiDebug: ReturnType<typeof createAiDebugOverlay> | null = null;
+  if (line !== undefined) {
+    const aiPaintColors = AI_PAINTS.map((p) => p.css);
+    aiDebug = DEBUG_ENABLED ? createAiDebugOverlay(view.scene, camera, line, aiPaintColors) : null;
+  }
+  if (aiDebug) {
+    const aiDebugOverlay = aiDebug;
+    onDebugKey("KeyI", () => aiDebugOverlay.toggle());
+  }
+
   // Always constructed, NOT gated on `DEBUG_ENABLED` — the speedometer is
   // player-facing (NAV-01).
   const speedo = createSpeedometer();
@@ -628,7 +646,8 @@ try {
   // Full key map for this phase, recorded here as the single place a reader
   // would look: Backquote = profiler HUD, G = tuning panel, T = telemetry
   // panel, C = camera rig swap, V = camera skin, O = occlusion mitigation A/B
-  // (fade / steepen / off), F = temporary free-look orbit (debug only).
+  // (fade / steepen / off), F = temporary free-look orbit (debug only),
+  // I = AI debug overlay (circuit-race only).
   const cameraChrome = createCameraSkinChrome();
   const skin = createCameraSkin(canvas.classList, cameraChrome, "police");
   skin.set("sports");
@@ -753,6 +772,18 @@ try {
         view.meshes[0].position.y,
         view.meshes[0].position.z,
       );
+      // D-15's `?debug` AI overlay: runs AFTER `freeLook.apply()` (so its
+      // label projection uses THIS frame's final camera pose, matching
+      // `occlusion.update`'s own "converged camera pose" ordering rule
+      // above) and BEFORE `renderer.render`. `circuitRace !== undefined`
+      // always holds when `aiDebug` is non-null (both are gated on the same
+      // `line !== undefined` circuit-race check above) — checked again here
+      // because TypeScript cannot otherwise prove the correlation between
+      // the two separately-declared variables. A no-op (`aiDebug` is `null`)
+      // outside `?mode=circuit-race&debug`.
+      if (aiDebug && circuitRace !== undefined) {
+        aiDebug.update(circuitRace.debugSnapshot(), canvas.clientWidth, canvas.clientHeight);
+      }
       // `view.wheelMeshes[i].getWorldPosition(...)` below is only correct if
       // `matrixWorld` already reflects THIS frame's chassis pose (written by
       // `applyAllInterpolated` above) and wheel local transforms (written by

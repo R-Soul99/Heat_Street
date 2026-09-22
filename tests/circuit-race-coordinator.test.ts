@@ -578,7 +578,7 @@ describe("circuit race coordinator — debugSnapshot (D-15)", () => {
     }
   });
 
-  it("reads state \"avoiding\" only when avoidanceScale < 1 (racing otherwise)", () => {
+  it('reads state "avoiding" only when avoidanceScale < 1 (racing otherwise)', () => {
     const { coordinator, fleet } = setup();
     expect(coordinator.debugSnapshot()[1].state).toBe("racing");
 
@@ -586,7 +586,7 @@ describe("circuit race coordinator — debugSnapshot (D-15)", () => {
     expect(coordinator.debugSnapshot()[1].state).toBe("avoiding");
   });
 
-  it("reads state \"recovering\" while the detector is recovering, taking priority over avoidance", () => {
+  it('reads state "recovering" while the detector is recovering, taking priority over avoidance', () => {
     const { coordinator, fleet } = setup();
     coordinator.onTickBegin(0);
     coordinator.onTickBegin(180);
