@@ -1,5 +1,6 @@
 import type { CheckpointChime } from "../audio/checkpoint-chime";
 import { detectCheckpointHit } from "../core/checkpoint-detection";
+import { checkpointResetPose } from "../core/checkpoint-pose";
 import type { Course } from "../core/course";
 import { headingFromRotation } from "../core/heading";
 import type { InputFrame } from "../core/input-tape";
@@ -24,7 +25,6 @@ import type { AiFleet } from "../physics/ai-fleet";
 import type { MapScene } from "../physics/map-scene";
 import type { VehiclePose } from "../physics/vehicle";
 import type { ObjectiveView } from "../render/objective-view";
-import { poseForCheckpoint } from "./race-coordinator";
 
 /**
  * N-racer (D-01: 4 total) orchestration for Circuit Race: a staggered-grid
@@ -243,7 +243,7 @@ export function createCircuitRaceCoordinator(
       const pose =
         anchor === undefined
           ? deps.gridPoses[PLAYER_GRID_SLOT]
-          : poseForCheckpoint(anchor, deps.course, deps.navigation);
+          : checkpointResetPose(anchor, deps.course, deps.navigation);
       deps.scene.resetVehicle(pose);
       insideMaps[PLAYER_GRID_SLOT].clear();
       refresh();

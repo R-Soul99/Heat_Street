@@ -1,12 +1,13 @@
 import type { CheckpointChime } from "../audio/checkpoint-chime";
 import type { CheckpointDetectionResult } from "../core/checkpoint-detection";
 import { detectCheckpointHit } from "../core/checkpoint-detection";
-import type { Course, CourseCheckpoint } from "../core/course";
+import { checkpointResetPose } from "../core/checkpoint-pose";
+import type { Course } from "../core/course";
 import { headingFromRotation } from "../core/heading";
 import type { MedalProgressRecord } from "../core/medal-persistence";
 import type { MedalReferenceCourse } from "../core/medal-reference";
 import type { MedalTiming, MedalTimingSnapshot } from "../core/medal-timing";
-import { findRoadPath, type NavigationGraph, nearestRoadNode } from "../core/navigation";
+import { type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import type { RaceSnapshot, RaceState } from "../core/race-state";
 import type { Minimap } from "../hud/minimap";
 import type { NavigationArrow } from "../hud/navigation-arrow";
@@ -38,33 +39,6 @@ export interface RaceCoordinator {
   onCommands(commands: RaceCommands): void;
   render(): void;
   snapshot(): RaceSnapshot;
-}
-
-/**
- * Exported (plan 07-02) so `circuit-race-coordinator.ts` reuses this SAME
- * checkpoint-to-pose math for the player's respawn (D-13: "the same rule as
- * the player's respawn") rather than re-deriving it. Body unchanged.
- */
-export function poseForCheckpoint(
-  checkpoint: CourseCheckpoint,
-  course: Course,
-  navigation: NavigationGraph,
-): { x: number; y: number; z: number; headingRad: number } {
-  const checkpointIndex = course.checkpoints.findIndex((item) => item.id === checkpoint.id);
-  const next = course.checkpoints[(checkpointIndex + 1) % course.checkpoints.length];
-  const path = next === undefined ? [] : findRoadPath(navigation, checkpoint.nodeId, next.nodeId);
-  const from = navigation.roadGraph.nodes.find((node) => node.id === path[0]);
-  const to = navigation.roadGraph.nodes.find((node) => node.id === path[1]);
-  const headingRad =
-    from === undefined || to === undefined
-      ? course.start.headingRad
-      : Math.atan2(to.z - from.z, to.x - from.x);
-  return {
-    x: checkpoint.position[0],
-    y: checkpoint.position[1] + 0.6,
-    z: checkpoint.position[2],
-    headingRad,
-  };
 }
 
 function comparisonFor(
@@ -189,7 +163,7 @@ export function createRaceCoordinator(deps: RaceCoordinatorDeps): RaceCoordinato
       deps.scene.resetVehicle(
         anchor === undefined
           ? deps.scene.defaultSpawnPose
-          : poseForCheckpoint(anchor, deps.course, deps.navigation),
+          : checkpointResetPose(anchor, deps.course, deps.navigation),
       );
       inside.clear();
       refresh();

@@ -126,4 +126,51 @@ describe("TransformCache", () => {
     expect(cache.prev.byteLength).toBe(prevBytes);
     expect(cache.cur.byteLength).toBe(curBytes);
   });
+
+  describe("snapBody", () => {
+    it("makes prev and cur both equal the body's current transform after a teleport, leaving every other body's slices untouched", () => {
+      const cache = new TransformCache(bodies);
+      // Diverge prev/cur for every body first, so a no-op snapBody would be
+      // indistinguishable from a real one.
+      for (let i = 0; i < 5; i++) world.step();
+      cache.captureAsPrevious();
+      world.step();
+      cache.captureAsCurrent();
+      const otherIndex = 1;
+      const untouchedPrev = xform(cache.prev, otherIndex);
+      const untouchedCur = xform(cache.cur, otherIndex);
+
+      bodies[0].setTranslation({ x: 42, y: 7, z: -3 }, true);
+      bodies[0].setRotation({ x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }, true);
+      cache.snapBody(0);
+
+      const expected = [42, 7, -3, 0, Math.SQRT1_2, 0, Math.SQRT1_2];
+      expect(xform(cache.cur, 0)[0]).toBeCloseTo(expected[0], 9);
+      expect(xform(cache.cur, 0)[1]).toBeCloseTo(expected[1], 9);
+      expect(xform(cache.cur, 0)[2]).toBeCloseTo(expected[2], 9);
+      expect(xform(cache.prev, 0)).toEqual(xform(cache.cur, 0));
+
+      expect(xform(cache.prev, otherIndex)).toEqual(untouchedPrev);
+      expect(xform(cache.cur, otherIndex)).toEqual(untouchedCur);
+    });
+
+    it("throws a RangeError for an out-of-range index", () => {
+      const cache = new TransformCache(bodies);
+      expect(() => cache.snapBody(-1)).toThrow(RangeError);
+      expect(() => cache.snapBody(bodies.length)).toThrow(RangeError);
+      expect(() => cache.snapBody(1.5)).toThrow(RangeError);
+    });
+
+    it("allocates nothing", () => {
+      const cache = new TransformCache(bodies);
+      const prevRef = cache.prev;
+      const curRef = cache.cur;
+      for (let i = 0; i < 100; i++) {
+        bodies[0].setTranslation({ x: i, y: 0, z: 0 }, true);
+        cache.snapBody(0);
+      }
+      expect(cache.prev).toBe(prevRef);
+      expect(cache.cur).toBe(curRef);
+    });
+  });
 });
