@@ -1,6 +1,8 @@
 import type { CheckpointChime } from "../audio/checkpoint-chime";
 import {
+  type AiDebugState,
   createStuckDetector,
+  deriveAiDebugState,
   driveOutFrame,
   type StuckDetector,
   type StuckInput,
@@ -13,6 +15,7 @@ import { headingFromRotation } from "../core/heading";
 import type { InputFrame } from "../core/input-tape";
 import { type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import {
+  AI_PAINTS,
   AI_RACER_COUNT,
   COUNTDOWN_TICKS,
   type CountdownLabel,
@@ -105,6 +108,29 @@ export interface CircuitRaceSnapshot {
   readonly racers: readonly RacerSnapshot[];
 }
 
+/**
+ * One AI racer's plain-number debug record for the `?debug` AI overlay
+ * (D-15, plan 07-05). Deliberately a LOCAL structural type rather than an
+ * import from `src/debug/ai-debug-overlay.ts` — this file must not import
+ * `three` (directly or transitively), and `src/debug/**` is the tier that
+ * imports `three`, never the other way around. `src/debug/ai-debug-overlay.ts`
+ * exports the identical shape under the same name; `src/main.ts` composes
+ * the two structurally, with no import between this file and that one.
+ */
+export interface AiDebugCar {
+  readonly racerIndex: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly targetX: number;
+  readonly targetZ: number;
+  readonly frame: InputFrame;
+  readonly state: AiDebugState;
+  readonly stuckSec: number;
+  readonly noProgressSec: number;
+  readonly color: string;
+}
+
 export interface CircuitRaceCoordinator {
   onTickBegin(tick: number): void;
   /** Returns `HOLD_FRAME` before GO, the argument unchanged after. */
@@ -113,6 +139,8 @@ export interface CircuitRaceCoordinator {
   onCommands(commands: RaceCommands): void;
   render(): void;
   snapshot(): CircuitRaceSnapshot;
+  /** Per-AI debug record for the `?debug` overlay (D-15) — one entry per AI racer, index-aligned with the RACER INDEX TABLE's `fleet car` column (never includes the player). */
+  debugSnapshot(): readonly AiDebugCar[];
 }
 
 export function createCircuitRaceCoordinator(
@@ -357,6 +385,38 @@ export function createCircuitRaceCoordinator(
     });
   }
 
+  function debugSnapshot(): readonly AiDebugCar[] {
+    const cars: AiDebugCar[] = new Array(AI_RACER_COUNT);
+    for (let carIndex = 0; carIndex < AI_RACER_COUNT; carIndex++) {
+      const car = deps.fleet.cars[carIndex];
+      const position = car.vehicle.body.translation();
+      const driverDebug = car.driver.debug();
+      const stuck = detectors[carIndex].snapshot();
+      cars[carIndex] = Object.freeze({
+        racerIndex: carIndex,
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        targetX: driverDebug.targetX,
+        targetZ: driverDebug.targetZ,
+        frame: deps.fleet.lastFrame(carIndex),
+        state: deriveAiDebugState(stuck.phase, deps.fleet.avoidanceScale(carIndex)),
+        stuckSec: stuck.stuckSec,
+        noProgressSec: stuck.noProgressSec,
+        color: AI_PAINTS[carIndex].css,
+      });
+    }
+    return Object.freeze(cars);
+  }
+
   refresh();
-  return { onTickBegin, gatePlayerInput, onTickEnd, onCommands, render: refresh, snapshot };
+  return {
+    onTickBegin,
+    gatePlayerInput,
+    onTickEnd,
+    onCommands,
+    render: refresh,
+    snapshot,
+    debugSnapshot,
+  };
 }
