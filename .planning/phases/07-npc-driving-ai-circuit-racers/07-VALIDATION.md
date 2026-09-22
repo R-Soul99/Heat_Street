@@ -21,7 +21,7 @@ created: 2026-09-22
 | **Config file** | `vitest.config.ts` |
 | **Quick run command** | `npx vitest run tests/<new-file>.test.ts` |
 | **Full suite command** | `npm run test` (= `vitest run`); `npm run check` runs typecheck + lint + test |
-| **Estimated runtime** | ~10 seconds (existing suite is fast, unit-only) |
+| **Estimated runtime** | Quick run (single non-sim test file): ~10 seconds. Full suite: well above the ~10s unit-test baseline — `tests/ai-lap.test.ts` (07-01, 120000ms timeout) and `tests/ai-field.test.ts` (07-03, 180000ms timeout) are headless full-lap/field physics-sim outliers over real map data, up to 2-3 min worst case each |
 
 ---
 

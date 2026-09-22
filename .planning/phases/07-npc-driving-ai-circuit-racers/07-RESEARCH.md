@@ -443,6 +443,7 @@ function forwardAvoidanceSlowdown(
    - What we know: `race-state.ts`'s `updateWrongWay` already special-cases `course.mode !== "circuit"`. AI always drives forward along its own racing line by construction (pure pursuit never targets a "behind" point), so wrong-way detection is likely a player-only concern that can be skipped for the generalized `createMultiRaceState` wrapper's AI instances.
    - What's unclear: Whether the AI's `RaceState.snapshot().wrongWay` flag should simply be ignored for AI cars (never read), or whether `createMultiRaceState` should short-circuit it to always `false` for non-player cars to avoid a confusing debug-overlay reading if a future dev wires it up by mistake.
    - Recommendation: Plan should decide explicitly rather than leave it implicit — a one-line decision, not a research gap.
+   - (RESOLVED — see 07-02-PLAN.md: AI wrongWay is computed but intentionally never read/acted on for AI cars.)
 
 3. **Exact `aLatMaxMs2` and lookahead-gain tuning constants**
    - Covered under Assumption A3 — genuinely needs an in-browser pass, flagged rather than guessed at a specific number.
