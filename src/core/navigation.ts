@@ -59,7 +59,11 @@ export function nearestRoadNode(
   return nearest.id;
 }
 
-const DEFECT_COORDINATES: readonly (readonly [number, number])[] = [
+// `export`ed (plan 07-01, D-11) so `src/core/racing-line.ts` reuses this
+// SAME list rather than re-declaring it — two copies WILL drift
+// (07-PATTERNS.md). No value changes; `validateCourseRoutes` below keeps
+// using them exactly as before.
+export const DEFECT_COORDINATES: readonly (readonly [number, number])[] = [
   [-633.25, -134.43],
   [-420, 102.2],
   [-1227.2, -1062.3],
@@ -69,7 +73,7 @@ const DEFECT_COORDINATES: readonly (readonly [number, number])[] = [
   [1048.35, 215.1],
   [1039.58, 344.87],
 ];
-const DEFECT_CLEARANCE_M = 40;
+export const DEFECT_CLEARANCE_M = 40;
 const CHECKPOINT_EDGE_TOLERANCE_M = 30;
 
 function distanceXZ(a: readonly [number, number, number], b: readonly [number, number]): number {

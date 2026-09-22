@@ -2,6 +2,7 @@ import type { CheckpointChime } from "../audio/checkpoint-chime";
 import type { CheckpointDetectionResult } from "../core/checkpoint-detection";
 import { detectCheckpointHit } from "../core/checkpoint-detection";
 import type { Course, CourseCheckpoint } from "../core/course";
+import { headingFromRotation } from "../core/heading";
 import type { MedalProgressRecord } from "../core/medal-persistence";
 import type { MedalReferenceCourse } from "../core/medal-reference";
 import type { MedalTiming, MedalTimingSnapshot } from "../core/medal-timing";
@@ -37,12 +38,6 @@ export interface RaceCoordinator {
   onCommands(commands: RaceCommands): void;
   render(): void;
   snapshot(): RaceSnapshot;
-}
-
-function headingFromRotation(rotation: { x: number; y: number; z: number; w: number }): number {
-  const forwardX = 2 * (rotation.x * rotation.z - rotation.w * rotation.y);
-  const forwardZ = 2 * (rotation.x * rotation.x + rotation.y * rotation.y) - 1;
-  return Math.atan2(forwardZ, forwardX);
 }
 
 function poseForCheckpoint(
