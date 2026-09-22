@@ -102,9 +102,11 @@ function makeBody(initial: { x: number; y: number; z: number }) {
 
 function makeFleet() {
   const bodies = [0, 1, 2].map(() => makeBody({ x: 0, y: 0, z: 0 }));
-  const telemetry = [0, 1, 2].map(() => ({ forwardSpeedMs: 0 }));
+  const telemetry = [0, 1, 2].map(() => ({ forwardSpeedMs: 0, groundSpeedMs: 0, tiltDeg: 0 }));
+  const debugLineIndex = [0, 0, 0];
   const cars = [0, 1, 2].map((i) => ({
     vehicle: { body: bodies[i], telemetry: telemetry[i] },
+    driver: { debug: () => ({ lineIndex: debugLineIndex[i] }) },
   }));
   let shapeOutputs: InputFrame[] = [];
   const tick = vi.fn(
@@ -113,17 +115,32 @@ function makeFleet() {
     },
   );
   const resetCar = vi.fn();
+  // Defaults to BASE_FRAME's own throttle (0.7) so a real pursuit-driven
+  // fleet's typical "commanded" throttle is the default in these tests too
+  // — individual tests override this per-car to exercise the stuck check.
+  const lastFrames: InputFrame[] = [BASE_FRAME, BASE_FRAME, BASE_FRAME];
+  const lastFrame = vi.fn((carIndex: number): InputFrame => lastFrames[carIndex]);
+  const avoidanceScale = vi.fn((): number => 1);
   return {
     cars,
     tick,
     resetCar,
     bodies,
     telemetry,
+    debugLineIndex,
+    lastFrame,
+    avoidanceScale,
+    setLastFrameThrottle(carIndex: number, throttle: number): void {
+      lastFrames[carIndex] = Object.freeze({ ...lastFrames[carIndex], throttle });
+    },
     get shapeOutputs(): readonly InputFrame[] {
       return shapeOutputs;
     },
   };
 }
+
+/** A synthetic `RacingLine`-shaped fixture — only `lapLengthM` and `points[i].arcM` are read by the coordinator; a large `lapLengthM` keeps the no-progress window (8s) well outside every test's own tick budget so it never interferes with the stuck-speed tests below. */
+const line = { lapLengthM: 1_000_000, points: [{ arcM: 0 }] };
 
 function setup() {
   const navigation = buildNavigationGraph(graph);
@@ -142,17 +159,20 @@ function setup() {
   const navigationArrow = { update: vi.fn() };
   const raceHud = { update: vi.fn(), flashRestart: vi.fn(), showCountdown: vi.fn() };
   const chime = { play: vi.fn() };
+  const onCarReset = vi.fn();
   const coordinator = createCircuitRaceCoordinator({
     course,
     navigation,
     scene: scene as never,
     fleet: fleet as never,
     gridPoses,
+    line: line as never,
     objectiveView: objectiveView as never,
     minimap: minimap as never,
     navigationArrow: navigationArrow as never,
     raceHud: raceHud as never,
     chime: chime as never,
+    onCarReset,
   });
   return {
     coordinator,
@@ -165,7 +185,23 @@ function setup() {
     navigationArrow,
     raceHud,
     chime,
+    onCarReset,
   };
+}
+
+/** Drives `n` onTickBegin/onTickEnd pairs starting from `startTick`, returning the next unused tick index. */
+function runTicks(
+  coordinator: ReturnType<typeof createCircuitRaceCoordinator>,
+  startTick: number,
+  n: number,
+): number {
+  let tick = startTick;
+  for (let i = 0; i < n; i++) {
+    coordinator.onTickBegin(tick);
+    coordinator.onTickEnd();
+    tick++;
+  }
+  return tick;
 }
 
 describe("circuit race coordinator — countdown gate", () => {
@@ -296,6 +332,206 @@ describe("circuit race coordinator — restart and respawn", () => {
     const snap = coordinator.snapshot();
     expect(snap.racers[3].race.penaltySec).toBe(5);
     expect(snap.racers[0].race).toEqual(aiRaceBefore);
+  });
+});
+
+describe("circuit race coordinator — AI stuck/flip recovery (SC3, D-13)", () => {
+  it("snapshot().racers[i].stuck is the detector snapshot for AI and null for the player", () => {
+    const { coordinator } = setup();
+    const snap = coordinator.snapshot();
+    for (let i = 0; i < AI_RACER_COUNT; i++) {
+      expect(snap.racers[i].stuck).toEqual({
+        phase: "racing",
+        stuckSec: 0,
+        flippedSec: 0,
+        noProgressSec: 0,
+        recoverSec: 0,
+        deferSec: 0,
+      });
+    }
+    expect(snap.racers[PLAYER_GRID_SLOT].stuck).toBeNull();
+  });
+
+  it("a stuck AI car begins a reverse drive-out after ~2.5s stuck", () => {
+    const { coordinator, fleet } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    let tick = 181;
+    let recovering = false;
+    for (let i = 0; i < 200 && !recovering; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      recovering = coordinator.snapshot().racers[0].stuck?.phase === "recovering";
+    }
+    expect(recovering).toBe(true);
+
+    // One more onTickBegin to read the shape output derived from the
+    // now-"recovering" detector snapshot.
+    coordinator.onTickBegin(tick);
+    expect(fleet.shapeOutputs[0]).toEqual({
+      steer: -BASE_FRAME.steer,
+      throttle: 0,
+      brake: 1,
+      handbrake: false,
+    });
+  });
+
+  it("still stuck with the player far away: resets at the grid pose (no anchor yet), charges the 5s penalty, calls onCarReset once, then resumes racing", () => {
+    const { coordinator, fleet, scene, onCarReset, gridPoses } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    // Every OTHER racer (player, fleet cars 1/2) starts near the origin in
+    // this fixture — the same point as car 0's own no-anchor reset pose
+    // (gridPoses[0]). Move them all clear so the 6m clearance check (tested
+    // separately below) doesn't also block this test's reset.
+    scene.vehicle.body.setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[1].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[2].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    let tick = 181;
+    let resetCalled = false;
+    for (let i = 0; i < 400 && !resetCalled; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      resetCalled = fleet.resetCar.mock.calls.length > 0;
+    }
+    expect(fleet.resetCar).toHaveBeenCalledTimes(1);
+    expect(fleet.resetCar).toHaveBeenCalledWith(0, gridPoses[0]);
+    expect(onCarReset).toHaveBeenCalledTimes(1);
+    expect(onCarReset).toHaveBeenCalledWith(0);
+    expect(coordinator.snapshot().racers[0].race.penaltySec).toBe(5);
+
+    // Once the reset label time has passed, this racer is driving normally
+    // again — shape is the unmodified pursuit frame, not a drive-out override.
+    tick = runTicks(coordinator, tick, 65);
+    coordinator.onTickBegin(tick);
+    expect(fleet.shapeOutputs[0]).toEqual(BASE_FRAME);
+  });
+
+  it("defers the actual reset while the player is within 60m, without ever losing the pending request", () => {
+    const { coordinator, fleet, scene, onCarReset } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    // 10m from car 0's own no-anchor reset pose (gridPoses[0], the origin):
+    // inside the 60m camera-clearance defer radius but clear of the
+    // separately-tested 6m reset-pose-occupied clearance check.
+    scene.vehicle.body.setPosition({ x: 10, y: 0, z: 0 });
+    fleet.bodies[1].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[2].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    // Past stuck (2.5s) + drive-out timeout (3.0s) = 5.5s (330 ticks) — still withheld.
+    let tick = runTicks(coordinator, 181, 330);
+    expect(fleet.resetCar).not.toHaveBeenCalled();
+
+    // A further ~3.0s of deferral resolves it.
+    let resetCalled = false;
+    for (let i = 0; i < 200 && !resetCalled; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      resetCalled = fleet.resetCar.mock.calls.length > 0;
+    }
+    expect(fleet.resetCar).toHaveBeenCalledTimes(1);
+    expect(onCarReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("postpones the reset while another racer sits within 6m of the reset pose, then completes once clear", () => {
+    const { coordinator, fleet, scene } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    scene.vehicle.body.setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[1].setPosition({ x: 0, y: 0, z: 0 }); // sits exactly on gridPoses[0], car 0's no-anchor reset pose
+    fleet.bodies[2].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    let tick = runTicks(coordinator, 181, 400);
+    expect(fleet.resetCar).not.toHaveBeenCalled();
+
+    fleet.bodies[1].setPosition({ x: 500, y: 0, z: 500 });
+    let resetCalled = false;
+    for (let i = 0; i < 5 && !resetCalled; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      resetCalled = fleet.resetCar.mock.calls.length > 0;
+    }
+    expect(fleet.resetCar).toHaveBeenCalledTimes(1);
+  });
+
+  it("detectors are not updated before GO", () => {
+    const { coordinator, fleet } = setup();
+    // No onTickBegin(180) — countdown never released.
+    coordinator.onTickBegin(0);
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    for (let i = 0; i < 200; i++) {
+      coordinator.onTickBegin(0);
+      coordinator.onTickEnd();
+    }
+    expect(coordinator.snapshot().racers[0].stuck).toEqual({
+      phase: "racing",
+      stuckSec: 0,
+      flippedSec: 0,
+      noProgressSec: 0,
+      recoverSec: 0,
+      deferSec: 0,
+    });
+  });
+
+  it("detectors are not updated for a finished AI", () => {
+    const { coordinator, fleet } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+    let tick = 181;
+    for (let i = 0; i < course.checkpoints.length; i++) {
+      fleet.bodies[0].setPosition(checkpointXYZ(i));
+      tick = runTicks(coordinator, tick, 1);
+    }
+    expect(coordinator.snapshot().racers[0].race.complete).toBe(true);
+    const finishedStuck = coordinator.snapshot().racers[0].stuck;
+
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+    runTicks(coordinator, tick, 200);
+
+    expect(coordinator.snapshot().racers[0].stuck).toEqual(finishedStuck);
+  });
+
+  it("restart command restarts every detector", () => {
+    const { coordinator, fleet } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+    runTicks(coordinator, 181, 60);
+    expect(coordinator.snapshot().racers[0].stuck?.stuckSec).toBeGreaterThan(0);
+
+    coordinator.onCommands({ restart: true, respawn: false });
+
+    for (let i = 0; i < AI_RACER_COUNT; i++) {
+      expect(coordinator.snapshot().racers[i].stuck).toEqual({
+        phase: "racing",
+        stuckSec: 0,
+        flippedSec: 0,
+        noProgressSec: 0,
+        recoverSec: 0,
+        deferSec: 0,
+      });
+    }
   });
 });
 

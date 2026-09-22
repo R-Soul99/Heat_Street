@@ -87,4 +87,44 @@ export class TransformCache {
       this.cur[o + 6] = r.w;
     }
   }
+
+  /**
+   * Re-reads body `index` from Rapier into BOTH `cur` and `prev`, so it
+   * renders at its new pose on the very next frame with no one-frame slide
+   * through the world. Used when ONE body is teleported OUTSIDE the loop's
+   * normal reset-command path (07-RESEARCH.md Pitfall 4) — plan 07-04's AI
+   * reset is the first caller: `captureAsPrevious()`/`captureAsCurrent()`
+   * both run on every fixed tick regardless, so a body moved by
+   * `resetPose` between two ticks would otherwise have `prev` still holding
+   * its PRE-reset transform and interpolate (lerp/slerp) across the
+   * teleport for exactly one render frame. Throws a `RangeError` for an
+   * out-of-range index rather than silently no-op'ing, since the only
+   * caller (racer index -> `1 + racerIndex`, `src/main.ts`'s
+   * `onCarReset`) computes `index` from a fixed racer table and a bad index
+   * there is a real bug, not a transient condition to swallow (T-07-14).
+   * Allocation-free.
+   */
+  snapBody(index: number): void {
+    if (!Number.isInteger(index) || index < 0 || index >= this.bodies.length) {
+      throw new RangeError(`TransformCache.snapBody: index ${index} is out of range`);
+    }
+    const body = this.bodies[index];
+    const o = index * XFORM_STRIDE;
+    const t = body.translation();
+    const r = body.rotation();
+    this.cur[o] = t.x;
+    this.cur[o + 1] = t.y;
+    this.cur[o + 2] = t.z;
+    this.cur[o + 3] = r.x;
+    this.cur[o + 4] = r.y;
+    this.cur[o + 5] = r.z;
+    this.cur[o + 6] = r.w;
+    this.prev[o] = this.cur[o];
+    this.prev[o + 1] = this.cur[o + 1];
+    this.prev[o + 2] = this.cur[o + 2];
+    this.prev[o + 3] = this.cur[o + 3];
+    this.prev[o + 4] = this.cur[o + 4];
+    this.prev[o + 5] = this.cur[o + 5];
+    this.prev[o + 6] = this.cur[o + 6];
+  }
 }
