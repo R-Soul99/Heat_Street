@@ -164,7 +164,12 @@ export function createMinimap(graph: RoadGraph, sizePx = 196, radiusM = 420): Mi
         context.stroke();
       }
       if (snapshot.racers !== undefined) {
-        for (const marker of projectRacerMarkers(snapshot.racers, snapshot.player, radiusM, sizePx)) {
+        for (const marker of projectRacerMarkers(
+          snapshot.racers,
+          snapshot.player,
+          radiusM,
+          sizePx,
+        )) {
           context.fillStyle = marker.color;
           context.strokeStyle = "#071015";
           context.lineWidth = 1.5;

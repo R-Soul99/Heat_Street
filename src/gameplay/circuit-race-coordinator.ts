@@ -15,6 +15,14 @@ import { headingFromRotation } from "../core/heading";
 import type { InputFrame } from "../core/input-tape";
 import { type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import {
+  computeStandings,
+  createGapTracker,
+  createProgressTracker,
+  type ProgressTracker,
+  type Standing,
+  type StandingInput,
+} from "../core/race-placement";
+import {
   AI_PAINTS,
   AI_RACER_COUNT,
   COUNTDOWN_TICKS,
@@ -30,7 +38,7 @@ import type { RacingLine } from "../core/racing-line";
 import { DT } from "../core/sim-clock";
 import type { Minimap } from "../hud/minimap";
 import type { NavigationArrow } from "../hud/navigation-arrow";
-import type { RaceHud } from "../hud/race-hud";
+import type { RaceHud, RaceStatusModel } from "../hud/race-hud";
 import type { RaceCommands } from "../input/race-commands";
 import type { AiFleet } from "../physics/ai-fleet";
 import type { MapScene } from "../physics/map-scene";
@@ -97,6 +105,8 @@ export interface RacerSnapshot {
   readonly finishElapsedSec: number | null;
   /** This AI racer's own stuck/flip/recovery state (SC3, D-13), or `null` for the player (racer `PLAYER_GRID_SLOT` has no detector). */
   readonly stuck: StuckSnapshot | null;
+  /** Leg-bounded distance-along-the-racing-line progress, metres (D-16, `src/core/race-placement.ts`). */
+  readonly progressM: number;
 }
 
 export interface CircuitRaceSnapshot {
@@ -106,6 +116,8 @@ export interface CircuitRaceSnapshot {
   readonly elapsedSec: number;
   /** Length `RACE_FIELD_SIZE`, index-aligned with the RACER INDEX TABLE above. */
   readonly racers: readonly RacerSnapshot[];
+  /** Live placing (D-16), ordered by position 1..N (`src/core/race-placement.ts`). */
+  readonly standings: readonly Standing[];
 }
 
 /**
@@ -157,6 +169,15 @@ export function createCircuitRaceCoordinator(
   const detectors: StuckDetector[] = Array.from({ length: AI_RACER_COUNT }, () =>
     createStuckDetector(deps.line.lapLengthM),
   );
+  const checkpointIds = deps.course.checkpoints.map((checkpoint) => checkpoint.id);
+  // D-16: one progress tracker per racer (RACE_FIELD_SIZE), each an
+  // identical, stateless wrapper over the shared racing line's own
+  // precomputed legs (07-RESEARCH.md Pattern 7) — no per-racer internal
+  // state, only the race snapshot + live XZ position passed to `update()`.
+  const progressTrackers: ProgressTracker[] = Array.from({ length: RACE_FIELD_SIZE }, () =>
+    createProgressTracker(deps.line, checkpointIds),
+  );
+  const gap = createGapTracker(RACE_FIELD_SIZE);
 
   let armedTick: number | null = null;
   let goTick: number | null = null;
@@ -187,6 +208,28 @@ export function createCircuitRaceCoordinator(
     return false;
   }
 
+  /** This racer's live leg-bounded progress (D-16), computed fresh from its current body position and race snapshot every call — mirrors this file's existing convention of calling `races[i].snapshot()` fresh at every use site rather than caching. */
+  function racerProgressM(racerIndex: number): number {
+    const position = racerBody(racerIndex).translation();
+    return progressTrackers[racerIndex].update(
+      races[racerIndex].snapshot(),
+      position.x,
+      position.z,
+    );
+  }
+
+  /** Live standings (D-16): finished racers by effective finish time, then unfinished by progress. */
+  function computeCurrentStandings(): readonly Standing[] {
+    const inputs: StandingInput[] = [];
+    for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
+      const finish = finishElapsedSec[racerIndex];
+      const finishEffectiveSec =
+        finish === null ? null : finish + races[racerIndex].snapshot().penaltySec;
+      inputs.push({ racerIndex, finishEffectiveSec, progressM: racerProgressM(racerIndex) });
+    }
+    return computeStandings(inputs);
+  }
+
   function currentCountdown(): {
     readonly label: CountdownLabel | null;
     readonly released: boolean;
@@ -213,11 +256,16 @@ export function createCircuitRaceCoordinator(
     const currentWaypoint: readonly [number, number, number] | null =
       target === undefined ? null : [target.position[0], target.position[1], target.position[2]];
     deps.objectiveView.update(playerSnapshot, deps.course.checkpoints);
+    const racerMarkers = Array.from({ length: AI_RACER_COUNT }, (_, carIndex) => {
+      const position = deps.fleet.cars[carIndex].vehicle.body.translation();
+      return { point: { x: position.x, z: position.z }, color: AI_PAINTS[carIndex].css };
+    });
     deps.minimap.update({
       player: { x: bodyPosition.x, z: bodyPosition.z },
       headingRad,
       remaining,
       target: currentWaypoint === null ? null : { x: currentWaypoint[0], z: currentWaypoint[2] },
+      racers: racerMarkers,
     });
     deps.navigationArrow.update({
       carHeadingRad: headingRad,
@@ -226,6 +274,33 @@ export function createCircuitRaceCoordinator(
     });
     deps.raceHud.update(playerSnapshot);
     deps.raceHud.showCountdown(currentCountdown().label);
+    deps.raceHud.updateRaceStatus(buildRaceStatusModel(playerSnapshot));
+  }
+
+  /** D-16: the player's own live P/lap/gap status line, plus the race clock. `gapSec` is the time BEHIND the racer directly ahead, or — when the player leads — the LEAD over P2 (`leading: true`), or `null` before a shared 20 m milestone exists between the two racers. */
+  function buildRaceStatusModel(playerSnapshot: RaceSnapshot): RaceStatusModel {
+    const standings = computeCurrentStandings();
+    const playerStanding = standings.find((s) => s.racerIndex === PLAYER_GRID_SLOT);
+    const position = playerStanding?.position ?? RACE_FIELD_SIZE;
+    const leading = position === 1;
+    let gapSec: number | null;
+    if (leading) {
+      const p2 = standings.find((s) => s.position === 2);
+      gapSec = p2 === undefined ? null : gap.gapSec(p2.racerIndex, PLAYER_GRID_SLOT);
+    } else {
+      const ahead = standings.find((s) => s.position === position - 1);
+      gapSec = ahead === undefined ? null : gap.gapSec(PLAYER_GRID_SLOT, ahead.racerIndex);
+    }
+    return {
+      position,
+      fieldSize: RACE_FIELD_SIZE,
+      lap: playerSnapshot.lap,
+      totalLaps: playerSnapshot.totalLaps,
+      gapSec,
+      leading,
+      finished: playerSnapshot.complete,
+      elapsedSec: computeElapsedSec(),
+    };
   }
 
   function onTickBegin(tick: number): void {
@@ -282,6 +357,16 @@ export function createCircuitRaceCoordinator(
       }
     }
 
+    // D-16: record every racer's own gap-tracker milestones only once GO has
+    // released (before GO, progress readings from held/staggered grid poses
+    // are not meaningful race data).
+    if (currentCountdown().released) {
+      const elapsed = computeElapsedSec();
+      for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
+        gap.record(racerIndex, racerProgressM(racerIndex), elapsed);
+      }
+    }
+
     // SC3/D-13: stuck/flip/no-progress recovery, only after GO and only for
     // AI racers still racing — "detectors are not updated before GO or for
     // a finished AI" (Task 3's own behavior list).
@@ -324,6 +409,10 @@ export function createCircuitRaceCoordinator(
         race.respawn();
         insideMaps[carIndex].clear();
         detectors[carIndex].acknowledgeReset();
+        // D-16: truncate this AI's own gap-tracker milestones to its NEW
+        // reset position (the pose it is about to occupy), so a re-pass
+        // records fresh times rather than reusing stale pre-reset ones.
+        gap.truncate(carIndex, progressTrackers[carIndex].update(race.snapshot(), pose.x, pose.z));
         deps.onCarReset?.(carIndex);
       }
     }
@@ -345,6 +434,10 @@ export function createCircuitRaceCoordinator(
       }
       armedTick = null;
       goTick = null;
+      // D-16: a restart resets the whole gap tracker — standings return to
+      // grid order from progress alone, with no stale milestone data from
+      // the previous attempt.
+      gap.reset();
       deps.raceHud.flashRestart();
       refresh();
       return;
@@ -361,6 +454,12 @@ export function createCircuitRaceCoordinator(
           : checkpointResetPose(anchor, deps.course, deps.navigation);
       deps.scene.resetVehicle(pose);
       insideMaps[PLAYER_GRID_SLOT].clear();
+      // D-16: truncate the player's own gap-tracker milestones to the NEW
+      // respawn position, same rule as the AI reset path above.
+      gap.truncate(
+        PLAYER_GRID_SLOT,
+        progressTrackers[PLAYER_GRID_SLOT].update(playerRace.snapshot(), pose.x, pose.z),
+      );
       refresh();
     }
   }
@@ -371,6 +470,7 @@ export function createCircuitRaceCoordinator(
       phase: cd.released ? "racing" : "countdown",
       countdownLabel: cd.label,
       elapsedSec: computeElapsedSec(),
+      standings: computeCurrentStandings(),
       racers: Object.freeze(
         Array.from({ length: RACE_FIELD_SIZE }, (_, racerIndex) =>
           Object.freeze({
@@ -379,6 +479,7 @@ export function createCircuitRaceCoordinator(
             race: races[racerIndex].snapshot(),
             finishElapsedSec: finishElapsedSec[racerIndex],
             stuck: racerIndex === PLAYER_GRID_SLOT ? null : detectors[racerIndex].snapshot(),
+            progressM: racerProgressM(racerIndex),
           }),
         ),
       ),

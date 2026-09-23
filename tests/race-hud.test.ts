@@ -27,9 +27,9 @@ describe("formatRaceStatus", () => {
   });
 
   it('formats a null gap as "--": "P2/4 · Lap 1/3 · --"', () => {
-    expect(
-      formatRaceStatus(baseModel({ position: 2, lap: 1, gapSec: null, leading: false })),
-    ).toBe("P2/4 · Lap 1/3 · --");
+    expect(formatRaceStatus(baseModel({ position: 2, lap: 1, gapSec: null, leading: false }))).toBe(
+      "P2/4 · Lap 1/3 · --",
+    );
   });
 
   it("clamps lap 4 of 3 to Lap 3/3", () => {
@@ -39,8 +39,6 @@ describe("formatRaceStatus", () => {
   });
 
   it('renders "P2/4 · FINISHED" when finished', () => {
-    expect(formatRaceStatus(baseModel({ position: 2, finished: true }))).toBe(
-      "P2/4 · FINISHED",
-    );
+    expect(formatRaceStatus(baseModel({ position: 2, finished: true }))).toBe("P2/4 · FINISHED");
   });
 });
