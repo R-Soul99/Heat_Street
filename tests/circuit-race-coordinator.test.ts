@@ -3,6 +3,7 @@ import type { Course } from "../src/core/course";
 import type { InputFrame } from "../src/core/input-tape";
 import { buildNavigationGraph } from "../src/core/navigation";
 import {
+  AI_PAINTS,
   AI_RACER_COUNT,
   HOLD_FRAME,
   PLAYER_GRID_SLOT,
@@ -104,9 +105,19 @@ function makeFleet() {
   const bodies = [0, 1, 2].map(() => makeBody({ x: 0, y: 0, z: 0 }));
   const telemetry = [0, 1, 2].map(() => ({ forwardSpeedMs: 0, groundSpeedMs: 0, tiltDeg: 0 }));
   const debugLineIndex = [0, 0, 0];
+  // Distinct per-car target coordinates so a debugSnapshot() test can tell
+  // each AI's own `driver.debug()` read apart from the others'.
+  const debugTargetX = [10, 20, 30];
+  const debugTargetZ = [-10, -20, -30];
   const cars = [0, 1, 2].map((i) => ({
     vehicle: { body: bodies[i], telemetry: telemetry[i] },
-    driver: { debug: () => ({ lineIndex: debugLineIndex[i] }) },
+    driver: {
+      debug: () => ({
+        lineIndex: debugLineIndex[i],
+        targetX: debugTargetX[i],
+        targetZ: debugTargetZ[i],
+      }),
+    },
   }));
   let shapeOutputs: InputFrame[] = [];
   const tick = vi.fn(
@@ -120,7 +131,8 @@ function makeFleet() {
   // — individual tests override this per-car to exercise the stuck check.
   const lastFrames: InputFrame[] = [BASE_FRAME, BASE_FRAME, BASE_FRAME];
   const lastFrame = vi.fn((carIndex: number): InputFrame => lastFrames[carIndex]);
-  const avoidanceScale = vi.fn((): number => 1);
+  const avoidanceScales = [1, 1, 1];
+  const avoidanceScale = vi.fn((carIndex: number): number => avoidanceScales[carIndex]);
   return {
     cars,
     tick,
@@ -128,8 +140,11 @@ function makeFleet() {
     bodies,
     telemetry,
     debugLineIndex,
+    debugTargetX,
+    debugTargetZ,
     lastFrame,
     avoidanceScale,
+    avoidanceScales,
     setLastFrameThrottle(carIndex: number, throttle: number): void {
       lastFrames[carIndex] = Object.freeze({ ...lastFrames[carIndex], throttle });
     },
@@ -532,6 +547,79 @@ describe("circuit race coordinator — AI stuck/flip recovery (SC3, D-13)", () =
         deferSec: 0,
       });
     }
+  });
+});
+
+describe("circuit race coordinator — debugSnapshot (D-15)", () => {
+  it("returns one frozen record per AI racer with racerIndex, position, target, frame and color", () => {
+    const { coordinator, fleet } = setup();
+    fleet.bodies[0].setPosition({ x: 5, y: 0.5, z: -5 });
+
+    const debug = coordinator.debugSnapshot();
+    expect(debug).toHaveLength(AI_RACER_COUNT);
+    expect(debug[0]).toEqual({
+      racerIndex: 0,
+      x: 5,
+      y: 0.5,
+      z: -5,
+      targetX: fleet.debugTargetX[0],
+      targetZ: fleet.debugTargetZ[0],
+      frame: BASE_FRAME,
+      state: "racing",
+      stuckSec: 0,
+      noProgressSec: 0,
+      color: AI_PAINTS[0].css,
+    });
+    expect(Object.isFrozen(debug)).toBe(true);
+    expect(Object.isFrozen(debug[0])).toBe(true);
+    for (let i = 0; i < AI_RACER_COUNT; i++) {
+      expect(debug[i].racerIndex).toBe(i);
+      expect(debug[i].color).toBe(AI_PAINTS[i].css);
+    }
+  });
+
+  it('reads state "avoiding" only when avoidanceScale < 1 (racing otherwise)', () => {
+    const { coordinator, fleet } = setup();
+    expect(coordinator.debugSnapshot()[1].state).toBe("racing");
+
+    fleet.avoidanceScales[1] = 0.4;
+    expect(coordinator.debugSnapshot()[1].state).toBe("avoiding");
+  });
+
+  it('reads state "recovering" while the detector is recovering, taking priority over avoidance', () => {
+    const { coordinator, fleet } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+    fleet.avoidanceScales[0] = 0.4;
+
+    let tick = 181;
+    let recovering = false;
+    for (let i = 0; i < 200 && !recovering; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      recovering = coordinator.debugSnapshot()[0].state === "recovering";
+    }
+    expect(recovering).toBe(true);
+  });
+
+  it("stuckSec/noProgressSec mirror the detector's own snapshot timers", () => {
+    const { coordinator, fleet } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180);
+
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+    runTicks(coordinator, 181, 60);
+
+    const debug = coordinator.debugSnapshot();
+    const stuck = coordinator.snapshot().racers[0].stuck;
+    expect(debug[0].stuckSec).toBe(stuck?.stuckSec);
+    expect(debug[0].noProgressSec).toBe(stuck?.noProgressSec);
+    expect(debug[0].stuckSec).toBeGreaterThan(0);
   });
 });
 
