@@ -1,11 +1,39 @@
 import type { MedalTimingSnapshot } from "../core/medal-timing";
 import type { RaceSnapshot } from "../core/race-state";
 
+/** D-16 race-status model for the player in a Circuit Race: live position, lap and time gap to the car ahead (or the lead over P2 when in front), plus the race clock. */
+export interface RaceStatusModel {
+  readonly position: number;
+  readonly fieldSize: number;
+  readonly lap: number;
+  readonly totalLaps: number;
+  /** Time gap at the last shared 20 m progress milestone, or `null` before one exists. */
+  readonly gapSec: number | null;
+  /** `true` when this racer is P1 — `gapSec` then reads as the LEAD over P2. */
+  readonly leading: boolean;
+  readonly finished: boolean;
+  readonly elapsedSec: number;
+}
+
+/** `"P3/4 · Lap 2/3 · +1.4s"` (behind), `"-0.8s"` (leading), `"--"` (no shared milestone yet), or `"P2/4 · FINISHED"`. */
+export function formatRaceStatus(model: RaceStatusModel): string {
+  const position = `P${model.position}/${model.fieldSize}`;
+  if (model.finished) return `${position} · FINISHED`;
+  const lap = `Lap ${Math.min(model.lap, model.totalLaps)}/${model.totalLaps}`;
+  const gap =
+    model.gapSec === null
+      ? "--"
+      : `${model.leading ? "-" : "+"}${Math.abs(model.gapSec).toFixed(1)}s`;
+  return `${position} · ${lap} · ${gap}`;
+}
+
 export interface RaceHud {
   update(snapshot: RaceSnapshot, timing?: MedalTimingSnapshot): void;
   flashRestart(): void;
   /** Circuit Race's 3-2-1-GO countdown text (plan 07-02, D-04). `null` hides it. */
   showCountdown(label: string | null): void;
+  /** D-16 race-status line + race clock (Circuit Race only). `null` hides the status line; the solo `update()` timing path is unaffected. */
+  updateRaceStatus(model: RaceStatusModel | null): void;
   dispose(): void;
 }
 
@@ -29,13 +57,19 @@ export function createRaceHud(): RaceHud {
   const timingPanel = document.createElement("div");
   timingPanel.style.cssText =
     "position:fixed;top:78px;right:24px;min-width:180px;text-align:right;letter-spacing:.06em;text-shadow:0 2px 4px #000";
+  // D-16: the race-status line (P/lap/gap) is the FIRST child of the timing
+  // panel, above the race clock — hidden (not empty text) until a Circuit
+  // Race supplies a model via updateRaceStatus, matching the countdown/
+  // wrongWay hidden-by-visibility convention elsewhere in this file.
+  const raceStatus = document.createElement("div");
+  raceStatus.style.cssText = "font-size:20px;color:#f4fbff;letter-spacing:.06em;visibility:hidden";
   const timer = document.createElement("div");
   timer.style.cssText = "font-size:24px;color:#ffd447";
   const thresholds = document.createElement("div");
   thresholds.style.cssText = "margin-top:6px;font-size:11px;line-height:1.45;white-space:pre";
   const split = document.createElement("div");
   split.style.cssText = "margin-top:10px;color:#7ee8ff;font-size:12px;min-height:15px";
-  timingPanel.append(timer, thresholds, split);
+  timingPanel.append(raceStatus, timer, thresholds, split);
   // Circuit Race's 3-2-1-GO countdown (plan 07-02, D-04): centred, large,
   // hidden (not empty text) when there is nothing to show. Written with
   // `textContent` only, matching every other DOM write in this file --
@@ -81,6 +115,15 @@ export function createRaceHud(): RaceHud {
     showCountdown(label: string | null): void {
       countdown.textContent = label ?? "";
       countdown.style.visibility = label === null ? "hidden" : "visible";
+    },
+    updateRaceStatus(model: RaceStatusModel | null): void {
+      if (model === null) {
+        raceStatus.style.visibility = "hidden";
+        return;
+      }
+      raceStatus.style.visibility = "visible";
+      raceStatus.textContent = formatRaceStatus(model);
+      timer.textContent = formatTime(model.elapsedSec);
     },
     dispose(): void {
       root.remove();

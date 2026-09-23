@@ -12,11 +12,27 @@ export interface MinimapProjection {
   readonly angleRad: number;
 }
 
+/** One AI racer's minimap dot (D-14): position plus its own paint color. */
+export interface MinimapRacer {
+  readonly point: MinimapPoint;
+  readonly color: string;
+}
+
 export interface MinimapSnapshot {
   readonly player: MinimapPoint;
   readonly headingRad: number;
   readonly remaining: readonly MinimapPoint[];
   readonly target: MinimapPoint | null;
+  /** Circuit Race only (D-14) — omitted (or `undefined`) draws exactly as before. */
+  readonly racers?: readonly MinimapRacer[];
+}
+
+export interface MinimapRacerMarker {
+  readonly x: number;
+  readonly y: number;
+  readonly offscreen: boolean;
+  readonly color: string;
+  readonly radiusPx: number;
 }
 
 export interface Minimap {
@@ -64,6 +80,25 @@ export function projectCarRotation(headingRad: number): number {
   // increasing) — both properties verified algebraically, not just at
   // discrete heading values.
   return Math.PI / 2 + headingRad;
+}
+
+/** Pure projection for each AI racer dot (D-14): reuses `projectMinimapPoint`'s own edge-blip treatment (radiusPx 4.5 on-map / 3 offscreen, same as checkpoints). */
+export function projectRacerMarkers(
+  racers: readonly MinimapRacer[],
+  player: MinimapPoint,
+  radiusM: number,
+  sizePx: number,
+): readonly MinimapRacerMarker[] {
+  return racers.map((racer) => {
+    const projected = projectMinimapPoint(racer.point, player, radiusM, sizePx);
+    return {
+      x: projected.x,
+      y: projected.y,
+      offscreen: projected.offscreen,
+      color: racer.color,
+      radiusPx: projected.offscreen ? 3 : 4.5,
+    };
+  });
 }
 
 function distanceFromPlayer(point: MinimapPoint, player: MinimapPoint): number {
@@ -127,6 +162,17 @@ export function createMinimap(graph: RoadGraph, sizePx = 196, radiusM = 420): Mi
         context.arc(projected.x, projected.y, projected.offscreen ? 6 : 7, 0, Math.PI * 2);
         context.fill();
         context.stroke();
+      }
+      if (snapshot.racers !== undefined) {
+        for (const marker of projectRacerMarkers(snapshot.racers, snapshot.player, radiusM, sizePx)) {
+          context.fillStyle = marker.color;
+          context.strokeStyle = "#071015";
+          context.lineWidth = 1.5;
+          context.beginPath();
+          context.arc(marker.x, marker.y, marker.radiusPx, 0, Math.PI * 2);
+          context.fill();
+          context.stroke();
+        }
       }
       context.save();
       context.translate(sizePx / 2, sizePx / 2);
