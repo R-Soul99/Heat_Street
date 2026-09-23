@@ -9,6 +9,7 @@ import {
   PLAYER_GRID_SLOT,
   RACE_FIELD_SIZE,
 } from "../src/core/race-start";
+import type { RacingLine } from "../src/core/racing-line";
 import type { RoadGraph } from "../src/core/road-graph";
 import { createCircuitRaceCoordinator } from "../src/gameplay/circuit-race-coordinator";
 import circuitRaceCoordinatorSource from "../src/gameplay/circuit-race-coordinator.ts?raw";
@@ -154,8 +155,42 @@ function makeFleet() {
   };
 }
 
-/** A synthetic `RacingLine`-shaped fixture — only `lapLengthM` and `points[i].arcM` are read by the coordinator; a large `lapLengthM` keeps the no-progress window (8s) well outside every test's own tick budget so it never interferes with the stuck-speed tests below. */
-const line = { lapLengthM: 1_000_000, points: [{ arcM: 0 }] };
+/**
+ * A synthetic, fully-shaped `RacingLine` fixture (07-06): points run along
+ * the SAME x-axis the road-graph/course fixture above already uses (`x = i`
+ * for `i` in `0..39`), at 10x the arc scale (`arcM = i * 10`) so a car
+ * sitting at `checkpointXYZ(i)` (node x-position `(i+1)*10`) sits exactly on
+ * this line's own arc for checkpoint `i` (arc 100/200/300/400, matching
+ * `checkpointArcM` below) — and, just as importantly, so `lapLengthM` (400)
+ * stays comfortably larger than `LEG_BACKTRACK_M` (60): a lap length smaller
+ * than the backtrack window would make every leg's own point list wrap
+ * around and swallow the ENTIRE line, defeating the leg-restriction this
+ * fixture is meant to exercise. `debugLineIndex` (in `makeFleet` below)
+ * stays `0` for the whole file, so the AI stuck detector only ever reads
+ * `points[0].arcM` (0) — unaffected by this fixture's real geometry or by
+ * `lapLengthM`'s value (the no-progress window's `wrappedArcDelta` is always
+ * computed against a constant `arcM`, so it triggers identically regardless
+ * of `lapLengthM`).
+ */
+const line: RacingLine = {
+  courseId: course.id,
+  points: Array.from({ length: 40 }, (_, i) =>
+    Object.freeze({
+      x: i,
+      y: 0,
+      z: 0,
+      centreX: i,
+      centreZ: 0,
+      halfWidthM: 4,
+      surface: "tarmac" as const,
+      arcM: i * 10,
+      curvature: 0,
+      targetSpeedMs: 20,
+    }),
+  ),
+  lapLengthM: 400,
+  checkpointArcM: [100, 200, 300, 400],
+};
 
 function setup() {
   const navigation = buildNavigationGraph(graph);
@@ -172,7 +207,12 @@ function setup() {
   const objectiveView = { update: vi.fn() };
   const minimap = { update: vi.fn() };
   const navigationArrow = { update: vi.fn() };
-  const raceHud = { update: vi.fn(), flashRestart: vi.fn(), showCountdown: vi.fn() };
+  const raceHud = {
+    update: vi.fn(),
+    flashRestart: vi.fn(),
+    showCountdown: vi.fn(),
+    updateRaceStatus: vi.fn(),
+  };
   const chime = { play: vi.fn() };
   const onCarReset = vi.fn();
   const coordinator = createCircuitRaceCoordinator({
@@ -181,7 +221,7 @@ function setup() {
     scene: scene as never,
     fleet: fleet as never,
     gridPoses,
-    line: line as never,
+    line,
     objectiveView: objectiveView as never,
     minimap: minimap as never,
     navigationArrow: navigationArrow as never,
@@ -620,6 +660,207 @@ describe("circuit race coordinator — debugSnapshot (D-15)", () => {
     expect(debug[0].stuckSec).toBe(stuck?.stuckSec);
     expect(debug[0].noProgressSec).toBe(stuck?.noProgressSec);
     expect(debug[0].stuckSec).toBeGreaterThan(0);
+  });
+});
+
+describe("circuit race coordinator — live placing (D-16)", () => {
+  it("before GO, updateRaceStatus receives elapsedSec 0 and grid-order standings", () => {
+    const { coordinator, raceHud } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickEnd();
+
+    const lastModel = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(lastModel.elapsedSec).toBe(0);
+    // Player is grid slot PLAYER_GRID_SLOT (3, the back of the grid) -> P4.
+    expect(lastModel.position).toBe(RACE_FIELD_SIZE);
+
+    const snap = coordinator.snapshot();
+    expect(snap.standings.map((s) => s.racerIndex)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("ranks a racer ahead of the player above them, with a positive time gap to the racer directly ahead", () => {
+    const { coordinator, fleet, raceHud, playerBody } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180); // GO at tick 180
+
+    // Racer 0 hits checkpoint 0 immediately (tick 181), landing at
+    // progress 100 and filling its own gap-tracker milestones 0..5 at this
+    // tick's elapsed time (1/60 s).
+    coordinator.onTickBegin(181);
+    fleet.bodies[0].setPosition(checkpointXYZ(0));
+    coordinator.onTickEnd();
+
+    // The player sits still for a few ticks (elapsed keeps advancing, but
+    // its own progress does not change, so no new milestones), then crosses
+    // its own first 40 m milestone at tick 182 (2/60 s).
+    coordinator.onTickBegin(182);
+    playerBody.setPosition({ x: 5, y: 0, z: 0 });
+    coordinator.onTickEnd();
+
+    const snap = coordinator.snapshot();
+    const racer0 = snap.standings.find((s) => s.racerIndex === 0);
+    const player = snap.standings.find((s) => s.racerIndex === PLAYER_GRID_SLOT);
+    expect(racer0?.position).toBe(1);
+    expect(player?.position).toBe(2);
+
+    const lastModel = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(lastModel.position).toBe(2);
+    expect(lastModel.leading).toBe(false);
+    // gapSec = player's own milestone-2 (40 m) time (2/60 s) - racer 0's own
+    // stored time at that SAME milestone (1/60 s, recorded a tick earlier).
+    expect(lastModel.gapSec).toBeCloseTo(1 / 60, 5);
+  });
+
+  it("with the player leading, updateRaceStatus reports leading true and gapSec as the lead over P2", () => {
+    const { coordinator, playerBody, raceHud } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180); // GO
+
+    // Before any movement, every racer is tied at progress 0 -> the player
+    // (lowest-priority tie-break, grid slot 3) is P4, not leading yet.
+    coordinator.onTickBegin(181);
+    coordinator.onTickEnd();
+    const beforeMoving = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(beforeMoving.leading).toBe(false);
+
+    // The player alone pulls far ahead (progress 100, all three AI stay at 0).
+    coordinator.onTickBegin(182);
+    playerBody.setPosition(checkpointXYZ(0));
+    coordinator.onTickEnd();
+
+    const snap = coordinator.snapshot();
+    expect(snap.standings[0].racerIndex).toBe(PLAYER_GRID_SLOT);
+    expect(snap.standings[0].position).toBe(1);
+
+    const lastModel = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(lastModel.leading).toBe(true);
+    expect(lastModel.position).toBe(1);
+    // P2 (racer 1, tie-broken ahead of racer 2) shares the same progress-0
+    // milestone timestamp as the player's own tick-181 one -> the lead
+    // reads as a defined (here, zero) number, not null.
+    expect(lastModel.gapSec).not.toBeNull();
+  });
+
+  it("player respawn truncates the player's own gap-tracker milestones past the new position", () => {
+    const { coordinator, fleet, playerBody, raceHud } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180); // GO
+
+    // Racer 0 (the ahead reference car) parks at progress 100, filling its
+    // own milestones 0..5 at tick 181's elapsed time (1/60 s).
+    coordinator.onTickBegin(181);
+    fleet.bodies[0].setPosition(checkpointXYZ(0));
+    coordinator.onTickEnd();
+
+    // The player advances to progress 50 (crossing milestone 2, 40 m) at
+    // tick 182 (2/60 s) -> gap to racer 0 (P1, directly ahead) is 1/60 s.
+    coordinator.onTickBegin(182);
+    playerBody.setPosition({ x: 5, y: 0, z: 0 });
+    coordinator.onTickEnd();
+    const beforeRespawn = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(beforeRespawn.gapSec).toBeCloseTo(1 / 60, 5);
+
+    // Respawn: no checkpoint hit yet, so the player resets to
+    // gridPoses[PLAYER_GRID_SLOT] (x=3, arc 30) -> progress 30, truncating
+    // milestone 2 (40 m) away. The mock scene does not itself move
+    // `playerBody` on reset (unlike a real `Vehicle.resetPose`), so the
+    // very next tick's own progress read is still the pre-respawn position
+    // (x=5, progress 50) — which is exactly what re-fills the just-dropped
+    // milestone 2, at a NEW, later elapsed time.
+    coordinator.onCommands({ restart: false, respawn: true });
+
+    coordinator.onTickBegin(183);
+    coordinator.onTickEnd();
+    const afterRespawnRepass = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    // Had truncate NOT run, milestone 2 would still hold its OLD value and
+    // this gap would be unchanged (1/60 s) instead of the fresh 2/60 s.
+    expect(afterRespawnRepass.gapSec).toBeCloseTo(2 / 60, 5);
+  });
+
+  it("an AI reset truncates that AI's own gap-tracker milestones without breaking subsequent progress/standings", () => {
+    const { coordinator, fleet, scene } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180); // GO
+
+    // Seed racer 0 with real forward progress AND a respawn anchor (hit
+    // checkpoint 0), so its eventual reset uses `checkpointResetPose`, the
+    // branch the player-respawn test above does not exercise.
+    coordinator.onTickBegin(181);
+    fleet.bodies[0].setPosition(checkpointXYZ(0));
+    coordinator.onTickEnd();
+    coordinator.onTickBegin(182);
+    fleet.bodies[0].setPosition({ x: 15, y: 0, z: 0 });
+    coordinator.onTickEnd();
+    expect(coordinator.snapshot().racers[0].progressM).toBeCloseTo(150);
+
+    // Move every other racer well clear (6 m reset-pose clearance, 60 m
+    // camera-clearance defer) before making racer 0 stuck.
+    scene.vehicle.body.setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[1].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.bodies[2].setPosition({ x: 1000, y: 0, z: 1000 });
+    fleet.telemetry[0].groundSpeedMs = 0;
+    fleet.telemetry[0].tiltDeg = 0;
+    fleet.setLastFrameThrottle(0, 1);
+
+    let tick = 183;
+    let resetCalled = false;
+    for (let i = 0; i < 400 && !resetCalled; i++) {
+      tick = runTicks(coordinator, tick, 1);
+      resetCalled = fleet.resetCar.mock.calls.length > 0;
+    }
+    expect(fleet.resetCar).toHaveBeenCalledTimes(1);
+    expect(fleet.resetCar.mock.calls[0][0]).toBe(0);
+    const resetPose = fleet.resetCar.mock.calls[0][1] as { x: number; z: number };
+    // checkpointResetPose (respawnAnchorId "c0" from the earlier hit), not
+    // the no-anchor gridPoses branch — position matches checkpoint 0's own.
+    expect(resetPose.x).toBeCloseTo(10);
+    expect(resetPose.z).toBeCloseTo(0);
+
+    // No crash, and progressM/standings stay well-formed after the reset.
+    const snap = coordinator.snapshot();
+    expect(Number.isFinite(snap.racers[0].progressM)).toBe(true);
+    expect(snap.standings).toHaveLength(RACE_FIELD_SIZE);
+  });
+
+  it("restart resets the whole gap tracker (gapSec goes back to null) and standings return to grid order", () => {
+    const { coordinator, fleet, raceHud } = setup();
+    coordinator.onTickBegin(0);
+    coordinator.onTickBegin(180); // GO
+
+    coordinator.onTickBegin(181);
+    fleet.bodies[0].setPosition(checkpointXYZ(0));
+    coordinator.onTickEnd();
+    coordinator.onTickBegin(182);
+    fleet.bodies[0].setPosition({ x: 15, y: 0, z: 0 });
+    coordinator.onTickEnd();
+
+    const beforeRestart = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(beforeRestart.gapSec).not.toBeNull();
+
+    coordinator.onCommands({ restart: true, respawn: false });
+
+    const afterRestart = raceHud.updateRaceStatus.mock.calls.at(-1)?.[0];
+    expect(afterRestart.gapSec).toBeNull();
+
+    const snap = coordinator.snapshot();
+    expect(snap.standings.map((s) => s.racerIndex)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("minimap.update receives racers with AI colors and body XZ positions", () => {
+    const { coordinator, fleet, minimap } = setup();
+    fleet.bodies[0].setPosition({ x: 5, y: 0, z: -3 });
+    fleet.bodies[1].setPosition({ x: 6, y: 0, z: 4 });
+    fleet.bodies[2].setPosition({ x: 7, y: 0, z: 1 });
+
+    coordinator.onTickBegin(0);
+    coordinator.onTickEnd();
+
+    const lastCall = minimap.update.mock.calls.at(-1)?.[0];
+    expect(lastCall.racers).toEqual([
+      { point: { x: 5, z: -3 }, color: AI_PAINTS[0].css },
+      { point: { x: 6, z: 4 }, color: AI_PAINTS[1].css },
+      { point: { x: 7, z: 1 }, color: AI_PAINTS[2].css },
+    ]);
   });
 });
 
