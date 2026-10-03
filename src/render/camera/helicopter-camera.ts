@@ -416,26 +416,28 @@ export function createChaseCameraRig(
 export function createFixedIsoCameraRig(
   camera: THREE.PerspectiveCamera,
   target: CameraTarget,
-  tuning: CameraTuning,
+  _tuning: CameraTuning,
 ): CameraRig {
   const offset = fixedIsoOffset(FIXED_ISO.headingRad, FIXED_ISO.pitchRad, FIXED_ISO.armLengthM);
+  // The damped point the camera looks at. The camera is always exactly
+  // `offset` from it, so pitch and heading are constant — damping the camera
+  // position alone while aiming at the true target tilts the view in
+  // proportion to speed, which reads as the road surface wobbling.
+  const focus = new THREE.Vector3();
   let fovApplied = false;
 
   function applyPose(dtSec: number | null): void {
     const targetPos = target.position();
-    const desiredX = targetPos.x + offset.x;
-    const desiredY = targetPos.y + offset.y;
-    const desiredZ = targetPos.z + offset.z;
-
     if (dtSec === null) {
-      camera.position.set(desiredX, desiredY, desiredZ);
+      focus.set(targetPos.x, targetPos.y, targetPos.z);
     } else {
-      const lambda = tuning.damping.positionLambda;
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, desiredX, lambda, dtSec);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, desiredY, lambda, dtSec);
-      camera.position.z = THREE.MathUtils.damp(camera.position.z, desiredZ, lambda, dtSec);
+      const lambda = FIXED_ISO.followLambda;
+      focus.x = THREE.MathUtils.damp(focus.x, targetPos.x, lambda, dtSec);
+      focus.y = THREE.MathUtils.damp(focus.y, targetPos.y, lambda, dtSec);
+      focus.z = THREE.MathUtils.damp(focus.z, targetPos.z, lambda, dtSec);
     }
-    camera.lookAt(targetPos.x, targetPos.y, targetPos.z);
+    camera.position.set(focus.x + offset.x, focus.y + offset.y, focus.z + offset.z);
+    camera.lookAt(focus);
 
     // The other rigs write their own FOV, so re-assert ours on the first frame
     // after a swap (`snap()` resets the flag).

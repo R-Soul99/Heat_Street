@@ -171,6 +171,8 @@ export const FIXED_ISO = {
   pitchRad: (50 * Math.PI) / 180,
   headingRad: Math.PI,
   armLengthM: 170,
+  /** Follow stiffness (1/s) for the look-at point; stiffer than `positionLambda` so the car stays near screen centre. */
+  followLambda: 8,
 } as const;
 
 /**
