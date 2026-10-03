@@ -70,6 +70,13 @@ export interface CameraRig {
   dispose(): void;
 }
 
+/**
+ * TEMPORARY (quick 261003-pgl camera test): hold the helicopter rig at its
+ * low-speed framing so altitude/distance/FOV no longer zoom out with speed.
+ * Heading blend is unaffected. Set to `false` to restore the speed curve.
+ */
+const DISABLE_SPEED_FRAMING = true;
+
 /** Wrap an angle into `(-PI, PI]` — the shortest-arc step for heading damping, never a raw subtraction (03-RESEARCH.md "Don't Hand-Roll"). */
 function wrapAngleRad(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a));
@@ -171,7 +178,10 @@ export function createHelicopterCameraRig(
       groundSpeedMs,
       tuning.heading.blendSpeedMs,
     );
-    const desiredFraming = framingForSpeed(groundSpeedMs, curveFromTuning(tuning));
+    const desiredFraming = framingForSpeed(
+      DISABLE_SPEED_FRAMING ? 0 : groundSpeedMs,
+      curveFromTuning(tuning),
+    );
     return { headingRad: desiredHeadingRad, framing: desiredFraming };
   }
 
