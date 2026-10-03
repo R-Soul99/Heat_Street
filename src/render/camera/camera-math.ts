@@ -157,3 +157,41 @@ export function framingForSpeed(speedMs: number, curve: CameraSpeedCurve): Camer
     fovDeg: curve.low.fovDeg + (curve.high.fovDeg - curve.low.fovDeg) * t,
   };
 }
+
+/**
+ * Pose constants for the alternative fixed "tower-defence" rig. Heading is
+ * `PI` because the map is ENU with X east and Z SOUTH, so north is -Z and a
+ * camera looking north sits at +Z of its target. `armLengthM` is the straight
+ * target-to-camera distance: at FOV 22 deg and a 170 m arm the view spans
+ * roughly 66 m along the view axis (about 86 m of ground depth at 50 deg
+ * pitch). Provisional — tuned by eye, not by playtest.
+ */
+export const FIXED_ISO = {
+  fovDeg: 22,
+  pitchRad: (50 * Math.PI) / 180,
+  headingRad: Math.PI,
+  armLengthM: 170,
+  /** Follow stiffness (1/s) for the look-at point; stiffer than `positionLambda` so the car stays near screen centre. */
+  followLambda: 8,
+  /** Clip planes for the 170 m arm. A 0.1 m near plane gives ~cm depth resolution at this range, too coarse for the 0.1 m road-to-terrain gap (z-fighting); nothing renders closer than ~100 m. */
+  nearM: 40,
+  farM: 400,
+} as const;
+
+/**
+ * Target-relative camera offset for a fixed rig: `armLengthM` away from the
+ * target, raised by `pitchRad`, on the side opposite the `headingRad` forward
+ * direction `(sin h, 0, cos h)`. Pure, so it is unit-testable without THREE.
+ */
+export function fixedIsoOffset(
+  headingRad: number,
+  pitchRad: number,
+  armLengthM: number,
+): { x: number; y: number; z: number } {
+  const horizontalM = armLengthM * Math.cos(pitchRad);
+  return {
+    x: -Math.sin(headingRad) * horizontalM,
+    y: armLengthM * Math.sin(pitchRad),
+    z: -Math.cos(headingRad) * horizontalM,
+  };
+}
