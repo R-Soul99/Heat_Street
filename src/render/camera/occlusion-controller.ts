@@ -46,6 +46,9 @@ export interface OcclusionController {
 /** `cycle()`'s fixed order: fade first (the current shipped default per `src/main.ts`), then steepen, then the off baseline. */
 const CYCLE_ORDER: readonly OcclusionMitigation[] = ["fade", "steepen", "off"];
 
+/** Opacity above which a fading-in building is snapped to fully opaque. */
+const OPAQUE_SNAP = 0.999;
+
 export function createOcclusionController(
   probe: OcclusionProbe,
   buildingMeshes: readonly THREE.Mesh[],
@@ -97,7 +100,11 @@ export function createOcclusionController(
       const isOccluder = state.occluderIds.includes(buildingMeshes[i].id);
       const targetOpacity = fadeTargetOpacity(isOccluder, 1, tuning.occlusion.fadeFloorOpacity);
       const nextOpacity = opacities[i] + (targetOpacity - opacities[i]) * factor;
-      setMeshOpacity(i, nextOpacity);
+      // Exponential easing never lands exactly on 1, and in a Float32Array it
+      // stalls a few ulps short (e.g. 0.99999976). `setMeshOpacity` only
+      // restores depthWrite at exactly 1, so without this snap a building
+      // stays depth-write-off after its first fade and never comes back.
+      setMeshOpacity(i, targetOpacity === 1 && nextOpacity > OPAQUE_SNAP ? 1 : nextOpacity);
     }
   }
 
