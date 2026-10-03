@@ -46,6 +46,7 @@
 import * as THREE from "three";
 import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 import { SURFACE_TYPES, type SurfaceType } from "../core/surface-types";
+import { nextSliding } from "../core/tyre-slip";
 
 /**
  * One surface's full particle + skid-decal visual profile. Every field
@@ -63,14 +64,11 @@ export interface SurfaceFxProfile {
   /** Baseline particles/second emitted while at least one qualifying wheel is on this surface and sliding right at `slipThreshold`. */
   readonly emitPerSec: number;
   /**
-   * Combined `hypot(wheelSideImpulse, wheelForwardImpulse)` a grounded wheel
-   * on this surface must exceed before this system emits at all. Calibrated
-   * against a real headless measurement session (recorded in this plan's
-   * SUMMARY.md) rather than guessed: a full-throttle/full-brake straight
-   * line on tarmac (zero lateral slip) peaks at a combined magnitude of
-   * ~61; a genuine handbrake slide peaks at ~89 combined (side impulse alone
-   * reaching ~88). `SLIP_THRESHOLD_HIGH`/`_MID`/`_LOW` below are the three
-   * tiers every surface picks from.
+   * Tyre slip ratio (tyre force over the wheel's friction limit, see
+   * `src/core/tyre-slip.ts`) a grounded wheel on this surface must exceed
+   * before this system emits at all; a wheel then keeps sliding until it falls
+   * a hysteresis margin below this. `SLIP_THRESHOLD_HIGH`/`_MID`/`_LOW` below
+   * are the tiers every surface picks from.
    */
   readonly slipThreshold: number;
   /** Initial upward speed, m/s, given to a freshly spawned particle. */
@@ -86,51 +84,22 @@ export interface SurfaceFxProfile {
 }
 
 /**
- * `[MEASURED]` -- a throwaway headless Vitest script (`createVehicle` +
- * `createWorld`, no `Routine` harness needed since raw
- * `wheelSideImpulse`/`wheelForwardImpulse` reads were wanted, not a
- * `RoutineResult`) drove three scenarios against `defaultTuning()` on flat
- * tarmac and logged `Math.hypot(wheelSideImpulse(i), wheelForwardImpulse(i))`
- * for the rear wheels every tick:
- *   - Straight-line full throttle (zero steer): forward impulse alone peaks
- *     at 60.83 (== `engineForcePerRearWheel` (3650 N) * `DT`), side impulse
- *     stays at essentially zero (1e-6 to 1e-8) -- confirming forward impulse
- *     tracks COMMANDED engine force, not slip, and that ordinary full-throttle
- *     driving must sit BELOW tarmac's threshold.
- *   - A scripted handbrake slide (full lock + handbrake, tick 180-300): side
- *     impulse climbs from ~8 at slide onset to a peak of 87.98, forward
- *     impulse simultaneously DROPS to 15.45 at that same peak (the friction-
- *     circle clamp trading forward grip for lateral grip) -- combined
- *     magnitude peaks at ~89.3.
- *   - Sustained gentle cornering (0.15 steer fraction, throttle 0.5): side
- *     impulse reaches 68.29 -- confirming even non-handbrake cornering can
- *     approach handbrake-slide magnitudes given enough sustained steer.
- * `SLIP_THRESHOLD_HIGH` sits above the full-throttle/full-brake ceiling
- * (~61) so ordinary tarmac driving never trips it. `SLIP_THRESHOLD_LOW` sits
- * far enough above the near-zero straight-line-idle floor (~0) that a parked
- * or gently-coasting car stays silent, but low enough to catch ordinary
- * throttle application early -- the D-05 anchor's "starts early" half.
- * `SLIP_THRESHOLD_MID` sits between the two.
+ * Slip thresholds, in `src/core/tyre-slip.ts`'s dimensionless RATIO of tyre
+ * force to the wheel's friction limit (1.0 == at the limit), `[MEASURED]`
+ * there. The previous thresholds were raw impulse magnitudes calibrated
+ * against an older engine tune; full throttle now reads a constant 80 at every
+ * speed, which sat above tarmac's 65 and made every flat-out run lay skid
+ * marks, smoke and screech.
+ *   - Tarmac sits right at the limit (1.0): straight full-throttle driving
+ *     measures 0.88 (grip, silent); launch wheelspin, sustained turns and
+ *     handbrake slides measure 1.0-1.6 and trip it.
+ *   - Loose surfaces trip a little BELOW the limit so dust starts early (D-05).
  */
-const SLIP_THRESHOLD_HIGH = 65;
-const SLIP_THRESHOLD_MID = 30;
-const SLIP_THRESHOLD_LOW = 12;
-/**
- * `[TUNED in plan 03-12's feel session]`: sand/mud's very low `forwardGrip`
- * (0.45/0.40) means ordinary throttle -- not just a deliberate slide --
- * already pushed wheel slip well past `SLIP_THRESHOLD_LOW` and near the
- * emit-rate multiplier's x4 cap (`EMIT_RATE_EXCESS_CAP`), so particle
- * intensity read as constant regardless of how hard the player was actually
- * driving. This sits between `_LOW` and `_MID` so ordinary driving still
- * trips it (dust must start early per D-05's spirit) but leaves headroom for
- * the emit rate to genuinely ramp with input intensity, the way
- * gravel/dirt_road's `_LOW` already does on their higher-grip surfaces.
- * Confirmed by direct playtest: "yes it helped, dust is produced for
- * longer." A genuinely continuous (not slip-threshold-gated) emission
- * channel for loose surfaces remains a separate, deferred idea — see
- * `.planning/seeds/dust-cloud-los-evasion.md`.
- */
-const SLIP_THRESHOLD_LOOSE = 22;
+const SLIP_THRESHOLD_HIGH = 1.0;
+const SLIP_THRESHOLD_MID = 0.95;
+const SLIP_THRESHOLD_LOW = 0.85;
+/** Sand/mud: between LOW and MID so the emit rate can still ramp with input intensity. */
+const SLIP_THRESHOLD_LOOSE = 0.9;
 
 /**
  * D-08's colour language (grey smoke/tarmac, tan-brown dust/gravel-dirt,
@@ -155,8 +124,8 @@ export const SURFACE_FX_PROFILES: { readonly [K in SurfaceType]: SurfaceFxProfil
     slipThreshold: SLIP_THRESHOLD_HIGH,
     riseMps: 1.2,
     gravityMps2: -0.4,
-    decalColour: 0x101014,
-    decalSizeM: 1.4,
+    decalColour: 0x26262b,
+    decalSizeM: 0.9,
     decalLifetimeSec: 8,
   },
   /**
@@ -258,7 +227,7 @@ const PARTICLE_SPAWN_JITTER_M = 0.3;
 const DECAL_POOL_SIZE = 48;
 
 /** Minimum travel, metres, a wheel must cover since its last decal before it may spawn another -- the gate that stops a stationary spinning wheel from consuming the whole ring buffer in one second. */
-const DECAL_MIN_SPACING_M = 1.2;
+const DECAL_MIN_SPACING_M = 1.0;
 
 /** Shallow decal-projector depth along the surface normal, metres -- D-01's ground is a flat plane this phase, so this only needs to be a few centimetres either side of it. */
 const DECAL_PROJECTION_DEPTH_M = 0.4;
@@ -272,6 +241,12 @@ const DECAL_PROJECTION_DEPTH_M = 0.4;
  * burst-spawn many particles the instant pool headroom reopens.
  */
 const EMIT_RATE_EXCESS_CAP = 3;
+
+/** Slip-ratio excess above a surface's threshold that adds one step to the emit-rate multiplier. */
+const EMIT_RATE_EXCESS_PER_STEP = 0.3;
+
+/** Peak decal opacity; skid marks start translucent and fade from here, not from solid black. */
+const DECAL_MAX_OPACITY = 0.6;
 
 /** Canvas size, pixels, for the runtime-generated puff texture. */
 const PUFF_TEXTURE_SIZE = 64;
@@ -422,11 +397,14 @@ function swapParticle(sys: ParticleSystem, a: number, b: number): void {
 /** Module-scope scratch: which of the (at most 4) wheels qualify for a given surface this frame. Reused across every system's per-frame scan so `update` allocates nothing (mirrors `vehicle-view.ts`'s `SCRATCH_AXLE` convention). */
 const QUALIFYING_WHEEL_INDICES = new Int8Array(4);
 
+/** Per-wheel hysteresis latch: true while that wheel counts as sliding (`nextSliding`). Shared by particles and decals so both stop together. */
+const WHEEL_SLIDING: boolean[] = [false, false, false, false];
+
 /** One render frame's input for one wheel. */
 export interface SurfaceFxWheelInput {
   readonly surface: SurfaceType;
   readonly grounded: boolean;
-  /** Combined slip magnitude -- see `SurfaceFxProfile.slipThreshold`'s doc comment for how this is expected to be derived. */
+  /** Tyre slip ratio (force over friction limit, `src/core/tyre-slip.ts`); compared against `SurfaceFxProfile.slipThreshold`. */
   readonly slip: number;
   readonly position: THREE.Vector3;
 }
@@ -559,7 +537,7 @@ export function createSurfaceFx(
     slot.geometry = geometry;
     slot.mesh.geometry = geometry;
     slot.material.color.setHex(profile.decalColour);
-    slot.material.opacity = 1;
+    slot.material.opacity = DECAL_MAX_OPACITY;
     slot.mesh.visible = true;
     slot.active = true;
     slot.ageSec = 0;
@@ -571,6 +549,17 @@ export function createSurfaceFx(
 
     update(wheels: readonly SurfaceFxWheelInput[], dtMs: number): void {
       const dtSec = dtMs / 1000;
+
+      for (let w = 0; w < wheels.length; w++) {
+        const wheel = wheels[w];
+        WHEEL_SLIDING[w] =
+          wheel.grounded &&
+          nextSliding(
+            WHEEL_SLIDING[w],
+            wheel.slip,
+            SURFACE_FX_PROFILES[wheel.surface].slipThreshold,
+          );
+      }
 
       for (const surface of SURFACE_TYPES) {
         const sys = systems[surface];
@@ -585,19 +574,17 @@ export function createSurfaceFx(
         let maxExcess = 0;
         for (let w = 0; w < wheels.length; w++) {
           const wheel = wheels[w];
-          if (wheel.grounded && wheel.surface === surface) {
+          if (WHEEL_SLIDING[w] && wheel.surface === surface) {
+            QUALIFYING_WHEEL_INDICES[qualifyingCount] = w;
+            qualifyingCount++;
             const excess = wheel.slip - profile.slipThreshold;
-            if (excess > 0) {
-              QUALIFYING_WHEEL_INDICES[qualifyingCount] = w;
-              qualifyingCount++;
-              if (excess > maxExcess) maxExcess = excess;
-            }
+            if (excess > maxExcess) maxExcess = excess;
           }
         }
 
         if (qualifyingCount > 0) {
           const rateMultiplier =
-            1 + Math.min(maxExcess / profile.slipThreshold, EMIT_RATE_EXCESS_CAP);
+            1 + Math.min(maxExcess / EMIT_RATE_EXCESS_PER_STEP, EMIT_RATE_EXCESS_CAP);
           sys.emitAccumulator += profile.emitPerSec * rateMultiplier * dtSec;
           while (sys.emitAccumulator >= 1 && sys.liveCount < PARTICLE_POOL_SIZE) {
             const wheelIndex = QUALIFYING_WHEEL_INDICES[sys.spawnCursor % qualifyingCount];
@@ -651,9 +638,7 @@ export function createSurfaceFx(
       // protecting against for a wheel that never moves.
       for (let w = 0; w < wheels.length; w++) {
         const wheel = wheels[w];
-        if (!wheel.grounded) continue;
-        const profile = SURFACE_FX_PROFILES[wheel.surface];
-        if (wheel.slip <= profile.slipThreshold) continue;
+        if (!WHEEL_SLIDING[w]) continue;
         const last = lastDecalPos[w];
         if (last !== null && last.distanceTo(wheel.position) < DECAL_MIN_SPACING_M) continue;
         spawnDecal(wheel.position, wheel.surface);
@@ -676,7 +661,7 @@ export function createSurfaceFx(
           slot.active = false;
           continue;
         }
-        slot.material.opacity = fade;
+        slot.material.opacity = fade * DECAL_MAX_OPACITY;
       }
     },
 
