@@ -599,7 +599,8 @@ try {
   const helicopterRig = createHelicopterCameraRig(camera, cameraTarget, cameraTuning);
   const chaseRig = createChaseCameraRig(camera, cameraTarget, cameraTuning);
   const fixedIsoRig = createFixedIsoCameraRig(camera, cameraTarget, cameraTuning);
-  let activeRig: CameraRig = helicopterRig;
+  // Fixed-iso is the boot default (quick 261003-pgl); K swaps to the helicopter rig.
+  let activeRig: CameraRig = fixedIsoRig;
   // The fixed-iso rig overrides near/far; every swap restores these first so
   // the other rigs keep the renderer's planes.
   const defaultNear = camera.near;
@@ -616,8 +617,7 @@ try {
     onDebugKey("KeyC", () => {
       swapRig(activeRig === helicopterRig ? chaseRig : helicopterRig);
     });
-    // K = fixed isometric-style rig <-> helicopter (default). Experimental,
-    // quick task 261003-pgl.
+    // K = fixed isometric-style rig (default) <-> helicopter, quick task 261003-pgl.
     onDebugKey("KeyK", () => {
       swapRig(activeRig === fixedIsoRig ? helicopterRig : fixedIsoRig);
     });
