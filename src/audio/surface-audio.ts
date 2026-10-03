@@ -32,15 +32,15 @@ import { dampFactor } from "../render/camera/camera-math";
 const WHEEL_SHARE = 0.25;
 
 /**
- * Combined slip magnitude (matching `src/render/surface-fx.ts`'s own
- * `hypot(wheelSideImpulse, wheelForwardImpulse)` convention) at/below which
- * a wheel contributes NOTHING — a car rolling gently on tarmac must be
- * silent, not hissing continuously. `[ASSUMED]`, retuneable by feel.
+ * Tyre slip ratio (force over the wheel's friction limit, `src/core/tyre-slip.ts`)
+ * at/below which a wheel contributes NOTHING — a car gripping on tarmac, even at
+ * full throttle (measured 0.88), must be silent, not hissing. `[ASSUMED]`,
+ * retuneable by feel.
  */
-const SLIP_AUDIBLE_THRESHOLD = 5;
+const SLIP_AUDIBLE_THRESHOLD = 0.95;
 
-/** Slip magnitude at/above which a wheel contributes its full `WHEEL_SHARE`. `[ASSUMED]`, retuneable by feel. */
-const SLIP_FOR_MAX_GAIN = 70;
+/** Slip ratio at/above which a wheel contributes its full `WHEEL_SHARE` (a handbrake slide measures ~1.3-1.4 on tarmac). `[ASSUMED]`, retuneable by feel. */
+const SLIP_FOR_MAX_GAIN = 1.5;
 
 /** Clamp `v` into `[lo, hi]`. */
 function clamp(v: number, lo: number, hi: number): number {

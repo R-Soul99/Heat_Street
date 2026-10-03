@@ -59,12 +59,14 @@ import { buildGridPoses, buildRacingLine } from "./core/racing-line";
 // type-stripping resolver) — this file imports it the same, ordinary,
 // extensionless way every other `src/` consumer does.
 import { parseRoadGraph } from "./core/road-graph";
+import { DT } from "./core/sim-clock";
 import {
   defaultSurfaceProfiles,
   parseSavedSurfaceProfiles,
   SURFACE_TUNING_STORAGE_KEY,
 } from "./core/surface-tuning";
 import type { SurfaceType } from "./core/surface-types";
+import { tyreSlipRatio } from "./core/tyre-slip";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
@@ -820,9 +822,17 @@ try {
         const wi = wheelFxInput[i];
         wi.surface = scene.vehicle.wheelSurfaces[i];
         wi.grounded = scene.vehicle.controller.wheelIsInContact(i);
-        const sideImpulse = scene.vehicle.controller.wheelSideImpulse(i) ?? 0;
-        const forwardImpulse = scene.vehicle.controller.wheelForwardImpulse(i) ?? 0;
-        wi.slip = Math.hypot(sideImpulse, forwardImpulse);
+        // Ratio of tyre force to the wheel's friction limit (src/core/tyre-slip.ts),
+        // NOT the raw impulse: that tracks engine force and read as "sliding"
+        // under any full-throttle run.
+        const controller = scene.vehicle.controller;
+        wi.slip = tyreSlipRatio(
+          controller.wheelSideImpulse(i) ?? 0,
+          controller.wheelForwardImpulse(i) ?? 0,
+          controller.wheelFrictionSlip(i) ?? 0,
+          controller.wheelSuspensionForce(i) ?? 0,
+          DT,
+        );
         view.wheelMeshes[i].getWorldPosition(wi.position);
         // Filled in the SAME loop as `wheelFxInput` above -- see the
         // `wheelAudioSurfaces`/`wheelAudioGrounded`/`wheelAudioSlip`
