@@ -173,6 +173,9 @@ export const FIXED_ISO = {
   armLengthM: 170,
   /** Follow stiffness (1/s) for the look-at point; stiffer than `positionLambda` so the car stays near screen centre. */
   followLambda: 8,
+  /** Clip planes for the 170 m arm. A 0.1 m near plane gives ~cm depth resolution at this range, too coarse for the 0.1 m road-to-terrain gap (z-fighting); nothing renders closer than ~100 m. */
+  nearM: 40,
+  farM: 400,
 } as const;
 
 /**

@@ -443,6 +443,8 @@ export function createFixedIsoCameraRig(
     // after a swap (`snap()` resets the flag).
     if (!fovApplied) {
       camera.fov = FIXED_ISO.fovDeg;
+      camera.near = FIXED_ISO.nearM;
+      camera.far = FIXED_ISO.farM;
       camera.updateProjectionMatrix();
       fovApplied = true;
     }
