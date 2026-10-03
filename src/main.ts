@@ -98,6 +98,7 @@ import {
 import { createObjectCameraTarget } from "./render/camera/object-camera-target";
 import { createOcclusionController } from "./render/camera/occlusion-controller";
 import { createOcclusionProbe } from "./render/camera/occlusion-probe";
+import { createCarXray } from "./render/car-xray";
 import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
@@ -647,8 +648,12 @@ try {
     mapView.buildingMeshes,
     helicopterRig,
     cameraTuning,
-    "fade",
+    // "off": buildings stay solid; the car shows through them as a ghost
+    // silhouette instead (`src/render/car-xray.ts`). `O` still cycles to
+    // "fade" for comparison.
+    "off",
   );
+  createCarXray(view.meshes[0]);
   if (DEBUG_ENABLED) {
     onDebugKey("KeyO", () => {
       occlusion.cycle();
