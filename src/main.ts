@@ -92,6 +92,7 @@ import { createCameraSkin, createCameraSkinChrome } from "./render/camera/camera
 import {
   type CameraRig,
   createChaseCameraRig,
+  createFixedIsoCameraRig,
   createHelicopterCameraRig,
 } from "./render/camera/helicopter-camera";
 import { createObjectCameraTarget } from "./render/camera/object-camera-target";
@@ -597,11 +598,18 @@ try {
   // initialiser would be the whole change.
   const helicopterRig = createHelicopterCameraRig(camera, cameraTarget, cameraTuning);
   const chaseRig = createChaseCameraRig(camera, cameraTarget, cameraTuning);
+  const fixedIsoRig = createFixedIsoCameraRig(camera, cameraTarget, cameraTuning);
   let activeRig: CameraRig = helicopterRig;
   activeRig.snap();
   if (DEBUG_ENABLED) {
     onDebugKey("KeyC", () => {
       activeRig = activeRig === helicopterRig ? chaseRig : helicopterRig;
+      activeRig.snap();
+    });
+    // K = fixed isometric-style rig <-> helicopter (default). Experimental,
+    // quick task 261003-pgl.
+    onDebugKey("KeyK", () => {
+      activeRig = activeRig === fixedIsoRig ? helicopterRig : fixedIsoRig;
       activeRig.snap();
     });
   }

@@ -30,6 +30,8 @@ import {
   type CameraFraming,
   type CameraSpeedCurve,
   dampFactor,
+  FIXED_ISO,
+  fixedIsoOffset,
   framingForSpeed,
 } from "./camera-math";
 
@@ -57,7 +59,7 @@ export interface CameraTarget {
  * which one is active.
  */
 export interface CameraRig {
-  readonly kind: "helicopter" | "chase";
+  readonly kind: "helicopter" | "chase" | "fixed-iso";
   /** Advance the rig's damped state and write the pose onto `camera`. `dtMs` is a RENDER-frame delta — see the module doc comment's Pitfall 3 note. */
   update(dtMs: number): void;
   /** Place the camera at its fully-converged pose instantly, no damping — called once at boot so frame 1 is not a swoop in from the origin. */
@@ -388,6 +390,70 @@ export function createChaseCameraRig(
     dispose(): void {
       // No-op: this rig owns no listeners and no GPU resources, mirroring
       // the helicopter rig's own dispose() for a uniform teardown shape.
+    },
+  };
+}
+
+/**
+ * Alternative fixed "tower-defence" rig (debug-toggled, never the default):
+ * constant FOV, constant pitch, heading locked to north — no yaw following
+ * the car, no speed-driven framing. Only the target's POSITION is followed,
+ * damped with the same `positionLambda` the other rigs use so a comparison
+ * judges framing, not smoothing. Pose constants live in `FIXED_ISO`
+ * (camera-math.ts), deliberately outside `CameraTuning` so this experiment
+ * adds nothing to the persisted/validated tuning schema.
+ */
+export function createFixedIsoCameraRig(
+  camera: THREE.PerspectiveCamera,
+  target: CameraTarget,
+  tuning: CameraTuning,
+): CameraRig {
+  const offset = fixedIsoOffset(FIXED_ISO.headingRad, FIXED_ISO.pitchRad, FIXED_ISO.armLengthM);
+  let fovApplied = false;
+
+  function applyPose(dtSec: number | null): void {
+    const targetPos = target.position();
+    const desiredX = targetPos.x + offset.x;
+    const desiredY = targetPos.y + offset.y;
+    const desiredZ = targetPos.z + offset.z;
+
+    if (dtSec === null) {
+      camera.position.set(desiredX, desiredY, desiredZ);
+    } else {
+      const lambda = tuning.damping.positionLambda;
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, desiredX, lambda, dtSec);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, desiredY, lambda, dtSec);
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, desiredZ, lambda, dtSec);
+    }
+    camera.lookAt(targetPos.x, targetPos.y, targetPos.z);
+
+    // The other rigs write their own FOV, so re-assert ours on the first frame
+    // after a swap (`snap()` resets the flag).
+    if (!fovApplied) {
+      camera.fov = FIXED_ISO.fovDeg;
+      camera.updateProjectionMatrix();
+      fovApplied = true;
+    }
+  }
+
+  return {
+    kind: "fixed-iso",
+
+    update(dtMs: number): void {
+      applyPose(dtMs / 1000);
+    },
+
+    snap(): void {
+      fovApplied = false;
+      applyPose(null);
+    },
+
+    setPitchBiasRad(_rad: number): void {
+      // Documented no-op: pitch is fixed by design, like the chase rig.
+    },
+
+    dispose(): void {
+      // No-op: owns no listeners or GPU resources.
     },
   };
 }
