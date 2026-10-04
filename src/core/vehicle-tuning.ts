@@ -637,7 +637,10 @@ const REQUIRED_GROUP_KEYS = ["chassis", "wheels", "drive", "assists"] as const;
  * object is always fully populated and every leaf is a finite, in-range
  * number.
  */
-export function parseSavedTuning(raw: string | null): VehicleTuning | null {
+export function parseSavedTuning(
+  raw: string | null,
+  base: () => VehicleTuning = defaultTuning,
+): VehicleTuning | null {
   if (raw === null) {
     return null;
   }
@@ -659,7 +662,7 @@ export function parseSavedTuning(raw: string | null): VehicleTuning | null {
     }
   }
 
-  const result = defaultTuning();
+  const result = base();
   copyLeaves(
     parsed,
     result as unknown as Record<string, unknown>,
