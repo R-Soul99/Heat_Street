@@ -380,7 +380,13 @@ try {
 
   // This replaces the Phase 1 all-NEUTRAL stub with live keyboard + gamepad
   // input.
-  const input = new LiveInputSource();
+  // The steer rates come from the loaded tuning so `drive.steerRampPerSec` /
+  // `steerReturnPerSec` (and their saved/exported values) actually reach the
+  // keyboard path instead of LiveInputSource's own fallback constants.
+  const input = new LiveInputSource({
+    steerRampPerSec: tuning.drive.steerRampPerSec,
+    steerReturnPerSec: tuning.drive.steerReturnPerSec,
+  });
 
   // `selectedMode`/`course`/`reference` were already resolved above (moved
   // ahead of `createMapScene`, plan 07-02) — this block only builds what

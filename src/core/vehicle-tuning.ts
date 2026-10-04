@@ -79,7 +79,12 @@ export interface VehicleTuning {
     halfExtents: { x: number; y: number; z: number };
     /** Linear velocity damping, per second. */
     linearDamping: number;
-    /** Angular velocity damping, per second. */
+    /**
+     * Angular velocity damping, per second.
+     *
+     * [TUNED, user feel report 2026-10-04]: lowered 0.3 -> 0.08 because the car
+     * felt heavy and slow to rotate. First-guess step, not measured.
+     */
     angularDamping: number;
   };
   readonly wheels: {
@@ -122,6 +127,9 @@ export interface VehicleTuning {
      * out), 1.0 -> 0.84 g (period-correct muscle car), 1.5 -> 1.25 g (modern
      * sports car). 1.2 gives roughly 1.0 g on the measured skidpad, which is
      * this file's default.
+     *
+     * [TUNED, user feel report 2026-10-04]: raised 1.2 -> 1.5 because the car
+     * understeered. First-guess step, not measured.
      */
     frictionSlip: number;
     /**
@@ -132,6 +140,10 @@ export interface VehicleTuning {
      * Source is the developer's own hand-tuning session through the `?debug`
      * panel (exported as JSON via quick task 260920-l94's Export feature),
      * not an automated sweep — no measured figure to cite, chosen by feel.
+     *
+     * [TUNED, user feel report 2026-10-04]: raised 1.21 -> 1.35 because the
+     * car turned in too slowly even at low speed. First-guess step, not
+     * measured.
      */
     frontSideFriction: number;
     /**
@@ -162,6 +174,13 @@ export interface VehicleTuning {
      * power-oversteer move: at full throttle + full steer, `powerOversteerGain`
      * already drives the lerp factor to 1, so only `handbrakeRearSideFriction`
      * matters there regardless of this baseline.
+     *
+     * [TUNED, user feel report 2026-10-04]: raised 0.2 -> 0.28 because the rear
+     * stepped out too easily; the user wants to START drifts deliberately
+     * (handbrake / power oversteer) rather than have them happen on their own.
+     * `[MEASURED]` at front 1.35 / frictionSlip 1.5: the 90 mph steer-pulse
+     * routine diverges (never settles) at 0.20-0.26 and settles (~1.0deg) at
+     * 0.28, so 0.28 is the lowest tested value that stays stable at speed.
      */
     rearSideFriction: number;
   };
@@ -194,7 +213,13 @@ export interface VehicleTuning {
     brakeImpulsePerWheel: number;
     /** Maximum steering angle at the front wheels, radians. */
     maxSteerLock: number;
-    /** Steering ramp-in rate while steer input is held, radians per second. */
+    /**
+     * Steering ramp-in rate while steer input is held, radians per second.
+     *
+     * [TUNED, user feel report 2026-10-04]: raised 2.5 -> 5.0 (0.4 s -> 0.2 s
+     * to full lock on keyboard) because the car turned in too slowly. First-
+     * guess step, not measured.
+     */
     steerRampPerSec: number;
     /** Steering ramp-out (return to centre) rate, radians per second. */
     steerReturnPerSec: number;
@@ -349,6 +374,10 @@ export interface VehicleTuning {
      * 260920-l94's Export feature), not an automated sweep — no measured
      * figure to cite here. Minor adjustment alongside the other session
      * changes, from 0.12 down to 0.1.
+     *
+     * [TUNED, user feel report 2026-10-04]: lowered 0.1 -> 0.04 because the
+     * assist fought the rotation the player wanted. First-guess step, not
+     * measured.
      */
     slideCatchGain: number;
     /** Slide-catch yaw-rate damping term, as a multiple of the gain. */
@@ -391,7 +420,7 @@ export function defaultTuning(): VehicleTuning {
       comOffset: { x: 0, y: -0.25, z: 0 },
       halfExtents: { x: 0.95, y: 0.5, z: 2.35 },
       linearDamping: 0.03,
-      angularDamping: 0.3,
+      angularDamping: 0.08,
     },
     wheels: {
       halfTrack: 0.85,
@@ -404,15 +433,15 @@ export function defaultTuning(): VehicleTuning {
       suspensionCompression: 1.3,
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 20000,
-      frictionSlip: 1.2,
-      frontSideFriction: 1.21,
-      rearSideFriction: 0.2,
+      frictionSlip: 1.5,
+      frontSideFriction: 1.35,
+      rearSideFriction: 0.28,
     },
     drive: {
       engineForcePerRearWheel: 4800,
       brakeImpulsePerWheel: 60,
       maxSteerLock: Math.PI / 4,
-      steerRampPerSec: 2.5,
+      steerRampPerSec: 5.0,
       steerReturnPerSec: 4.0,
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
@@ -425,7 +454,7 @@ export function defaultTuning(): VehicleTuning {
       bodyRollGain: 0.075,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
-      slideCatchGain: 0.1,
+      slideCatchGain: 0.04,
       slideCatchDamping: 0.35,
       downforcePerSpeed2: 0,
     },

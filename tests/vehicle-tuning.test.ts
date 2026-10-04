@@ -50,17 +50,18 @@ describe("defaultTuning()", () => {
     const b = defaultTuning();
     a.wheels.frictionSlip = 999;
     a.chassis.comOffset.y = 999;
-    expect(b.wheels.frictionSlip).toBe(1.2);
+    expect(b.wheels.frictionSlip).toBe(1.5);
     expect(b.chassis.comOffset.y).toBe(-0.25);
   });
 
   it("has the eight measured load-bearing default values, asserted by literal", () => {
     const t = defaultTuning();
-    expect(t.wheels.frictionSlip).toBe(1.2);
+    expect(t.wheels.frictionSlip).toBe(1.5);
     // Tuned 0.12 -> 0.2 in the plan 02-10 feel session: at 0.12, sustained
     // full-throttle straight-line driving spontaneously spins out at ~89 mph
     // (see the doc comment on `rearSideFriction` in src/core/vehicle-tuning.ts).
-    expect(t.wheels.rearSideFriction).toBe(0.2);
+    // Raised 0.2 -> 0.28 on 2026-10-04 (user feel report; see the doc comment).
+    expect(t.wheels.rearSideFriction).toBe(0.28);
     // Tuned live 0.01 -> 0.005 in the 260920-sm2 session — developer wanted a
     // bigger handbrake kick-out (see the doc comment on
     // `handbrakeRearSideFriction` in src/core/vehicle-tuning.ts).
