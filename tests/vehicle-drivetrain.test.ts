@@ -128,10 +128,10 @@ describe("vehicle drivetrain", () => {
       return 900;
     }
 
-    it("fwd 0-60 is within 15% of rwd", () => {
+    it("fwd 0-60 is within 10% of rwd", () => {
       const rwd = ticksTo60("rwd");
       const fwd = ticksTo60("fwd");
-      expect(Math.abs(fwd - rwd) / rwd).toBeLessThanOrEqual(0.15);
+      expect(Math.abs(fwd - rwd) / rwd).toBeLessThanOrEqual(0.1);
     });
 
     it("an airborne fwd car receives no front-drive thrust", () => {

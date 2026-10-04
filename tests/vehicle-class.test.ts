@@ -106,12 +106,10 @@ describe("classDefaultTuning", () => {
     expect(fwd.drive.powerOversteerGain).toBe(0.5);
     expect(fwd.wheels.rearSideFriction).toBe(0.3);
     expect(fwd.wheels.frontSideFriction).toBe(1.2);
-    expect(fwd.drive.engineForcePerRearWheel).toBe(6000);
     const fwdRest = structuredClone(fwd);
     fwdRest.drive.powerOversteerGain = base.drive.powerOversteerGain;
     fwdRest.wheels.rearSideFriction = base.wheels.rearSideFriction;
     fwdRest.wheels.frontSideFriction = base.wheels.frontSideFriction;
-    fwdRest.drive.engineForcePerRearWheel = base.drive.engineForcePerRearWheel;
     expect(fwdRest).toEqual(base);
 
     const awd = classDefaultTuning("awd");

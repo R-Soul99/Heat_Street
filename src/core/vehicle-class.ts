@@ -82,11 +82,12 @@ export function wheelEngineForces(
  * ground contact (0..2).
  */
 export function frontDriveThrustN(
-  _perWheelEngineForce: number,
-  _frontShare: number,
-  _frontContacts: number,
+  perWheelEngineForce: number,
+  frontShare: number,
+  frontContacts: number,
 ): number {
-  return 0;
+  const thrust = -perWheelEngineForce * frontShare * frontContacts;
+  return thrust === 0 ? 0 : thrust;
 }
 
 /** Class default tuning:`defaultTuning()` plus per-class overrides. */
@@ -105,11 +106,6 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // Slightly less front bite -> understeer bias.
       t.wheels.frontSideFriction = 1.2;
       // handbrakeRearSideFriction intentionally untouched: handbrake turns still work.
-      // More drive force: with the steered front wheels carrying all of it, the
-      // car scrubs speed cornering on throttle (measured: 25 mph in, full throttle
-      // + half lock for 1.5 s -> 21 mph out, vs RWD 40). 6000 (RWD 4800; total is
-      // 2x per-wheel) lifts corner exit ~34 -> 38 mph at +1 s and 0-60 to ~3.3 s.
-      t.drive.engineForcePerRearWheel = 6000;
       break;
     case "awd":
       // Grippier overall.

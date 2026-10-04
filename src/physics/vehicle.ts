@@ -17,7 +17,7 @@ import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
-import { wheelEngineForces } from "../core/vehicle-class";
+import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
 import { applyAssists, boxPrincipalInertia } from "./vehicle-assists";
@@ -388,13 +388,19 @@ export function createVehicle(
         : reversing
           ? frame.brake * t.drive.reverseEngineForcePerRearWheel
           : 0;
-      // With FWD/AWD the front wheels carry engine force too, so Pitfall 7
-      // applies to them as well: engine force stays zero on ALL four wheels
-      // while braking (engineForce is already 0 there), and reverse uses the
-      // same front/rear distribution.
+      // Arcade front-drive model. Rapier's updateFriction scales a steered
+      // wheel's forward impulse by maxImpulse/sideImpulse once side slip
+      // saturates the friction circle, so drive routed through the steered
+      // front wheels collapsed mid-corner (measured FWD 25->22 mph on throttle
+      // vs 25->21 coasting at half lock, 1 s). The front share is therefore
+      // applied as a chassis impulse after updateVehicle (step 5b); the front
+      // wheels get literal +0 engine force (identical to RWD). Front brakes now
+      // always work with throttle held; Pitfall 7 still zeroes engineForce while
+      // braking, so thrust is 0 then too, and reverse uses the same split
+      // (negative thrust).
       const forces = wheelEngineForces(engineForce, frontDriveShare);
-      vc.setWheelEngineForce(FL, forces[0]);
-      vc.setWheelEngineForce(FR, forces[1]);
+      vc.setWheelEngineForce(FL, 0);
+      vc.setWheelEngineForce(FR, 0);
       vc.setWheelEngineForce(RL, forces[2]);
       vc.setWheelEngineForce(RR, forces[3]);
 
@@ -435,6 +441,27 @@ export function createVehicle(
       // 5. Solve the vehicle — writes suspension + tire impulses onto the
       // chassis body. Imported DT, never a literal.
       vc.updateVehicle(DT);
+
+      // 5b. Front drive share as a chassis impulse along heading. The guard
+      // keeps RWD at zero extra Rapier calls (bit-for-bit unchanged).
+      // applyImpulse(force * DT), not addForce: matches vehicle-assists.ts;
+      // consumed by the next world.step(), so nothing persists, accumulates or
+      // leaks into other vehicles. Applied at the centre of mass: no parasitic
+      // yaw/pitch torque; squat/dive still emerges from the suspension.
+      // Direction is chassis forward (the pre-update `forward` from step 2),
+      // not the steered wheel direction: front lateral grip still turns the
+      // car. Grip-aware: scaled by front wheels in contact this tick (0..2),
+      // zero when airborne.
+      if (frontDriveShare > 0) {
+        const frontContacts = (vc.wheelIsInContact(FL) ? 1 : 0) + (vc.wheelIsInContact(FR) ? 1 : 0);
+        const thrust = frontDriveThrustN(engineForce, frontDriveShare, frontContacts);
+        if (thrust !== 0) {
+          body.applyImpulse(
+            { x: forward.x * thrust * DT, y: forward.y * thrust * DT, z: forward.z * thrust * DT },
+            true,
+          );
+        }
+      }
 
       // 6. Fresh telemetry — valid only AFTER updateVehicle.
       let contacts = 0;
