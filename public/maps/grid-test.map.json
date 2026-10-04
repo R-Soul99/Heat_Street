@@ -1,0 +1,6239 @@
+{
+  "schemaVersion": 1,
+  "areaId": "grid-test",
+  "name": "Grid Test City (synthetic)",
+  "source": {
+    "osmExtract": "synthetic://heat-street/grid-test",
+    "osmSnapshot": "2026-10-04T00:00:00.000Z",
+    "demSource": "none-flat-authored",
+    "compilerVersion": "0.6.0"
+  },
+  "attribution": {
+    "osm": "© OpenStreetMap contributors",
+    "osmLicense": "ODbL-1.0",
+    "osmLicenseUrl": "https://www.openstreetmap.org/copyright",
+    "dem": "Terrain elevation is flat and hand-authored — no DEM data is used (see docs/adr/0001-map-data-source.md)"
+  },
+  "origin": {
+    "lat": 33,
+    "lon": -84,
+    "projection": "local-enu-metres"
+  },
+  "bounds": {
+    "minX": -359.99999999999295,
+    "minZ": -299.99999999988165,
+    "maxX": 359.99999999999295,
+    "maxZ": 299.99999999988165
+  },
+  "nodes": [
+    {
+      "id": 0,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": false,
+      "osmNodeId": 1000000
+    },
+    {
+      "id": 1,
+      "x": -328.5000000002426,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000001
+    },
+    {
+      "id": 2,
+      "x": -238.50000000057636,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000002
+    },
+    {
+      "id": 3,
+      "x": -148.4999999995821,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000003
+    },
+    {
+      "id": 4,
+      "x": -58.49999999991586,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000004
+    },
+    {
+      "id": 5,
+      "x": 31.499999999750376,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000005
+    },
+    {
+      "id": 6,
+      "x": 121.4999999994166,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000006
+    },
+    {
+      "id": 7,
+      "x": 211.5000000004109,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000007
+    },
+    {
+      "id": 8,
+      "x": 301.50000000007714,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000008
+    },
+    {
+      "id": 9,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": -299.99999999988165,
+      "junction": false,
+      "osmNodeId": 1000009
+    },
+    {
+      "id": 10,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000010
+    },
+    {
+      "id": 11,
+      "x": -328.5000000002426,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000011
+    },
+    {
+      "id": 12,
+      "x": -270.00000000032674,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000012
+    },
+    {
+      "id": 13,
+      "x": -238.50000000057636,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000013
+    },
+    {
+      "id": 14,
+      "x": -148.4999999995821,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000014
+    },
+    {
+      "id": 15,
+      "x": -58.49999999991586,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000015
+    },
+    {
+      "id": 16,
+      "x": 31.499999999750376,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000016
+    },
+    {
+      "id": 17,
+      "x": 67.50000000041369,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000017
+    },
+    {
+      "id": 18,
+      "x": 121.4999999994166,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000018
+    },
+    {
+      "id": 19,
+      "x": 180.00000000066052,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000019
+    },
+    {
+      "id": 20,
+      "x": 211.5000000004109,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000020
+    },
+    {
+      "id": 21,
+      "x": 301.50000000007714,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000021
+    },
+    {
+      "id": 22,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": -230.0000000001194,
+      "junction": true,
+      "osmNodeId": 1000022
+    },
+    {
+      "id": 23,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000023
+    },
+    {
+      "id": 24,
+      "x": -329.99999999966155,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000024
+    },
+    {
+      "id": 25,
+      "x": -270.00000000032674,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000025
+    },
+    {
+      "id": 26,
+      "x": -209.99999999966388,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000026
+    },
+    {
+      "id": 27,
+      "x": -148.4999999995821,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000027
+    },
+    {
+      "id": 28,
+      "x": -89.99999999966623,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000028
+    },
+    {
+      "id": 29,
+      "x": -58.49999999991586,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000029
+    },
+    {
+      "id": 30,
+      "x": -30.000000000331426,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000030
+    },
+    {
+      "id": 31,
+      "x": 30.000000000331426,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000031
+    },
+    {
+      "id": 32,
+      "x": 67.50000000041369,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000032
+    },
+    {
+      "id": 33,
+      "x": 89.99999999966623,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000033
+    },
+    {
+      "id": 34,
+      "x": 150.0000000003291,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000034
+    },
+    {
+      "id": 35,
+      "x": 180.00000000066052,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000035
+    },
+    {
+      "id": 36,
+      "x": 209.99999999966388,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000036
+    },
+    {
+      "id": 37,
+      "x": 270.00000000032674,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000037
+    },
+    {
+      "id": 38,
+      "x": 301.50000000007714,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000038
+    },
+    {
+      "id": 39,
+      "x": 329.99999999966155,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000039
+    },
+    {
+      "id": 40,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": -140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000040
+    },
+    {
+      "id": 41,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000041
+    },
+    {
+      "id": 42,
+      "x": -329.99999999966155,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000042
+    },
+    {
+      "id": 43,
+      "x": -270.00000000032674,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000043
+    },
+    {
+      "id": 44,
+      "x": -209.99999999966388,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000044
+    },
+    {
+      "id": 45,
+      "x": -148.4999999995821,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000045
+    },
+    {
+      "id": 46,
+      "x": -89.99999999966623,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000046
+    },
+    {
+      "id": 47,
+      "x": -30.000000000331426,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000047
+    },
+    {
+      "id": 48,
+      "x": 30.000000000331426,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000048
+    },
+    {
+      "id": 49,
+      "x": 89.99999999966623,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000049
+    },
+    {
+      "id": 50,
+      "x": 150.0000000003291,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000050
+    },
+    {
+      "id": 51,
+      "x": 209.99999999966388,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000051
+    },
+    {
+      "id": 52,
+      "x": 270.00000000032674,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000052
+    },
+    {
+      "id": 53,
+      "x": 329.99999999966155,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000053
+    },
+    {
+      "id": 54,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": -80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000054
+    },
+    {
+      "id": 55,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000055
+    },
+    {
+      "id": 56,
+      "x": -292.4999999995793,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000056
+    },
+    {
+      "id": 57,
+      "x": -270.00000000032674,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000057
+    },
+    {
+      "id": 58,
+      "x": -180.00000000066052,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000058
+    },
+    {
+      "id": 59,
+      "x": -148.4999999995821,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000059
+    },
+    {
+      "id": 60,
+      "x": -89.99999999966623,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000060
+    },
+    {
+      "id": 61,
+      "x": -67.50000000041369,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000061
+    },
+    {
+      "id": 62,
+      "x": 30.000000000331426,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000062
+    },
+    {
+      "id": 63,
+      "x": 89.99999999966623,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000063
+    },
+    {
+      "id": 64,
+      "x": 157.50000000007992,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000064
+    },
+    {
+      "id": 65,
+      "x": 209.99999999966388,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000065
+    },
+    {
+      "id": 66,
+      "x": 270.00000000032674,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000066
+    },
+    {
+      "id": 67,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": -9.999999999628312,
+      "junction": true,
+      "osmNodeId": 1000067
+    },
+    {
+      "id": 68,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000068
+    },
+    {
+      "id": 69,
+      "x": -292.4999999995793,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000069
+    },
+    {
+      "id": 70,
+      "x": -225.00000000049363,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000070
+    },
+    {
+      "id": 71,
+      "x": -180.00000000066052,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000071
+    },
+    {
+      "id": 72,
+      "x": -105.00000000049597,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000072
+    },
+    {
+      "id": 73,
+      "x": -67.50000000041369,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000073
+    },
+    {
+      "id": 74,
+      "x": -44.999999999833115,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000074
+    },
+    {
+      "id": 75,
+      "x": 30.000000000331426,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000075
+    },
+    {
+      "id": 76,
+      "x": 75.00000000016455,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000076
+    },
+    {
+      "id": 77,
+      "x": 134.99999999949935,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000077
+    },
+    {
+      "id": 78,
+      "x": 157.50000000007992,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000078
+    },
+    {
+      "id": 79,
+      "x": 195.0000000001622,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000079
+    },
+    {
+      "id": 80,
+      "x": 270.00000000032674,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000080
+    },
+    {
+      "id": 81,
+      "x": 315.00000000015984,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000081
+    },
+    {
+      "id": 82,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": 80.00000000017859,
+      "junction": true,
+      "osmNodeId": 1000082
+    },
+    {
+      "id": 83,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000083
+    },
+    {
+      "id": 84,
+      "x": -292.4999999995793,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000084
+    },
+    {
+      "id": 85,
+      "x": -225.00000000049363,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000085
+    },
+    {
+      "id": 86,
+      "x": -180.00000000066052,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000086
+    },
+    {
+      "id": 87,
+      "x": -105.00000000049597,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000087
+    },
+    {
+      "id": 88,
+      "x": -44.999999999833115,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000088
+    },
+    {
+      "id": 89,
+      "x": 30.000000000331426,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000089
+    },
+    {
+      "id": 90,
+      "x": 75.00000000016455,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000090
+    },
+    {
+      "id": 91,
+      "x": 134.99999999949935,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000091
+    },
+    {
+      "id": 92,
+      "x": 195.0000000001622,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000092
+    },
+    {
+      "id": 93,
+      "x": 243.00000000016126,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000093
+    },
+    {
+      "id": 94,
+      "x": 270.00000000032674,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000094
+    },
+    {
+      "id": 95,
+      "x": 315.00000000015984,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000095
+    },
+    {
+      "id": 96,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": 140.00000000031253,
+      "junction": true,
+      "osmNodeId": 1000096
+    },
+    {
+      "id": 97,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000097
+    },
+    {
+      "id": 98,
+      "x": -292.4999999995793,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000098
+    },
+    {
+      "id": 99,
+      "x": -225.00000000049363,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000099
+    },
+    {
+      "id": 100,
+      "x": -196.8749999994359,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000100
+    },
+    {
+      "id": 101,
+      "x": -105.00000000049597,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000101
+    },
+    {
+      "id": 102,
+      "x": -44.999999999833115,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000102
+    },
+    {
+      "id": 103,
+      "x": 28.124999999729692,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000103
+    },
+    {
+      "id": 104,
+      "x": 75.00000000016455,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000104
+    },
+    {
+      "id": 105,
+      "x": 134.99999999949935,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000105
+    },
+    {
+      "id": 106,
+      "x": 243.00000000016126,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000106
+    },
+    {
+      "id": 107,
+      "x": 315.00000000015984,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000107
+    },
+    {
+      "id": 108,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": 210.00000000007475,
+      "junction": true,
+      "osmNodeId": 1000108
+    },
+    {
+      "id": 109,
+      "x": -359.99999999999295,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": false,
+      "osmNodeId": 1000109
+    },
+    {
+      "id": 110,
+      "x": -292.4999999995793,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000110
+    },
+    {
+      "id": 111,
+      "x": -196.8749999994359,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000111
+    },
+    {
+      "id": 112,
+      "x": -105.00000000049597,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000112
+    },
+    {
+      "id": 113,
+      "x": 28.124999999729692,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000113
+    },
+    {
+      "id": 114,
+      "x": 134.99999999949935,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000114
+    },
+    {
+      "id": 115,
+      "x": 243.00000000016126,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": true,
+      "osmNodeId": 1000115
+    },
+    {
+      "id": 116,
+      "x": 359.99999999999295,
+      "y": 0,
+      "z": 299.99999999988165,
+      "junction": false,
+      "osmNodeId": 1000116
+    }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "from": 0,
+      "to": 1,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -328.5000000002426,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 31.499999999750344,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 1,
+      "from": 1,
+      "to": 2,
+      "points": [
+        [
+          -328.5000000002426,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -238.50000000057636,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 89.99999999966624,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 2,
+      "from": 2,
+      "to": 3,
+      "points": [
+        [
+          -238.50000000057636,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 90.00000000099428,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 3,
+      "from": 3,
+      "to": 4,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -58.49999999991586,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 89.99999999966623,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 4,
+      "from": 4,
+      "to": 5,
+      "points": [
+        [
+          -58.49999999991586,
+          0,
+          -299.99999999988165
+        ],
+        [
+          31.499999999750376,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 89.99999999966623,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 5,
+      "from": 5,
+      "to": 6,
+      "points": [
+        [
+          31.499999999750376,
+          0,
+          -299.99999999988165
+        ],
+        [
+          121.4999999994166,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 89.99999999966623,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 6,
+      "from": 6,
+      "to": 7,
+      "points": [
+        [
+          121.4999999994166,
+          0,
+          -299.99999999988165
+        ],
+        [
+          211.5000000004109,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 90.00000000099429,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 7,
+      "from": 7,
+      "to": 8,
+      "points": [
+        [
+          211.5000000004109,
+          0,
+          -299.99999999988165
+        ],
+        [
+          301.50000000007714,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 89.99999999966624,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 8,
+      "from": 8,
+      "to": 9,
+      "points": [
+        [
+          301.50000000007714,
+          0,
+          -299.99999999988165
+        ],
+        [
+          359.99999999999295,
+          0,
+          -299.99999999988165
+        ]
+      ],
+      "lengthM": 58.499999999915815,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000000
+    },
+    {
+      "id": 9,
+      "from": 10,
+      "to": 11,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -328.5000000002426,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 31.499999999750344,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 10,
+      "from": 11,
+      "to": 12,
+      "points": [
+        [
+          -328.5000000002426,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 58.49999999991587,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 11,
+      "from": 12,
+      "to": 13,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -238.50000000057636,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 31.499999999750372,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 12,
+      "from": 13,
+      "to": 14,
+      "points": [
+        [
+          -238.50000000057636,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 90.00000000099428,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 13,
+      "from": 14,
+      "to": 15,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -58.49999999991586,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 89.99999999966623,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 14,
+      "from": 15,
+      "to": 16,
+      "points": [
+        [
+          -58.49999999991586,
+          0,
+          -230.0000000001194
+        ],
+        [
+          31.499999999750376,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 89.99999999966623,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 15,
+      "from": 16,
+      "to": 17,
+      "points": [
+        [
+          31.499999999750376,
+          0,
+          -230.0000000001194
+        ],
+        [
+          67.50000000041369,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 36.00000000066332,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 16,
+      "from": 17,
+      "to": 18,
+      "points": [
+        [
+          67.50000000041369,
+          0,
+          -230.0000000001194
+        ],
+        [
+          121.4999999994166,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 53.99999999900291,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 17,
+      "from": 18,
+      "to": 19,
+      "points": [
+        [
+          121.4999999994166,
+          0,
+          -230.0000000001194
+        ],
+        [
+          180.00000000066052,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 58.50000000124392,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 18,
+      "from": 19,
+      "to": 20,
+      "points": [
+        [
+          180.00000000066052,
+          0,
+          -230.0000000001194
+        ],
+        [
+          211.5000000004109,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 31.499999999750372,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 19,
+      "from": 20,
+      "to": 21,
+      "points": [
+        [
+          211.5000000004109,
+          0,
+          -230.0000000001194
+        ],
+        [
+          301.50000000007714,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 89.99999999966624,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 20,
+      "from": 21,
+      "to": 22,
+      "points": [
+        [
+          301.50000000007714,
+          0,
+          -230.0000000001194
+        ],
+        [
+          359.99999999999295,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 58.499999999915815,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000001
+    },
+    {
+      "id": 21,
+      "from": 23,
+      "to": 24,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -329.99999999966155,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 30.000000000331397,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 22,
+      "from": 24,
+      "to": 25,
+      "points": [
+        [
+          -329.99999999966155,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 59.99999999933482,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 23,
+      "from": 25,
+      "to": 26,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -209.99999999966388,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 24,
+      "from": 26,
+      "to": 27,
+      "points": [
+        [
+          -209.99999999966388,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 61.5000000000818,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 25,
+      "from": 27,
+      "to": 28,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -89.99999999966623,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 58.49999999991586,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 26,
+      "from": 28,
+      "to": 29,
+      "points": [
+        [
+          -89.99999999966623,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -58.49999999991586,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 31.499999999750372,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 27,
+      "from": 29,
+      "to": 30,
+      "points": [
+        [
+          -58.49999999991586,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -30.000000000331426,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 28.499999999584432,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 28,
+      "from": 30,
+      "to": 31,
+      "points": [
+        [
+          -30.000000000331426,
+          0,
+          -140.00000000031253
+        ],
+        [
+          30.000000000331426,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 29,
+      "from": 31,
+      "to": 32,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -140.00000000031253
+        ],
+        [
+          67.50000000041369,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 37.50000000008227,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 30,
+      "from": 32,
+      "to": 33,
+      "points": [
+        [
+          67.50000000041369,
+          0,
+          -140.00000000031253
+        ],
+        [
+          89.99999999966623,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 22.499999999252537,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 31,
+      "from": 33,
+      "to": 34,
+      "points": [
+        [
+          89.99999999966623,
+          0,
+          -140.00000000031253
+        ],
+        [
+          150.0000000003291,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 60.000000000662865,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 32,
+      "from": 34,
+      "to": 35,
+      "points": [
+        [
+          150.0000000003291,
+          0,
+          -140.00000000031253
+        ],
+        [
+          180.00000000066052,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 30.000000000331426,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 33,
+      "from": 35,
+      "to": 36,
+      "points": [
+        [
+          180.00000000066052,
+          0,
+          -140.00000000031253
+        ],
+        [
+          209.99999999966388,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 29.999999999003364,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 34,
+      "from": 36,
+      "to": 37,
+      "points": [
+        [
+          209.99999999966388,
+          0,
+          -140.00000000031253
+        ],
+        [
+          270.00000000032674,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 35,
+      "from": 37,
+      "to": 38,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -140.00000000031253
+        ],
+        [
+          301.50000000007714,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 31.4999999997504,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 36,
+      "from": 38,
+      "to": 39,
+      "points": [
+        [
+          301.50000000007714,
+          0,
+          -140.00000000031253
+        ],
+        [
+          329.99999999966155,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 28.499999999584418,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 37,
+      "from": 39,
+      "to": 40,
+      "points": [
+        [
+          329.99999999966155,
+          0,
+          -140.00000000031253
+        ],
+        [
+          359.99999999999295,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 30.000000000331397,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000002
+    },
+    {
+      "id": 38,
+      "from": 41,
+      "to": 42,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -329.99999999966155,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 30.000000000331397,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 39,
+      "from": 42,
+      "to": 43,
+      "points": [
+        [
+          -329.99999999966155,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 59.99999999933482,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 40,
+      "from": 43,
+      "to": 44,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -209.99999999966388,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 41,
+      "from": 44,
+      "to": 45,
+      "points": [
+        [
+          -209.99999999966388,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 61.5000000000818,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 42,
+      "from": 45,
+      "to": 46,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -89.99999999966623,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 58.49999999991586,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 43,
+      "from": 46,
+      "to": 47,
+      "points": [
+        [
+          -89.99999999966623,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -30.000000000331426,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 44,
+      "from": 47,
+      "to": 48,
+      "points": [
+        [
+          -30.000000000331426,
+          0,
+          -80.00000000017859
+        ],
+        [
+          30.000000000331426,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 45,
+      "from": 48,
+      "to": 49,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -80.00000000017859
+        ],
+        [
+          89.99999999966623,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 46,
+      "from": 49,
+      "to": 50,
+      "points": [
+        [
+          89.99999999966623,
+          0,
+          -80.00000000017859
+        ],
+        [
+          150.0000000003291,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.000000000662865,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 47,
+      "from": 50,
+      "to": 51,
+      "points": [
+        [
+          150.0000000003291,
+          0,
+          -80.00000000017859
+        ],
+        [
+          209.99999999966388,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 59.99999999933479,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 48,
+      "from": 51,
+      "to": 52,
+      "points": [
+        [
+          209.99999999966388,
+          0,
+          -80.00000000017859
+        ],
+        [
+          270.00000000032674,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 49,
+      "from": 52,
+      "to": 53,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -80.00000000017859
+        ],
+        [
+          329.99999999966155,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 59.99999999933482,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 50,
+      "from": 53,
+      "to": 54,
+      "points": [
+        [
+          329.99999999966155,
+          0,
+          -80.00000000017859
+        ],
+        [
+          359.99999999999295,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 30.000000000331397,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000003
+    },
+    {
+      "id": 51,
+      "from": 55,
+      "to": 56,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -292.4999999995793,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 67.50000000041365,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 52,
+      "from": 56,
+      "to": 57,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 22.499999999252566,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 53,
+      "from": 57,
+      "to": 58,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -180.00000000066052,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 89.99999999966622,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 54,
+      "from": 58,
+      "to": 59,
+      "points": [
+        [
+          -180.00000000066052,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 31.500000001078433,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 55,
+      "from": 59,
+      "to": 60,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -89.99999999966623,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 58.49999999991586,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 56,
+      "from": 60,
+      "to": 61,
+      "points": [
+        [
+          -89.99999999966623,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -67.50000000041369,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 22.499999999252537,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 57,
+      "from": 61,
+      "to": 62,
+      "points": [
+        [
+          -67.50000000041369,
+          0,
+          -9.999999999628312
+        ],
+        [
+          30.000000000331426,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 97.50000000074512,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 58,
+      "from": 62,
+      "to": 63,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -9.999999999628312
+        ],
+        [
+          89.99999999966623,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 59,
+      "from": 63,
+      "to": 64,
+      "points": [
+        [
+          89.99999999966623,
+          0,
+          -9.999999999628312
+        ],
+        [
+          157.50000000007992,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 67.50000000041369,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 60,
+      "from": 64,
+      "to": 65,
+      "points": [
+        [
+          157.50000000007992,
+          0,
+          -9.999999999628312
+        ],
+        [
+          209.99999999966388,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 52.49999999958396,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 61,
+      "from": 65,
+      "to": 66,
+      "points": [
+        [
+          209.99999999966388,
+          0,
+          -9.999999999628312
+        ],
+        [
+          270.00000000032674,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 62,
+      "from": 66,
+      "to": 67,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -9.999999999628312
+        ],
+        [
+          359.99999999999295,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 89.99999999966622,
+      "surface": "tarmac",
+      "roadClass": "motorway",
+      "lanes": 2,
+      "widthM": 24,
+      "oneway": false,
+      "speedLimitKph": 100,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000004
+    },
+    {
+      "id": 63,
+      "from": 68,
+      "to": 69,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          80.00000000017859
+        ],
+        [
+          -292.4999999995793,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 67.50000000041365,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 64,
+      "from": 69,
+      "to": 70,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          80.00000000017859
+        ],
+        [
+          -225.00000000049363,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 67.49999999908567,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 65,
+      "from": 70,
+      "to": 71,
+      "points": [
+        [
+          -225.00000000049363,
+          0,
+          80.00000000017859
+        ],
+        [
+          -180.00000000066052,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 66,
+      "from": 71,
+      "to": 72,
+      "points": [
+        [
+          -180.00000000066052,
+          0,
+          80.00000000017859
+        ],
+        [
+          -105.00000000049597,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 75.00000000016455,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 67,
+      "from": 72,
+      "to": 73,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          80.00000000017859
+        ],
+        [
+          -67.50000000041369,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 37.50000000008228,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 68,
+      "from": 73,
+      "to": 74,
+      "points": [
+        [
+          -67.50000000041369,
+          0,
+          80.00000000017859
+        ],
+        [
+          -44.999999999833115,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 22.500000000580577,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 69,
+      "from": 74,
+      "to": 75,
+      "points": [
+        [
+          -44.999999999833115,
+          0,
+          80.00000000017859
+        ],
+        [
+          30.000000000331426,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 75.00000000016453,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 70,
+      "from": 75,
+      "to": 76,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          80.00000000017859
+        ],
+        [
+          75.00000000016455,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 44.99999999983312,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 71,
+      "from": 76,
+      "to": 77,
+      "points": [
+        [
+          75.00000000016455,
+          0,
+          80.00000000017859
+        ],
+        [
+          134.99999999949935,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 72,
+      "from": 77,
+      "to": 78,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          80.00000000017859
+        ],
+        [
+          157.50000000007992,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 22.50000000058057,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 73,
+      "from": 78,
+      "to": 79,
+      "points": [
+        [
+          157.50000000007992,
+          0,
+          80.00000000017859
+        ],
+        [
+          195.0000000001622,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 37.50000000008228,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 74,
+      "from": 79,
+      "to": 80,
+      "points": [
+        [
+          195.0000000001622,
+          0,
+          80.00000000017859
+        ],
+        [
+          270.00000000032674,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 75.00000000016453,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 75,
+      "from": 80,
+      "to": 81,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          80.00000000017859
+        ],
+        [
+          315.00000000015984,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 76,
+      "from": 81,
+      "to": 82,
+      "points": [
+        [
+          315.00000000015984,
+          0,
+          80.00000000017859
+        ],
+        [
+          359.99999999999295,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000005
+    },
+    {
+      "id": 77,
+      "from": 83,
+      "to": 84,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          140.00000000031253
+        ],
+        [
+          -292.4999999995793,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 67.50000000041365,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 78,
+      "from": 84,
+      "to": 85,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          140.00000000031253
+        ],
+        [
+          -225.00000000049363,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 67.49999999908567,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 79,
+      "from": 85,
+      "to": 86,
+      "points": [
+        [
+          -225.00000000049363,
+          0,
+          140.00000000031253
+        ],
+        [
+          -180.00000000066052,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 80,
+      "from": 86,
+      "to": 87,
+      "points": [
+        [
+          -180.00000000066052,
+          0,
+          140.00000000031253
+        ],
+        [
+          -105.00000000049597,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 75.00000000016455,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 81,
+      "from": 87,
+      "to": 88,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          140.00000000031253
+        ],
+        [
+          -44.999999999833115,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000066286,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 82,
+      "from": 88,
+      "to": 89,
+      "points": [
+        [
+          -44.999999999833115,
+          0,
+          140.00000000031253
+        ],
+        [
+          30.000000000331426,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 75.00000000016453,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 83,
+      "from": 89,
+      "to": 90,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          140.00000000031253
+        ],
+        [
+          75.00000000016455,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 44.99999999983312,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 84,
+      "from": 90,
+      "to": 91,
+      "points": [
+        [
+          75.00000000016455,
+          0,
+          140.00000000031253
+        ],
+        [
+          134.99999999949935,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 85,
+      "from": 91,
+      "to": 92,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          140.00000000031253
+        ],
+        [
+          195.0000000001622,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000066285,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 86,
+      "from": 92,
+      "to": 93,
+      "points": [
+        [
+          195.0000000001622,
+          0,
+          140.00000000031253
+        ],
+        [
+          243.00000000016126,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 47.99999999999906,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 87,
+      "from": 93,
+      "to": 94,
+      "points": [
+        [
+          243.00000000016126,
+          0,
+          140.00000000031253
+        ],
+        [
+          270.00000000032674,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 27.00000000016547,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 88,
+      "from": 94,
+      "to": 95,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          140.00000000031253
+        ],
+        [
+          315.00000000015984,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 89,
+      "from": 95,
+      "to": 96,
+      "points": [
+        [
+          315.00000000015984,
+          0,
+          140.00000000031253
+        ],
+        [
+          359.99999999999295,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "primary",
+      "lanes": 2,
+      "widthM": 14,
+      "oneway": false,
+      "speedLimitKph": 90,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000006
+    },
+    {
+      "id": 90,
+      "from": 97,
+      "to": 98,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          210.00000000007475
+        ],
+        [
+          -292.4999999995793,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 67.50000000041365,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 91,
+      "from": 98,
+      "to": 99,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          210.00000000007475
+        ],
+        [
+          -225.00000000049363,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 67.49999999908567,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 92,
+      "from": 99,
+      "to": 100,
+      "points": [
+        [
+          -225.00000000049363,
+          0,
+          210.00000000007475
+        ],
+        [
+          -196.8749999994359,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 28.125000001057742,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 93,
+      "from": 100,
+      "to": 101,
+      "points": [
+        [
+          -196.8749999994359,
+          0,
+          210.00000000007475
+        ],
+        [
+          -105.00000000049597,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 91.87499999893991,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 94,
+      "from": 101,
+      "to": 102,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          210.00000000007475
+        ],
+        [
+          -44.999999999833115,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 60.00000000066286,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 95,
+      "from": 102,
+      "to": 103,
+      "points": [
+        [
+          -44.999999999833115,
+          0,
+          210.00000000007475
+        ],
+        [
+          28.124999999729692,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 73.1249999995628,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 96,
+      "from": 103,
+      "to": 104,
+      "points": [
+        [
+          28.124999999729692,
+          0,
+          210.00000000007475
+        ],
+        [
+          75.00000000016455,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 46.87500000043485,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 97,
+      "from": 104,
+      "to": 105,
+      "points": [
+        [
+          75.00000000016455,
+          0,
+          210.00000000007475
+        ],
+        [
+          134.99999999949935,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 59.999999999334804,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 98,
+      "from": 105,
+      "to": 106,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          210.00000000007475
+        ],
+        [
+          243.00000000016126,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 108.00000000066191,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 99,
+      "from": 106,
+      "to": 107,
+      "points": [
+        [
+          243.00000000016126,
+          0,
+          210.00000000007475
+        ],
+        [
+          315.00000000015984,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 71.99999999999858,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 100,
+      "from": 107,
+      "to": 108,
+      "points": [
+        [
+          315.00000000015984,
+          0,
+          210.00000000007475
+        ],
+        [
+          359.99999999999295,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 44.99999999983311,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000007
+    },
+    {
+      "id": 101,
+      "from": 109,
+      "to": 110,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          299.99999999988165
+        ],
+        [
+          -292.4999999995793,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 67.50000000041365,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 102,
+      "from": 110,
+      "to": 111,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          299.99999999988165
+        ],
+        [
+          -196.8749999994359,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 95.62500000014342,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 103,
+      "from": 111,
+      "to": 112,
+      "points": [
+        [
+          -196.8749999994359,
+          0,
+          299.99999999988165
+        ],
+        [
+          -105.00000000049597,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 91.87499999893991,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 104,
+      "from": 112,
+      "to": 113,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          299.99999999988165
+        ],
+        [
+          28.124999999729692,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 133.12500000022567,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 105,
+      "from": 113,
+      "to": 114,
+      "points": [
+        [
+          28.124999999729692,
+          0,
+          299.99999999988165
+        ],
+        [
+          134.99999999949935,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 106.87499999976966,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 106,
+      "from": 114,
+      "to": 115,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          299.99999999988165
+        ],
+        [
+          243.00000000016126,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 108.00000000066191,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 107,
+      "from": 115,
+      "to": 116,
+      "points": [
+        [
+          243.00000000016126,
+          0,
+          299.99999999988165
+        ],
+        [
+          359.99999999999295,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 116.99999999983169,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2000008
+    },
+    {
+      "id": 108,
+      "from": 0,
+      "to": 10,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -359.99999999999295,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100000
+    },
+    {
+      "id": 109,
+      "from": 1,
+      "to": 11,
+      "points": [
+        [
+          -328.5000000002426,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -328.5000000002426,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100001
+    },
+    {
+      "id": 110,
+      "from": 2,
+      "to": 13,
+      "points": [
+        [
+          -238.50000000057636,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -238.50000000057636,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100002
+    },
+    {
+      "id": 111,
+      "from": 3,
+      "to": 14,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100003
+    },
+    {
+      "id": 112,
+      "from": 4,
+      "to": 15,
+      "points": [
+        [
+          -58.49999999991586,
+          0,
+          -299.99999999988165
+        ],
+        [
+          -58.49999999991586,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100004
+    },
+    {
+      "id": 113,
+      "from": 5,
+      "to": 16,
+      "points": [
+        [
+          31.499999999750376,
+          0,
+          -299.99999999988165
+        ],
+        [
+          31.499999999750376,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100005
+    },
+    {
+      "id": 114,
+      "from": 6,
+      "to": 18,
+      "points": [
+        [
+          121.4999999994166,
+          0,
+          -299.99999999988165
+        ],
+        [
+          121.4999999994166,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100006
+    },
+    {
+      "id": 115,
+      "from": 7,
+      "to": 20,
+      "points": [
+        [
+          211.5000000004109,
+          0,
+          -299.99999999988165
+        ],
+        [
+          211.5000000004109,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100007
+    },
+    {
+      "id": 116,
+      "from": 8,
+      "to": 21,
+      "points": [
+        [
+          301.50000000007714,
+          0,
+          -299.99999999988165
+        ],
+        [
+          301.50000000007714,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100008
+    },
+    {
+      "id": 117,
+      "from": 9,
+      "to": 22,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          -299.99999999988165
+        ],
+        [
+          359.99999999999295,
+          0,
+          -230.0000000001194
+        ]
+      ],
+      "lengthM": 69.99999999976225,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100009
+    },
+    {
+      "id": 118,
+      "from": 10,
+      "to": 23,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -359.99999999999295,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100010
+    },
+    {
+      "id": 119,
+      "from": 12,
+      "to": 25,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100011
+    },
+    {
+      "id": 120,
+      "from": 14,
+      "to": 27,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100012
+    },
+    {
+      "id": 121,
+      "from": 15,
+      "to": 29,
+      "points": [
+        [
+          -58.49999999991586,
+          0,
+          -230.0000000001194
+        ],
+        [
+          -58.49999999991586,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100013
+    },
+    {
+      "id": 122,
+      "from": 17,
+      "to": 32,
+      "points": [
+        [
+          67.50000000041369,
+          0,
+          -230.0000000001194
+        ],
+        [
+          67.50000000041369,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100014
+    },
+    {
+      "id": 123,
+      "from": 19,
+      "to": 35,
+      "points": [
+        [
+          180.00000000066052,
+          0,
+          -230.0000000001194
+        ],
+        [
+          180.00000000066052,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100015
+    },
+    {
+      "id": 124,
+      "from": 21,
+      "to": 38,
+      "points": [
+        [
+          301.50000000007714,
+          0,
+          -230.0000000001194
+        ],
+        [
+          301.50000000007714,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100016
+    },
+    {
+      "id": 125,
+      "from": 22,
+      "to": 40,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          -230.0000000001194
+        ],
+        [
+          359.99999999999295,
+          0,
+          -140.00000000031253
+        ]
+      ],
+      "lengthM": 89.99999999980687,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100017
+    },
+    {
+      "id": 126,
+      "from": 23,
+      "to": 41,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -359.99999999999295,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100018
+    },
+    {
+      "id": 127,
+      "from": 24,
+      "to": 42,
+      "points": [
+        [
+          -329.99999999966155,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -329.99999999966155,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100019
+    },
+    {
+      "id": 128,
+      "from": 25,
+      "to": 43,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100020
+    },
+    {
+      "id": 129,
+      "from": 26,
+      "to": 44,
+      "points": [
+        [
+          -209.99999999966388,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -209.99999999966388,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100021
+    },
+    {
+      "id": 130,
+      "from": 27,
+      "to": 45,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100022
+    },
+    {
+      "id": 131,
+      "from": 28,
+      "to": 46,
+      "points": [
+        [
+          -89.99999999966623,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -89.99999999966623,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100023
+    },
+    {
+      "id": 132,
+      "from": 30,
+      "to": 47,
+      "points": [
+        [
+          -30.000000000331426,
+          0,
+          -140.00000000031253
+        ],
+        [
+          -30.000000000331426,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100024
+    },
+    {
+      "id": 133,
+      "from": 31,
+      "to": 48,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -140.00000000031253
+        ],
+        [
+          30.000000000331426,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100025
+    },
+    {
+      "id": 134,
+      "from": 33,
+      "to": 49,
+      "points": [
+        [
+          89.99999999966623,
+          0,
+          -140.00000000031253
+        ],
+        [
+          89.99999999966623,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100026
+    },
+    {
+      "id": 135,
+      "from": 34,
+      "to": 50,
+      "points": [
+        [
+          150.0000000003291,
+          0,
+          -140.00000000031253
+        ],
+        [
+          150.0000000003291,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100027
+    },
+    {
+      "id": 136,
+      "from": 36,
+      "to": 51,
+      "points": [
+        [
+          209.99999999966388,
+          0,
+          -140.00000000031253
+        ],
+        [
+          209.99999999966388,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100028
+    },
+    {
+      "id": 137,
+      "from": 37,
+      "to": 52,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -140.00000000031253
+        ],
+        [
+          270.00000000032674,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100029
+    },
+    {
+      "id": 138,
+      "from": 39,
+      "to": 53,
+      "points": [
+        [
+          329.99999999966155,
+          0,
+          -140.00000000031253
+        ],
+        [
+          329.99999999966155,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100030
+    },
+    {
+      "id": 139,
+      "from": 40,
+      "to": 54,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          -140.00000000031253
+        ],
+        [
+          359.99999999999295,
+          0,
+          -80.00000000017859
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100031
+    },
+    {
+      "id": 140,
+      "from": 41,
+      "to": 55,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -359.99999999999295,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100032
+    },
+    {
+      "id": 141,
+      "from": 43,
+      "to": 57,
+      "points": [
+        [
+          -270.00000000032674,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -270.00000000032674,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100033
+    },
+    {
+      "id": 142,
+      "from": 45,
+      "to": 59,
+      "points": [
+        [
+          -148.4999999995821,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -148.4999999995821,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100034
+    },
+    {
+      "id": 143,
+      "from": 46,
+      "to": 60,
+      "points": [
+        [
+          -89.99999999966623,
+          0,
+          -80.00000000017859
+        ],
+        [
+          -89.99999999966623,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100035
+    },
+    {
+      "id": 144,
+      "from": 48,
+      "to": 62,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -80.00000000017859
+        ],
+        [
+          30.000000000331426,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100036
+    },
+    {
+      "id": 145,
+      "from": 49,
+      "to": 63,
+      "points": [
+        [
+          89.99999999966623,
+          0,
+          -80.00000000017859
+        ],
+        [
+          89.99999999966623,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100037
+    },
+    {
+      "id": 146,
+      "from": 51,
+      "to": 65,
+      "points": [
+        [
+          209.99999999966388,
+          0,
+          -80.00000000017859
+        ],
+        [
+          209.99999999966388,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100038
+    },
+    {
+      "id": 147,
+      "from": 52,
+      "to": 66,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -80.00000000017859
+        ],
+        [
+          270.00000000032674,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100039
+    },
+    {
+      "id": 148,
+      "from": 54,
+      "to": 67,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          -80.00000000017859
+        ],
+        [
+          359.99999999999295,
+          0,
+          -9.999999999628312
+        ]
+      ],
+      "lengthM": 70.00000000055027,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100040
+    },
+    {
+      "id": 149,
+      "from": 55,
+      "to": 68,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -359.99999999999295,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100041
+    },
+    {
+      "id": 150,
+      "from": 56,
+      "to": 69,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -292.4999999995793,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100042
+    },
+    {
+      "id": 151,
+      "from": 58,
+      "to": 71,
+      "points": [
+        [
+          -180.00000000066052,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -180.00000000066052,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100043
+    },
+    {
+      "id": 152,
+      "from": 61,
+      "to": 73,
+      "points": [
+        [
+          -67.50000000041369,
+          0,
+          -9.999999999628312
+        ],
+        [
+          -67.50000000041369,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100044
+    },
+    {
+      "id": 153,
+      "from": 62,
+      "to": 75,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          -9.999999999628312
+        ],
+        [
+          30.000000000331426,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100045
+    },
+    {
+      "id": 154,
+      "from": 64,
+      "to": 78,
+      "points": [
+        [
+          157.50000000007992,
+          0,
+          -9.999999999628312
+        ],
+        [
+          157.50000000007992,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100046
+    },
+    {
+      "id": 155,
+      "from": 66,
+      "to": 80,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          -9.999999999628312
+        ],
+        [
+          270.00000000032674,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100047
+    },
+    {
+      "id": 156,
+      "from": 67,
+      "to": 82,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          -9.999999999628312
+        ],
+        [
+          359.99999999999295,
+          0,
+          80.00000000017859
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100048
+    },
+    {
+      "id": 157,
+      "from": 68,
+      "to": 83,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          80.00000000017859
+        ],
+        [
+          -359.99999999999295,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100049
+    },
+    {
+      "id": 158,
+      "from": 69,
+      "to": 84,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          80.00000000017859
+        ],
+        [
+          -292.4999999995793,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100050
+    },
+    {
+      "id": 159,
+      "from": 70,
+      "to": 85,
+      "points": [
+        [
+          -225.00000000049363,
+          0,
+          80.00000000017859
+        ],
+        [
+          -225.00000000049363,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100051
+    },
+    {
+      "id": 160,
+      "from": 71,
+      "to": 86,
+      "points": [
+        [
+          -180.00000000066052,
+          0,
+          80.00000000017859
+        ],
+        [
+          -180.00000000066052,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100052
+    },
+    {
+      "id": 161,
+      "from": 72,
+      "to": 87,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          80.00000000017859
+        ],
+        [
+          -105.00000000049597,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100053
+    },
+    {
+      "id": 162,
+      "from": 74,
+      "to": 88,
+      "points": [
+        [
+          -44.999999999833115,
+          0,
+          80.00000000017859
+        ],
+        [
+          -44.999999999833115,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100054
+    },
+    {
+      "id": 163,
+      "from": 75,
+      "to": 89,
+      "points": [
+        [
+          30.000000000331426,
+          0,
+          80.00000000017859
+        ],
+        [
+          30.000000000331426,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100055
+    },
+    {
+      "id": 164,
+      "from": 76,
+      "to": 90,
+      "points": [
+        [
+          75.00000000016455,
+          0,
+          80.00000000017859
+        ],
+        [
+          75.00000000016455,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100056
+    },
+    {
+      "id": 165,
+      "from": 77,
+      "to": 91,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          80.00000000017859
+        ],
+        [
+          134.99999999949935,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100057
+    },
+    {
+      "id": 166,
+      "from": 79,
+      "to": 92,
+      "points": [
+        [
+          195.0000000001622,
+          0,
+          80.00000000017859
+        ],
+        [
+          195.0000000001622,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100058
+    },
+    {
+      "id": 167,
+      "from": 80,
+      "to": 94,
+      "points": [
+        [
+          270.00000000032674,
+          0,
+          80.00000000017859
+        ],
+        [
+          270.00000000032674,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100059
+    },
+    {
+      "id": 168,
+      "from": 81,
+      "to": 95,
+      "points": [
+        [
+          315.00000000015984,
+          0,
+          80.00000000017859
+        ],
+        [
+          315.00000000015984,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100060
+    },
+    {
+      "id": 169,
+      "from": 82,
+      "to": 96,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          80.00000000017859
+        ],
+        [
+          359.99999999999295,
+          0,
+          140.00000000031253
+        ]
+      ],
+      "lengthM": 60.00000000013394,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100061
+    },
+    {
+      "id": 170,
+      "from": 83,
+      "to": 97,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          140.00000000031253
+        ],
+        [
+          -359.99999999999295,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100062
+    },
+    {
+      "id": 171,
+      "from": 84,
+      "to": 98,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          140.00000000031253
+        ],
+        [
+          -292.4999999995793,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100063
+    },
+    {
+      "id": 172,
+      "from": 85,
+      "to": 99,
+      "points": [
+        [
+          -225.00000000049363,
+          0,
+          140.00000000031253
+        ],
+        [
+          -225.00000000049363,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100064
+    },
+    {
+      "id": 173,
+      "from": 87,
+      "to": 101,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          140.00000000031253
+        ],
+        [
+          -105.00000000049597,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100065
+    },
+    {
+      "id": 174,
+      "from": 88,
+      "to": 102,
+      "points": [
+        [
+          -44.999999999833115,
+          0,
+          140.00000000031253
+        ],
+        [
+          -44.999999999833115,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100066
+    },
+    {
+      "id": 175,
+      "from": 90,
+      "to": 104,
+      "points": [
+        [
+          75.00000000016455,
+          0,
+          140.00000000031253
+        ],
+        [
+          75.00000000016455,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100067
+    },
+    {
+      "id": 176,
+      "from": 91,
+      "to": 105,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          140.00000000031253
+        ],
+        [
+          134.99999999949935,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100068
+    },
+    {
+      "id": 177,
+      "from": 93,
+      "to": 106,
+      "points": [
+        [
+          243.00000000016126,
+          0,
+          140.00000000031253
+        ],
+        [
+          243.00000000016126,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100069
+    },
+    {
+      "id": 178,
+      "from": 95,
+      "to": 107,
+      "points": [
+        [
+          315.00000000015984,
+          0,
+          140.00000000031253
+        ],
+        [
+          315.00000000015984,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100070
+    },
+    {
+      "id": 179,
+      "from": 96,
+      "to": 108,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          140.00000000031253
+        ],
+        [
+          359.99999999999295,
+          0,
+          210.00000000007475
+        ]
+      ],
+      "lengthM": 69.99999999976222,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100071
+    },
+    {
+      "id": 180,
+      "from": 97,
+      "to": 109,
+      "points": [
+        [
+          -359.99999999999295,
+          0,
+          210.00000000007475
+        ],
+        [
+          -359.99999999999295,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "gravel",
+      "roadClass": "unclassified",
+      "lanes": 2,
+      "widthM": 4.5,
+      "oneway": false,
+      "speedLimitKph": 60,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100072
+    },
+    {
+      "id": 181,
+      "from": 98,
+      "to": 110,
+      "points": [
+        [
+          -292.4999999995793,
+          0,
+          210.00000000007475
+        ],
+        [
+          -292.4999999995793,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100073
+    },
+    {
+      "id": 182,
+      "from": 100,
+      "to": 111,
+      "points": [
+        [
+          -196.8749999994359,
+          0,
+          210.00000000007475
+        ],
+        [
+          -196.8749999994359,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100074
+    },
+    {
+      "id": 183,
+      "from": 101,
+      "to": 112,
+      "points": [
+        [
+          -105.00000000049597,
+          0,
+          210.00000000007475
+        ],
+        [
+          -105.00000000049597,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100075
+    },
+    {
+      "id": 184,
+      "from": 103,
+      "to": 113,
+      "points": [
+        [
+          28.124999999729692,
+          0,
+          210.00000000007475
+        ],
+        [
+          28.124999999729692,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100076
+    },
+    {
+      "id": 185,
+      "from": 105,
+      "to": 114,
+      "points": [
+        [
+          134.99999999949935,
+          0,
+          210.00000000007475
+        ],
+        [
+          134.99999999949935,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 5,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100077
+    },
+    {
+      "id": 186,
+      "from": 106,
+      "to": 115,
+      "points": [
+        [
+          243.00000000016126,
+          0,
+          210.00000000007475
+        ],
+        [
+          243.00000000016126,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 7,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100078
+    },
+    {
+      "id": 187,
+      "from": 108,
+      "to": 116,
+      "points": [
+        [
+          359.99999999999295,
+          0,
+          210.00000000007475
+        ],
+        [
+          359.99999999999295,
+          0,
+          299.99999999988165
+        ]
+      ],
+      "lengthM": 89.9999999998069,
+      "surface": "tarmac",
+      "roadClass": "secondary",
+      "lanes": 2,
+      "widthM": 10.5,
+      "oneway": false,
+      "speedLimitKph": 80,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 2100079
+    }
+  ],
+  "spawns": [
+    {
+      "id": "default",
+      "nodeId": 62,
+      "headingRad": -1.5707963267948966
+    }
+  ]
+}

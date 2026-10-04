@@ -64,6 +64,7 @@ import {
   type ClearanceBuilding,
   resolvePointShoulderWidth,
 } from "../../src/core/shoulder-clearance.ts";
+import { gridTestConfig } from "./areas/grid-test.config.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
@@ -90,6 +91,7 @@ import {
  */
 const KNOWN_AREAS: Record<string, AreaConfig> = {
   "juliette-ga": julietteGaConfig,
+  "grid-test": gridTestConfig,
 };
 
 /** Parses `--area <id>` out of an argv-shaped string array. Returns `null` if absent. */
