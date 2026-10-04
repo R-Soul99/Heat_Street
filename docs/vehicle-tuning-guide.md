@@ -282,6 +282,15 @@ full-lock power-oversteer move: at full throttle + full steer, `powerOversteerGa
 already drives the lerp factor to 1 regardless of the baseline, so only
 `handbrakeRearSideFriction` matters there.
 
+### Arcade front-drive model (FWD / AWD)
+
+The front share of drive force (`frontDriveShare`: FWD 1, AWD 0.4, RWD 0) is NOT sent through the front tyres. It is applied each tick as a chassis impulse along the car's heading, at the centre of mass, scaled by how many front wheels are on the ground (0..2) and zero when airborne. The rear share still goes through the rear tyres as before.
+
+- **Why:** Rapier scales a steered wheel's forward impulse by maxImpulse/sideImpulse once side slip saturates the friction circle, so drive through the steered fronts collapsed mid-corner (FWD at half lock for 1 s: 25 -> 22 mph on throttle vs 25 -> 21 coasting).
+- **Braking / reverse:** engine force is zero while braking, so thrust is zero then; reverse uses the same split with negative thrust. Front brakes always work with throttle held.
+- **Consequence for tuning:** `engineForcePerRearWheel` no longer has to fight cornering scrub for FWD (the class now uses the base 4800), and front `frictionSlip` / `frontSideFriction` only affect turning, not traction.
+- RWD takes none of this path (bit-for-bit unchanged).
+
 ### `frictionSlip` as the shared friction-circle ceiling
 
 `frictionSlip` is the multiplier BOTH axes are clamped against inside Rapier's own
