@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AI_PAINTS } from "../src/core/race-start";
 import {
   classDefaultTuning,
+  frontDriveThrustN,
   KNOWN_VEHICLE_CLASS_IDS,
   resolveVehicleClassId,
   VEHICLE_CLASSES,
@@ -74,6 +75,24 @@ describe("wheelEngineForces", () => {
         expect(Object.is(v, 0)).toBe(true);
       }
     }
+  });
+});
+
+describe("frontDriveThrustN", () => {
+  it("returns forward thrust for the front share, scaled by front contacts", () => {
+    expect(frontDriveThrustN(-4800, 1, 2)).toBe(9600);
+    expect(frontDriveThrustN(-4800, 1, 1)).toBe(4800);
+    expect(frontDriveThrustN(-4800, 1, 0)).toBe(0);
+    expect(frontDriveThrustN(-4800, 0.4, 2)).toBeCloseTo(3840, 9);
+  });
+
+  it("reverse (positive engine force) is backwards thrust", () => {
+    expect(frontDriveThrustN(2000, 1, 2)).toBe(-4000);
+  });
+
+  it("normalises zero results to +0", () => {
+    expect(Object.is(frontDriveThrustN(0, 1, 2), 0)).toBe(true);
+    expect(Object.is(frontDriveThrustN(-4800, 0, 2), 0)).toBe(true);
   });
 });
 

@@ -75,7 +75,21 @@ export function wheelEngineForces(
   return [f, f, r, r];
 }
 
-/** Class default tuning: `defaultTuning()` plus per-class overrides. */
+/**
+ * Signed chassis-forward thrust (newtons) for the front-axle share of drive
+ * force; positive = forward. Engine-force sign convention is negative =
+ * forward (car forward is local -Z). Contribution is per front wheel in
+ * ground contact (0..2).
+ */
+export function frontDriveThrustN(
+  _perWheelEngineForce: number,
+  _frontShare: number,
+  _frontContacts: number,
+): number {
+  return 0;
+}
+
+/** Class default tuning:`defaultTuning()` plus per-class overrides. */
 export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
   const t = defaultTuning();
   switch (id) {

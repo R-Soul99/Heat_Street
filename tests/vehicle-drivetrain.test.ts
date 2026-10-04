@@ -94,6 +94,60 @@ describe("vehicle drivetrain", () => {
     });
   }
 
+  describe("arcade front-drive thrust", () => {
+    const MPH25 = 11.176;
+    const MPH60 = 26.82;
+
+    function cornerEndSpeed(id: "fwd" | "awd", throttle: number): number {
+      const t = classDefaultTuning(id);
+      const s = buildScene(t, VEHICLE_CLASSES[id].frontDriveShare);
+      run(s, t, 30, () => NEUTRAL);
+      s.vehicle.body.setLinvel({ x: 0, y: 0, z: -MPH25 }, true);
+      run(s, t, 60, () => ({ ...NEUTRAL, throttle, steer: 0.5 }));
+      const lv = s.vehicle.body.linvel();
+      return Math.hypot(lv.x, lv.z);
+    }
+
+    for (const id of ["fwd", "awd"] as const) {
+      it(`${id} gains speed on throttle at half lock vs coasting`, () => {
+        const on = cornerEndSpeed(id, 1);
+        const coast = cornerEndSpeed(id, 0);
+        expect(on).toBeGreaterThanOrEqual(MPH25);
+        expect(on - coast).toBeGreaterThanOrEqual(1.34);
+      });
+    }
+
+    function ticksTo60(id: "rwd" | "fwd" | "awd"): number {
+      const t = classDefaultTuning(id);
+      const s = buildScene(t, VEHICLE_CLASSES[id].frontDriveShare);
+      for (let i = 0; i < 900; i++) {
+        s.vehicle.tick(full, t);
+        s.world.step();
+        if (forwardSpeed(s.vehicle) >= MPH60) return i + 1;
+      }
+      return 900;
+    }
+
+    it("fwd 0-60 is within 15% of rwd", () => {
+      const rwd = ticksTo60("rwd");
+      const fwd = ticksTo60("fwd");
+      expect(Math.abs(fwd - rwd) / rwd).toBeLessThanOrEqual(0.15);
+    });
+
+    it("an airborne fwd car receives no front-drive thrust", () => {
+      const t = classDefaultTuning("fwd");
+      const s = buildScene(t, 1);
+      s.vehicle.body.setTranslation({ x: 0, y: 30, z: 0 }, true);
+      s.vehicle.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      run(s, t, 20, () => full);
+      const lv = s.vehicle.body.linvel();
+      expect(Math.hypot(lv.x, lv.z)).toBeLessThan(0.05);
+      for (let i = 0; i < 4; i++) {
+        expect(s.vehicle.controller.wheelIsInContact(i)).toBe(false);
+      }
+    });
+  });
+
   it("rejects an out-of-range drive share", () => {
     const world = createWorld();
     const t = defaultTuning();
