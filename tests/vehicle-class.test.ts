@@ -84,7 +84,7 @@ describe("classDefaultTuning", () => {
   it("fwd and awd differ only in the overridden leaves", () => {
     const base = defaultTuning();
     const fwd = classDefaultTuning("fwd");
-    expect(fwd.drive.powerOversteerGain).toBe(0);
+    expect(fwd.drive.powerOversteerGain).toBe(0.5);
     expect(fwd.wheels.rearSideFriction).toBe(0.3);
     expect(fwd.wheels.frontSideFriction).toBe(1.2);
     const fwdRest = structuredClone(fwd);
@@ -155,7 +155,7 @@ describe("parseSavedTuning base", () => {
     delete full.drive.powerOversteerGain;
     const raw = JSON.stringify(full);
     const viaBase = parseSavedTuning(raw, () => classDefaultTuning("fwd"));
-    expect(viaBase?.drive.powerOversteerGain).toBe(0);
+    expect(viaBase?.drive.powerOversteerGain).toBe(0.5);
     const viaDefault = parseSavedTuning(raw);
     expect(viaDefault?.drive.powerOversteerGain).toBe(defaultTuning().drive.powerOversteerGain);
   });

@@ -82,8 +82,10 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
     case "rwd":
       break;
     case "fwd":
-      // FWD cannot power-oversteer: no throttle-driven rear unloading.
-      t.drive.powerOversteerGain = 0;
+      // Reduced (not zero) power-oversteer: with 0 the front-driven car pulled
+      // itself straight within ~1.5 s of a handbrake kick-out (user feel report
+      // 2026-10-04), so throttle + steer keeps some rear unloading to hold a slide.
+      t.drive.powerOversteerGain = 0.5;
       // Max rear grip (TUNING_RANGES ceiling) for a stable tail.
       t.wheels.rearSideFriction = 0.3;
       // Slightly less front bite -> understeer bias.
