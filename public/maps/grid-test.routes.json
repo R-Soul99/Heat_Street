@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "areaId": "grid-test",
+  "courses": [
+    {
+      "id": "grid-test-stagger-run",
+      "name": "Stagger Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 10,
+          "edgeId": 9,
+          "position": [
+            -359.99999999999295,
+            0,
+            -230.0000000001194
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 14,
+          "edgeId": 12,
+          "position": [
+            -148.4999999995821,
+            0,
+            -230.0000000001194
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 46,
+          "edgeId": 43,
+          "position": [
+            -89.99999999966623,
+            0,
+            -80.00000000017859
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 33,
+          "edgeId": 30,
+          "position": [
+            89.99999999966623,
+            0,
+            -140.00000000031253
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 51,
+          "edgeId": 136,
+          "position": [
+            209.99999999966388,
+            0,
+            -80.00000000017859
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-06",
+          "nodeId": 78,
+          "edgeId": 73,
+          "position": [
+            157.50000000007992,
+            0,
+            80.00000000017859
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-07",
+          "nodeId": 107,
+          "edgeId": 99,
+          "position": [
+            315.00000000015984,
+            0,
+            210.00000000007475
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 41,
+        "headingRad": 0
+      },
+      "authoring": "Zig-zags across block rows through staggered T-junctions and doglegs, crosses the central motorway, starts on the gravel west alley."
+    },
+    {
+      "id": "grid-test-block-loop",
+      "name": "Block Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 23,
+          "edgeId": 21,
+          "position": [
+            -359.99999999999295,
+            0,
+            -140.00000000031253
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 15,
+          "edgeId": 14,
+          "position": [
+            -58.49999999991586,
+            0,
+            -230.0000000001194
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 49,
+          "edgeId": 45,
+          "position": [
+            89.99999999966623,
+            0,
+            -80.00000000017859
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 75,
+          "edgeId": 153,
+          "position": [
+            30.000000000331426,
+            0,
+            80.00000000017859
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-05",
+          "nodeId": 102,
+          "edgeId": 174,
+          "position": [
+            -44.999999999833115,
+            0,
+            210.00000000007475
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 83,
+        "headingRad": 0
+      },
+      "authoring": "Three-lap loop that runs the gravel west alley, crosses the motorway and weaves through the staggered grid."
+    }
+  ]
+}

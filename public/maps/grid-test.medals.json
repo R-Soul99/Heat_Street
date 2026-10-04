@@ -1,0 +1,179 @@
+{
+  "kind": "heat-street.medal-reference",
+  "version": 1,
+  "areaId": "grid-test",
+  "contractVersion": 1,
+  "handlingContentVersion": "260920-sm2",
+  "courses": [
+    {
+      "courseId": "grid-test-stagger-run",
+      "mode": "p2p",
+      "laps": 1,
+      "totalTimeSec": 107,
+      "splits": [
+        {
+          "checkpointId": "p2p-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 11
+        },
+        {
+          "checkpointId": "p2p-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 26
+        },
+        {
+          "checkpointId": "p2p-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 41
+        },
+        {
+          "checkpointId": "p2p-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 58
+        },
+        {
+          "checkpointId": "p2p-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 71
+        },
+        {
+          "checkpointId": "p2p-06",
+          "lap": 1,
+          "authoredIndex": 5,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 86
+        },
+        {
+          "checkpointId": "p2p-07",
+          "lap": 1,
+          "authoredIndex": 6,
+          "hitOrder": 6,
+          "cumulativeTimeSec": 107
+        }
+      ]
+    },
+    {
+      "courseId": "grid-test-block-loop",
+      "mode": "circuit",
+      "laps": 3,
+      "totalTimeSec": 354,
+      "splits": [
+        {
+          "checkpointId": "circuit-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 21
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 48
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 70
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 85
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 100
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 2,
+          "authoredIndex": 0,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 148
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 2,
+          "authoredIndex": 1,
+          "hitOrder": 6,
+          "cumulativeTimeSec": 176
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 2,
+          "authoredIndex": 2,
+          "hitOrder": 7,
+          "cumulativeTimeSec": 197
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 2,
+          "authoredIndex": 3,
+          "hitOrder": 8,
+          "cumulativeTimeSec": 213
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 2,
+          "authoredIndex": 4,
+          "hitOrder": 9,
+          "cumulativeTimeSec": 227
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 3,
+          "authoredIndex": 0,
+          "hitOrder": 10,
+          "cumulativeTimeSec": 275
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 3,
+          "authoredIndex": 1,
+          "hitOrder": 11,
+          "cumulativeTimeSec": 303
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 3,
+          "authoredIndex": 2,
+          "hitOrder": 12,
+          "cumulativeTimeSec": 324
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 3,
+          "authoredIndex": 3,
+          "hitOrder": 13,
+          "cumulativeTimeSec": 340
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 3,
+          "authoredIndex": 4,
+          "hitOrder": 14,
+          "cumulativeTimeSec": 354
+        }
+      ]
+    }
+  ]
+}

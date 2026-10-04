@@ -47,6 +47,7 @@ import {
 } from "./core/camera-tuning";
 import { parseCourseData } from "./core/course";
 import { parseMapCollision } from "./core/map-collision";
+import { resolveMapId } from "./core/map-select";
 import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
 import { parseMedalReference } from "./core/medal-reference";
 import { createMedalTiming } from "./core/medal-timing";
@@ -141,7 +142,8 @@ const world = createWorld();
 // exactly once so the three map artifact URLs and `parseMapCollision`'s
 // area-mismatch check (T-04-30) can never independently drift from each
 // other — every URL below is built FROM this constant, never re-typed.
-const AREA_ID = "juliette-ga";
+// Selected via `?map=<id>` against an allowlist (src/core/map-select.ts); defaults to juliette-ga.
+const AREA_ID = resolveMapId(location.search);
 const MAP_GRAPH_URL = `/maps/${AREA_ID}.map.json`;
 const MAP_COLLISION_URL = `/maps/${AREA_ID}.collision.json`;
 const MAP_GLB_URL = `/maps/${AREA_ID}.glb`;
