@@ -68,6 +68,7 @@ import {
 } from "./core/surface-tuning";
 import type { SurfaceType } from "./core/surface-types";
 import { tyreSlipRatio } from "./core/tyre-slip";
+import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./core/vehicle-class";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
@@ -123,10 +124,24 @@ const canvas: HTMLCanvasElement = canvasElement;
 // `parse` called directly here. Three separate keys mean a corrupt camera
 // blob cannot take
 // vehicle tuning down with it, which a single merged blob would.
+// The player's drivetrain class (`?car=rwd|fwd|awd`, allowlisted); each class
+// has its own default tuning and its own saved-tuning key (RWD keeps the
+// original key). AI cars always stay RWD.
+const CAR_CLASS = VEHICLE_CLASSES[resolveVehicleClassId(location.search)];
 const tuning =
   parseSavedTuning(
-    typeof localStorage !== "undefined" ? localStorage.getItem(TUNING_STORAGE_KEY) : null,
-  ) ?? defaultTuning();
+    typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
+    () => classDefaultTuning(CAR_CLASS.id),
+  ) ?? classDefaultTuning(CAR_CLASS.id);
+// AI fleet tuning: the same object as the player's when RWD (panel edits still
+// reach the fleet); otherwise an independent RWD tune so FWD/AWD edits never
+// leak into the AI cars.
+const aiTuning =
+  CAR_CLASS.id === "rwd"
+    ? tuning
+    : (parseSavedTuning(
+        typeof localStorage !== "undefined" ? localStorage.getItem(TUNING_STORAGE_KEY) : null,
+      ) ?? defaultTuning());
 const surfaceProfiles =
   parseSavedSurfaceProfiles(
     typeof localStorage !== "undefined" ? localStorage.getItem(SURFACE_TUNING_STORAGE_KEY) : null,
@@ -224,7 +239,14 @@ try {
   const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
   const mapView = await loadMapView(MAP_GLB_URL);
 
-  const scene = createMapScene(world, graph, collision, tuning, surfaceProfiles);
+  const scene = createMapScene(
+    world,
+    graph,
+    collision,
+    tuning,
+    surfaceProfiles,
+    CAR_CLASS.frontDriveShare,
+  );
 
   // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
   // grid (player at the back, D-03), and 3 AI vehicles built through the
@@ -245,11 +267,11 @@ try {
     scene.resetVehicle(gridPoses[PLAYER_GRID_SLOT]);
     fleet = createAiFleet(
       world,
-      tuning,
+      aiTuning,
       scene.surfaces,
       line,
       gridPoses.slice(0, AI_RACER_COUNT),
-      defaultAiDriverParams(tuning),
+      defaultAiDriverParams(aiTuning),
       // D-10: the player's own body is an avoidance obstacle for AI too, so
       // AI never rear-ends a slow/stopped player.
       { obstacleBodies: [scene.vehicle.body] },
@@ -297,7 +319,7 @@ try {
     tuning.wheels.halfTrack,
     tuning.wheels.halfWheelbase,
     tuning.chassis.halfExtents,
-    { includePhase2Ground: false, groundExtents },
+    { includePhase2Ground: false, groundExtents, chassisColor: CAR_CLASS.chassisColor },
   );
   view.scene.add(mapView.group);
 
@@ -554,16 +576,23 @@ try {
   // push — this is said explicitly here rather than silently omitting the
   // handler.
   const panel = DEBUG_ENABLED
-    ? createTuningPanel(tuning, surfaceProfiles, cameraTuning, {
-        onApplyVehicle: () => {
-          scene.setTuning(tuning);
-          fleet?.setTuning(tuning);
+    ? createTuningPanel(
+        tuning,
+        surfaceProfiles,
+        cameraTuning,
+        {
+          onApplyVehicle: () => {
+            scene.setTuning(tuning);
+            fleet?.setTuning(aiTuning);
+          },
+          onApplySurfaces: () => scene.setSurfaceProfiles(surfaceProfiles),
+          onApplyCamera: () => {
+            // No-op — see this block's own comment above.
+          },
         },
-        onApplySurfaces: () => scene.setSurfaceProfiles(surfaceProfiles),
-        onApplyCamera: () => {
-          // No-op — see this block's own comment above.
-        },
-      })
+        undefined,
+        { storageKey: CAR_CLASS.storageKey, defaults: () => classDefaultTuning(CAR_CLASS.id) },
+      )
     : null;
   if (panel) {
     onDebugKey("KeyG", () => panel.toggle());

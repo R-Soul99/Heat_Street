@@ -382,6 +382,8 @@ export function createVehicleView(
   options?: {
     readonly includePhase2Ground?: boolean;
     readonly groundExtents?: { readonly x: number; readonly z: number };
+    /** Player chassis paint (0xRRGGBB); defaults to the RWD red. */
+    readonly chassisColor?: number;
   },
 ): VehicleView {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
@@ -479,7 +481,7 @@ export function createVehicleView(
     halfTrack,
     halfWheelbase,
     chassisHalfExtents,
-    COLOUR_CHASSIS,
+    options?.chassisColor ?? COLOUR_CHASSIS,
   );
   const { chassis, wheelMeshes } = carMeshes;
   scene.add(chassis);

@@ -216,6 +216,10 @@ export function createTuningPanel(
   cameraTuning: CameraTuning,
   handlers: TuningPanelHandlers,
   storage?: TuningStorage,
+  persist: {
+    readonly storageKey: string;
+    readonly defaults: () => VehicleTuning;
+  } = { storageKey: TUNING_STORAGE_KEY, defaults: defaultTuning },
 ): TuningPanel {
   const store = storage ?? createLocalStorageAdapter();
 
@@ -671,7 +675,7 @@ export function createTuningPanel(
    * corrupt camera blob can never take the vehicle tuning down with it.
    */
   function persistAll(): void {
-    store.set(TUNING_STORAGE_KEY, serializeTuning(tuning));
+    store.set(persist.storageKey, serializeTuning(tuning));
     store.set(SURFACE_TUNING_STORAGE_KEY, serializeSurfaceProfiles(surfaces));
     store.set(CAMERA_TUNING_STORAGE_KEY, serializeCameraTuning(cameraTuning));
   }
@@ -837,7 +841,7 @@ export function createTuningPanel(
 
           writeLeavesOnto(
             tuning as unknown as Record<string, unknown>,
-            defaultTuning() as unknown as Record<string, unknown>,
+            persist.defaults() as unknown as Record<string, unknown>,
             TUNING_RANGES as unknown as Record<string, unknown>,
           );
           writeLeavesOnto(
@@ -850,7 +854,7 @@ export function createTuningPanel(
             defaultCameraTuning() as unknown as Record<string, unknown>,
             CAMERA_TUNING_RANGES as unknown as Record<string, unknown>,
           );
-          store.remove(TUNING_STORAGE_KEY);
+          store.remove(persist.storageKey);
           store.remove(SURFACE_TUNING_STORAGE_KEY);
           store.remove(CAMERA_TUNING_STORAGE_KEY);
           handlers.onApplyVehicle();
