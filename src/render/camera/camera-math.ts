@@ -159,9 +159,11 @@ export function framingForSpeed(speedMs: number, curve: CameraSpeedCurve): Camer
 }
 
 /**
- * Pose constants for the alternative fixed "tower-defence" rig. Heading is
- * `PI` because the map is ENU with X east and Z SOUTH, so north is -Z and a
- * camera looking north sits at +Z of its target. `armLengthM` is the straight
+ * Pose constants for the alternative fixed "tower-defence" rig. The map is ENU
+ * with X east and Z SOUTH, so north is -Z and heading `PI` is a camera looking
+ * north from +Z of its target. Heading is `PI + PI / 4`: a locked 45 deg yaw
+ * off north, so an axis-aligned N/S-E/W street grid reads diagonal on screen
+ * (flip the sign of the `PI / 4` term to rotate the other way). `armLengthM` is the straight
  * target-to-camera distance: at FOV 22 deg and a 170 m arm the view spans
  * roughly 66 m along the view axis (about 86 m of ground depth at 50 deg
  * pitch). Provisional — tuned by eye, not by playtest.
@@ -169,7 +171,7 @@ export function framingForSpeed(speedMs: number, curve: CameraSpeedCurve): Camer
 export const FIXED_ISO = {
   fovDeg: 22,
   pitchRad: (50 * Math.PI) / 180,
-  headingRad: Math.PI,
+  headingRad: Math.PI + Math.PI / 4,
   armLengthM: 170,
   /** Follow stiffness (1/s) for the look-at point; stiffer than `positionLambda` so the car stays near screen centre. */
   followLambda: 8,

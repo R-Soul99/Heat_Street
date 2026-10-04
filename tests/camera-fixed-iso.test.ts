@@ -4,10 +4,16 @@ import { FIXED_ISO, fixedIsoOffset } from "../src/render/camera/camera-math";
 /** Pure-geometry tests for the fixed isometric-style rig's offset. */
 describe("fixedIsoOffset", () => {
   it("heading north (PI) puts the camera south (+Z) of the target, no X shift", () => {
-    const o = fixedIsoOffset(FIXED_ISO.headingRad, FIXED_ISO.pitchRad, FIXED_ISO.armLengthM);
+    const o = fixedIsoOffset(Math.PI, FIXED_ISO.pitchRad, FIXED_ISO.armLengthM);
     expect(o.x).toBeCloseTo(0, 9);
     expect(o.z).toBeGreaterThan(0);
     expect(o.y).toBeGreaterThan(0);
+  });
+
+  it("the locked heading is a 45 deg yaw off north, so an axis-aligned grid reads diagonal", () => {
+    const o = fixedIsoOffset(FIXED_ISO.headingRad, FIXED_ISO.pitchRad, FIXED_ISO.armLengthM);
+    expect(Math.abs(o.x)).toBeGreaterThan(0);
+    expect(Math.abs(o.x)).toBeCloseTo(Math.abs(o.z), 9);
   });
 
   it("preserves the arm length and the pitch", () => {
