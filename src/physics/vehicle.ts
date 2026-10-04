@@ -17,6 +17,7 @@ import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
+import { wheelEngineForces } from "../core/vehicle-class";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
 import { applyAssists, boxPrincipalInertia } from "./vehicle-assists";
@@ -164,7 +165,11 @@ export function createVehicle(
   world: RAPIER.World,
   tuning: VehicleTuning,
   spawn: { x: number; y: number; z: number },
+  frontDriveShare = 0,
 ): Vehicle {
+  if (!Number.isFinite(frontDriveShare) || frontDriveShare < 0 || frontDriveShare > 1) {
+    throw new RangeError(`frontDriveShare must be finite and within 0..1, got ${frontDriveShare}`);
+  }
   const c = tuning.chassis;
 
   const body = world.createRigidBody(
@@ -383,8 +388,15 @@ export function createVehicle(
         : reversing
           ? frame.brake * t.drive.reverseEngineForcePerRearWheel
           : 0;
-      vc.setWheelEngineForce(RL, engineForce);
-      vc.setWheelEngineForce(RR, engineForce);
+      // With FWD/AWD the front wheels carry engine force too, so Pitfall 7
+      // applies to them as well: engine force stays zero on ALL four wheels
+      // while braking (engineForce is already 0 there), and reverse uses the
+      // same front/rear distribution.
+      const forces = wheelEngineForces(engineForce, frontDriveShare);
+      vc.setWheelEngineForce(FL, forces[0]);
+      vc.setWheelEngineForce(FR, forces[1]);
+      vc.setWheelEngineForce(RL, forces[2]);
+      vc.setWheelEngineForce(RR, forces[3]);
 
       // 3. Brake, all four wheels — zero while reversing (see the comment
       // above step 2).

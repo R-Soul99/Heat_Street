@@ -348,6 +348,7 @@ export function createMapScene(
   collision: MapCollision,
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
+  frontDriveShare = 0,
 ): MapScene {
   const surfaceMap = createSurfaceMap();
 
@@ -372,7 +373,7 @@ export function createMapScene(
   }
 
   const spawn = resolveSpawn(graph);
-  const vehicle = createVehicle(world, tuning, spawn);
+  const vehicle = createVehicle(world, tuning, spawn, frontDriveShare);
   const defaultSpawnPose: VehiclePose = spawn;
   vehicle.resetPose(defaultSpawnPose);
   let currentTuning = tuning;
