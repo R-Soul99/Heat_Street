@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 Phase: 07 (npc-driving-ai-circuit-racers) — EXECUTING
 Plan: 1 of 7
 Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
-Last activity: 2026-10-04 - Completed quick task 261004-gmu: FWD and 4WD vehicle classes
+Last activity: 2026-10-04 - Completed quick task 261004-otc: arcade front-drive thrust
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 Progress: [██████████] 100%
@@ -225,6 +225,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 260920-sm2 | Apply the developer's hand-tuned vehicle + camera-damping values (exported via 260920-l94's panel) into `defaultTuning()`/`defaultCameraTuning()`; D-14's accel/brake bands now knowingly fail against the new, quicker performance (see STATE.md open item) | 2026-09-20 | b7c5e23 | [260920-sm2-apply-the-developer-s-hand-tuned-vehicle](./quick/260920-sm2-apply-the-developer-s-hand-tuned-vehicle/) |
 | 261004-3zw | Synthetic `grid-test` handling-test map: 8 block rows around a 24 m central motorway, staggered block lengths, mixed road widths; `?map=grid-test` selection. Browser check not yet run | 2026-10-04 | 9884ef9 | [261004-3zw-create-a-new-synthetic-test-city-map-gri](./quick/261004-3zw-create-a-new-synthetic-test-city-map-gri/) |
 | 261004-gmu | FWD and 4WD vehicle classes (`?car=rwd|fwd|awd`; red/green/blue are temporary test colours), per-class drive split, tuning and saved-tuning key | 2026-10-04 | bb0958d | [261004-gmu-add-fwd-and-4wd-vehicle-classes-with-col](./quick/261004-gmu-add-fwd-and-4wd-vehicle-classes-with-col/) |
+| 261004-otc | Arcade front-drive thrust for FWD/AWD: front-axle share applied as a chassis impulse along heading (scaled by front contact) so throttle works while cornering; FWD engine force back to 4800. Feel not yet user-verified | 2026-10-04 | ca9daae | [261004-otc-arcade-front-drive-thrust-for-fwd-and-aw](./quick/261004-otc-arcade-front-drive-thrust-for-fwd-and-aw/) |
 
 ## Session Continuity
 
