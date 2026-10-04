@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 Phase: 07 (npc-driving-ai-circuit-racers) — EXECUTING
 Plan: 1 of 7
 Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
-Last activity: 2026-09-22 -- Phase 07 execution started
+Last activity: 2026-10-04 - Completed quick task 261004-3zw: synthetic grid-test map
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 Progress: [██████████] 100%
@@ -223,6 +223,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261003-pgl | Fixed isometric-style camera rig behind debug K toggle (FOV 22, pitch 50, north-locked) | 2026-10-03 | e183188 | [261003-pgl-add-alternative-fixed-isometric-camera-m](./quick/261003-pgl-add-alternative-fixed-isometric-camera-m/) |
 | 260920-l94 | Add tuning-panel export/import (save/reload a tuning setup to a file) plus `docs/vehicle-tuning-guide.md` documenting all 72 debug-panel controls and their interactions, with a mechanical drift gate against the panel source | 2026-09-20 | 8a85530 | [260920-l94-write-a-markdown-explainer-doc-for-the-d](./quick/260920-l94-write-a-markdown-explainer-doc-for-the-d/) |
 | 260920-sm2 | Apply the developer's hand-tuned vehicle + camera-damping values (exported via 260920-l94's panel) into `defaultTuning()`/`defaultCameraTuning()`; D-14's accel/brake bands now knowingly fail against the new, quicker performance (see STATE.md open item) | 2026-09-20 | b7c5e23 | [260920-sm2-apply-the-developer-s-hand-tuned-vehicle](./quick/260920-sm2-apply-the-developer-s-hand-tuned-vehicle/) |
+| 261004-3zw | Synthetic `grid-test` handling-test map: 8 block rows around a 24 m central motorway, staggered block lengths, mixed road widths; `?map=grid-test` selection. Browser check not yet run | 2026-10-04 | 9884ef9 | [261004-3zw-create-a-new-synthetic-test-city-map-gri](./quick/261004-3zw-create-a-new-synthetic-test-city-map-gri/) |
 
 ## Session Continuity
 
