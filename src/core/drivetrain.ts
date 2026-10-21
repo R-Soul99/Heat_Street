@@ -44,7 +44,7 @@ export function gearForSpeed(speedMs: number, topSpeedMs: number): number {
 /**
  * Multiplier applied to the tuned engine force at this forward speed.
  * Positive speeds only; non-positive speed uses first gear. `steerAbs`
- * (0..1) fades the low-gear pull toward 1.0: traction spent cornering is not
+ * (0..1) fades the low-gear pull up to half way toward 1.0: traction spent cornering is not
  * available for launching, and without this a full-lock, full-throttle exit
  * from a spin at walking pace pivots on the tail instead of recovering.
  */
@@ -56,12 +56,17 @@ export function engineForceScale(speedMs: number, topSpeedMs: number, steerAbs =
   const rev = (frac - lo) / (GEARS[i].maxFrac - lo); // 0..1 through the gear
   const powerBand = 1 - 0.35 * rev * rev;
   const limiter = Math.min(1, (1 - frac) / LIMITER_BAND);
-  const gearForce = 1 + (GEARS[i].force - 1) * (1 - Math.min(1, Math.max(0, steerAbs)));
+  const g = GEARS[i].force;
+  // Only the low-gear boost (g > 1) fades; high gears keep their reduced pull.
+  const gearForce = g > 1 ? 1 + (g - 1) * (1 - 0.5 * Math.min(1, Math.max(0, steerAbs))) : g;
   return gearForce * powerBand * limiter;
 }
 
 /** Speed (m/s) below which steering lock is not reduced. */
 export const STEER_FADE_START_MS = 12;
+
+/** Reverse top speed (m/s): the same gear curve, scaled to this speed. */
+export const REVERSE_TOP_MS = 14;
 
 /**
  * Multiplier on max steering lock at this ground speed: 1 up to

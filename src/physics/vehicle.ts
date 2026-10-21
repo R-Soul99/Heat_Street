@@ -15,7 +15,7 @@
  */
 import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
-import { engineForceScale, steerLockScale } from "../core/drivetrain";
+import { REVERSE_TOP_MS, engineForceScale, steerLockScale } from "../core/drivetrain";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
 import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
@@ -404,7 +404,9 @@ export function createVehicle(
             Math.abs(frame.steer),
           )
         : reversing
-          ? frame.brake * t.drive.reverseEngineForcePerRearWheel
+          ? frame.brake *
+            t.drive.reverseEngineForcePerRearWheel *
+            engineForceScale(-forwardSpeedMs, REVERSE_TOP_MS)
           : 0;
       // Arcade front-drive model. Rapier's updateFriction scales a steered
       // wheel's forward impulse by maxImpulse/sideImpulse once side slip
@@ -446,6 +448,11 @@ export function createVehicle(
       // `surfaces` is undefined, `rearLateralGrip` stays at its `[1, 1]`
       // initialiser (an explicit local default, not a second code path),
       // so this line is unchanged from the Phase 2 behaviour.
+      // The blend is off below 3 m/s and full from 8 m/s. At walking pace the
+      // rear must bite: with the tail kept loose, a car sliding sideways at
+      // ~1 m/s (e.g. after a spin) pivoted on full throttle for seconds
+      // instead of driving away.
+      const crawlFade = clamp((Math.hypot(lv.x, lv.z) - 3) / 5, 0, 1);
       const rearSfs = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
@@ -455,7 +462,11 @@ export function createVehicle(
               // Scaled by the speed lock fade: the blend is keyed on steer
               // INPUT, so at speed it must shrink with the real wheel angle
               // or full-lock + throttle frees the tail on a tiny steer angle.
-              t.drive.powerOversteerGain * frame.throttle * Math.abs(frame.steer) * lockScale,
+              t.drive.powerOversteerGain *
+                frame.throttle *
+                Math.abs(frame.steer) *
+                lockScale *
+                crawlFade,
               0,
               1,
             ),

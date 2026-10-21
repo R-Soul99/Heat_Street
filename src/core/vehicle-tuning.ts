@@ -130,6 +130,11 @@ export interface VehicleTuning {
      *
      * [TUNED, user feel report 2026-10-04]: raised 1.2 -> 1.5 because the car
      * understeered. First-guess step, not measured.
+     *
+     * [TUNED, user feel report 2026-10-21]: raised 1.5 -> 1.7 because the car
+     * massively understeered above 40 mph (half lock held 1.3-1.6 g on the
+     * old value, so it was grip-limited, not lock-limited). `[MEASURED]`: 1.7 gives 1.5 g skidpad (was 1.3);
+     * above ~1.8 body roll and ramp landings blow through the 15/20 deg gates (2.0 -> 27 deg ramp tilt).
      */
     frictionSlip: number;
     /**
@@ -451,7 +456,7 @@ export function defaultTuning(): VehicleTuning {
       suspensionCompression: 1.3,
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 20000,
-      frictionSlip: 1.5,
+      frictionSlip: 1.7,
       frontSideFriction: 1.35,
       rearSideFriction: 0.28,
     },
@@ -463,10 +468,10 @@ export function defaultTuning(): VehicleTuning {
       steerReturnPerSec: 4.0,
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
-      reverseEngineForcePerRearWheel: 1500,
+      reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
-      highSpeedSteerFraction: 0.3,
+      highSpeedSteerFraction: 0.45,
     },
     assists: {
       autoLevelGain: 0.4,

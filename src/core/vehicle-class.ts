@@ -109,7 +109,7 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       break;
     case "awd":
       // Grippier overall.
-      t.wheels.frictionSlip = 1.8;
+      t.wheels.frictionSlip = 2.0;
       t.wheels.rearSideFriction = 0.3;
       // Some rear-biased throttle rotation, far less than RWD.
       t.drive.powerOversteerGain = 0.5;

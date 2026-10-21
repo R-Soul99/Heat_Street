@@ -1,5 +1,6 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
+import { REVERSE_TOP_MS, engineForceScale } from "../src/core/drivetrain";
 import { NEUTRAL } from "../src/core/input-tape";
 import { DT } from "../src/core/sim-clock";
 import {
@@ -185,11 +186,11 @@ describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)
     // Forward is chassis-local -Z, so positive rear engine force IS backward
     // — see the comment in src/physics/vehicle.ts step 2.
     expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
-      tuning.drive.reverseEngineForcePerRearWheel,
+      tuning.drive.reverseEngineForcePerRearWheel * engineForceScale(0, REVERSE_TOP_MS),
       6,
     );
     expect(vehicle.controller.wheelEngineForce(RR)).toBeCloseTo(
-      tuning.drive.reverseEngineForcePerRearWheel,
+      tuning.drive.reverseEngineForcePerRearWheel * engineForceScale(0, REVERSE_TOP_MS),
       6,
     );
     for (let i = 0; i < 4; i++) {
@@ -231,10 +232,11 @@ describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)
     vehicle.tick(frame, tuning);
     world.step();
 
-    expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
-      tuning.drive.reverseEngineForcePerRearWheel,
-      6,
-    );
+    // Still producing reverse force at 5 m/s backward (gear-scaled; the
+    // chassis may be pitched a hair so allow a small tolerance).
+    const expected =
+      tuning.drive.reverseEngineForcePerRearWheel * engineForceScale(5, REVERSE_TOP_MS);
+    expect(Math.abs((vehicle.controller.wheelEngineForce(RL) ?? 0) - expected)).toBeLessThan(200);
     for (let i = 0; i < 4; i++) {
       expect(vehicle.controller.wheelBrake(i)).toBe(0);
     }
@@ -249,7 +251,7 @@ describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)
     world.step();
 
     expect(vehicle.controller.wheelEngineForce(RL)).toBeCloseTo(
-      0.5 * tuning.drive.reverseEngineForcePerRearWheel,
+      0.5 * tuning.drive.reverseEngineForcePerRearWheel * engineForceScale(0, REVERSE_TOP_MS),
       6,
     );
   });
@@ -278,7 +280,7 @@ describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)
         assists: {},
       }),
     );
-    expect(poisoned?.drive.reverseEngineForcePerRearWheel).toBe(1500);
+    expect(poisoned?.drive.reverseEngineForcePerRearWheel).toBe(3000);
     expect(Number.isFinite(poisoned?.drive.reverseEngineForcePerRearWheel)).toBe(true);
 
     const negative = parseSavedTuning(
@@ -332,6 +334,8 @@ describe("createVehicle: handbrake and the authored throttle-oversteer term", ()
     zeroGainTuning.drive.powerOversteerGain = 0;
     const zeroScene = buildScene(zeroGainTuning);
     settle(zeroScene.world, zeroScene.vehicle, zeroScene.tuning, 60);
+    // Moving (forward is -Z): the blend is deliberately off at crawl speed.
+    zeroScene.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
     zeroScene.vehicle.tick(frame, zeroScene.tuning);
     zeroScene.world.step();
     const zeroGainRearSfs =
@@ -342,6 +346,8 @@ describe("createVehicle: handbrake and the authored throttle-oversteer term", ()
     halfGainTuning.drive.powerOversteerGain = 0.5;
     const halfScene = buildScene(halfGainTuning);
     settle(halfScene.world, halfScene.vehicle, halfScene.tuning, 60);
+    // Moving (forward is -Z): the blend is deliberately off at crawl speed.
+    halfScene.vehicle.body.setLinvel({ x: 0, y: 0, z: -10 }, true);
     halfScene.vehicle.tick(frame, halfScene.tuning);
     halfScene.world.step();
     const halfGainRearSfs =

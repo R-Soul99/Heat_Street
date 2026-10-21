@@ -56,13 +56,16 @@ describe("vehicle-recovery: powerSlideRecoveryRoutine (260920-j4d symptom 1)", (
     expect(result.value).toBeLessThan(2.5);
   });
 
-  it("anti-trivially-green companion: the shipped powerOversteerGain (1.1) fails the band (proves the gate can fail)", () => {
+  it("anti-trivially-green companion: a loose rear (rearSideFriction 0.1) fails the band (proves the gate can fail)", () => {
     // <root_cause> Fact 1: at throttle=1, |steer|=1 (this routine's recovery
     // phase), the blend factor saturates at 1.0 for ANY gain >= 1.0 -- 1.0
     // and 1.1 are byte-identical there, so this is the mechanism-accurate
     // "old" value, not an arbitrary pick.
     const tuning = defaultTuning();
     tuning.drive.powerOversteerGain = 1.1;
+    // The crawl-speed fade in vehicle.ts step 4 now fixes the old failure at
+    // gain 1.1 on its own, so the failing case is a loose baseline rear.
+    tuning.wheels.rearSideFriction = 0.1;
     const result = runRoutine(powerSlideRecoveryRoutine, tuning);
 
     expect(result.pass).toBe(false);

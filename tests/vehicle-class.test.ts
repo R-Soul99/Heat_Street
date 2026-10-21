@@ -113,7 +113,7 @@ describe("classDefaultTuning", () => {
     expect(fwdRest).toEqual(base);
 
     const awd = classDefaultTuning("awd");
-    expect(awd.wheels.frictionSlip).toBe(1.8);
+    expect(awd.wheels.frictionSlip).toBe(2.0);
     expect(awd.wheels.rearSideFriction).toBe(0.3);
     expect(awd.drive.powerOversteerGain).toBe(0.5);
     const awdRest = structuredClone(awd);
