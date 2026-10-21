@@ -295,6 +295,15 @@ export interface VehicleTuning {
      * (~107 mph), not measured.
      */
     topSpeedMs: number;
+    /**
+     * Fraction of `maxSteerLock` still available at top speed. Lock shrinks
+     * smoothly from full at `STEER_FADE_START_MS` to this fraction at
+     * `topSpeedMs`. Keyboard steering is all-or-nothing, and full lock at
+     * 100 mph spins the car.
+     *
+     * [TUNED, user feel report 2026-10-21]: first-guess value, not measured.
+     */
+    highSpeedSteerFraction: number;
   };
   readonly assists: {
     /**
@@ -457,6 +466,7 @@ export function defaultTuning(): VehicleTuning {
       reverseEngineForcePerRearWheel: 1500,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
+      highSpeedSteerFraction: 0.3,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -522,6 +532,7 @@ export const TUNING_RANGES: {
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
+    highSpeedSteerFraction: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -586,6 +597,7 @@ export const TUNING_RANGES: {
     // max would let a slider release the brakes at real driving speed.
     reverseEngageSpeedMs: { min: 0, max: 1, step: 0.01 },
     topSpeedMs: { min: 20, max: 90, step: 1 },
+    highSpeedSteerFraction: { min: 0.05, max: 1, step: 0.01 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

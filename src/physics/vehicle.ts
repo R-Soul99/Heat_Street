@@ -15,7 +15,7 @@
  */
 import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
-import { engineForceScale } from "../core/drivetrain";
+import { engineForceScale, steerLockScale } from "../core/drivetrain";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
 import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
@@ -355,7 +355,15 @@ export function createVehicle(
       // turns LEFT — measured setWheelSteering(+0.2618) -> angvel.y =
       // +0.25 rad/s (02-RESEARCH.md "Steering sign, derived and measured").
       // Hence the leading minus.
-      const steerAngle = -frame.steer * t.drive.maxSteerLock;
+      // Lock shrinks with ground speed (see steerLockScale) so a full-lock
+      // keyboard tap at speed cannot spin the car.
+      const lv = body.linvel();
+      const lockScale = steerLockScale(
+        Math.hypot(lv.x, lv.z),
+        t.drive.topSpeedMs,
+        t.drive.highSpeedSteerFraction,
+      );
+      const steerAngle = -frame.steer * t.drive.maxSteerLock * lockScale;
       vc.setWheelSteering(FL, steerAngle);
       vc.setWheelSteering(FR, steerAngle);
 
@@ -443,7 +451,14 @@ export function createVehicle(
         : lerp(
             t.wheels.rearSideFriction,
             t.drive.handbrakeRearSideFriction,
-            clamp(t.drive.powerOversteerGain * frame.throttle * Math.abs(frame.steer), 0, 1),
+            clamp(
+              // Scaled by the speed lock fade: the blend is keyed on steer
+              // INPUT, so at speed it must shrink with the real wheel angle
+              // or full-lock + throttle frees the tail on a tiny steer angle.
+              t.drive.powerOversteerGain * frame.throttle * Math.abs(frame.steer) * lockScale,
+              0,
+              1,
+            ),
           );
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);

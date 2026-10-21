@@ -59,3 +59,18 @@ export function engineForceScale(speedMs: number, topSpeedMs: number, steerAbs =
   const gearForce = 1 + (GEARS[i].force - 1) * (1 - Math.min(1, Math.max(0, steerAbs)));
   return gearForce * powerBand * limiter;
 }
+
+/** Speed (m/s) below which steering lock is not reduced. */
+export const STEER_FADE_START_MS = 12;
+
+/**
+ * Multiplier on max steering lock at this ground speed: 1 up to
+ * `STEER_FADE_START_MS`, easing (smoothstep) down to `topFraction` at top
+ * speed and beyond.
+ */
+export function steerLockScale(speedMs: number, topSpeedMs: number, topFraction: number): number {
+  const span = Math.max(1e-6, topSpeedMs - STEER_FADE_START_MS);
+  const x = Math.min(1, Math.max(0, (speedMs - STEER_FADE_START_MS) / span));
+  const ease = x * x * (3 - 2 * x);
+  return 1 + (topFraction - 1) * ease;
+}

@@ -430,6 +430,12 @@ export function createTuningPanel(
   addNumber(driveFolder, tuning.drive, "topSpeedMs", TUNING_RANGES.drive.topSpeedMs).onChange(
     handlers.onApplyVehicle,
   );
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "highSpeedSteerFraction",
+    TUNING_RANGES.drive.highSpeedSteerFraction,
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
