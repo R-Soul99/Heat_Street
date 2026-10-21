@@ -15,6 +15,7 @@
  */
 import * as RAPIER from "@dimforge/rapier3d";
 import type { InputFrame } from "../core/input-tape";
+import { engineForceScale } from "../core/drivetrain";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
 import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
@@ -384,7 +385,16 @@ export function createVehicle(
       const braking = frame.brake > 0;
       const reversing = braking && forwardSpeedMs < t.drive.reverseEngageSpeedMs;
       const engineForce = !braking
-        ? -frame.throttle * t.drive.engineForcePerRearWheel
+        ? -frame.throttle *
+          t.drive.engineForcePerRearWheel *
+          engineForceScale(
+            // Total ground speed, not forward speed: a car sliding sideways
+            // has low forward speed but is not in a launch, and the low-gear
+            // boost would otherwise spin the tail on slide exit.
+            forwardSpeedMs < 0 ? forwardSpeedMs : Math.hypot(linvel.x, linvel.z),
+            t.drive.topSpeedMs,
+            Math.abs(frame.steer),
+          )
         : reversing
           ? frame.brake * t.drive.reverseEngineForcePerRearWheel
           : 0;

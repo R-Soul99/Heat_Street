@@ -427,6 +427,9 @@ export function createTuningPanel(
     "reverseEngageSpeedMs",
     TUNING_RANGES.drive.reverseEngageSpeedMs,
   ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "topSpeedMs", TUNING_RANGES.drive.topSpeedMs).onChange(
+    handlers.onApplyVehicle,
+  );
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a

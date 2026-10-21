@@ -286,6 +286,15 @@ export interface VehicleTuning {
      * `src/physics/vehicle.ts`).
      */
     reverseEngageSpeedMs: number;
+    /**
+     * Forward speed (m/s) at which the gearbox model in `./drivetrain` tapers
+     * engine force to zero, so it is effectively the car's top speed.
+     *
+     * [TUNED, user feel report 2026-10-21]: added because engine force was
+     * flat at every speed and top speed was far too high. First-guess value
+     * (~107 mph), not measured.
+     */
+    topSpeedMs: number;
   };
   readonly assists: {
     /**
@@ -447,6 +456,7 @@ export function defaultTuning(): VehicleTuning {
       powerOversteerGain: 1.1,
       reverseEngineForcePerRearWheel: 1500,
       reverseEngageSpeedMs: 0.1,
+      topSpeedMs: 48,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -511,6 +521,7 @@ export const TUNING_RANGES: {
     powerOversteerGain: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
+    topSpeedMs: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -574,6 +585,7 @@ export const TUNING_RANGES: {
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.
     reverseEngageSpeedMs: { min: 0, max: 1, step: 0.01 },
+    topSpeedMs: { min: 20, max: 90, step: 1 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },
