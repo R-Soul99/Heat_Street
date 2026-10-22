@@ -14,8 +14,8 @@
  * `FL/FR/RL/RR` index order exported below.
  */
 import * as RAPIER from "@dimforge/rapier3d";
+import { engineForceScale, REVERSE_TOP_MS, steerLockScale } from "../core/drivetrain";
 import type { InputFrame } from "../core/input-tape";
-import { REVERSE_TOP_MS, engineForceScale, steerLockScale } from "../core/drivetrain";
 import { DT } from "../core/sim-clock";
 import type { SurfaceType } from "../core/surface-types";
 import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
@@ -54,6 +54,9 @@ const DIRECTION = { x: 0, y: -1, z: 0 };
 const AXLE = { x: -1, y: 0, z: 0 };
 
 /** The neutral orientation quaternion, reused for every `setAdditionalMassProperties` call. */
+/** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
+const FLICK_YAW_ACCEL = 8;
+
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
 /** Clamp `v` into `[lo, hi]`. */
@@ -293,10 +296,15 @@ export function createVehicle(
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     body.wakeUp();
+    steerSwing = 0;
+    flickEnv = 0;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
   // reallocated. See the matching doc comment on `Vehicle.wheelSurfaces`.
+  // Smoothed steer input (weight swing) for the flick; see step 4.
+  let steerSwing = 0;
+  let flickEnv = 0;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
@@ -402,6 +410,7 @@ export function createVehicle(
             forwardSpeedMs < 0 ? forwardSpeedMs : Math.hypot(linvel.x, linvel.z),
             t.drive.topSpeedMs,
             Math.abs(frame.steer),
+            t.drive.lowGearPunch,
           )
         : reversing
           ? frame.brake *
@@ -453,22 +462,44 @@ export function createVehicle(
       // ~1 m/s (e.g. after a spin) pivoted on full throttle for seconds
       // instead of driving away.
       const crawlFade = clamp((Math.hypot(lv.x, lv.z) - 3) / 5, 0, 1);
+      // Weight-swing flick. `steerSwing` is the steer input smoothed over
+      // flickSwingSec, standing in for weight swung toward the outside of the
+      // last turn. Steering the OTHER way (past 35% of lock) while that swing
+      // is still there is a flick: it latches `flickEnv` to the strength of
+      // the swing, which then decays over the same time constant, holding the
+      // rear loose long enough to actually rotate the car (a single-tick
+      // blend measured as no effect at all). The swing is read before it is
+      // updated so the reversal tick sees the old value. Zero gain = off.
+      const swingK = 1 - Math.exp(-DT / Math.max(0.05, t.drive.flickSwingSec));
+      const opposition =
+        clamp(-steerSwing * Math.sign(frame.steer), 0, 1) *
+        clamp(Math.abs(frame.steer) / 0.35, 0, 1);
+      steerSwing += (frame.steer - steerSwing) * swingK;
+      flickEnv = Math.max(flickEnv * (1 - swingK), clamp(opposition * 1.6, 0, 1));
+      const flickBlend = clamp(
+        t.drive.flickGain * flickEnv * clamp((Math.hypot(lv.x, lv.z) - 6) / 6, 0, 1) * lockScale,
+        0,
+        1,
+      );
       const rearSfs = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
             t.wheels.rearSideFriction,
             t.drive.handbrakeRearSideFriction,
-            clamp(
-              // Scaled by the speed lock fade: the blend is keyed on steer
-              // INPUT, so at speed it must shrink with the real wheel angle
-              // or full-lock + throttle frees the tail on a tiny steer angle.
-              t.drive.powerOversteerGain *
-                frame.throttle *
-                Math.abs(frame.steer) *
-                lockScale *
-                crawlFade,
-              0,
-              1,
+            Math.max(
+              flickBlend,
+              clamp(
+                // Scaled by the speed lock fade: the blend is keyed on steer
+                // INPUT, so at speed it must shrink with the real wheel angle
+                // or full-lock + throttle frees the tail on a tiny steer angle.
+                t.drive.powerOversteerGain *
+                  frame.throttle *
+                  Math.abs(frame.steer) *
+                  lockScale *
+                  crawlFade,
+                0,
+                1,
+              ),
             ),
           );
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
@@ -497,6 +528,21 @@ export function createVehicle(
             true,
           );
         }
+      }
+
+      // 5c. Flick yaw kick: the swung weight snaps the nose into the new
+      // turn (loosening the rear alone only lets it drift: measured +1 deg of
+      // slip at full blend). Positive angular velocity about +Y turns LEFT, so
+      // a RIGHT steer (positive) kicks negative. Impulse form, like the assists.
+      if (flickBlend > 0) {
+        body.applyTorqueImpulse(
+          {
+            x: 0,
+            y: -Math.sign(frame.steer) * FLICK_YAW_ACCEL * inertia.y * flickBlend * DT,
+            z: 0,
+          },
+          true,
+        );
       }
 
       // 6. Fresh telemetry — valid only AFTER updateVehicle.

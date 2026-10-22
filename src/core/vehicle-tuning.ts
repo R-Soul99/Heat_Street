@@ -309,6 +309,28 @@ export interface VehicleTuning {
      * [TUNED, user feel report 2026-10-21]: first-guess value, not measured.
      */
     highSpeedSteerFraction: number;
+    /**
+     * Multiplier on the low-gear launch boost in `./drivetrain` (1 = as
+     * shipped, 0 = every gear pulls the same, 2 = double the excess). Only
+     * the part of a gear's multiplier above 1.0 is scaled.
+     *
+     * Added with the `?feel` panel (2026-10-22), default 1 = unchanged.
+     */
+    lowGearPunch: number;
+    /**
+     * Weight-shift flick strength, 0..1. Steering hard one way swings the
+     * car's weight to that side (`flickSwingSec` smoothed steer); steering
+     * sharply the OTHER way while moving then unloads the rear and kicks it
+     * out toward the new turn, the Scandinavian-flick / feint slide. 0 = off.
+     * The rear grip is blended toward `handbrakeRearSideFriction` by
+     * `flickGain * opposition * speedFade * lockFade`.
+     *
+     * Added with the `?feel` panel (2026-10-22). Default 0 = off, so the
+     * committed base handling is unchanged outside `?feel`.
+     */
+    flickGain: number;
+    /** Seconds the swung weight takes to follow the steering (smoothing time constant). */
+    flickSwingSec: number;
   };
   readonly assists: {
     /**
@@ -472,6 +494,9 @@ export function defaultTuning(): VehicleTuning {
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
       highSpeedSteerFraction: 0.45,
+      lowGearPunch: 1,
+      flickGain: 0,
+      flickSwingSec: 0.45,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -538,6 +563,9 @@ export const TUNING_RANGES: {
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
     highSpeedSteerFraction: TuningRange;
+    lowGearPunch: TuningRange;
+    flickGain: TuningRange;
+    flickSwingSec: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -603,6 +631,9 @@ export const TUNING_RANGES: {
     reverseEngageSpeedMs: { min: 0, max: 1, step: 0.01 },
     topSpeedMs: { min: 20, max: 90, step: 1 },
     highSpeedSteerFraction: { min: 0.05, max: 1, step: 0.01 },
+    lowGearPunch: { min: 0, max: 2.5, step: 0.05 },
+    flickGain: { min: 0, max: 1, step: 0.05 },
+    flickSwingSec: { min: 0.1, max: 1.2, step: 0.05 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

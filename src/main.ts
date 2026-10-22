@@ -46,6 +46,7 @@ import {
   parseSavedCameraTuning,
 } from "./core/camera-tuning";
 import { parseCourseData } from "./core/course";
+import { applyFeel, parseFeelFlag } from "./core/feel";
 import { parseMapCollision } from "./core/map-collision";
 import { resolveMapId } from "./core/map-select";
 import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
@@ -72,6 +73,7 @@ import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./co
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
+import { createFeelPanel, loadFeel } from "./debug/feel-panel";
 import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
@@ -128,11 +130,19 @@ const canvas: HTMLCanvasElement = canvasElement;
 // has its own default tuning and its own saved-tuning key (RWD keeps the
 // original key). AI cars always stay RWD.
 const CAR_CLASS = VEHICLE_CLASSES[resolveVehicleClassId(location.search)];
-const tuning =
-  parseSavedTuning(
-    typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
-    () => classDefaultTuning(CAR_CLASS.id),
-  ) ?? classDefaultTuning(CAR_CLASS.id);
+// `?feel` replaces the saved big-panel blob with the class base, then lets the
+// small feel panel derive the handling from its few sliders (see core/feel).
+const FEEL_ENABLED = parseFeelFlag(location.search);
+const feelSettings = loadFeel();
+const tuning = FEEL_ENABLED
+  ? classDefaultTuning(CAR_CLASS.id)
+  : (parseSavedTuning(
+      typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
+      () => classDefaultTuning(CAR_CLASS.id),
+    ) ?? classDefaultTuning(CAR_CLASS.id));
+if (FEEL_ENABLED) {
+  applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings);
+}
 // AI fleet tuning: the same object as the player's when RWD (panel edits still
 // reach the fleet); otherwise an independent RWD tune so FWD/AWD edits never
 // leak into the AI cars.
@@ -596,6 +606,18 @@ try {
     : null;
   if (panel) {
     onDebugKey("KeyG", () => panel.toggle());
+  }
+
+  // The small feel panel (`?feel`): re-derives the live tuning object from its
+  // sliders and pushes it to the vehicle (and the AI fleet when RWD) exactly
+  // like a big-panel slider move does.
+  if (FEEL_ENABLED) {
+    const feelBase = classDefaultTuning(CAR_CLASS.id);
+    createFeelPanel(feelSettings, () => {
+      applyFeel(tuning, feelBase, feelSettings);
+      scene.setTuning(tuning);
+      fleet?.setTuning(aiTuning);
+    });
   }
 
   // `() => tuning` / `() => surfaceProfiles` — callbacks, not captured values,

@@ -43,12 +43,18 @@ export function gearForSpeed(speedMs: number, topSpeedMs: number): number {
 
 /**
  * Multiplier applied to the tuned engine force at this forward speed.
- * Positive speeds only; non-positive speed uses first gear. `steerAbs`
+ * Positive speeds only; non-positive speed uses first gear. `punch`
+ * scales the low-gear boost (1 = as shipped). `steerAbs`
  * (0..1) fades the low-gear pull up to half way toward 1.0: traction spent cornering is not
  * available for launching, and without this a full-lock, full-throttle exit
  * from a spin at walking pace pivots on the tail instead of recovering.
  */
-export function engineForceScale(speedMs: number, topSpeedMs: number, steerAbs = 0): number {
+export function engineForceScale(
+  speedMs: number,
+  topSpeedMs: number,
+  steerAbs = 0,
+  punch = 1,
+): number {
   const frac = Math.max(0, speedMs) / topSpeedMs;
   if (frac >= 1) return 0;
   const i = gearForSpeed(speedMs, topSpeedMs);
@@ -56,7 +62,8 @@ export function engineForceScale(speedMs: number, topSpeedMs: number, steerAbs =
   const rev = (frac - lo) / (GEARS[i].maxFrac - lo); // 0..1 through the gear
   const powerBand = 1 - 0.35 * rev * rev;
   const limiter = Math.min(1, (1 - frac) / LIMITER_BAND);
-  const g = GEARS[i].force;
+  // `punch` scales only the part of a gear's multiplier above 1.0.
+  const g = GEARS[i].force > 1 ? 1 + (GEARS[i].force - 1) * punch : GEARS[i].force;
   // Only the low-gear boost (g > 1) fades; high gears keep their reduced pull.
   const gearForce = g > 1 ? 1 + (g - 1) * (1 - 0.5 * Math.min(1, Math.max(0, steerAbs))) : g;
   return gearForce * powerBand * limiter;

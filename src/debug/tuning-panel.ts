@@ -436,6 +436,15 @@ export function createTuningPanel(
     "highSpeedSteerFraction",
     TUNING_RANGES.drive.highSpeedSteerFraction,
   ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "lowGearPunch", TUNING_RANGES.drive.lowGearPunch).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "flickGain", TUNING_RANGES.drive.flickGain).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "flickSwingSec", TUNING_RANGES.drive.flickSwingSec).onChange(
+    handlers.onApplyVehicle,
+  );
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
