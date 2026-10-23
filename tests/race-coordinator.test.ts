@@ -5,7 +5,7 @@ import { buildNavigationGraph } from "../src/core/navigation";
 import { createRaceState } from "../src/core/race-state";
 import type { RoadGraph } from "../src/core/road-graph";
 import { createRaceCoordinator } from "../src/gameplay/race-coordinator";
-import { navigationArrowRotation } from "../src/hud/navigation-arrow";
+import { navigationArrowRotation, screenBearingRad } from "../src/hud/navigation-arrow";
 
 const graph: RoadGraph = {
   schemaVersion: 1,
@@ -159,5 +159,16 @@ describe("race coordinator", () => {
 describe("navigation arrow bearing", () => {
   it("keeps a waypoint on the car's right at a right angle", () => {
     expect(navigationArrowRotation(0, [0, 0, 0], [0, 0, 10])).toBeCloseTo(Math.PI / 2);
+  });
+});
+
+describe("screenBearingRad", () => {
+  it("is 0 straight up the screen, clockwise positive, null when the points coincide", () => {
+    const o = { x: 100, y: 100 };
+    expect(screenBearingRad(o, { x: 100, y: 50 })).toBeCloseTo(0);
+    expect(screenBearingRad(o, { x: 150, y: 100 })).toBeCloseTo(Math.PI / 2);
+    expect(screenBearingRad(o, { x: 100, y: 150 })).toBeCloseTo(Math.PI);
+    expect(screenBearingRad(o, { x: 50, y: 100 })).toBeCloseTo(-Math.PI / 2);
+    expect(screenBearingRad(o, o)).toBeNull();
   });
 });

@@ -444,7 +444,17 @@ try {
   // unchanged).
   const objectiveView = createObjectiveView(view.scene);
   const minimap = createMinimap(graph);
-  const navigationArrow = createNavigationArrow();
+  // The arrow points along the waypoint's direction ON SCREEN (projected through
+  // the live camera), so it stays right whatever way the camera is turned.
+  const arrowScratch = new THREE.Vector3();
+  const navigationArrow = createNavigationArrow((x, y, z) => {
+    arrowScratch.set(x, y, z).project(camera);
+    if (arrowScratch.z > 1) return null;
+    return {
+      x: ((arrowScratch.x + 1) / 2) * window.innerWidth,
+      y: ((1 - arrowScratch.y) / 2) * window.innerHeight,
+    };
+  });
   const raceHud = createRaceHud();
 
   // Circuit Race builds a `CircuitRaceCoordinator` INSTEAD of the solo
