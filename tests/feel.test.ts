@@ -68,6 +68,10 @@ describe("applyFeel", () => {
     expect(hi("looseness").wheels.rearSideFriction).toBeLessThan(
       lo("looseness").wheels.rearSideFriction,
     );
+    expect(hi("slideSurge").drive.slideSurge).toBeGreaterThan(lo("slideSurge").drive.slideSurge);
+    expect(hi("regrip").drive.rearGripRecoverySec).toBeGreaterThan(
+      lo("regrip").drive.rearGripRecoverySec,
+    );
     expect(hi("flick").drive.flickGain).toBeGreaterThan(lo("flick").drive.flickGain);
   });
 

@@ -54,6 +54,12 @@ const DIRECTION = { x: 0, y: -1, z: 0 };
 const AXLE = { x: -1, y: 0, z: 0 };
 
 /** The neutral orientation quaternion, reused for every `setAdditionalMassProperties` call. */
+/** Hermite smoothstep of `x` between `lo` and `hi`. */
+function smoothstep(lo: number, hi: number, x: number): number {
+  const t = clamp((x - lo) / (hi - lo), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
 const FLICK_YAW_ACCEL = 8;
 
@@ -298,6 +304,7 @@ export function createVehicle(
     body.wakeUp();
     steerSwing = 0;
     flickEnv = 0;
+    rearSfsSmoothed = -1;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -305,6 +312,8 @@ export function createVehicle(
   // Smoothed steer input (weight swing) for the flick; see step 4.
   let steerSwing = 0;
   let flickEnv = 0;
+  // Slew-limited rear side friction (-1 = not yet seeded); see step 4.
+  let rearSfsSmoothed = -1;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
@@ -481,7 +490,19 @@ export function createVehicle(
         0,
         1,
       );
-      const rearSfs = frame.handbrake
+      // Steering AGAINST the slip (catching the slide) must not loosen the
+      // tail further. The power-oversteer blend above is keyed on |steer|, so
+      // counter-steering under throttle used to free the rear even more and
+      // spin the car (measured, slide-exit routine: slip 130 deg and no
+      // recovery; with this fade 1.1 s and no spin). Fades in over 6-17 deg
+      // of slip, so straight-line and normal cornering are untouched.
+      const rightV = rotateVec(q, 1, 0, 0);
+      const latMs = lv.x * rightV.x + lv.y * rightV.y + lv.z * rightV.z;
+      const slipRad = Math.atan2(latMs, Math.max(Math.abs(forwardSpeedMs), 0.1));
+      const against = frame.steer * slipRad < 0 ? 1 : 0;
+      const sm = clamp((Math.abs(slipRad) - 0.1) / 0.2, 0, 1);
+      const counterSteerFade = 1 - sm * sm * (3 - 2 * sm) * against;
+      const rearSfsTarget = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
             t.wheels.rearSideFriction,
@@ -496,12 +517,27 @@ export function createVehicle(
                   frame.throttle *
                   Math.abs(frame.steer) *
                   lockScale *
-                  crawlFade,
+                  crawlFade *
+                  counterSteerFade,
                 0,
                 1,
               ),
             ),
           );
+      // Regrip smoothing (opt-in): the tail loosens fast but regrips over
+      // `rearGripRecoverySec`, so the lateral-velocity cancel that follows a
+      // slide is spread out instead of deleting speed in one tick. Off (0) =
+      // the target is used as-is, numerically unchanged.
+      let rearSfs = rearSfsTarget;
+      if (t.drive.rearGripRecoverySec > 0) {
+        if (rearSfsSmoothed < 0) rearSfsSmoothed = rearSfsTarget;
+        const tau =
+          rearSfsTarget < rearSfsSmoothed ? 0.05 : Math.max(0.01, t.drive.rearGripRecoverySec);
+        rearSfsSmoothed += (rearSfsTarget - rearSfsSmoothed) * (1 - Math.exp(-DT / tau));
+        rearSfs = rearSfsSmoothed;
+      } else {
+        rearSfsSmoothed = -1;
+      }
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 
@@ -523,6 +559,27 @@ export function createVehicle(
         const frontContacts = (vc.wheelIsInContact(FL) ? 1 : 0) + (vc.wheelIsInContact(FR) ? 1 : 0);
         const thrust = frontDriveThrustN(engineForce, frontDriveShare, frontContacts);
         if (thrust !== 0) {
+          body.applyImpulse(
+            { x: forward.x * thrust * DT, y: forward.y * thrust * DT, z: forward.z * thrust * DT },
+            true,
+          );
+        }
+      }
+
+      // 5b'. Slide surge (opt-in): while the car is sliding, add a forward
+      // push along the heading. Rapier scales forward and side tyre impulses
+      // down together once the traction circle saturates, and a sliding rear
+      // spends the circle cancelling lateral velocity, so engine force barely
+      // gets through (the same collapse the FWD chassis thrust works around).
+      // Gated by slip (smoothstep 8-26 deg) and a 4-10 m/s speed ramp, scaled
+      // by the real engine force (already gear-curved, limited and zeroed
+      // under brake), so it fades with top speed and never fights the brakes.
+      if (t.drive.slideSurge > 0 && engineForce < 0) {
+        const rearContacts = (vc.wheelIsInContact(RL) ? 1 : 0) + (vc.wheelIsInContact(RR) ? 1 : 0);
+        const gate =
+          smoothstep(0.14, 0.45, Math.abs(slipRad)) * clamp((Math.hypot(lv.x, lv.z) - 4) / 6, 0, 1);
+        if (rearContacts > 0 && gate > 0) {
+          const thrust = -engineForce * rearContacts * t.drive.slideSurge * gate;
           body.applyImpulse(
             { x: forward.x * thrust * DT, y: forward.y * thrust * DT, z: forward.z * thrust * DT },
             true,

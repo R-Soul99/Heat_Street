@@ -56,16 +56,17 @@ describe("vehicle-recovery: powerSlideRecoveryRoutine (260920-j4d symptom 1)", (
     expect(result.value).toBeLessThan(2.5);
   });
 
-  it("anti-trivially-green companion: a loose rear (rearSideFriction 0.1) fails the band (proves the gate can fail)", () => {
+  it("anti-trivially-green companion: a rear with no baseline grip (rearSideFriction 0) fails the band (proves the gate can fail)", () => {
     // <root_cause> Fact 1: at throttle=1, |steer|=1 (this routine's recovery
     // phase), the blend factor saturates at 1.0 for ANY gain >= 1.0 -- 1.0
     // and 1.1 are byte-identical there, so this is the mechanism-accurate
     // "old" value, not an arbitrary pick.
     const tuning = defaultTuning();
     tuning.drive.powerOversteerGain = 1.1;
-    // The crawl-speed fade in vehicle.ts step 4 now fixes the old failure at
-    // gain 1.1 on its own, so the failing case is a loose baseline rear.
-    tuning.wheels.rearSideFriction = 0.1;
+    // The crawl-speed fade and the counter-steer fade in vehicle.ts step 4 now
+    // fix the old failure at gain 1.1 on their own (a 0.1 rear recovers in
+    // 1.6 s), so the failing case is a rear with no baseline grip at all.
+    tuning.wheels.rearSideFriction = 0;
     const result = runRoutine(powerSlideRecoveryRoutine, tuning);
 
     expect(result.pass).toBe(false);
@@ -109,12 +110,18 @@ describe("vehicle-recovery: highSpeedPulseRoutine (260920-j4d symptom 2)", () =>
    * low-angle drift equilibrium once perturbed, rather than an under-damped
    * oscillation as `<root_cause>` Fact 4 hypothesized.
    */
-  it("anti-trivially-green companion: the shipped rearSideFriction (0.2) reports Number.POSITIVE_INFINITY (proves the gate can fail, and is not a routine defect -- see doc comment above)", () => {
+  it("anti-trivially-green companion: a genuinely loose rear (rearSideFriction 0.12) fails the band (proves the gate can fail)", () => {
+    // Re-anchored 2026-10-23. This used to assert Infinity at 0.2, but that was
+    // the telemetry strip being only 120 m wide: the car drove off its side
+    // edge mid-settle although slip never passed 2.2 deg. With the strip
+    // widened, 0.2 settles at ~4.9 deg; the measured instability onset is
+    // below ~0.16 (0.12 -> 18.7 deg).
     const tuning = defaultTuning();
-    tuning.wheels.rearSideFriction = 0.2;
+    tuning.wheels.rearSideFriction = 0.12;
     const result = runRoutine(highSpeedPulseRoutine, tuning);
 
-    expect(result.value).toBe(Number.POSITIVE_INFINITY);
+    expect(Number.isFinite(result.value)).toBe(true);
+    expect(result.value).toBeGreaterThan(15);
     expect(result.pass).toBe(false);
   });
 

@@ -26,7 +26,7 @@
 
 import type { InputFrame } from "../../core/input-tape";
 import { DT } from "../../core/sim-clock";
-import type { Vehicle, VehicleSample } from "../vehicle";
+import { RL, type Vehicle, type VehicleSample } from "../vehicle";
 
 /** One routine's measured outcome, shared by the Vitest suite and (plan
  * 02-09) the browser telemetry panel. */
@@ -924,6 +924,183 @@ function makeHighSpeedPulseRoutine(): Routine {
 }
 
 export const highSpeedPulseRoutine: Routine = makeHighSpeedPulseRoutine();
+
+/**
+ * `slide-exit` (diagnostic only; deliberately NOT in `ROUTINES`, so the six-
+ * routine contract and its tests are untouched). Reach 45 mph, steer into a
+ * corner coasting, pull the handbrake for 0.3 s, then release it with FULL
+ * throttle while counter-steering against the slip angle (as a driver would),
+ * and keep recording for 3 s.
+ *
+ * It measures the "bogs down after a slide" complaint
+ * (prompts/slide-exit-handling-spec.md):
+ *   (a) `speedDropMs`: the largest ground-speed drawdown from its running
+ *       peak between release and slip first falling under 5 deg (>=0, m/s);
+ *   (b) `slipAccelMs2`: mean forward acceleration over the ticks after
+ *       release where slip is above 10 deg at full throttle (m/s^2);
+ *   (c) `recoverSec`: release until slip first falls under 5 deg
+ *       (`Number.POSITIVE_INFINITY` if it never does).
+ * Every tick is also pushed to `trace` (ground/forward speed, slip, yaw rate,
+ * effective rear side-friction stiffness and which term set it) so a number
+ * can be explained, not just reported.
+ */
+export interface SlideExitTick {
+  readonly t: number;
+  readonly groundSpeedMs: number;
+  readonly forwardSpeedMs: number;
+  readonly slipDeg: number;
+  readonly yawRate: number;
+  readonly rearSfs: number;
+  readonly term: "handbrake" | "loosened" | "base";
+}
+
+export interface SlideExitMetrics {
+  readonly speedDropMs: number;
+  readonly slipAccelMs2: number;
+  readonly recoverSec: number;
+  readonly releaseSpeedMs: number;
+}
+
+const SLIDE_EXIT_ENTRY_STEER = 0.45;
+const SLIDE_EXIT_HOLD_TICKS = Math.round(0.3 / DT);
+const SLIDE_EXIT_RUN_TICKS = Math.round(3 / DT);
+/** Counter-steer gain on exit, steer-fraction per radian of slip (same as the handbrake routine). */
+const SLIDE_EXIT_COUNTER_STEER_GAIN = 2.0;
+
+export function makeSlideExitRoutine(): {
+  readonly routine: Routine;
+  readonly trace: SlideExitTick[];
+  metrics(): SlideExitMetrics;
+} {
+  type Phase = "accel" | "turnIn" | "hold" | "exit" | "done";
+  let phase: Phase = "accel";
+  let phaseStart = 0;
+  let releaseTick = -1;
+  let vehicleRef: { controller: { wheelSideFrictionStiffness(i: number): number | null } } | null =
+    null;
+  let baseRearSfs = 0;
+  const trace: SlideExitTick[] = [];
+
+  let releaseSpeed = 0;
+  let peak = 0;
+  let drop = 0;
+  let recoveredTick = -1;
+  let accSum = 0;
+  let accTicks = 0;
+  let prevForward = 0;
+
+  const routine: Routine = {
+    id: "slide-exit",
+    label: "slide exit under power",
+    setup(vehicle) {
+      phase = "accel";
+      phaseStart = 0;
+      releaseTick = -1;
+      vehicleRef = vehicle;
+      baseRearSfs = 0;
+      trace.length = 0;
+      releaseSpeed = 0;
+      peak = 0;
+      drop = 0;
+      recoveredTick = -1;
+      accSum = 0;
+      accTicks = 0;
+      prevForward = 0;
+    },
+    drive(tick, s) {
+      if (phase === "accel") {
+        if (s.forwardSpeedMs >= MPH_45_MS) {
+          phase = "turnIn";
+          phaseStart = tick;
+        } else {
+          return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+        }
+      }
+      if (phase === "turnIn") {
+        // 0.25 s of coasting turn-in before the handbrake.
+        if (tick - phaseStart >= Math.round(0.25 / DT)) {
+          phase = "hold";
+          phaseStart = tick;
+        } else {
+          return { steer: SLIDE_EXIT_ENTRY_STEER, throttle: 0, brake: 0, handbrake: false };
+        }
+      }
+      if (phase === "hold") {
+        if (tick - phaseStart >= SLIDE_EXIT_HOLD_TICKS) {
+          phase = "exit";
+          releaseTick = tick;
+          releaseSpeed = s.groundSpeedMs;
+        } else {
+          return { steer: SLIDE_EXIT_ENTRY_STEER, throttle: 0, brake: 0, handbrake: true };
+        }
+      }
+      if (phase === "exit") {
+        const since = tick - releaseTick;
+        if (since >= SLIDE_EXIT_RUN_TICKS) {
+          phase = "done";
+          return null;
+        }
+        // A human catches the slide: steer against the slip angle, full throttle.
+        const steer = clamp(-s.slipAngleRad * SLIDE_EXIT_COUNTER_STEER_GAIN, -1, 1);
+        return { steer, throttle: 1, brake: 0, handbrake: false };
+      }
+      return null;
+    },
+    sample(tick, s, acc) {
+      const ground = s.groundSpeedMs;
+      const slipDeg = Math.abs(s.slipAngleRad) * RAD_TO_DEG;
+      const rearSfs = vehicleRef?.controller.wheelSideFrictionStiffness(RL) ?? 0;
+      if (baseRearSfs === 0 && phase === "accel") baseRearSfs = rearSfs;
+      const term: SlideExitTick["term"] =
+        phase === "hold" ? "handbrake" : rearSfs < baseRearSfs * 0.9 ? "loosened" : "base";
+      trace.push({
+        t: tick * DT,
+        groundSpeedMs: ground,
+        forwardSpeedMs: s.forwardSpeedMs,
+        slipDeg,
+        yawRate: s.angvel.y,
+        rearSfs,
+        term,
+      });
+      acc.ticks = tick;
+      if (phase === "exit" && releaseTick >= 0) {
+        if (recoveredTick < 0) {
+          peak = Math.max(peak, ground);
+          drop = Math.max(drop, peak - ground);
+          if (slipDeg < 5) recoveredTick = tick;
+        }
+        if (slipDeg > 10 && tick > releaseTick) {
+          accSum += (s.forwardSpeedMs - prevForward) / DT;
+          accTicks++;
+        }
+      }
+      prevForward = s.forwardSpeedMs;
+    },
+    evaluate() {
+      const m = metrics();
+      return {
+        id: "slide-exit",
+        label: "slide exit under power",
+        value: m.recoverSec,
+        unit: "s",
+        target: "diagnostic (no pass band)",
+        pass: Number.isFinite(m.recoverSec),
+      };
+    },
+  };
+
+  function metrics(): SlideExitMetrics {
+    return {
+      speedDropMs: drop,
+      slipAccelMs2: accTicks > 0 ? accSum / accTicks : 0,
+      recoverSec:
+        recoveredTick >= 0 ? (recoveredTick - releaseTick) * DT : Number.POSITIVE_INFINITY,
+      releaseSpeedMs: releaseSpeed,
+    };
+  }
+
+  return { routine, trace, metrics };
+}
 
 /**
  * The six scripted routines, in the fixed order every consumer (the Vitest

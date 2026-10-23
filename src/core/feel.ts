@@ -31,6 +31,10 @@ export interface FeelSettings {
   topSpeed: number;
   /** Rear looseness: throttle power-slide and a looser tail. Base 5. */
   looseness: number;
+  /** Slide-exit surge: forward push while sliding so the car drives out. Base 5. */
+  slideSurge: number;
+  /** Slide regrip: how gradually the tail regrips after a slide. Low = snaps back. Base 5. */
+  regrip: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
   flick: number;
 }
@@ -48,6 +52,8 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   lowGearPunch: 5,
   topSpeed: 5,
   looseness: 5,
+  slideSurge: 5,
+  regrip: 5,
   flick: 4,
 });
 
@@ -60,6 +66,8 @@ export const FEEL_CONTROLS: readonly { key: FeelKey; label: string }[] = Object.
   { key: "lowGearPunch", label: "Low-gear punch" },
   { key: "topSpeed", label: "Top speed" },
   { key: "looseness", label: "Rear looseness" },
+  { key: "slideSurge", label: "Slide-exit surge" },
+  { key: "regrip", label: "Slide regrip (low = snappy)" },
   { key: "flick", label: "Weight-shift flick" },
 ]);
 
@@ -97,6 +105,8 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     lowGearPunch: clamp(feel.lowGearPunch, FEEL_MIN, FEEL_MAX),
     topSpeed: clamp(feel.topSpeed, FEEL_MIN, FEEL_MAX),
     looseness: clamp(feel.looseness, FEEL_MIN, FEEL_MAX),
+    slideSurge: clamp(feel.slideSurge, FEEL_MIN, FEEL_MAX),
+    regrip: clamp(feel.regrip, FEEL_MIN, FEEL_MAX),
     flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
   };
 
@@ -119,6 +129,9 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   target.drive.powerOversteerGain = base.drive.powerOversteerGain * lerp(0, 2, f.looseness / 10);
   target.wheels.rearSideFriction =
     base.wheels.rearSideFriction * anchored(f.looseness, 1.07, 1, 0.8);
+
+  target.drive.slideSurge = base.drive.slideSurge * lerp(0, 2, f.slideSurge / 10);
+  target.drive.rearGripRecoverySec = base.drive.rearGripRecoverySec * anchored(f.regrip, 0, 1, 3);
 
   target.drive.flickGain = lerp(0, 1, f.flick / 10);
 

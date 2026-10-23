@@ -331,6 +331,25 @@ export interface VehicleTuning {
     flickGain: number;
     /** Seconds the swung weight takes to follow the steering (smoothing time constant). */
     flickSwingSec: number;
+    /**
+     * Seconds the rear side friction takes to regrip after the tail has been
+     * loosened (handbrake, power-oversteer, flick). The tail still loosens
+     * fast (0.05 s). 0 = off: the target value is applied instantly, as
+     * shipped.
+     *
+     * Added 2026-10-23 for the slide-exit work
+     * (prompts/slide-exit-handling-spec.md); default 0 = unchanged.
+     */
+    rearGripRecoverySec: number;
+    /**
+     * Slide-exit surge, 0..1: while slip is above ~8 deg a forward push of
+     * `slideSurge * gate * rearContacts * engineForce` is added along the
+     * heading, because a sliding rear spends the traction circle cancelling
+     * sideways speed and little drive force gets through. 0 = off.
+     *
+     * Added 2026-10-23; default 0 = unchanged.
+     */
+    slideSurge: number;
   };
   readonly assists: {
     /**
@@ -497,6 +516,8 @@ export function defaultTuning(): VehicleTuning {
       lowGearPunch: 1,
       flickGain: 0,
       flickSwingSec: 0.45,
+      rearGripRecoverySec: 0.15,
+      slideSurge: 0.3,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -566,6 +587,8 @@ export const TUNING_RANGES: {
     lowGearPunch: TuningRange;
     flickGain: TuningRange;
     flickSwingSec: TuningRange;
+    rearGripRecoverySec: TuningRange;
+    slideSurge: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -634,6 +657,8 @@ export const TUNING_RANGES: {
     lowGearPunch: { min: 0, max: 2.5, step: 0.05 },
     flickGain: { min: 0, max: 1, step: 0.05 },
     flickSwingSec: { min: 0.1, max: 1.2, step: 0.05 },
+    rearGripRecoverySec: { min: 0, max: 0.8, step: 0.05 },
+    slideSurge: { min: 0, max: 1, step: 0.05 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },
