@@ -485,7 +485,9 @@ export function createVehicle(
         ? t.drive.handbrakeRearSideFriction
         : lerp(
             t.wheels.rearSideFriction,
-            t.drive.handbrakeRearSideFriction,
+            // The throttle / flick blend has its OWN target (a controllable
+            // power slide); the handbrake keeps the much looser value above.
+            t.drive.powerOversteerRearSideFriction,
             Math.max(
               flickBlend,
               clamp(

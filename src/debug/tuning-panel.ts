@@ -418,6 +418,12 @@ export function createTuningPanel(
   addNumber(
     driveFolder,
     tuning.drive,
+    "powerOversteerRearSideFriction",
+    TUNING_RANGES.drive.powerOversteerRearSideFriction,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
     "reverseEngineForcePerRearWheel",
     TUNING_RANGES.drive.reverseEngineForcePerRearWheel,
   ).onChange(handlers.onApplyVehicle);

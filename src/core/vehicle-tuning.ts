@@ -269,6 +269,18 @@ export interface VehicleTuning {
      */
     powerOversteerGain: number;
     /**
+     * Rear side-friction value the throttle power-oversteer blend and the
+     * weight-shift flick blend TOWARD (at full blend), where the handbrake
+     * uses `handbrakeRearSideFriction` alone. Split out so a hard-braking
+     * handbrake kick (0.005) and a controllable power slide (0.024) can be
+     * tuned independently; before this the blend shared the handbrake's
+     * value and full-lock throttle slides were too snappy to hold.
+     *
+     * [TUNED, user feel report 2026-10-25]: 0.024 default, first-guess, not
+     * measured. Range 0..0.05 matches `handbrakeRearSideFriction`.
+     */
+    powerOversteerRearSideFriction: number;
+    /**
      * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
      * each rear wheel, newtons, while `reversing` is true in
      * `src/physics/vehicle.ts`'s `tick`. A starting value, not swept — chosen
@@ -490,6 +502,7 @@ export function defaultTuning(): VehicleTuning {
       steerReturnPerSec: 4.0,
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
+      powerOversteerRearSideFriction: 0.024,
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
@@ -559,6 +572,7 @@ export const TUNING_RANGES: {
     steerReturnPerSec: TuningRange;
     handbrakeRearSideFriction: TuningRange;
     powerOversteerGain: TuningRange;
+    powerOversteerRearSideFriction: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
@@ -625,6 +639,7 @@ export const TUNING_RANGES: {
     // inside the first half-percent of the track.
     handbrakeRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     powerOversteerGain: { min: 0, max: 2, step: 0.05 },
+    powerOversteerRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.
