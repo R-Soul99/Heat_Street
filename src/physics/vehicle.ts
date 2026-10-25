@@ -57,6 +57,22 @@ const AXLE = { x: -1, y: 0, z: 0 };
 /** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
 const FLICK_YAW_ACCEL = 8;
 
+/** Pivot turn: ground speed (m/s) at and above which the helper never engages. */
+const PIVOT_MAX_SPEED_MS = 12;
+/** Pivot turn: steer / throttle level that counts as "full". */
+const PIVOT_FULL_INPUT = 0.8;
+/** Pivot turn: seconds full steer + throttle must be held before it engages. */
+const PIVOT_HOLD_SEC = 0.3;
+/** Pivot turn: first-order time constants, seconds. */
+const PIVOT_TAU_IN = 0.08;
+const PIVOT_TAU_OUT = 0.1;
+const PIVOT_TAU_YAW = 0.1;
+const PIVOT_TAU_CAP = 0.08;
+const PIVOT_TAU_DAMP = 0.15;
+const PIVOT_TAU_REAR = 0.05;
+/** Below this engagement the pivot is snapped fully off (first-order filters never reach 0). */
+const PIVOT_OFF_EPS = 0.002;
+
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
 /** Clamp `v` into `[lo, hi]`. */
@@ -298,6 +314,10 @@ export function createVehicle(
     body.wakeUp();
     steerSwing = 0;
     flickEnv = 0;
+    pivotHold = 0;
+    pivotE = 0;
+    pivotRear = 0;
+    pivotDir = 0;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -305,6 +325,11 @@ export function createVehicle(
   // Smoothed steer input (weight swing) for the flick; see step 4.
   let steerSwing = 0;
   let flickEnv = 0;
+  // Pivot turn state (see step 4 and 5d). All zero = inert.
+  let pivotHold = 0;
+  let pivotE = 0;
+  let pivotRear = 0;
+  let pivotDir = 0;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
@@ -481,6 +506,37 @@ export function createVehicle(
         0,
         1,
       );
+      // Pivot-turn gate and filters (step 5d applies the impulses). Skipped
+      // entirely when off, so the physics is bit-for-bit unchanged. Below the
+      // gate the filters are held at exactly 0 (snapped, not decayed), so
+      // inputs that never open the gate are bit-for-bit unchanged too.
+      let pivotGate = 0;
+      if (t.drive.pivotTurn > 0) {
+        const lowSpeed = Math.hypot(lv.x, lv.z) < PIVOT_MAX_SPEED_MS;
+        const fullSteer = Math.abs(frame.steer) > PIVOT_FULL_INPUT;
+        if (lowSpeed && fullSteer && frame.throttle > PIVOT_FULL_INPUT) {
+          pivotHold += DT;
+        } else {
+          pivotHold = 0;
+        }
+        if (lowSpeed && fullSteer && (pivotHold >= PIVOT_HOLD_SEC || frame.handbrake)) {
+          pivotGate = 1;
+          pivotDir = Math.sign(frame.steer);
+        }
+        pivotE +=
+          (pivotGate - pivotE) *
+          (1 - Math.exp(-DT / (pivotGate > 0 ? PIVOT_TAU_IN : PIVOT_TAU_OUT)));
+        pivotRear += (pivotGate - pivotRear) * (1 - Math.exp(-DT / PIVOT_TAU_REAR));
+        if (pivotGate === 0) {
+          if (pivotE < PIVOT_OFF_EPS) pivotE = 0;
+          if (pivotRear < PIVOT_OFF_EPS) pivotRear = 0;
+        }
+      } else {
+        pivotHold = 0;
+        pivotE = 0;
+        pivotRear = 0;
+        pivotDir = 0;
+      }
       const rearSfs = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
@@ -490,6 +546,9 @@ export function createVehicle(
             t.drive.powerOversteerRearSideFriction,
             Math.max(
               flickBlend,
+              // The pivot loosens the tail to the power-slide value (fast in,
+              // 0.05 s out) so the car actually rotates about the nose.
+              pivotRear * t.drive.pivotTurn,
               clamp(
                 // Scaled by the speed lock fade: the blend is keyed on steer
                 // INPUT, so at speed it must shrink with the real wheel angle
@@ -527,6 +586,77 @@ export function createVehicle(
         if (thrust !== 0) {
           body.applyImpulse(
             { x: forward.x * thrust * DT, y: forward.y * thrust * DT, z: forward.z * thrust * DT },
+            true,
+          );
+        }
+      }
+
+      // 5d. Pivot turn impulses (only while engaged or releasing). Impulse
+      // form like the assists: nothing persists past the next world.step().
+      if (pivotE > 0) {
+        const angvel = body.angvel();
+        const iy = inertia.y;
+        if (pivotGate > 0) {
+          // Torque toward the target yaw rate, ONE-SIDED: it only ever adds
+          // rotation in the steer direction. A two-sided controller pulled an
+          // already-rotating car DOWN toward a small target at low strength
+          // (measured: pivotTurn 0.25 turned less than off). Positive angular
+          // velocity about +Y turns LEFT, so steer-direction yaw is -dir * w.
+          const target = t.drive.pivotYawRate * t.drive.pivotTurn * pivotE;
+          const steerYaw = -pivotDir * angvel.y;
+          if (steerYaw < target) {
+            body.applyTorqueImpulse(
+              {
+                x: 0,
+                y: -pivotDir * iy * (target - steerYaw) * (1 - Math.exp(-DT / PIVOT_TAU_YAW)),
+                z: 0,
+              },
+              true,
+            );
+          }
+          // Front axle speed cap: velocity of the front-axle point is linvel
+          // + w x r (r = half a wheelbase ahead of the centre of mass).
+          const fwdX = forward.x;
+          const fwdZ = forward.z;
+          const fLen = Math.hypot(fwdX, fwdZ);
+          if (fLen > 1e-6) {
+            const fx = fwdX / fLen;
+            const fz = fwdZ / fLen;
+            const half = t.wheels.halfWheelbase;
+            const rx = fx * half;
+            const rz = fz * half;
+            const lin = body.linvel();
+            const px = lin.x + angvel.y * rz;
+            const pz = lin.z - angvel.y * rx;
+            const speed = Math.hypot(px, pz);
+            const cap = t.drive.pivotFrontSpeedCap;
+            if (speed > cap) {
+              const k = 1 - cap / speed;
+              const ex = px * k;
+              const ez = pz * k;
+              // Split the excess along / across the car: an impulse at the
+              // front axle moves the point by J * (1/m + r^2/Iy) across the
+              // car but only J/m along it.
+              const alongX = ex * fx + ez * fz;
+              const acrossX = ex * -fz + ez * fx;
+              const mass = t.chassis.mass;
+              const massAcross = 1 / (1 / mass + (half * half) / iy);
+              const gain = (1 - Math.exp(-DT / PIVOT_TAU_CAP)) * pivotE * t.drive.pivotTurn;
+              const jAlong = -mass * alongX * gain;
+              const jAcross = -massAcross * acrossX * gain;
+              const com = body.worldCom();
+              body.applyImpulseAtPoint(
+                { x: jAlong * fx + jAcross * -fz, y: 0, z: jAlong * fz + jAcross * fx },
+                { x: com.x + rx, y: com.y, z: com.z + rz },
+                true,
+              );
+            }
+          }
+        } else {
+          // Releasing: damp the yaw over ~0.15 s, weighted by what is left of
+          // the engagement so it hands back to normal handling smoothly.
+          body.applyTorqueImpulse(
+            { x: 0, y: -iy * angvel.y * (1 - Math.exp(-DT / PIVOT_TAU_DAMP)) * pivotE, z: 0 },
             true,
           );
         }

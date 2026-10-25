@@ -281,6 +281,26 @@ export interface VehicleTuning {
      */
     powerOversteerRearSideFriction: number;
     /**
+     * Pivot-turn strength, 0..1. 0 = off: the whole mechanic is skipped and
+     * the physics is bit-for-bit what it is without it.
+     *
+     * A low-speed doughnut helper. When the car is below 12 m/s with full
+     * steer (>0.8) and throttle (>0.8) held for 0.3 s (or the handbrake held
+     * with full steer), an engagement filter fades in and the car is torqued
+     * toward `pivotYawRate` in the steer direction while its front axle is
+     * held under `pivotFrontSpeedCap`, so it rotates about the front axle
+     * instead of understeering out in a wide arc. On release the yaw rate is
+     * damped over ~0.15 s and the tail regrips in ~0.05 s.
+     *
+     * Added 2026-10-25 for the doughnut / pivot feel; default 0, first-guess,
+     * not measured.
+     */
+    pivotTurn: number;
+    /** Target yaw rate of an engaged pivot at full `pivotTurn`, rad/s. */
+    pivotYawRate: number;
+    /** Front-axle ground speed an engaged pivot holds the nose under, m/s. */
+    pivotFrontSpeedCap: number;
+    /**
      * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
      * each rear wheel, newtons, while `reversing` is true in
      * `src/physics/vehicle.ts`'s `tick`. A starting value, not swept — chosen
@@ -503,6 +523,9 @@ export function defaultTuning(): VehicleTuning {
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
       powerOversteerRearSideFriction: 0.024,
+      pivotTurn: 0,
+      pivotYawRate: 4,
+      pivotFrontSpeedCap: 3,
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
@@ -573,6 +596,9 @@ export const TUNING_RANGES: {
     handbrakeRearSideFriction: TuningRange;
     powerOversteerGain: TuningRange;
     powerOversteerRearSideFriction: TuningRange;
+    pivotTurn: TuningRange;
+    pivotYawRate: TuningRange;
+    pivotFrontSpeedCap: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
@@ -640,6 +666,9 @@ export const TUNING_RANGES: {
     handbrakeRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     powerOversteerGain: { min: 0, max: 2, step: 0.05 },
     powerOversteerRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
+    pivotTurn: { min: 0, max: 1, step: 0.05 },
+    pivotYawRate: { min: 0.5, max: 8, step: 0.1 },
+    pivotFrontSpeedCap: { min: 0.5, max: 10, step: 0.1 },
     reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.

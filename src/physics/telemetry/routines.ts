@@ -926,6 +926,141 @@ function makeHighSpeedPulseRoutine(): Routine {
 export const highSpeedPulseRoutine: Routine = makeHighSpeedPulseRoutine();
 
 /**
+ * `pivot-turn` (diagnostic only; deliberately NOT in `ROUTINES`). From
+ * standstill: a neutral settle, then 1 s of full steer + full throttle, then
+ * steer released with throttle still held, for 3 s more.
+ *
+ * Reports (headings are positive in the steer direction, integrated from the
+ * yaw rate so there is no wrap-around to unwind):
+ *   - `headingAtReleaseDeg`: turned during the 1 s hold;
+ *   - `headingAfter1sDeg`:  heading 1 s after release; `overshootDeg` is the
+ *     difference, i.e. how much further it carried on after the steer let go;
+ *   - `finalHeadingDeg`: at the end of the run;
+ *   - `timeTo15Sec`: release until forward speed (along the NEW heading)
+ *     first reaches 15 m/s, `Infinity` if it never does;
+ *   - `series`: ground speed and front-axle speed every 0.25 s.
+ * Front-axle speed is the speed of the point half a wheelbase ahead of the
+ * centre of mass (`linvel + w x r`).
+ */
+export interface PivotTurnSample {
+  readonly t: number;
+  readonly groundSpeedMs: number;
+  readonly frontAxleSpeedMs: number;
+  readonly forwardSpeedMs: number;
+  readonly yawRate: number;
+  readonly headingDeg: number;
+}
+
+export interface PivotTurnMetrics {
+  readonly headingAtReleaseDeg: number;
+  readonly headingAfter1sDeg: number;
+  readonly overshootDeg: number;
+  readonly finalHeadingDeg: number;
+  readonly timeTo15Sec: number;
+  readonly peakYawRate: number;
+  readonly series: readonly PivotTurnSample[];
+}
+
+const PIVOT_ROUTINE_HOLD_TICKS = Math.round(1 / DT);
+const PIVOT_ROUTINE_RUN_TICKS = Math.round(3 / DT);
+
+export function makePivotTurnRoutine(halfWheelbase = 1.55): {
+  readonly routine: Routine;
+  metrics(): PivotTurnMetrics;
+} {
+  const samples: PivotTurnSample[] = [];
+  let startTick = 0;
+  let heading = 0;
+
+  const routine: Routine = {
+    id: "pivot-turn",
+    label: "pivot turn from standstill",
+    setup() {
+      samples.length = 0;
+      startTick = SETTLE_TICKS;
+      heading = 0;
+    },
+    drive(tick) {
+      if (tick < startTick) return { steer: 0, throttle: 0, brake: 0, handbrake: false };
+      const k = tick - startTick;
+      if (k < PIVOT_ROUTINE_HOLD_TICKS)
+        return { steer: 1, throttle: 1, brake: 0, handbrake: false };
+      if (k < PIVOT_ROUTINE_HOLD_TICKS + PIVOT_ROUTINE_RUN_TICKS) {
+        return { steer: 0, throttle: 1, brake: 0, handbrake: false };
+      }
+      return null;
+    },
+    sample(tick, s) {
+      if (tick < startTick) return;
+      // Positive yaw rate about +Y is a LEFT turn; steer +1 is RIGHT, so the
+      // steer-direction heading integrates the negated rate.
+      heading += -s.angvel.y * DT * RAD_TO_DEG;
+      const q = s.rotation;
+      // Chassis forward is local -Z.
+      const fx = -2 * (q.x * q.z + q.w * q.y);
+      const fz = -(1 - 2 * (q.x * q.x + q.y * q.y));
+      const fl = Math.hypot(fx, fz) || 1;
+      const rx = (fx / fl) * halfWheelbase;
+      const rz = (fz / fl) * halfWheelbase;
+      const px = s.linvel.x + s.angvel.y * rz;
+      const pz = s.linvel.z - s.angvel.y * rx;
+      samples.push({
+        t: (tick - startTick) * DT,
+        groundSpeedMs: s.groundSpeedMs,
+        frontAxleSpeedMs: Math.hypot(px, pz),
+        forwardSpeedMs: s.forwardSpeedMs,
+        yawRate: -s.angvel.y,
+        headingDeg: heading,
+      });
+    },
+    evaluate() {
+      const m = metrics();
+      return {
+        id: "pivot-turn",
+        label: "pivot turn from standstill",
+        value: m.finalHeadingDeg,
+        unit: "deg",
+        target: "diagnostic (no pass band)",
+        pass: Number.isFinite(m.finalHeadingDeg),
+      };
+    },
+  };
+
+  function at(sec: number): PivotTurnSample | undefined {
+    return samples[Math.min(samples.length - 1, Math.round(sec / DT))];
+  }
+
+  function metrics(): PivotTurnMetrics {
+    const hold = PIVOT_ROUTINE_HOLD_TICKS * DT;
+    const atRelease = at(hold)?.headingDeg ?? 0;
+    const after1s = at(hold + 1)?.headingDeg ?? 0;
+    let timeTo15 = Number.POSITIVE_INFINITY;
+    for (const sm of samples) {
+      if (sm.t >= hold && sm.forwardSpeedMs >= 15) {
+        timeTo15 = sm.t - hold;
+        break;
+      }
+    }
+    const series: PivotTurnSample[] = [];
+    for (let sec = 0; sec <= hold + PIVOT_ROUTINE_RUN_TICKS * DT + 1e-9; sec += 0.25) {
+      const sm = at(sec);
+      if (sm) series.push(sm);
+    }
+    return {
+      headingAtReleaseDeg: atRelease,
+      headingAfter1sDeg: after1s,
+      overshootDeg: after1s - atRelease,
+      finalHeadingDeg: samples.length > 0 ? samples[samples.length - 1].headingDeg : 0,
+      timeTo15Sec: timeTo15,
+      peakYawRate: samples.reduce((mx, sm) => Math.max(mx, Math.abs(sm.yawRate)), 0),
+      series,
+    };
+  }
+
+  return { routine, metrics };
+}
+
+/**
  * The six scripted routines, in the fixed order every consumer (the Vitest
  * suite, the plan 02-09 browser panel, `runAllRoutines`) iterates. Written
  * inline here rather than assembled elsewhere, so the list a reader sees is

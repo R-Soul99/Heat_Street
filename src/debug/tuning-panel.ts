@@ -421,6 +421,18 @@ export function createTuningPanel(
     "powerOversteerRearSideFriction",
     TUNING_RANGES.drive.powerOversteerRearSideFriction,
   ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "pivotTurn", TUNING_RANGES.drive.pivotTurn).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "pivotYawRate", TUNING_RANGES.drive.pivotYawRate).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "pivotFrontSpeedCap",
+    TUNING_RANGES.drive.pivotFrontSpeedCap,
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
