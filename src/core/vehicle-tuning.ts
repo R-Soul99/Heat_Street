@@ -284,9 +284,10 @@ export interface VehicleTuning {
      * Pivot-turn strength, 0..1. 0 = off: the whole mechanic is skipped and
      * the physics is bit-for-bit what it is without it.
      *
-     * A low-speed doughnut helper. When the car is below 12 m/s with full
-     * steer (>0.8) and throttle (>0.8) held for 0.3 s (or the handbrake held
-     * with full steer), an engagement filter fades in and the car is torqued
+     * A low-speed doughnut helper. When full steer (>0.8) and throttle (>0.8)
+     * have been held for 0.3 s below 8 m/s (fully active under 5 m/s, fading
+     * linearly to zero at 8 m/s; the handbrake plays no part), an engagement
+     * filter fades in and the car is torqued
      * toward `pivotYawRate` in the steer direction while its front axle is
      * held under `pivotFrontSpeedCap`, so it rotates about the front axle
      * instead of understeering out in a wide arc. On release the yaw rate is

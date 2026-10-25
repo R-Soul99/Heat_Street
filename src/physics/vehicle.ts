@@ -57,8 +57,10 @@ const AXLE = { x: -1, y: 0, z: 0 };
 /** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
 const FLICK_YAW_ACCEL = 8;
 
-/** Pivot turn: ground speed (m/s) at and above which the helper never engages. */
-const PIVOT_MAX_SPEED_MS = 12;
+/** Pivot turn: fully active below this ground speed, m/s... */
+const PIVOT_FULL_SPEED_MS = 5;
+/** ...fading linearly to zero at this speed, and never engaged at or above it. */
+const PIVOT_ZERO_SPEED_MS = 8;
 /** Pivot turn: steer / throttle level that counts as "full". */
 const PIVOT_FULL_INPUT = 0.8;
 /** Pivot turn: seconds full steer + throttle must be held before it engages. */
@@ -507,25 +509,34 @@ export function createVehicle(
         1,
       );
       // Pivot-turn gate and filters (step 5d applies the impulses). Skipped
-      // entirely when off, so the physics is bit-for-bit unchanged. Below the
-      // gate the filters are held at exactly 0 (snapped, not decayed), so
-      // inputs that never open the gate are bit-for-bit unchanged too.
+      // entirely when off, so the physics is bit-for-bit unchanged. The gate
+      // is |steer| > 0.8 with throttle > 0.8 held for 0.3 s, scaled by a speed
+      // fade (1 below 5 m/s, linearly to 0 at 8 m/s). The handbrake is
+      // deliberately NOT part of it: it neither triggers the pivot, shifts its
+      // dwell timer, nor changes its strength. Below the gate the filters are
+      // held at exactly 0 (snapped, not decayed), so inputs that never open the
+      // gate are bit-for-bit unchanged too.
       let pivotGate = 0;
       if (t.drive.pivotTurn > 0) {
-        const lowSpeed = Math.hypot(lv.x, lv.z) < PIVOT_MAX_SPEED_MS;
+        const groundSpeed = Math.hypot(lv.x, lv.z);
+        const speedFade = clamp(
+          (PIVOT_ZERO_SPEED_MS - groundSpeed) / (PIVOT_ZERO_SPEED_MS - PIVOT_FULL_SPEED_MS),
+          0,
+          1,
+        );
         const fullSteer = Math.abs(frame.steer) > PIVOT_FULL_INPUT;
-        if (lowSpeed && fullSteer && frame.throttle > PIVOT_FULL_INPUT) {
+        if (speedFade > 0 && fullSteer && frame.throttle > PIVOT_FULL_INPUT) {
           pivotHold += DT;
         } else {
           pivotHold = 0;
         }
-        if (lowSpeed && fullSteer && (pivotHold >= PIVOT_HOLD_SEC || frame.handbrake)) {
-          pivotGate = 1;
+        if (pivotHold >= PIVOT_HOLD_SEC) {
+          pivotGate = speedFade;
           pivotDir = Math.sign(frame.steer);
         }
         pivotE +=
           (pivotGate - pivotE) *
-          (1 - Math.exp(-DT / (pivotGate > 0 ? PIVOT_TAU_IN : PIVOT_TAU_OUT)));
+          (1 - Math.exp(-DT / (pivotGate > pivotE ? PIVOT_TAU_IN : PIVOT_TAU_OUT)));
         pivotRear += (pivotGate - pivotRear) * (1 - Math.exp(-DT / PIVOT_TAU_REAR));
         if (pivotGate === 0) {
           if (pivotE < PIVOT_OFF_EPS) pivotE = 0;

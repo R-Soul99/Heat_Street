@@ -16,10 +16,14 @@ fails the band with `powerOversteerRearSideFriction = 0`.
 
 Fields: `pivotTurn`, `pivotYawRate` (4 rad/s), `pivotFrontSpeedCap` (3 m/s).
 
-- **Gate:** ground speed < 12 m/s AND |steer| > 0.8 AND (throttle > 0.8 held
-  continuously for 0.3 s OR handbrake held). Smoothed by first-order filters
-  (in 0.08 s, out 0.1 s), never a hard switch; the filters snap to exactly 0
-  below 0.002 so a gate that never opens leaves no residue.
+- **Gate:** |steer| > 0.8 AND throttle > 0.8, held continuously for 0.3 s
+  (dwell), scaled by a speed fade: fully active below 5 m/s, fading linearly
+  to zero at 8 m/s, never engaged at or above 8 m/s (revised 2026-10-25 from a
+  flat 12 m/s cut-off). The handbrake is NOT part of the gate: it does not
+  trigger the pivot, shift its dwell timer, or change its strength. Smoothed
+  by first-order filters (in 0.08 s, out 0.1 s), never a hard switch; the
+  filters snap to exactly 0 below 0.002 so a gate that never opens leaves no
+  residue.
 - **While engaged:** a one-sided torque impulse toward
   `pivotYawRate * pivotTurn * engagement` in the steer direction (it only adds
   rotation, never brakes it), and an `applyImpulseAtPoint` at the front axle
@@ -36,8 +40,23 @@ State fingerprints (FNV-style hash over every tick of position, rotation,
 linear and angular velocity) of five scripted drives were recorded before the
 pivot code existed and matched exactly afterwards with `pivotTurn = 0`.
 `tests/pivot-turn.test.ts` also asserts, tick by tick with `toEqual`:
-pivotTurn 0 ignores the other two fields; with pivotTurn 1, inputs above
-12 m/s, |steer| < 0.8, or no steer are identical to off.
+pivotTurn 0 ignores the other two fields; with pivotTurn 1, inputs at or
+above 8 m/s, |steer| < 0.8, or no steer are identical to off.
+
+Revision 2026-10-25 (handbrake removed, speed gate 5 to 8 m/s):
+- the handbrake with full steer never triggers it (throttle 0, 0.5, 0.8 and a
+  steady full steer all identical to off), and does not move the tick on which
+  the pivot starts to act (tick 18 either way, the 0.3 s dwell);
+- a test also asserts the gate code contains no reference to the handbrake;
+- speed fade, measured as the largest yaw-rate difference vs off with the
+  forward speed held constant: strong at 2 m/s, falling through 4.5 / 6.5 /
+  7.5 m/s, and exactly 0 (bit-identical) at 8 and 10 m/s;
+- hairpin regression: entered at 10 m/s with full lock and full throttle (both
+  instant lock and a 5/s keyboard ramp) over 6 s, pivotTurn 1 is bit-for-bit
+  identical to pivotTurn 0. At full throttle the car speeds up through the
+  hairpin (10 to 13 m/s), so it never drops under 8 m/s; the test asserts
+  that. The standstill sweep below is unchanged by the new gate: the car stays
+  under 5 m/s for the whole 1 s hold.
 
 ### Pivot routine sweep (`makePivotTurnRoutine`)
 
