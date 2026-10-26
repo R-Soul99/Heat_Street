@@ -302,6 +302,18 @@ export interface VehicleTuning {
     /** Front-axle ground speed an engaged pivot holds the nose under, m/s. */
     pivotFrontSpeedCap: number;
     /**
+     * Pivot engagement ramp: time constant of the engagement filter, seconds.
+     * Everything the pivot does (yaw torque, front-axle hold, tail loosening)
+     * follows a smoothstep of that filter, so it eases in with zero slope at
+     * the start and to a flat finish. Larger = a gentler, later takeover.
+     *
+     * [TUNED, user feel report 2026-10-26]: the pivot "activates quite
+     * suddenly". Was a fixed 0.08 s exponential driving a stiff controller
+     * (yaw acceleration jumped from 1.6 to 11 rad/s^2 within 0.15 s of the
+     * dwell ending). First-guess default, not measured beyond that trace.
+     */
+    pivotEngageSec: number;
+    /**
      * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
      * each rear wheel, newtons, while `reversing` is true in
      * `src/physics/vehicle.ts`'s `tick`. A starting value, not swept — chosen
@@ -527,6 +539,7 @@ export function defaultTuning(): VehicleTuning {
       pivotTurn: 0,
       pivotYawRate: 4,
       pivotFrontSpeedCap: 3,
+      pivotEngageSec: 0.25,
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
@@ -600,6 +613,7 @@ export const TUNING_RANGES: {
     pivotTurn: TuningRange;
     pivotYawRate: TuningRange;
     pivotFrontSpeedCap: TuningRange;
+    pivotEngageSec: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
@@ -670,6 +684,7 @@ export const TUNING_RANGES: {
     pivotTurn: { min: 0, max: 1, step: 0.05 },
     pivotYawRate: { min: 0.5, max: 8, step: 0.1 },
     pivotFrontSpeedCap: { min: 0.5, max: 10, step: 0.1 },
+    pivotEngageSec: { min: 0.02, max: 0.6, step: 0.01 },
     reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.

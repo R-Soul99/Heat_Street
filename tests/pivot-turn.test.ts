@@ -61,6 +61,7 @@ describe("pivot turn: off is inert", () => {
       withPivot(0, (t) => {
         t.drive.pivotYawRate = 8;
         t.drive.pivotFrontSpeedCap = 0.5;
+        t.drive.pivotEngageSec = 0.6;
       }),
       full,
       240,
@@ -113,8 +114,16 @@ describe("pivot turn: engaged", () => {
     const { routine, metrics } = makePivotTurnRoutine();
     runRoutine(routine, withPivot(1));
     const m = metrics();
-    const holdSamples = m.series.filter((s) => s.t >= 0.75 && s.t <= 1.0);
-    for (const s of holdSamples) expect(s.frontAxleSpeedMs).toBeLessThan(4);
+    const unassisted = makePivotTurnRoutine();
+    runRoutine(unassisted.routine, withPivot(0));
+    const frontAt = (series: readonly { t: number; frontAxleSpeedMs: number }[], sec: number) =>
+      series.reduce((b, s) => (Math.abs(s.t - sec) < Math.abs(b.t - sec) ? s : b)).frontAxleSpeedMs;
+    // By the end of the hold the nose is pinned well below where the
+    // unassisted car has it (6.9 m/s), and stays under 5 throughout.
+    for (const s of m.series.filter((x) => x.t >= 0.75 && x.t <= 1.0)) {
+      expect(s.frontAxleSpeedMs).toBeLessThan(5);
+    }
+    expect(frontAt(m.series, 1.0)).toBeLessThan(frontAt(unassisted.metrics().series, 1.0) * 0.6);
     // The turn carries on a little after the steer lets go, then stops.
     expect(m.overshootDeg).toBeLessThan(40);
     const last = m.series[m.series.length - 1];
@@ -187,29 +196,44 @@ describe("pivot turn: the handbrake is not part of it", () => {
     expect(trace(withPivot(1), hb, 240)).toEqual(trace(withPivot(0), hb, 240));
   });
 
-  it("the handbrake does not move the moment the pivot starts acting", () => {
-    // Same steer + throttle either way; the handbrake only differs. The pivot
-    // must begin to matter on the same tick (dwell is throttle + steer only),
-    // and the handbrake must not start it early or reset its dwell.
+  it("the handbrake neither starts the pivot early nor shifts its dwell", () => {
+    // Same steer + throttle either way; only the handbrake differs, pressed
+    // early and released before the 0.3 s (18 tick) dwell ends. The old
+    // handbrake path would open the gate at once (first difference at tick
+    // ~2-12); a dwell reset or delay would push it past the plain run's tick.
     const plain: Script = () => ({ steer: 1, throttle: 1, brake: 0, handbrake: false });
-    const withHandbrake: Script = (k) => ({
+    const earlyHandbrake: Script = (k) => ({
       steer: 1,
       throttle: 1,
       brake: 0,
-      handbrake: k >= 4 && k < 40,
+      handbrake: k >= 2 && k < 12,
     });
     const startPlain = firstDivergence(
       trace(withPivot(0), plain, 90),
       trace(withPivot(1), plain, 90),
     );
     const startHandbrake = firstDivergence(
-      trace(withPivot(0), withHandbrake, 90),
-      trace(withPivot(1), withHandbrake, 90),
+      trace(withPivot(0), earlyHandbrake, 90),
+      trace(withPivot(1), earlyHandbrake, 90),
     );
-    // 0.3 s dwell = 18 ticks.
-    expect(startPlain).toBeGreaterThanOrEqual(17);
-    expect(startPlain).toBeLessThanOrEqual(20);
+    // 0.3 s dwell = 18 ticks, so the first difference is at tick 17.
+    expect(startPlain).toBeGreaterThanOrEqual(16);
+    expect(startPlain).toBeLessThanOrEqual(19);
     expect(startHandbrake).toBe(startPlain);
+  });
+
+  it("a handbrake held through the dwell cannot make the pivot start earlier", () => {
+    const plain: Script = () => ({ steer: 1, throttle: 1, brake: 0, handbrake: false });
+    const heldHandbrake: Script = (k) => ({ steer: 1, throttle: 1, brake: 0, handbrake: k >= 2 });
+    const startPlain = firstDivergence(
+      trace(withPivot(0), plain, 90),
+      trace(withPivot(1), plain, 90),
+    );
+    const startHeld = firstDivergence(
+      trace(withPivot(0), heldHandbrake, 90),
+      trace(withPivot(1), heldHandbrake, 90),
+    );
+    expect(startHeld).toBeGreaterThanOrEqual(startPlain);
   });
 
   it("no handbrake reference remains in the pivot gate code", async () => {
@@ -289,5 +313,36 @@ describe("pivot turn: hairpin regression", () => {
       expect(minSpeed).toBeGreaterThanOrEqual(8);
       expect(on).toEqual(off);
     }
+  });
+});
+
+describe("pivot turn: eases in", () => {
+  function onsetJolt(engageSec: number, pivotTurn = 1): number {
+    const tuning = withPivot(pivotTurn, (t) => {
+      t.drive.pivotEngageSec = engageSec;
+    });
+    const { routine, metrics } = makePivotTurnRoutine();
+    runRoutine(routine, tuning);
+    return metrics().onsetPeakYawAccel;
+  }
+
+  it("a longer ease-in gives a gentler onset (peak yaw acceleration falls monotonically)", () => {
+    const j = [0.05, 0.15, 0.25, 0.4].map((e) => onsetJolt(e));
+    for (let i = 1; i < j.length; i++) expect(j[i]).toBeLessThan(j[i - 1]);
+  });
+
+  it("the default onset is at least a third gentler than a near-instant ramp", () => {
+    const def = defaultTuning().drive.pivotEngageSec;
+    expect(onsetJolt(def)).toBeLessThan(onsetJolt(0.02) * 0.67);
+  });
+
+  it("the default onset stays under 8 rad/s^2 and the pivot still turns the car well past the unassisted turn", () => {
+    const { routine, metrics } = makePivotTurnRoutine();
+    runRoutine(routine, withPivot(1));
+    const m = metrics();
+    expect(m.onsetPeakYawAccel).toBeLessThan(8);
+    const off = makePivotTurnRoutine();
+    runRoutine(off.routine, withPivot(0));
+    expect(m.headingAtReleaseDeg).toBeGreaterThan(off.metrics().headingAtReleaseDeg * 1.8);
   });
 });

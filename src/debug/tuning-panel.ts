@@ -436,6 +436,12 @@ export function createTuningPanel(
   addNumber(
     driveFolder,
     tuning.drive,
+    "pivotEngageSec",
+    TUNING_RANGES.drive.pivotEngageSec,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
     "reverseEngineForcePerRearWheel",
     TUNING_RANGES.drive.reverseEngineForcePerRearWheel,
   ).onChange(handlers.onApplyVehicle);

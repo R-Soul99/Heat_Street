@@ -68,6 +68,9 @@ describe("applyFeel", () => {
     expect(hi("looseness").wheels.rearSideFriction).toBeLessThan(
       lo("looseness").wheels.rearSideFriction,
     );
+    expect(hi("pivotEase").drive.pivotEngageSec).toBeGreaterThan(
+      lo("pivotEase").drive.pivotEngageSec,
+    );
     expect(hi("pivot").drive.pivotTurn).toBeGreaterThan(lo("pivot").drive.pivotTurn);
     expect(hi("flick").drive.flickGain).toBeGreaterThan(lo("flick").drive.flickGain);
   });

@@ -33,6 +33,8 @@ export interface FeelSettings {
   looseness: number;
   /** Pivot turn: low-speed doughnut helper. 0 = off (the default). */
   pivot: number;
+  /** Pivot ease-in: how gently the pivot takes over. Low = abrupt, high = gradual. Base 5. */
+  pivotEase: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
   flick: number;
 }
@@ -51,6 +53,7 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   topSpeed: 5,
   looseness: 5,
   pivot: 0,
+  pivotEase: 5,
   flick: 4,
 });
 
@@ -64,6 +67,7 @@ export const FEEL_CONTROLS: readonly { key: FeelKey; label: string }[] = Object.
   { key: "topSpeed", label: "Top speed" },
   { key: "looseness", label: "Rear looseness" },
   { key: "pivot", label: "Pivot turn (doughnuts)" },
+  { key: "pivotEase", label: "Pivot ease-in (high = smoother)" },
   { key: "flick", label: "Weight-shift flick" },
 ]);
 
@@ -102,6 +106,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     topSpeed: clamp(feel.topSpeed, FEEL_MIN, FEEL_MAX),
     looseness: clamp(feel.looseness, FEEL_MIN, FEEL_MAX),
     pivot: clamp(feel.pivot, FEEL_MIN, FEEL_MAX),
+    pivotEase: clamp(feel.pivotEase, FEEL_MIN, FEEL_MAX),
     flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
   };
 
@@ -126,6 +131,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     base.wheels.rearSideFriction * anchored(f.looseness, 1.07, 1, 0.8);
 
   target.drive.pivotTurn = lerp(0, 1, f.pivot / 10);
+  target.drive.pivotEngageSec = base.drive.pivotEngageSec * anchored(f.pivotEase, 0.2, 1, 1.8);
   target.drive.flickGain = lerp(0, 1, f.flick / 10);
 
   clampTuning(target);

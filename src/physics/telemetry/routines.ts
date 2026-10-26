@@ -958,6 +958,17 @@ export interface PivotTurnMetrics {
   readonly finalHeadingDeg: number;
   readonly timeTo15Sec: number;
   readonly peakYawRate: number;
+  /** Largest |d(yaw rate)/dt| during the hold, rad/s^2 - the "jolt" of the engage. */
+  readonly peakYawAccel: number;
+  /**
+   * Largest |d(yaw rate)/dt| between the end of the 0.3 s dwell and 0.8 s into
+   * the hold, rad/s^2: how hard the pivot kicks in. Lower = smoother.
+   */
+  readonly onsetPeakYawAccel: number;
+  /** Seconds for the yaw rate to climb from 10% to 90% of its peak during the hold. */
+  readonly riseSec: number;
+  /** Seconds from the start of the hold until the yaw rate first exceeds 0.2 rad/s. */
+  readonly onsetSec: number;
   readonly series: readonly PivotTurnSample[];
 }
 
@@ -1046,7 +1057,33 @@ export function makePivotTurnRoutine(halfWheelbase = 1.55): {
       const sm = at(sec);
       if (sm) series.push(sm);
     }
+    const holdSamples = samples.filter((sm) => sm.t <= hold);
+    let peakAccel = 0;
+    for (let i = 1; i < holdSamples.length; i++) {
+      peakAccel = Math.max(
+        peakAccel,
+        Math.abs((holdSamples[i].yawRate - holdSamples[i - 1].yawRate) / DT),
+      );
+    }
+    let onsetPeak = 0;
+    for (let i = 1; i < holdSamples.length; i++) {
+      if (holdSamples[i].t < 0.3 || holdSamples[i].t > 0.8) continue;
+      onsetPeak = Math.max(
+        onsetPeak,
+        Math.abs((holdSamples[i].yawRate - holdSamples[i - 1].yawRate) / DT),
+      );
+    }
+    const peakYaw = holdSamples.reduce((mx, sm) => Math.max(mx, Math.abs(sm.yawRate)), 0);
+    const cross = (frac: number): number => {
+      const hit = holdSamples.find((sm) => Math.abs(sm.yawRate) >= frac * peakYaw);
+      return hit ? hit.t : Number.NaN;
+    };
+    const onset = holdSamples.find((sm) => Math.abs(sm.yawRate) > 0.2);
     return {
+      peakYawAccel: peakAccel,
+      onsetPeakYawAccel: onsetPeak,
+      riseSec: cross(0.9) - cross(0.1),
+      onsetSec: onset ? onset.t : Number.POSITIVE_INFINITY,
       headingAtReleaseDeg: atRelease,
       headingAfter1sDeg: after1s,
       overshootDeg: after1s - atRelease,

@@ -66,7 +66,6 @@ const PIVOT_FULL_INPUT = 0.8;
 /** Pivot turn: seconds full steer + throttle must be held before it engages. */
 const PIVOT_HOLD_SEC = 0.3;
 /** Pivot turn: first-order time constants, seconds. */
-const PIVOT_TAU_IN = 0.08;
 const PIVOT_TAU_OUT = 0.1;
 const PIVOT_TAU_YAW = 0.1;
 const PIVOT_TAU_CAP = 0.08;
@@ -83,6 +82,11 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 /** Linear interpolation from `a` to `b` at fraction `t`. */
+/** Smoothstep of an already-0..1 value: zero slope at both ends. */
+function smoothstep01(x: number): number {
+  return x * x * (3 - 2 * x);
+}
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
@@ -536,8 +540,15 @@ export function createVehicle(
         }
         pivotE +=
           (pivotGate - pivotE) *
-          (1 - Math.exp(-DT / (pivotGate > pivotE ? PIVOT_TAU_IN : PIVOT_TAU_OUT)));
-        pivotRear += (pivotGate - pivotRear) * (1 - Math.exp(-DT / PIVOT_TAU_REAR));
+          (1 -
+            Math.exp(
+              -DT / (pivotGate > pivotE ? Math.max(0.01, t.drive.pivotEngageSec) : PIVOT_TAU_OUT),
+            ));
+        // The tail follows the SMOOTHED engagement on the way in (so it does not
+        // let go ahead of the yaw torque) and regrips on its own fast filter.
+        pivotRear +=
+          ((pivotGate > 0 ? smoothstep01(pivotE) : 0) - pivotRear) *
+          (1 - Math.exp(-DT / PIVOT_TAU_REAR));
         if (pivotGate === 0) {
           if (pivotE < PIVOT_OFF_EPS) pivotE = 0;
           if (pivotRear < PIVOT_OFF_EPS) pivotRear = 0;
@@ -613,7 +624,8 @@ export function createVehicle(
           // already-rotating car DOWN toward a small target at low strength
           // (measured: pivotTurn 0.25 turned less than off). Positive angular
           // velocity about +Y turns LEFT, so steer-direction yaw is -dir * w.
-          const target = t.drive.pivotYawRate * t.drive.pivotTurn * pivotE;
+          const pivotS = smoothstep01(pivotE);
+          const target = t.drive.pivotYawRate * t.drive.pivotTurn * pivotS;
           const steerYaw = -pivotDir * angvel.y;
           if (steerYaw < target) {
             body.applyTorqueImpulse(
@@ -652,7 +664,7 @@ export function createVehicle(
               const acrossX = ex * -fz + ez * fx;
               const mass = t.chassis.mass;
               const massAcross = 1 / (1 / mass + (half * half) / iy);
-              const gain = (1 - Math.exp(-DT / PIVOT_TAU_CAP)) * pivotE * t.drive.pivotTurn;
+              const gain = (1 - Math.exp(-DT / PIVOT_TAU_CAP)) * pivotS * t.drive.pivotTurn;
               const jAlong = -mass * alongX * gain;
               const jAcross = -massAcross * acrossX * gain;
               const com = body.worldCom();
