@@ -33,7 +33,7 @@ export interface FeelSettings {
   looseness: number;
   /** Pivot turn: low-speed doughnut helper. 0 = off (the default). */
   pivot: number;
-  /** Pivot ease-in: how gently the pivot takes over. Low = abrupt, high = gradual. Base 5. */
+  /** Pivot ease-in: how gently the pivot takes over. Low = abrupt, high = gradual. Default 10. */
   pivotEase: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
   flick: number;
@@ -53,7 +53,8 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   topSpeed: 5,
   looseness: 5,
   pivot: 0,
-  pivotEase: 5,
+  // 10 = the gentlest ramp (0.45 s): chosen by the user after trying 5 (0.25 s).
+  pivotEase: 10,
   flick: 4,
 });
 

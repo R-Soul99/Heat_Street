@@ -70,7 +70,9 @@ stiff yaw controller. Now:
   torque target, front-axle hold, tail loosening on the way in) follows a
   smoothstep of it, so the takeover starts with zero slope and finishes flat.
 - Releasing is unchanged (filter 0.1 s, yaw damping 0.15 s, tail regrip 0.05 s).
-- `?feel` has a "Pivot ease-in (high = smoother)" slider (5 = 0.25 s).
+- `?feel` has a "Pivot ease-in (high = smoother)" slider. The player chose 10
+  (0.45 s) after trying 5 (0.25 s) and it is now the `?feel` default; the plain
+  tuning default `pivotEngageSec` stays 0.25 s.
 
 Onset jolt = largest yaw acceleration between the end of the dwell and 0.8 s
 (`onsetPeakYawAccel` from the pivot routine), full strength:
@@ -79,9 +81,9 @@ Onset jolt = largest yaw acceleration between the end of the dwell and 0.8 s
 |---|---|---|---|---|
 | 0 | 0.05 s | 18.0 | 122 deg | 3.43 |
 | 2.5 | 0.15 s | 9.6 | 105 deg | 3.35 |
-| **5 (default)** | **0.25 s** | **6.5** | **88 deg** | **3.15** |
+| 5 (code default) | 0.25 s | 6.5 | 88 deg | 3.15 |
 | 7.5 | 0.35 s | 4.7 | 75 deg | 2.84 |
-| 10 | 0.45 s | 3.8 | 65 deg | 2.50 |
+| **10 (`?feel` default)** | **0.45 s** | **3.8** | **65 deg** | **2.50** |
 
 The trade-off is real: a gentler takeover turns less in a fixed 1 s hold
 (88 deg at the default against 117 deg when it was abrupt). Raise
