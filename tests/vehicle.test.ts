@@ -1,6 +1,6 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
-import { REVERSE_TOP_MS, engineForceScale } from "../src/core/drivetrain";
+import { engineForceScale, REVERSE_TOP_MS } from "../src/core/drivetrain";
 import { NEUTRAL } from "../src/core/input-tape";
 import { DT } from "../src/core/sim-clock";
 import {

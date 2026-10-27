@@ -112,9 +112,13 @@ describe("vehicle-recovery: highSpeedPulseRoutine (260920-j4d symptom 2)", () =>
    * low-angle drift equilibrium once perturbed, rather than an under-damped
    * oscillation as `<root_cause>` Fact 4 hypothesized.
    */
-  it("anti-trivially-green companion: the shipped rearSideFriction (0.2) reports Number.POSITIVE_INFINITY (proves the gate can fail, and is not a routine defect -- see doc comment above)", () => {
+  it("anti-trivially-green companion: a too-loose rear (rearSideFriction 0.1) reports Number.POSITIVE_INFINITY (proves the gate can fail, and is not a routine defect -- see doc comment above)", () => {
+    // Re-pointed 2026-10-27. The old premise (shipped 0.2 never settles) held
+    // only because the telemetry strip was 120 m wide and the car drove off its
+    // side; with the strip widened, 0.2 measures 4.3 deg and 0.15 measures
+    // 12.1 deg, while 0.1 genuinely never settles within the 5 s window.
     const tuning = defaultTuning();
-    tuning.wheels.rearSideFriction = 0.2;
+    tuning.wheels.rearSideFriction = 0.1;
     const result = runRoutine(highSpeedPulseRoutine, tuning);
 
     expect(result.value).toBe(Number.POSITIVE_INFINITY);

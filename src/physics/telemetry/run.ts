@@ -43,12 +43,18 @@ const MAX_TICKS = 1800;
 const SPAWN = { x: 0, y: 1, z: 0 };
 
 /**
- * Ground half-extents for `buildTelemetryScene`. `x: 60, y: 1, z: 600` is
+ * Ground half-extents for `buildTelemetryScene`. `x: 600, y: 1, z: 600` is
  * long enough for a 0-60 run, a 60-0 braking run and a slalom at highway
  * speed without running off the end, and thick enough (>= 1 m) that a
  * 120 mph chassis's CCD (Pitfall 6) never tunnels through it.
+ *
+ * x was 60 until 2026-10-27: at ~46 m/s the 90 mph steer-pulse routine drifts
+ * a few degrees off heading and drove off the SIDE of a 120 m strip within its
+ * 5 s settle, so `highSpeedPulse` reported Infinity (airborne) although slip
+ * never exceeded 2.2 deg. Flat ground, so this changes no handling. (Same fix
+ * as feel-testing e9b697f.)
  */
-const GROUND_HALF_EXTENTS = { x: 60, y: 1, z: 600 };
+const GROUND_HALF_EXTENTS = { x: 600, y: 1, z: 600 };
 
 /**
  * Build a flat ground cuboid for a telemetry world, top surface at world

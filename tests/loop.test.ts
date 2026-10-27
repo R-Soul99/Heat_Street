@@ -3,9 +3,9 @@ import type { FrameStats } from "../src/core/frame-stats";
 import type { InputSource } from "../src/core/input-tape";
 import { NEUTRAL } from "../src/core/input-tape";
 import { MAX_STEPS_PER_FRAME } from "../src/core/sim-clock";
+import { createRaceCommandLatch } from "../src/input/race-commands";
 import type { LoopDeps, LoopScheduler } from "../src/loop";
 import { startLoop } from "../src/loop";
-import { createRaceCommandLatch } from "../src/input/race-commands";
 import { createDebugScene } from "../src/physics/debug-scene";
 import { TransformCache } from "../src/physics/transform-cache";
 import { createWorld } from "../src/physics/world";
@@ -214,7 +214,15 @@ describe("startLoop — fixed-tick retry commands", () => {
     scheduler.runFrame((2 * 1000) / 60);
 
     expect(commandTicks).toEqual([0]);
-    expect(calls).toEqual(["onTickBegin", "restart", "applyInput", "world.step", "onTickBegin", "applyInput", "world.step"]);
+    expect(calls).toEqual([
+      "onTickBegin",
+      "restart",
+      "applyInput",
+      "world.step",
+      "onTickBegin",
+      "applyInput",
+      "world.step",
+    ]);
     expect(sceneDeps.world).toBe(originalWorld);
     expect(handle.clock.tick).toBe(2);
     expect(scheduler.pendingCount).toBe(1);

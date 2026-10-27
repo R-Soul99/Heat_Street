@@ -33,7 +33,7 @@ function trace(tuning: VehicleTuning, script: Script, ticks: number, initialSpee
   return out;
 }
 
-const full = (k: number): InputFrame => ({ steer: 1, throttle: 1, brake: 0, handbrake: false });
+const full = (): InputFrame => ({ steer: 1, throttle: 1, brake: 0, handbrake: false });
 const fullHandbrake = (k: number): InputFrame => ({
   steer: -1,
   throttle: 0.3,

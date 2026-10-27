@@ -4,7 +4,7 @@ import { DT } from "../src/core/sim-clock";
 import type { VehicleTuning } from "../src/core/vehicle-tuning";
 import { defaultTuning } from "../src/core/vehicle-tuning";
 import type { Routine } from "../src/physics/telemetry/routines";
-import { handbrakeRoutine, ROUTINES } from "../src/physics/telemetry/routines";
+import { handbrakeRoutine, ROUTINES, TELEMETRY_TARGETS } from "../src/physics/telemetry/routines";
 import { buildTelemetryScene, runAllRoutines, runRoutine } from "../src/physics/telemetry/run";
 import { createVehicle, sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
@@ -108,22 +108,22 @@ describe("vehicle-telemetry: shared harness", () => {
 });
 
 describe("vehicle-telemetry: accel (VEH-01, D-14)", () => {
-  it("accel: reaches 60 mph inside the 6.0-7.0 s target at default tuning", () => {
+  it("accel: reaches 60 mph inside the TELEMETRY_TARGETS band at default tuning", () => {
     const result = runRoutine(findRoutine("accel"), defaultTuning());
 
     expect(result.pass).toBe(true);
-    expect(result.value).toBeGreaterThanOrEqual(6.0);
-    expect(result.value).toBeLessThanOrEqual(7.0);
+    expect(result.value).toBeGreaterThanOrEqual(TELEMETRY_TARGETS.accel.min);
+    expect(result.value).toBeLessThanOrEqual(TELEMETRY_TARGETS.accel.max);
   });
 });
 
 describe("vehicle-telemetry: brake (VEH-01, D-14, Pitfall 7)", () => {
-  it("brake: 60-0 mph stopping distance inside the 110-135 ft target at default tuning", () => {
+  it("brake: 60-0 mph stopping distance inside the TELEMETRY_TARGETS band at default tuning", () => {
     const result = runRoutine(findRoutine("brake"), defaultTuning());
 
     expect(result.pass).toBe(true);
-    expect(result.value).toBeGreaterThanOrEqual(110);
-    expect(result.value).toBeLessThanOrEqual(135);
+    expect(result.value).toBeGreaterThanOrEqual(TELEMETRY_TARGETS.brake.min);
+    expect(result.value).toBeLessThanOrEqual(TELEMETRY_TARGETS.brake.max);
   });
 });
 
@@ -155,12 +155,12 @@ describe("vehicle-telemetry: reproducible (VEH-03 regression, applied to the tel
 });
 
 describe("vehicle-telemetry: skidpad (VEH-01, D-14)", () => {
-  it("skidpad: steady-state lateral g inside the 0.75-1.05 g target at default tuning", () => {
+  it("skidpad: steady-state lateral g inside the TELEMETRY_TARGETS band at default tuning", () => {
     const result = runRoutine(findRoutine("skidpad"), defaultTuning());
 
     expect(result.pass).toBe(true);
-    expect(result.value).toBeGreaterThanOrEqual(0.75);
-    expect(result.value).toBeLessThanOrEqual(1.05);
+    expect(result.value).toBeGreaterThanOrEqual(TELEMETRY_TARGETS.skidpad.min);
+    expect(result.value).toBeLessThanOrEqual(TELEMETRY_TARGETS.skidpad.max);
   });
 
   it("skidpad anti-trivially-green: frictionSlip 10.5 fails the band (proves the routine measures grip, not a constant)", () => {
@@ -171,14 +171,16 @@ describe("vehicle-telemetry: skidpad (VEH-01, D-14)", () => {
     // same value instead drives the positive-feedback body-roll assist past
     // its cutoff and the chassis flips (tilt -> 180 deg, contacts -> 0,
     // angvel.y -> 0), which reads as ~0 g — still a clear FAIL of the
-    // 0.75-1.05 g band either way, proving this routine is not returning a
+    // skidpad band either way, proving this routine is not returning a
     // constant.
     const tuning = defaultTuning();
     tuning.wheels.frictionSlip = 10.5;
     const result = runRoutine(findRoutine("skidpad"), tuning);
 
     expect(result.pass).toBe(false);
-    expect(result.value < 0.75 || result.value > 1.05).toBe(true);
+    expect(
+      result.value < TELEMETRY_TARGETS.skidpad.min || result.value > TELEMETRY_TARGETS.skidpad.max,
+    ).toBe(true);
   });
 });
 
@@ -376,7 +378,10 @@ describe("vehicle-telemetry: roll assist stability (D-06, SC3, Open Question 3)"
       const wrapped = wrapWithTiltTracking(findRoutine(id));
       runRoutine(wrapped.routine, defaultTuning());
 
-      expect(wrapped.maxTiltDeg()).toBeLessThan(15);
+      // The ramp routine is a scripted airborne launch with its own, looser
+      // tilt band (it is the one routine that is meant to leave the ground).
+      const limit = id === "ramp" ? TELEMETRY_TARGETS.ramp.maxTiltDeg : 15;
+      expect(wrapped.maxTiltDeg()).toBeLessThan(limit);
     },
   );
 

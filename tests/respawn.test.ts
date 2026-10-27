@@ -16,7 +16,13 @@ const collision = parseMapCollision(collisionRaw, graph.areaId, "juliette-ga.col
 describe("MapScene.resetVehicle", () => {
   it("resets the existing body upright at the authored heading with zero velocity", () => {
     const world = createWorld();
-    const scene = createMapScene(world, graph, collision, defaultTuning(), defaultSurfaceProfiles());
+    const scene = createMapScene(
+      world,
+      graph,
+      collision,
+      defaultTuning(),
+      defaultSurfaceProfiles(),
+    );
     const body = scene.vehicle.body;
     const originalBody = body;
     const pose = { x: 12, y: 4, z: -8, headingRad: Math.PI / 3 };
@@ -46,7 +52,13 @@ describe("MapScene.resetVehicle", () => {
 
   it("rejects non-finite reset poses at the physics boundary", () => {
     const world = createWorld();
-    const scene = createMapScene(world, graph, collision, defaultTuning(), defaultSurfaceProfiles());
+    const scene = createMapScene(
+      world,
+      graph,
+      collision,
+      defaultTuning(),
+      defaultSurfaceProfiles(),
+    );
 
     expect(() => scene.resetVehicle({ x: Number.NaN, y: 0, z: 0, headingRad: 0 })).toThrow(
       "finite",

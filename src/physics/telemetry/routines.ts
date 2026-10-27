@@ -92,9 +92,14 @@ const SETTLE_TICKS = 40;
  * the exact same target string for a given routine.
  */
 export const TELEMETRY_TARGETS = {
-  accel: { min: 6.0, max: 7.0, unit: "s", label: "6.0-7.0 s" },
-  brake: { min: 110, max: 135, unit: "ft", label: "110-135 ft" },
-  skidpad: { min: 0.75, max: 1.05, unit: "g", label: "0.75-1.05 g" },
+  // Re-baselined 2026-10-27 to the five-gear drivetrain and the grip the user
+  // approved as the feel base (tag drive-feel-base-2026-10-21; measured 3.70 s,
+  // 107.7 ft, 1.49 g). Deliberately wide, about +-20-25%: the feel is still
+  // being tuned, and these gates exist to catch a broken car, not a small
+  // retune. Change them here only; the tests read this table.
+  accel: { min: 3.0, max: 4.5, unit: "s", label: "3.0-4.5 s" },
+  brake: { min: 90, max: 125, unit: "ft", label: "90-125 ft" },
+  skidpad: { min: 1.25, max: 1.75, unit: "g", label: "1.25-1.75 g" },
   slalom: {
     maxSlipDeg: 90,
     recoverBelowDeg: 5,
@@ -224,7 +229,7 @@ function makeBrakeRoutine(): Routine {
       // into braking (this fires AFTER that tick's `vehicle.tick` +
       // `world.step()`), so the measured distance is a few tenths of a
       // metre short of the true start point — negligible against the
-      // 110-135 ft (~33.5-41.1 m) target band.
+      // 90-125 ft (~27.4-38.1 m) target band.
       if (!("brakeStartZ" in acc)) {
         acc.brakeStartZ = s.position.z;
       }
@@ -251,7 +256,7 @@ function makeBrakeRoutine(): Routine {
  * `sample` accumulates steady-state lateral g as
  * `|angvel.y * groundSpeedMs| / 9.81`, averaged over the LAST 2 s of the 4 s
  * hold only — the first 2 s are the transient corner-entry and are discarded.
- * Target `0.75-1.05 g`.
+ * Target `1.25-1.75 g`.
  *
  * `[MEASURED]` (02-RESEARCH.md "the frictionSlip saturation cliff"):
  * `frictionSlip` 10.5 and 1000 both measured 3.48-3.49 g and are IDENTICAL —
