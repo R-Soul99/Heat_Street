@@ -442,6 +442,15 @@ export function createTuningPanel(
   addNumber(
     driveFolder,
     tuning.drive,
+    "rearGripRecoverySec",
+    TUNING_RANGES.drive.rearGripRecoverySec,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "slideSurge", TUNING_RANGES.drive.slideSurge).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(
+    driveFolder,
+    tuning.drive,
     "reverseEngineForcePerRearWheel",
     TUNING_RANGES.drive.reverseEngineForcePerRearWheel,
   ).onChange(handlers.onApplyVehicle);

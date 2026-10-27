@@ -216,8 +216,8 @@ describe("pivot turn: the handbrake is not part of it", () => {
       trace(withPivot(0), earlyHandbrake, 90),
       trace(withPivot(1), earlyHandbrake, 90),
     );
-    // 0.3 s dwell = 18 ticks, so the first difference is at tick 17.
-    expect(startPlain).toBeGreaterThanOrEqual(16);
+    // The gate now builds up over 0.3 s (18 ticks) rather than switching on
+    // after it; the handbrake must not change when the first difference shows.
     expect(startPlain).toBeLessThanOrEqual(19);
     expect(startHandbrake).toBe(startPlain);
   });
@@ -240,7 +240,7 @@ describe("pivot turn: the handbrake is not part of it", () => {
     const src = (await import("../src/physics/vehicle.ts?raw")).default as string;
     const gate = src.slice(
       src.indexOf("// Pivot-turn gate and filters"),
-      src.indexOf("const rearSfs = frame.handbrake"),
+      src.indexOf("const rearSfsTarget = frame.handbrake"),
     );
     expect(gate.length).toBeGreaterThan(200);
     // The comment names the handbrake to say it is excluded; no code may read it.
@@ -248,7 +248,7 @@ describe("pivot turn: the handbrake is not part of it", () => {
   });
 });
 
-describe("pivot turn: speed gate (full below 5 m/s, zero at 8 m/s)", () => {
+describe("pivot turn: speed gate (full below 5 m/s, zero at 12 m/s)", () => {
   /** Max |yaw-rate difference| between pivot on and off with forward speed held constant. */
   function pivotEffect(speed: number): number {
     const run = (pivot: number): number[] => {
@@ -276,19 +276,19 @@ describe("pivot turn: speed gate (full below 5 m/s, zero at 8 m/s)", () => {
     return Math.max(...on.map((y, i) => Math.abs(y - off[i])));
   }
 
-  it("is fully active below 5 m/s, fades between 5 and 8, and is exactly inert at 8 m/s and above", () => {
+  it("is fully active below 5 m/s, fades between 5 and 12, and is exactly inert at 12 m/s and above", () => {
     const e2 = pivotEffect(2);
     const e4 = pivotEffect(4.5);
-    const e6 = pivotEffect(6.5);
-    const e7 = pivotEffect(7.5);
+    const e6 = pivotEffect(7);
+    const e7 = pivotEffect(10);
     expect(e2).toBeGreaterThan(0.3);
     expect(e6).toBeGreaterThan(0);
     // Monotonic fade across the band.
     expect(e4).toBeGreaterThan(e6);
     expect(e6).toBeGreaterThan(e7);
     // Inert at the fade end and beyond: identical, not merely small.
-    expect(pivotEffect(8)).toBe(0);
-    expect(pivotEffect(10)).toBe(0);
+    expect(pivotEffect(12)).toBe(0);
+    expect(pivotEffect(15)).toBe(0);
   });
 });
 
@@ -302,15 +302,15 @@ describe("pivot turn: hairpin regression", () => {
         brake: 0,
         handbrake: false,
       });
-      const off = trace(withPivot(0), hairpin, 360, 10);
-      const on = trace(withPivot(1), hairpin, 360, 10);
+      const off = trace(withPivot(0), hairpin, 360, 16);
+      const on = trace(withPivot(1), hairpin, 360, 16);
       // Guard: the car really does stay in the inert band the whole way round
-      // (full throttle drives it up from 10 m/s, it never drops under 8).
+      // (full throttle drives it up from 16 m/s, it never drops under 12).
       let minSpeed = Number.POSITIVE_INFINITY;
       for (let i = 0; i < off.length; i += 13) {
         minSpeed = Math.min(minSpeed, Math.hypot(off[i + 7], off[i + 9]));
       }
-      expect(minSpeed).toBeGreaterThanOrEqual(8);
+      expect(minSpeed).toBeGreaterThanOrEqual(12);
       expect(on).toEqual(off);
     }
   });

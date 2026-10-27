@@ -1067,7 +1067,7 @@ export function makePivotTurnRoutine(halfWheelbase = 1.55): {
     }
     let onsetPeak = 0;
     for (let i = 1; i < holdSamples.length; i++) {
-      if (holdSamples[i].t < 0.3 || holdSamples[i].t > 0.8) continue;
+      if (holdSamples[i].t > 0.8) continue;
       onsetPeak = Math.max(
         onsetPeak,
         Math.abs((holdSamples[i].yawRate - holdSamples[i - 1].yawRate) / DT),

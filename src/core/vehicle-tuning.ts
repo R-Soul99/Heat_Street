@@ -314,6 +314,29 @@ export interface VehicleTuning {
      */
     pivotEngageSec: number;
     /**
+     * Time constant, seconds, for the rear side friction to return to its
+     * normal value after a slide (handbrake, power-oversteer or flick). The
+     * rear still loosens fast (0.05 s); only the regrip is slowed, so a slide
+     * ends as a gradual regrip instead of one tick of side impulse that
+     * deletes the sideways speed as friction. 0 = off (instant, as before).
+     *
+     * Added 2026-10-27 for the slide-exit feel; default 0, first-guess, not
+     * measured.
+     */
+    rearGripRecoverySec: number;
+    /**
+     * Slide-exit surge, 0..1. While the car is sliding (slip about 8 to 26
+     * degrees, above ~4 m/s) this fraction of the rear engine force is applied
+     * again as a chassis impulse along the heading, because the rear tyres'
+     * friction circle is otherwise spent cancelling sideways speed and the
+     * throttle cannot pull the car out. Gated on slip, so straight-line
+     * acceleration is unchanged. 0 = off.
+     *
+     * Added 2026-10-27 for the slide-exit feel; default 0, first-guess, not
+     * measured.
+     */
+    slideSurge: number;
+    /**
      * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
      * each rear wheel, newtons, while `reversing` is true in
      * `src/physics/vehicle.ts`'s `tick`. A starting value, not swept — chosen
@@ -540,6 +563,8 @@ export function defaultTuning(): VehicleTuning {
       pivotYawRate: 4,
       pivotFrontSpeedCap: 3,
       pivotEngageSec: 0.25,
+      rearGripRecoverySec: 0,
+      slideSurge: 0,
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
@@ -614,6 +639,8 @@ export const TUNING_RANGES: {
     pivotYawRate: TuningRange;
     pivotFrontSpeedCap: TuningRange;
     pivotEngageSec: TuningRange;
+    rearGripRecoverySec: TuningRange;
+    slideSurge: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
@@ -685,6 +712,8 @@ export const TUNING_RANGES: {
     pivotYawRate: { min: 0.5, max: 8, step: 0.1 },
     pivotFrontSpeedCap: { min: 0.5, max: 10, step: 0.1 },
     pivotEngageSec: { min: 0.02, max: 0.6, step: 0.01 },
+    rearGripRecoverySec: { min: 0, max: 0.8, step: 0.01 },
+    slideSurge: { min: 0, max: 1, step: 0.05 },
     reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.

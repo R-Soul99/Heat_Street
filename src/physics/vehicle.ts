@@ -59,12 +59,14 @@ const FLICK_YAW_ACCEL = 8;
 
 /** Pivot turn: fully active below this ground speed, m/s... */
 const PIVOT_FULL_SPEED_MS = 5;
-/** ...fading linearly to zero at this speed, and never engaged at or above it. */
-const PIVOT_ZERO_SPEED_MS = 8;
+/** ...fading smoothly to zero at this speed, and never engaged at or above it. */
+const PIVOT_ZERO_SPEED_MS = 12;
 /** Pivot turn: steer / throttle level that counts as "full". */
 const PIVOT_FULL_INPUT = 0.8;
-/** Pivot turn: seconds full steer + throttle must be held before it engages. */
+/** Pivot turn: seconds of full steer + throttle over which the engagement builds up. */
 const PIVOT_HOLD_SEC = 0.3;
+/** Pivot turn: the build-up drains this many times faster than it fills when inputs ease off. */
+const PIVOT_HOLD_DRAIN = 3;
 /** Pivot turn: first-order time constants, seconds. */
 const PIVOT_TAU_OUT = 0.1;
 const PIVOT_TAU_YAW = 0.1;
@@ -73,6 +75,8 @@ const PIVOT_TAU_DAMP = 0.15;
 const PIVOT_TAU_REAR = 0.05;
 /** Below this engagement the pivot is snapped fully off (first-order filters never reach 0). */
 const PIVOT_OFF_EPS = 0.002;
+/** Rear grip loosens with this time constant (fast), however slowly it recovers. */
+const REAR_GRIP_LOOSEN_TAU = 0.05;
 
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
@@ -324,6 +328,7 @@ export function createVehicle(
     pivotE = 0;
     pivotRear = 0;
     pivotDir = 0;
+    rearSfsSmoothed = -1;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -336,6 +341,8 @@ export function createVehicle(
   let pivotE = 0;
   let pivotRear = 0;
   let pivotDir = 0;
+  // Smoothed rear side friction (see step 4); negative = not initialised yet.
+  let rearSfsSmoothed = -1;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
@@ -523,20 +530,25 @@ export function createVehicle(
       let pivotGate = 0;
       if (t.drive.pivotTurn > 0) {
         const groundSpeed = Math.hypot(lv.x, lv.z);
-        const speedFade = clamp(
-          (PIVOT_ZERO_SPEED_MS - groundSpeed) / (PIVOT_ZERO_SPEED_MS - PIVOT_FULL_SPEED_MS),
-          0,
-          1,
+        const speedFade = smoothstep01(
+          clamp(
+            (PIVOT_ZERO_SPEED_MS - groundSpeed) / (PIVOT_ZERO_SPEED_MS - PIVOT_FULL_SPEED_MS),
+            0,
+            1,
+          ),
         );
         const fullSteer = Math.abs(frame.steer) > PIVOT_FULL_INPUT;
         if (speedFade > 0 && fullSteer && frame.throttle > PIVOT_FULL_INPUT) {
-          pivotHold += DT;
-        } else {
-          pivotHold = 0;
-        }
-        if (pivotHold >= PIVOT_HOLD_SEC) {
-          pivotGate = speedFade;
+          pivotHold = Math.min(PIVOT_HOLD_SEC, pivotHold + DT);
           pivotDir = Math.sign(frame.steer);
+        } else {
+          pivotHold = Math.max(0, pivotHold - DT * PIVOT_HOLD_DRAIN);
+        }
+        // Continuous, not a switch: the gate grows with how long the inputs
+        // have been held and with how slow the car is, so the pivot builds up
+        // as the car crawls rather than snapping on at one threshold.
+        if (pivotHold > 0) {
+          pivotGate = speedFade * smoothstep01(pivotHold / PIVOT_HOLD_SEC);
         }
         pivotE +=
           (pivotGate - pivotE) *
@@ -559,7 +571,7 @@ export function createVehicle(
         pivotRear = 0;
         pivotDir = 0;
       }
-      const rearSfs = frame.handbrake
+      const rearSfsTarget = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
             t.wheels.rearSideFriction,
@@ -585,6 +597,20 @@ export function createVehicle(
               ),
             ),
           );
+      // Rear grip loosens fast but returns slowly, so a slide ends as a
+      // gradual regrip instead of one tick of side impulse that deletes the
+      // sideways speed as friction (and with it the forward speed). Zero
+      // recovery time = off: the target is used as-is, bit-for-bit.
+      let rearSfs = rearSfsTarget;
+      if (t.drive.rearGripRecoverySec > 0) {
+        if (rearSfsSmoothed < 0) rearSfsSmoothed = rearSfsTarget;
+        const tau =
+          rearSfsTarget < rearSfsSmoothed ? REAR_GRIP_LOOSEN_TAU : t.drive.rearGripRecoverySec;
+        rearSfsSmoothed += (rearSfsTarget - rearSfsSmoothed) * (1 - Math.exp(-DT / tau));
+        rearSfs = rearSfsSmoothed;
+      } else {
+        rearSfsSmoothed = -1;
+      }
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 
@@ -680,6 +706,30 @@ export function createVehicle(
           // the engagement so it hands back to normal handling smoothly.
           body.applyTorqueImpulse(
             { x: 0, y: -iy * angvel.y * (1 - Math.exp(-DT / PIVOT_TAU_DAMP)) * pivotE, z: 0 },
+            true,
+          );
+        }
+      }
+
+      // 5e. Slide-exit surge: while the car is genuinely sliding sideways the
+      // rear tyres spend their friction circle cancelling lateral speed, so
+      // little of the engine force reaches the road. Add a share of it back as
+      // a chassis impulse along the heading, gated on slip angle (about 8 to 26
+      // degrees) and speed so straight-line acceleration is untouched. Reuses
+      // the negative-is-forward `engineForce` of step 2, so it vanishes under
+      // brake and at the speed limiter.
+      if (t.drive.slideSurge > 0 && engineForce < 0) {
+        const right = rotateVec(q, 1, 0, 0);
+        const lat = linvel.x * right.x + linvel.y * right.y + linvel.z * right.z;
+        const slip = Math.atan2(Math.abs(lat), Math.max(forwardSpeedMs, 0.1));
+        const gate =
+          smoothstep01(clamp((slip - 0.14) / (0.45 - 0.14), 0, 1)) *
+          clamp((Math.hypot(linvel.x, linvel.z) - 4) / 6, 0, 1);
+        const rearContacts = (vc.wheelIsInContact(RL) ? 1 : 0) + (vc.wheelIsInContact(RR) ? 1 : 0);
+        if (gate > 0 && rearContacts > 0) {
+          const thrust = -engineForce * rearContacts * t.drive.slideSurge * gate;
+          body.applyImpulse(
+            { x: forward.x * thrust * DT, y: forward.y * thrust * DT, z: forward.z * thrust * DT },
             true,
           );
         }
