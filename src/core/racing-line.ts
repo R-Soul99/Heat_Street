@@ -102,6 +102,39 @@ export interface RacingLineParams {
  * cornering grip in the speed profile, and D-09/07-RESEARCH.md reserve that
  * knob specifically for a car sliding or running wide on the dirt leg, which
  * this was not.
+ *
+ * RE-VERIFIED (2026-09-23 debug session `ai-pace-and-handbrake-feel`,
+ * investigating "AI opponents capped at ~40mph, trivially outclassed"): this
+ * comment's 0.75-also-crashes claim does NOT reproduce on the current
+ * map/physics build. Re-running the exact same `tests/ai-lap.test.ts`
+ * methodology: 0.75 now completes cleanly (max tilt 9.73 deg, straight-line
+ * steer average 0.056 — both comfortably inside their gates), only 1.0
+ * actually fails to complete within the test's tick budget. That headroom
+ * is moot in practice, though: this dial is already constrained almost
+ * entirely by the Silver +/-6% lap-time band above, not by the crash risk —
+ * 0.455 already sits near the top edge of that band (-4.1%; 0.47 alone
+ * measured -6.8%, outside it), far below where the (re-verified, higher
+ * than documented) crash threshold would start to matter. A decoupled
+ * model — scaling only cornering aggressiveness here while letting
+ * straight-line top speed run closer to the player's own ~100 mph ceiling,
+ * so the AI reads as "cautious in corners, fast on straights" instead of
+ * uniformly capped everywhere — was prototyped and rejected during that
+ * session: on this course the Silver lap-time target (161.00 s over
+ * ~2040 m, ~12.7 m/s / ~28 mph average) requires a genuinely slow pace
+ * across the WHOLE lap, not just in corners, and the AI driver's reactive
+ * (fixed-lookahead, proportional) throttle/brake controller produced
+ * non-monotonic lap times as the cornering dial was swept independently of
+ * the top-speed dial (e.g. a MORE conservative cornering scale measured a
+ * SHORTER lap than a less conservative one at the same top-speed ceiling) —
+ * too unpredictable to ship without dedicated retuning well beyond a debug
+ * session's scope. The real fix for "AI feels outclassed" is almost
+ * certainly that the Silver/Gold reference times in
+ * `public/maps/juliette-ga.medals.json` (locked in phase 06-03, tagged
+ * `handlingContentVersion: "260920-sm2"`) were not re-validated against how
+ * fast the post-260920-sm2 buffed player car (4.15 s 0-60, up from 6.52 s)
+ * can actually lap this course — a medal-timing/difficulty-tier design
+ * decision for Phase 7 planning, not something this dial alone can paper
+ * over.
  */
 export const AI_PACE_CALIBRATION = 0.455;
 

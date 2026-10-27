@@ -34,8 +34,8 @@
 import type * as RAPIER from "@dimforge/rapier3d";
 import type { FrameStats } from "./core/frame-stats";
 import type { InputFrame, InputSource } from "./core/input-tape";
-import type { RaceCommandSource, RaceCommands } from "./input/race-commands";
 import { MAX_STEPS_PER_FRAME, SimClock } from "./core/sim-clock";
+import type { RaceCommandSource, RaceCommands } from "./input/race-commands";
 import type { TransformCache } from "./physics/transform-cache";
 
 /**
