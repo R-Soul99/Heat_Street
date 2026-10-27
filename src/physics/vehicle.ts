@@ -606,7 +606,7 @@ export function createVehicle(
       const rightV = rotateVec(q, 1, 0, 0);
       const latMs = lv.x * rightV.x + lv.y * rightV.y + lv.z * rightV.z;
       const slipRad = Math.atan2(latMs, Math.max(Math.abs(forwardSpeedMs), 0.1));
-      const against = frame.steer * slipRad < 0 ? 1 : 0;
+      const against = frame.steer * slipRad > 0 ? 1 : 0;
       const sm = clamp((Math.abs(slipRad) - 0.1) / 0.2, 0, 1);
       const counterSteerFade = 1 - sm * sm * (3 - 2 * sm) * against;
       const pivotBlend = pivotRear * t.drive.pivotTurn;
