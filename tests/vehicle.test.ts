@@ -298,8 +298,9 @@ describe("createVehicle: reverse gear (brake held at/below reverseEngageSpeedMs)
 });
 
 describe("createVehicle: handbrake and the authored throttle-oversteer term", () => {
-  it("handbrake drops rear side friction and release restores it", () => {
+  it("handbrake drops rear side friction and release restores it (regrip smoothing off)", () => {
     const { world, vehicle, tuning } = buildScene();
+    tuning.drive.rearGripRecoverySec = 0;
     settle(world, vehicle, tuning, 60);
 
     const handbrakeFrame = { steer: 0, throttle: 0, brake: 0, handbrake: true };
@@ -319,6 +320,34 @@ describe("createVehicle: handbrake and the authored throttle-oversteer term", ()
     expect(vehicle.controller.wheelSideFrictionStiffness(RL)).toBeCloseTo(
       tuning.wheels.rearSideFriction,
       6,
+    );
+  });
+
+  it("with regrip smoothing on, release loosens fast but regrips gradually back to the baseline", () => {
+    const { world, vehicle, tuning } = buildScene();
+    tuning.drive.rearGripRecoverySec = 0.25;
+    settle(world, vehicle, tuning, 60);
+
+    for (let i = 0; i < 30; i++) {
+      vehicle.tick({ steer: 0, throttle: 0, brake: 0, handbrake: true }, tuning);
+      world.step();
+    }
+    const held = vehicle.controller.wheelSideFrictionStiffness(RL) ?? Number.NaN;
+    expect(held).toBeLessThan(tuning.wheels.rearSideFriction * 0.2);
+
+    vehicle.tick(NEUTRAL, tuning);
+    world.step();
+    const oneTick = vehicle.controller.wheelSideFrictionStiffness(RL) ?? Number.NaN;
+    // Not snapped back: still well below baseline a tick after release.
+    expect(oneTick).toBeLessThan(tuning.wheels.rearSideFriction * 0.5);
+
+    for (let i = 0; i < 120; i++) {
+      vehicle.tick(NEUTRAL, tuning);
+      world.step();
+    }
+    expect(vehicle.controller.wheelSideFrictionStiffness(RL)).toBeCloseTo(
+      tuning.wheels.rearSideFriction,
+      2,
     );
   });
 

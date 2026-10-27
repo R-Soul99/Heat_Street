@@ -35,12 +35,12 @@ export interface FeelSettings {
   pivot: number;
   /** Pivot ease-in: how gently the pivot takes over. Low = abrupt, high = gradual. Default 10. */
   pivotEase: number;
+  /** Slide-exit surge: forward push while sliding so the car drives out. Base 5. */
+  slideSurge: number;
+  /** Slide regrip: how gradually the tail regrips after a slide. Low = snaps back. Base 5. */
+  regrip: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
   flick: number;
-  /** Slide hold: how slowly rear grip returns after a slide. 0 = instant (off). */
-  slideHold: number;
-  /** Slide-exit surge: throttle drive that survives while sliding. 0 = off. */
-  slideSurge: number;
 }
 
 export type FeelKey = keyof FeelSettings;
@@ -59,9 +59,9 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   pivot: 0,
   // 10 = the gentlest ramp (0.45 s): chosen by the user after trying 5 (0.25 s).
   pivotEase: 10,
+  slideSurge: 5,
+  regrip: 5,
   flick: 4,
-  slideHold: 0,
-  slideSurge: 0,
 });
 
 /** Slider order and the wording shown to the player. */
@@ -75,9 +75,9 @@ export const FEEL_CONTROLS: readonly { key: FeelKey; label: string }[] = Object.
   { key: "looseness", label: "Rear looseness" },
   { key: "pivot", label: "Pivot turn (doughnuts)" },
   { key: "pivotEase", label: "Pivot ease-in (high = smoother)" },
+  { key: "slideSurge", label: "Slide-exit surge" },
+  { key: "regrip", label: "Slide regrip (low = snappy)" },
   { key: "flick", label: "Weight-shift flick" },
-  { key: "slideHold", label: "Slide hold (high = longer slide)" },
-  { key: "slideSurge", label: "Slide-exit surge (power out of slide)" },
 ]);
 
 export const FEEL_STORAGE_KEY = "heat-street.feel.v1";
@@ -116,9 +116,9 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     looseness: clamp(feel.looseness, FEEL_MIN, FEEL_MAX),
     pivot: clamp(feel.pivot, FEEL_MIN, FEEL_MAX),
     pivotEase: clamp(feel.pivotEase, FEEL_MIN, FEEL_MAX),
-    flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
-    slideHold: clamp(feel.slideHold, FEEL_MIN, FEEL_MAX),
     slideSurge: clamp(feel.slideSurge, FEEL_MIN, FEEL_MAX),
+    regrip: clamp(feel.regrip, FEEL_MIN, FEEL_MAX),
+    flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
   };
 
   // Grip: scales the friction circle. Above ~1.8 the body-roll assist and ramp
@@ -143,9 +143,10 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
 
   target.drive.pivotTurn = lerp(0, 1, f.pivot / 10);
   target.drive.pivotEngageSec = base.drive.pivotEngageSec * anchored(f.pivotEase, 0.2, 1, 1.8);
+  target.drive.slideSurge = base.drive.slideSurge * lerp(0, 2, f.slideSurge / 10);
+  target.drive.rearGripRecoverySec = base.drive.rearGripRecoverySec * anchored(f.regrip, 0, 1, 3);
+
   target.drive.flickGain = lerp(0, 1, f.flick / 10);
-  target.drive.rearGripRecoverySec = lerp(0, 0.6, f.slideHold / 10);
-  target.drive.slideSurge = lerp(0, 0.6, f.slideSurge / 10);
 
   clampTuning(target);
 }

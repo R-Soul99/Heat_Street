@@ -50,6 +50,10 @@ const halfSteer = (k: number): InputFrame => ({
 function withPivot(pivotTurn: number, mutate?: (t: VehicleTuning) => void): VehicleTuning {
   const t = defaultTuning();
   t.drive.pivotTurn = pivotTurn;
+  // These tests isolate the pivot: the slide-exit features (regrip smoothing,
+  // slide surge) are on by default and blur the one-tick and speed-fade reads.
+  t.drive.rearGripRecoverySec = 0;
+  t.drive.slideSurge = 0;
   mutate?.(t);
   return t;
 }
@@ -144,6 +148,8 @@ describe("pivot turn: engaged", () => {
 describe("powerOversteerRearSideFriction", () => {
   it("the throttle blend heads to its own value (0.024) and the handbrake keeps 0.005", () => {
     const tuning = defaultTuning();
+    // One-tick reading: needs instant regrip (the slide-exit smoothing is on by default).
+    tuning.drive.rearGripRecoverySec = 0;
     expect(tuning.drive.powerOversteerRearSideFriction).toBe(0.024);
     expect(tuning.drive.handbrakeRearSideFriction).toBe(0.005);
 

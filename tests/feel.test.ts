@@ -77,6 +77,10 @@ describe("applyFeel", () => {
       lo("pivotEase").drive.pivotEngageSec,
     );
     expect(hi("pivot").drive.pivotTurn).toBeGreaterThan(lo("pivot").drive.pivotTurn);
+    expect(hi("slideSurge").drive.slideSurge).toBeGreaterThan(lo("slideSurge").drive.slideSurge);
+    expect(hi("regrip").drive.rearGripRecoverySec).toBeGreaterThan(
+      lo("regrip").drive.rearGripRecoverySec,
+    );
     expect(hi("flick").drive.flickGain).toBeGreaterThan(lo("flick").drive.flickGain);
   });
 
