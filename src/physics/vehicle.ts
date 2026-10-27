@@ -150,6 +150,22 @@ export interface VehicleSample {
   readonly contacts: number;
 }
 
+/** Which rear-grip term is largest this tick (read-only diagnostics, see `Vehicle.rearGrip`). */
+export type RearGripTerm = "none" | "handbrake" | "power" | "flick" | "pivot";
+
+/**
+ * Read-only per-tick view of the rear side-friction decision, for the
+ * feel-dossier script and the like. Nothing in the physics reads it.
+ */
+export interface RearGripDebug {
+  /** Effective rear side friction applied this tick (after smoothing, before surface grip). */
+  readonly sideFriction: number;
+  /** The largest term pulling the tail loose, `none` when the base grip is untouched. */
+  readonly dominant: RearGripTerm;
+  /** Pivot gate (speed fade x dwell ramp) before the engagement filter, 0..1. */
+  readonly pivotGate: number;
+}
+
 /**
  * A vehicle built into a world. Generic per D-09 — nothing here assumes "the
  * player" is the only caller.
@@ -169,6 +185,8 @@ export interface Vehicle {
    * `surfaces` argument.
    */
   readonly wheelSurfaces: readonly SurfaceType[];
+  /** Diagnostics of the last `tick()`'s rear-grip decision. Mutated in place, never reallocated. */
+  readonly rearGrip: RearGripDebug;
   /**
    * Advance one fixed tick. Called BEFORE `world.step()`, per
    * 02-RESEARCH.md Pattern 2. `surfaces` is OPTIONAL — when omitted, the
@@ -344,6 +362,7 @@ export function createVehicle(
   // Smoothed rear side friction (see step 4); negative = not initialised yet.
   let rearSfsSmoothed = -1;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+  const rearGrip = { sideFriction: 0, dominant: "none" as RearGripTerm, pivotGate: 0 };
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
   return {
@@ -354,6 +373,7 @@ export function createVehicle(
     },
     inertia,
     wheelSurfaces,
+    rearGrip,
 
     tick(frame: InputFrame, t: VehicleTuning, surfaces?: SurfaceContext): void {
       // The order below is 02-RESEARCH.md Pattern 2 and is LOAD-BEARING:
@@ -571,6 +591,15 @@ export function createVehicle(
         pivotRear = 0;
         pivotDir = 0;
       }
+      const pivotBlend = pivotRear * t.drive.pivotTurn;
+      const powerBlend = clamp(
+        // Scaled by the speed lock fade: the blend is keyed on steer
+        // INPUT, so at speed it must shrink with the real wheel angle
+        // or full-lock + throttle frees the tail on a tiny steer angle.
+        t.drive.powerOversteerGain * frame.throttle * Math.abs(frame.steer) * lockScale * crawlFade,
+        0,
+        1,
+      );
       const rearSfsTarget = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
@@ -582,19 +611,8 @@ export function createVehicle(
               flickBlend,
               // The pivot loosens the tail to the power-slide value (fast in,
               // 0.05 s out) so the car actually rotates about the nose.
-              pivotRear * t.drive.pivotTurn,
-              clamp(
-                // Scaled by the speed lock fade: the blend is keyed on steer
-                // INPUT, so at speed it must shrink with the real wheel angle
-                // or full-lock + throttle frees the tail on a tiny steer angle.
-                t.drive.powerOversteerGain *
-                  frame.throttle *
-                  Math.abs(frame.steer) *
-                  lockScale *
-                  crawlFade,
-                0,
-                1,
-              ),
+              pivotBlend,
+              powerBlend,
             ),
           );
       // Rear grip loosens fast but returns slowly, so a slide ends as a
@@ -611,6 +629,19 @@ export function createVehicle(
       } else {
         rearSfsSmoothed = -1;
       }
+      // Diagnostics only (rearGrip): nothing above or below reads these.
+      rearGrip.sideFriction = rearSfs;
+      rearGrip.pivotGate = pivotGate;
+      const strongest = Math.max(powerBlend, flickBlend, pivotBlend);
+      rearGrip.dominant = frame.handbrake
+        ? "handbrake"
+        : strongest <= 0
+          ? "none"
+          : strongest === pivotBlend
+            ? "pivot"
+            : strongest === flickBlend
+              ? "flick"
+              : "power";
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 
