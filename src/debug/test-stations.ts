@@ -101,7 +101,7 @@ export function createTestStations(
   document.body.appendChild(panel);
 
   function paint(): void {
-    const head = `${speedMph} mph   ${last === undefined ? "press 1-9/0 to launch" : last.name}   [H] stations`;
+    const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0 or - to launch" : last.name}   [H] stations`;
     if (!expanded) {
       panel.textContent = head;
       return;
@@ -131,8 +131,9 @@ export function createTestStations(
       paint();
     } else if (e.code === "KeyG") {
       if (last !== undefined) go(last);
-    } else if (e.code.startsWith("Digit")) {
-      const station = stations.find((s) => s.key === e.code.slice(5));
+    } else if (e.code.startsWith("Digit") || e.code === "Minus") {
+      const key = e.code === "Minus" ? "-" : e.code.slice(5);
+      const station = stations.find((s) => s.key === key);
       if (station !== undefined) go(station);
     }
   });

@@ -92,12 +92,23 @@
     {
       "id": "jumps-b",
       "key": "0",
-      "name": "Kicker (25 mph) then big air (45 mph)",
-      "note": "Steep short ramp, then the big one: airborne attitude and landing.",
+      "name": "Kicker (short steep ramp)",
+      "note": "On its own: take-off attitude and landing. Nothing else to recover from.",
       "featureAheadM": 168,
       "widthM": 12,
       "x": -40,
       "z": 430,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "big-air",
+      "key": "-",
+      "name": "Big air (8 m dome)",
+      "note": "Its own run-up, so a bad landing off the kicker can't spoil it.",
+      "featureAheadM": 168,
+      "widthM": 12,
+      "x": -40,
+      "z": 260,
       "headingRad": -1.5707963267948966
     },
     {

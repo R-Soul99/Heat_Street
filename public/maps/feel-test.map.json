@@ -260,59 +260,83 @@
     },
     {
       "id": 29,
-      "x": 574.9999999994908,
+      "x": -79.99999999999844,
       "y": 0,
-      "z": -210.00000000007475,
+      "z": 259.99999999979235,
       "junction": false,
       "osmNodeId": 4000497
     },
     {
       "id": 30,
+      "x": 119.99999999999766,
+      "y": 0,
+      "z": 259.99999999979235,
+      "junction": false,
+      "osmNodeId": 4000505
+    },
+    {
+      "id": 31,
+      "x": 574.9999999994908,
+      "y": 0,
+      "z": -210.00000000007475,
+      "junction": false,
+      "osmNodeId": 4000506
+    },
+    {
+      "id": 32,
       "x": 574.9999999994908,
       "y": 0,
       "z": -49.9999999997176,
       "junction": false,
-      "osmNodeId": 4000498
-    },
-    {
-      "id": 31,
-      "x": -124.99999999983156,
-      "y": 0,
-      "z": -360.0000000000156,
-      "junction": true,
-      "osmNodeId": 4000499
-    },
-    {
-      "id": 32,
-      "x": -124.99999999983156,
-      "y": 0,
-      "z": -250.00000000016405,
-      "junction": true,
-      "osmNodeId": 4000500
+      "osmNodeId": 4000507
     },
     {
       "id": 33,
       "x": -124.99999999983156,
       "y": 0,
-      "z": -89.99999999980689,
+      "z": -360.0000000000156,
       "junction": true,
-      "osmNodeId": 4000501
+      "osmNodeId": 4000508
     },
     {
       "id": 34,
       "x": -124.99999999983156,
       "y": 0,
-      "z": 89.99999999980689,
+      "z": -250.00000000016405,
       "junction": true,
-      "osmNodeId": 4000502
+      "osmNodeId": 4000509
     },
     {
       "id": 35,
       "x": -124.99999999983156,
       "y": 0,
+      "z": -89.99999999980689,
+      "junction": true,
+      "osmNodeId": 4000510
+    },
+    {
+      "id": 36,
+      "x": -124.99999999983156,
+      "y": 0,
+      "z": 89.99999999980689,
+      "junction": true,
+      "osmNodeId": 4000511
+    },
+    {
+      "id": 37,
+      "x": -124.99999999983156,
+      "y": 0,
       "z": 429.99999999977786,
       "junction": true,
-      "osmNodeId": 4000503
+      "osmNodeId": 4000512
+    },
+    {
+      "id": 38,
+      "x": -124.99999999983156,
+      "y": 0,
+      "z": 259.99999999979235,
+      "junction": true,
+      "osmNodeId": 4000513
     }
   ],
   "edges": [
@@ -3222,6 +3246,69 @@
       "to": 30,
       "points": [
         [
+          -79.99999999999844,
+          0,
+          259.99999999979235
+        ],
+        [
+          -54.99999999950091,
+          0,
+          259.99999999979235
+        ],
+        [
+          -30.000000000331426,
+          0,
+          259.99999999979235
+        ],
+        [
+          -4.999999999833896,
+          0,
+          259.99999999979235
+        ],
+        [
+          20.000000000663633,
+          0,
+          259.99999999979235
+        ],
+        [
+          44.999999999833115,
+          0,
+          259.99999999979235
+        ],
+        [
+          70.00000000033064,
+          0,
+          259.99999999979235
+        ],
+        [
+          94.99999999950013,
+          0,
+          259.99999999979235
+        ],
+        [
+          119.99999999999766,
+          0,
+          259.99999999979235
+        ]
+      ],
+      "lengthM": 199.99999999999608,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 12,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 5000013
+    },
+    {
+      "id": 21,
+      "from": 31,
+      "to": 32,
+      "points": [
+        [
           574.9999999994908,
           0,
           -210.00000000007475
@@ -3242,10 +3329,10 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000013
+      "osmWayId": 5000014
     },
     {
-      "id": 21,
+      "id": 22,
       "from": 10,
       "to": 11,
       "points": [
@@ -3270,11 +3357,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000014
+      "osmWayId": 5000015
     },
     {
-      "id": 22,
-      "from": 31,
+      "id": 23,
+      "from": 33,
       "to": 13,
       "points": [
         [
@@ -3298,10 +3385,10 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000015
+      "osmWayId": 5000016
     },
     {
-      "id": 23,
+      "id": 24,
       "from": 9,
       "to": 15,
       "points": [
@@ -3326,10 +3413,10 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000016
+      "osmWayId": 5000017
     },
     {
-      "id": 24,
+      "id": 25,
       "from": 8,
       "to": 17,
       "points": [
@@ -3354,11 +3441,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000017
+      "osmWayId": 5000018
     },
     {
-      "id": 25,
-      "from": 32,
+      "id": 26,
+      "from": 34,
       "to": 19,
       "points": [
         [
@@ -3382,11 +3469,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000018
+      "osmWayId": 5000019
     },
     {
-      "id": 26,
-      "from": 33,
+      "id": 27,
+      "from": 35,
       "to": 21,
       "points": [
         [
@@ -3410,11 +3497,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000019
+      "osmWayId": 5000020
     },
     {
-      "id": 27,
-      "from": 34,
+      "id": 28,
+      "from": 36,
       "to": 23,
       "points": [
         [
@@ -3438,10 +3525,10 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000020
+      "osmWayId": 5000021
     },
     {
-      "id": 28,
+      "id": 29,
       "from": 7,
       "to": 25,
       "points": [
@@ -3466,11 +3553,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000021
+      "osmWayId": 5000022
     },
     {
-      "id": 29,
-      "from": 35,
+      "id": 30,
+      "from": 37,
       "to": 27,
       "points": [
         [
@@ -3494,12 +3581,40 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000022
+      "osmWayId": 5000023
     },
     {
-      "id": 30,
+      "id": 31,
+      "from": 38,
+      "to": 29,
+      "points": [
+        [
+          -124.99999999983156,
+          0,
+          259.99999999979235
+        ],
+        [
+          -79.99999999999844,
+          0,
+          259.99999999979235
+        ]
+      ],
+      "lengthM": 44.99999999983312,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 12,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 5000024
+    },
+    {
+      "id": 32,
       "from": 1,
-      "to": 31,
+      "to": 33,
       "points": [
         [
           -124.99999999983156,
@@ -3522,12 +3637,12 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 31,
-      "from": 31,
-      "to": 32,
+      "id": 33,
+      "from": 33,
+      "to": 34,
       "points": [
         [
           -124.99999999983156,
@@ -3550,12 +3665,12 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 32,
-      "from": 32,
-      "to": 33,
+      "id": 34,
+      "from": 34,
+      "to": 35,
       "points": [
         [
           -124.99999999983156,
@@ -3578,12 +3693,12 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 33,
-      "from": 33,
-      "to": 34,
+      "id": 35,
+      "from": 35,
+      "to": 36,
       "points": [
         [
           -124.99999999983156,
@@ -3606,12 +3721,12 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 34,
-      "from": 34,
-      "to": 35,
+      "id": 36,
+      "from": 36,
+      "to": 38,
       "points": [
         [
           -124.99999999983156,
@@ -3621,10 +3736,10 @@
         [
           -124.99999999983156,
           0,
-          429.99999999977786
+          259.99999999979235
         ]
       ],
-      "lengthM": 339.99999999997095,
+      "lengthM": 169.99999999998545,
       "surface": "tarmac",
       "roadClass": "residential",
       "lanes": 2,
@@ -3634,11 +3749,39 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 35,
-      "from": 35,
+      "id": 37,
+      "from": 38,
+      "to": 37,
+      "points": [
+        [
+          -124.99999999983156,
+          0,
+          259.99999999979235
+        ],
+        [
+          -124.99999999983156,
+          0,
+          429.99999999977786
+        ]
+      ],
+      "lengthM": 169.9999999999855,
+      "surface": "tarmac",
+      "roadClass": "residential",
+      "lanes": 2,
+      "widthM": 12,
+      "oneway": false,
+      "speedLimitKph": 40,
+      "bridge": false,
+      "tunnel": false,
+      "layer": 0,
+      "osmWayId": 5000025
+    },
+    {
+      "id": 38,
+      "from": 37,
       "to": 5,
       "points": [
         [
@@ -3662,11 +3805,11 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000023
+      "osmWayId": 5000025
     },
     {
-      "id": 36,
-      "from": 30,
+      "id": 39,
+      "from": 32,
       "to": 4,
       "points": [
         [
@@ -3690,7 +3833,7 @@
       "bridge": false,
       "tunnel": false,
       "layer": 0,
-      "osmWayId": 5000024
+      "osmWayId": 5000026
     }
   ],
   "spawns": [

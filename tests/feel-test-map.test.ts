@@ -90,7 +90,7 @@ describe("feel-test proving ground", () => {
   });
 
   it("the jumps launch the car: 80 mph over the big air leaves the ground", () => {
-    const run = launch("jumps-b", 80, { ...NEUTRAL, throttle: 1 }, 6);
+    const run = launch("big-air", 80, { ...NEUTRAL, throttle: 1 }, 6);
     const airborne = run.filter((r) => r.contacts === 0).length;
     expect(airborne).toBeGreaterThan(20);
     expect(Math.max(...run.map((r) => r.y))).toBeGreaterThan(run[0].y + 1.5);
