@@ -47,6 +47,7 @@ import {
 } from "./core/camera-tuning";
 import { parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag } from "./core/feel";
+import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { resolveMapId } from "./core/map-select";
 import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
@@ -73,6 +74,7 @@ import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./co
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
+import { createDriveLogger } from "./debug/drive-logger";
 import { createFeelPanel, loadFeel } from "./debug/feel-panel";
 import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createNavPointer } from "./debug/nav-pointer";
@@ -774,6 +776,14 @@ try {
   // `{x,y,z,w}` rotation object can be passed straight in with no wrapping.
   const navForwardScratch = new THREE.Vector3();
 
+  // Drive logger (L record / M mark, saves a CSV): `?feel` or `?debug` only.
+  const driveLogger =
+    FEEL_ENABLED || DEBUG_ENABLED ? createDriveLogger(() => scene.vehicle) : undefined;
+  const applyPlayerInput = (frame: InputFrame): void => {
+    scene.applyInput(frame);
+    driveLogger?.record(frame);
+  };
+
   loopClock = startLoop({
     world,
     input,
@@ -783,8 +793,8 @@ try {
     // every other mode applies the live frame straight through, unchanged.
     applyInput:
       circuitRace === undefined
-        ? scene.applyInput
-        : (frame) => scene.applyInput(circuitRace.gatePlayerInput(frame)),
+        ? applyPlayerInput
+        : (frame) => applyPlayerInput(circuitRace.gatePlayerInput(frame)),
     // Circuit Race also ticks the AI fleet from this SAME hook, before the
     // loop's own `world.step()` (07-RESEARCH.md Pattern 2) — `src/loop.ts`
     // itself needs zero changes.
