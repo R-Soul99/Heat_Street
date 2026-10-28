@@ -71,6 +71,9 @@ const frame = (steer: number, throttle: number, handbrake = false): InputFrame =
   handbrake,
 });
 
+/** Steer input rising at the live-input ramp (5/s) instead of a step. */
+const rampedSteer = (k: number, target: number): number => Math.min(target, k * DT * 5);
+
 const HOLD_1S = Math.round(1 / DT);
 const HOLD_HALF_S = Math.round(0.5 / DT);
 const HOLD_3S = Math.round(3 / DT);
@@ -131,7 +134,7 @@ const SCRIPTS: readonly Script[] = [
     drive(k, h, st) {
       if (st.releaseIndex < 0 && h >= 30) st.releaseIndex = k;
       const throttle = st.releaseIndex >= 0 ? 0 : 0.5;
-      return frame(h < 120 ? 0.8 : 0, throttle);
+      return frame(h < 120 ? rampedSteer(k, 0.8) : 0, throttle);
     },
   },
   {
@@ -142,7 +145,7 @@ const SCRIPTS: readonly Script[] = [
     seconds: 5,
     drive(k, h, st) {
       if (st.releaseIndex < 0 && h >= 30) st.releaseIndex = k;
-      return frame(h < 120 ? 0.8 : 0, 0.5);
+      return frame(h < 120 ? rampedSteer(k, 0.8) : 0, 0.5);
     },
   },
   {
