@@ -478,6 +478,12 @@ export function createTuningPanel(
   addNumber(driveFolder, tuning.drive, "slideSurge", TUNING_RANGES.drive.slideSurge).onChange(
     handlers.onApplyVehicle,
   );
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "liftOffOversteer",
+    TUNING_RANGES.drive.liftOffOversteer,
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a

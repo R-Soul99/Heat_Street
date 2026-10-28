@@ -123,6 +123,29 @@ const SCRIPTS: readonly Script[] = [
     },
   },
   {
+    id: "lift-off-60",
+    description:
+      "60 mph, steer 0.8 with throttle 0.5; throttle lifted to 0 at 30 deg of heading (release = the lift), steer held to 120 deg",
+    launchMph: 60,
+    seconds: 5,
+    drive(k, h, st) {
+      if (st.releaseIndex < 0 && h >= 30) st.releaseIndex = k;
+      const throttle = st.releaseIndex >= 0 ? 0 : 0.5;
+      return frame(h < 120 ? 0.8 : 0, throttle);
+    },
+  },
+  {
+    id: "hold-60",
+    description:
+      "control for lift-off-60: same corner, throttle held at 0.5 throughout (release = the same 30 deg point)",
+    launchMph: 60,
+    seconds: 5,
+    drive(k, h, st) {
+      if (st.releaseIndex < 0 && h >= 30) st.releaseIndex = k;
+      return frame(h < 120 ? 0.8 : 0, 0.5);
+    },
+  },
+  {
     id: "power-slide",
     description:
       "15 mph, full lock + full throttle 3 s, then steer released (release), throttle held 3 s",

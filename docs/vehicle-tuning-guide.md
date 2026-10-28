@@ -170,6 +170,7 @@ per-frame safe, unlike `setAdditionalMassProperties` above (`src/debug/tuning-pa
 | `flickSwingSec` | 0.1 / 1.2 / 0.05 | 0.45 | `[ASSUMED]` (`?feel` panel, 2026-10-22): time constant of the smoothed steer that stands in for swung weight, seconds. Shorter = the flick window closes faster after a steer. | `flickGain`. |
 | `rearGripRecoverySec` | 0 / 0.8 / 0.05 | 0 | `[ASSUMED]` (slide-exit work, 2026-10-23): seconds the rear side friction takes to regrip after the tail was loosened (handbrake, power-oversteer, flick). The tail still loosens in 0.05 s. 0 = off (instant, as before). Spreads out the lateral-velocity cancel that otherwise scrubs speed the tick the slide ends. | `slideSurge`, `handbrakeRearSideFriction`, `rearSideFriction`. |
 | `slideSurge` | 0 / 1 / 0.05 | 0 | `[ASSUMED]` (slide-exit work, 2026-10-23): forward push along the heading while the car is sliding (smoothstep over 8-26 deg of slip), scaled by engine force. A sliding rear spends the traction circle cancelling sideways speed, so little drive force gets through. 0 = off. | `engineForcePerRearWheel`, `rearGripRecoverySec`. |
+| `liftOffOversteer` | 0 / 12 / 0.1 | 5 | `[ASSUMED]` (exp/slide-sign, 2026-10-28): lifting the throttle while steering above ~8-18 m/s loosens the rear toward the power-slide value by gain x throttle removed x \|steer\| x lock scale, fading over ~0.3 s. 0 = off. Without it, lifting mid-corner made the rear GRIP more (the power blend dropped out). | `powerOversteerGain`, `powerOversteerRearSideFriction`. |
 
 ### Assists
 

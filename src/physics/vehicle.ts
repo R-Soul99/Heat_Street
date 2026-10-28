@@ -83,6 +83,8 @@ const PIVOT_TAU_REAR = 0.05;
 const PIVOT_OFF_EPS = 0.002;
 /** Rear grip loosens with this time constant (fast), however slowly it recovers. */
 const REAR_GRIP_LOOSEN_TAU = 0.05;
+/** Lift-off oversteer: time constant of the 'recent throttle' reference. */
+const LIFT_OFF_REF_TAU = 0.3;
 
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
@@ -157,7 +159,7 @@ export interface VehicleSample {
 }
 
 /** Which rear-grip term is largest this tick (read-only diagnostics, see `Vehicle.rearGrip`). */
-export type RearGripTerm = "none" | "handbrake" | "power" | "flick" | "pivot";
+export type RearGripTerm = "none" | "handbrake" | "power" | "flick" | "pivot" | "lift";
 
 /**
  * Read-only per-tick view of the rear side-friction decision, for the
@@ -353,6 +355,7 @@ export function createVehicle(
     pivotRear = 0;
     pivotDir = 0;
     rearSfsSmoothed = -1;
+    throttleRef = 0;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -367,6 +370,8 @@ export function createVehicle(
   let pivotDir = 0;
   // Slew-limited rear side friction (-1 = not yet seeded); see step 4.
   let rearSfsSmoothed = -1;
+  /** Low-passed throttle: what the driver was recently asking for. */
+  let throttleRef = 0;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   const rearGrip = { sideFriction: 0, dominant: "none" as RearGripTerm, pivotGate: 0 };
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
@@ -609,6 +614,23 @@ export function createVehicle(
       const against = frame.steer * slipRad > 0 ? 1 : 0;
       const sm = clamp((Math.abs(slipRad) - 0.1) / 0.2, 0, 1);
       const counterSteerFade = 1 - sm * sm * (3 - 2 * sm) * against;
+      // Lift-off oversteer: lifting the throttle while turning at speed moves
+      // load forward and puts engine braking on the driven axle, so the tail
+      // steps out. `lift` is how much throttle was just removed relative to
+      // what was recently held; the reference decays with LIFT_OFF_REF_TAU,
+      // so the effect fades by itself. Keyed on steer like the power blend.
+      const lift = Math.max(0, throttleRef - frame.throttle);
+      throttleRef += (frame.throttle - throttleRef) * (1 - Math.exp(-DT / LIFT_OFF_REF_TAU));
+      const liftBlend = clamp(
+        t.drive.liftOffOversteer *
+          lift *
+          Math.abs(frame.steer) *
+          lockScale *
+          clamp((Math.hypot(lv.x, lv.z) - 8) / 10, 0, 1) *
+          counterSteerFade,
+        0,
+        1,
+      );
       const pivotBlend = pivotRear * t.drive.pivotTurn;
       const powerBlend = clamp(
         // Scaled by the speed lock fade: the blend is keyed on steer
@@ -636,6 +658,7 @@ export function createVehicle(
               // 0.05 s out) so the car actually rotates about the nose.
               pivotBlend,
               powerBlend,
+              liftBlend,
             ),
           );
       // Regrip smoothing (opt-in): the tail loosens fast but regrips over
@@ -657,7 +680,7 @@ export function createVehicle(
       // Diagnostics only (rearGrip): nothing above or below reads these.
       rearGrip.sideFriction = rearSfs;
       rearGrip.pivotGate = pivotGate;
-      const strongest = Math.max(powerBlend, flickBlend, pivotBlend);
+      const strongest = Math.max(powerBlend, flickBlend, pivotBlend, liftBlend);
       rearGrip.dominant = frame.handbrake
         ? "handbrake"
         : strongest <= 0
@@ -666,7 +689,9 @@ export function createVehicle(
             ? "pivot"
             : strongest === flickBlend
               ? "flick"
-              : "power";
+              : strongest === liftBlend
+                ? "lift"
+                : "power";
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 

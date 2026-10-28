@@ -395,6 +395,13 @@ export interface VehicleTuning {
      * Added 2026-10-23; default 0 = unchanged.
      */
     slideSurge: number;
+    /**
+     * Lift-off oversteer, 0..12: lifting the throttle while steering at speed
+     * (above ~8-18 m/s) loosens the rear toward `powerOversteerRearSideFriction`
+     * by `liftOffOversteer * throttleRemoved * |steer| * lockScale`, fading
+     * over ~0.3 s. 0 = off. Added 2026-10-28 (exp/slide-sign).
+     */
+    liftOffOversteer: number;
   };
   readonly assists: {
     /**
@@ -568,6 +575,7 @@ export function defaultTuning(): VehicleTuning {
       flickSwingSec: 0.45,
       rearGripRecoverySec: 0.15,
       slideSurge: 0.3,
+      liftOffOversteer: 5,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -644,6 +652,7 @@ export const TUNING_RANGES: {
     flickSwingSec: TuningRange;
     rearGripRecoverySec: TuningRange;
     slideSurge: TuningRange;
+    liftOffOversteer: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -719,6 +728,7 @@ export const TUNING_RANGES: {
     flickSwingSec: { min: 0.1, max: 1.2, step: 0.05 },
     rearGripRecoverySec: { min: 0, max: 0.8, step: 0.05 },
     slideSurge: { min: 0, max: 1, step: 0.05 },
+    liftOffOversteer: { min: 0, max: 12, step: 0.1 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

@@ -1,7 +1,7 @@
 /**
  * Entry point for `npm run feel-dossier` (see vitest.dossier.config.ts).
  * Env: FEEL_DOSSIER_OUT (default out/feel-dossier), FEEL_DOSSIER_PIVOT (0..1,
- * unset = the committed default, which is off).
+ * unset = the committed default, which is off), FEEL_DOSSIER_LIFT (liftOffOversteer).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +13,8 @@ it("feel dossier", () => {
   const tuning = defaultTuning();
   const pivot = process.env.FEEL_DOSSIER_PIVOT;
   if (pivot !== undefined && pivot !== "") tuning.drive.pivotTurn = Number(pivot);
+  const lift = process.env.FEEL_DOSSIER_LIFT;
+  if (lift !== undefined && lift !== "") tuning.drive.liftOffOversteer = Number(lift);
   const out = process.env.FEEL_DOSSIER_OUT || join("out", "feel-dossier");
   mkdirSync(out, { recursive: true });
   const lines = [

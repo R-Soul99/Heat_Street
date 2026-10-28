@@ -34,10 +34,12 @@ describe("slide-exit diagnostic routine", () => {
     const instant = slideExit((t) => {
       t.drive.rearGripRecoverySec = 0;
       t.drive.slideSurge = 0;
+      t.drive.liftOffOversteer = 0;
     });
     const smooth = slideExit((t) => {
       t.drive.rearGripRecoverySec = 0.15;
       t.drive.slideSurge = 0;
+      t.drive.liftOffOversteer = 0;
     });
     expect(smooth.speedDropMs).toBeLessThan(instant.speedDropMs - 1);
   });
@@ -45,9 +47,11 @@ describe("slide-exit diagnostic routine", () => {
   it("slide surge adds speed while sliding", () => {
     const off = slideExit((t) => {
       t.drive.slideSurge = 0;
+      t.drive.liftOffOversteer = 0;
     });
     const on = slideExit((t) => {
       t.drive.slideSurge = 0.6;
+      t.drive.liftOffOversteer = 0;
     });
     expect(on.speedDropMs).toBeLessThan(off.speedDropMs);
   });

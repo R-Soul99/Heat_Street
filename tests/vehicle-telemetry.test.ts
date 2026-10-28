@@ -234,6 +234,8 @@ describe("vehicle-telemetry: brake-understeer (VEH-01, D-04)", () => {
     t.wheels.rearSideFriction = 1.0;
     // Disable the speed-sensitive steering fade: this pair isolates friction-circle understeer.
     t.drive.highSpeedSteerFraction = 1;
+    // Lift-off oversteer is a separate effect (tests/lift-off.test.ts).
+    t.drive.liftOffOversteer = 0;
     return t;
   }
 
