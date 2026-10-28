@@ -138,8 +138,23 @@ export const JULIETTE_GA_CRESTS: readonly AuthoredCrest[] = [
  * rather than a single flat list — the coordinates are area-local and would
  * be meaningless (or worse, silently wrong) if applied to a different area.
  */
+/**
+ * The feel-test proving ground's jumps, on flat tarmac ground. World
+ * coordinates are the layout's local coordinates minus (700, 550) (see
+ * `tools/map-compiler/synthetic/proving-ground.ts`, which ends each launch
+ * road 8 m short of the dome's edge). Launch speeds from the formula above:
+ * hop ~45 mph, crest ~50 mph, kicker ~25 mph, big air ~45 mph.
+ */
+export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
+  { id: "feel-test-hop", centerX: -357, centerZ: 320, radiusM: 25, heightM: 2.5 },
+  { id: "feel-test-crest", centerX: -207, centerZ: 320, radiusM: 35, heightM: 4 },
+  { id: "feel-test-kicker", centerX: 148, centerZ: 430, radiusM: 20, heightM: 5 },
+  { id: "feel-test-big-air", centerX: 303, centerZ: 430, radiusM: 45, heightM: 8 },
+];
+
 export const AUTHORED_CRESTS_BY_AREA: Readonly<Record<string, readonly AuthoredCrest[]>> = {
   "juliette-ga": JULIETTE_GA_CRESTS,
+  "feel-test": FEEL_TEST_CRESTS,
 };
 
 /**

@@ -49,6 +49,7 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildCrestGeometry, crestsForArea } from "../../src/core/crest-geometry.ts";
+import { FLAT_TEST_GROUND_HEX, isFlatTestArea } from "../../src/core/ground-surface.ts";
 import { sampleHeightfieldBilinear } from "../../src/core/heightfield-sample.ts";
 import { type MapCollision, parseMapCollision } from "../../src/core/map-collision.ts";
 import {
@@ -473,7 +474,12 @@ async function main(argv: readonly string[]): Promise<void> {
   // independently, so the grid must exist first. Consumed by BOTH the
   // collision sidecar (the physics ground) and the .glb (the visible terrain
   // mesh) below, so the two artifacts describe the exact same grid.
-  const heightfield: HeightfieldGrid = buildOffRoadRelief(flatGraph, flatGraph.bounds);
+  const heightfield: HeightfieldGrid = buildOffRoadRelief(
+    flatGraph,
+    flatGraph.bounds,
+    undefined,
+    isFlatTestArea(config.areaId),
+  );
   printHeightfieldSummary(heightfield);
 
   // glTF authoring stage (plan 04-07, SC3's second artifact): building boxes
@@ -561,6 +567,7 @@ async function main(argv: readonly string[]): Promise<void> {
     heightfield,
     shoulders,
     crests,
+    isFlatTestArea(config.areaId) ? FLAT_TEST_GROUND_HEX : undefined,
   );
   const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
   await writeGlb(gltfDocument, glbPath);

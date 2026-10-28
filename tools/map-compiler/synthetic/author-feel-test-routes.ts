@@ -33,21 +33,21 @@ const HANDLING_CONTENT_VERSION = "260920-sm2";
 type Target = readonly [x: number, z: number];
 
 // Ring road joints (see proving-ground.ts): clockwise from the west side.
-const P2P_START: Target = [30, 640];
+const P2P_START: Target = [30, 870];
 const P2P_CHECKPOINTS: readonly Target[] = [
   [30, 330],
   [30, 130],
   [575, 30],
   [1370, 100],
-  [1300, 810],
-  [575, 810],
+  [1300, 1070],
+  [575, 1070],
 ];
 const CIRCUIT_START: Target = [575, 30];
 const CIRCUIT_CHECKPOINTS: readonly Target[] = [
   [1370, 100],
-  [1300, 810],
-  [575, 810],
-  [30, 640],
+  [1300, 1070],
+  [575, 1070],
+  [30, 870],
   [30, 330],
 ];
 

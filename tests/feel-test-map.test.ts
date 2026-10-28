@@ -32,7 +32,14 @@ function launch(stationId: string, speedMph: number, frame: InputFrame, seconds:
     headingRad: station.headingRad,
   });
   scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
-  const out: { x: number; y: number; z: number; speed: number; contacts: number }[] = [];
+  const out: {
+    x: number;
+    y: number;
+    z: number;
+    speed: number;
+    contacts: number;
+    surfaces: string[];
+  }[] = [];
   for (let t = 0; t < seconds * 60; t++) {
     scene.applyInput(frame);
     world.step();
@@ -43,6 +50,7 @@ function launch(stationId: string, speedMph: number, frame: InputFrame, seconds:
       z: s.position.z,
       speed: s.groundSpeedMs,
       contacts: s.contacts,
+      surfaces: [...scene.vehicle.wheelSurfaces],
     });
   }
   return out;
@@ -52,7 +60,7 @@ describe("feel-test proving ground", () => {
   it("has no buildings and one launch pad per station key", () => {
     expect(collision.buildings).toHaveLength(0);
     expect(new Set(stations.map((s) => s.key)).size).toBe(stations.length);
-    expect(stations.length).toBeGreaterThanOrEqual(8);
+    expect(stations.length).toBeGreaterThanOrEqual(10);
   });
 
   it("every launch pad drops the car on solid ground that holds it level", () => {
@@ -72,5 +80,19 @@ describe("feel-test proving ground", () => {
     expect(end.x).toBeGreaterThan(start.x + 60);
     expect(Math.abs(end.z - start.z)).toBeLessThan(1);
     expect(end.contacts).toBe(4);
+  });
+
+  it("leaving the painted road never changes the surface: every wheel stays on tarmac", () => {
+    const run = launch("straight", 60, { ...NEUTRAL, steer: 0.6 }, 4);
+    const offRoad = run.filter((r) => Math.abs(r.z - run[0].z) > 12);
+    expect(offRoad.length).toBeGreaterThan(30);
+    for (const r of run) for (const surface of r.surfaces) expect(surface).toBe("tarmac");
+  });
+
+  it("the jumps launch the car: 80 mph over the big air leaves the ground", () => {
+    const run = launch("jumps-b", 80, { ...NEUTRAL, throttle: 1 }, 6);
+    const airborne = run.filter((r) => r.contacts === 0).length;
+    expect(airborne).toBeGreaterThan(20);
+    expect(Math.max(...run.map((r) => r.y))).toBeGreaterThan(run[0].y + 1.5);
   });
 });

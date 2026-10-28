@@ -273,6 +273,7 @@ export function buildGltfDocument(
   heightfield: HeightfieldGrid,
   shoulders: readonly ShoulderGeometryEntry[] = [],
   crests: readonly CrestGeometryEntry[] = [],
+  groundHex: number = SURFACE_COLOR_HEX.grass,
 ): { document: Document; stats: GltfBuildStats } {
   const document = new Document();
   const buffer = document.createBuffer();
@@ -371,7 +372,7 @@ export function buildGltfDocument(
 
   const terrainMaterial = document
     .createMaterial("surface-grass")
-    .setBaseColorFactor(hexToRgba(SURFACE_COLOR_HEX.grass));
+    .setBaseColorFactor(hexToRgba(groundHex));
 
   const terrainPrimitive = document
     .createPrimitive()
@@ -413,7 +414,7 @@ export function buildGltfDocument(
 
     const crestsMaterial = document
       .createMaterial("crests")
-      .setBaseColorFactor(hexToRgba(SURFACE_COLOR_HEX.grass));
+      .setBaseColorFactor(hexToRgba(groundHex));
 
     const crestsPrimitive = document
       .createPrimitive()

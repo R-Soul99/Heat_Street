@@ -7,7 +7,7 @@
       "name": "90 deg right (R25)",
       "note": "Tight square-ish right-hander after a 160 m run-up.",
       "x": -550,
-      "z": -290,
+      "z": -420,
       "headingRad": -1.5707963267948966
     },
     {
@@ -16,7 +16,7 @@
       "name": "90 deg left (R25)",
       "note": "Mirror of station 1.",
       "x": -40,
-      "z": -230,
+      "z": -360,
       "headingRad": -1.5707963267948966
     },
     {
@@ -25,7 +25,7 @@
       "name": "Fast sweeper right (R120)",
       "note": "Long 90 deg right for high-speed lift-off and throttle-on tests.",
       "x": -550,
-      "z": -90,
+      "z": -220,
       "headingRad": -1.5707963267948966
     },
     {
@@ -34,7 +34,7 @@
       "name": "Hairpin right (R30, 180 deg)",
       "note": "Slow 180 for handbrake / pivot work.",
       "x": -550,
-      "z": 220,
+      "z": 90,
       "headingRad": -1.5707963267948966
     },
     {
@@ -43,7 +43,7 @@
       "name": "Esses (R80 right-left-right)",
       "note": "Direction change at speed: weight transfer and recovery.",
       "x": -40,
-      "z": -120,
+      "z": -250,
       "headingRad": -1.5707963267948966
     },
     {
@@ -52,7 +52,7 @@
       "name": "Tightening right (R150 into R50)",
       "note": "Decreasing radius: the corner that catches you out.",
       "x": -40,
-      "z": 40,
+      "z": -90,
       "headingRad": -1.5707963267948966
     },
     {
@@ -61,7 +61,25 @@
       "name": "Long straight (330 m)",
       "note": "Acceleration, top speed, braking, handbrake from speed.",
       "x": -40,
-      "z": 220,
+      "z": 90,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "jumps-a",
+      "key": "9",
+      "name": "Hop (45 mph) then crest (50 mph)",
+      "note": "Two jumps in line: take-off, landing, settle, repeat.",
+      "x": -550,
+      "z": 320,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "jumps-b",
+      "key": "0",
+      "name": "Kicker (25 mph) then big air (45 mph)",
+      "note": "Steep short ramp, then the big one: airborne attitude and landing.",
+      "x": -40,
+      "z": 430,
       "headingRad": -1.5707963267948966
     },
     {
@@ -70,7 +88,7 @@
       "name": "Skid pan (160 x 160 m)",
       "note": "Open tarmac: donuts, power slides, steady-state circles.",
       "x": 505,
-      "z": 0,
+      "z": -130,
       "headingRad": -1.5707963267948966
     }
   ]

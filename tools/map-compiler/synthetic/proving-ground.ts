@@ -19,7 +19,7 @@ import { makeProjector } from "../graph/project.ts";
 import type { OverpassEnvelope } from "../sources/overpass.ts";
 
 export const WIDTH_M = 1400;
-export const DEPTH_M = 840;
+export const DEPTH_M = 1100;
 export const ROAD_WIDTH_M = 12;
 const ARC_STEP_DEG = 5;
 const STRAIGHT_STEP_M = 25;
@@ -174,6 +174,26 @@ const STATION_SPECS: readonly StationSpec[] = [
     z: 640,
     widthM: 14,
     build: (t) => t.straight(330),
+  },
+  {
+    key: "9",
+    id: "jumps-a",
+    name: "Hop (45 mph) then crest (50 mph)",
+    note: "Two jumps in line: take-off, landing, settle, repeat.",
+    x0: COLUMN_A_X,
+    z: 870,
+    widthM: 12,
+    build: (t) => t.straight(LEAD_M),
+  },
+  {
+    key: "0",
+    id: "jumps-b",
+    name: "Kicker (25 mph) then big air (45 mph)",
+    note: "Steep short ramp, then the big one: airborne attitude and landing.",
+    x0: COLUMN_B_X,
+    z: 980,
+    widthM: 12,
+    build: (t) => t.straight(LEAD_M),
   },
 ];
 

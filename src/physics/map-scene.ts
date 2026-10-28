@@ -29,6 +29,7 @@
  */
 import * as RAPIER from "@dimforge/rapier3d";
 import { buildCrestGeometry, crestsForArea } from "../core/crest-geometry";
+import { groundSurfaceForArea } from "../core/ground-surface";
 import { sampleHeightfieldBilinear } from "../core/heightfield-sample";
 import type { InputFrame } from "../core/input-tape";
 import type {
@@ -44,6 +45,7 @@ import {
   TARGET_SHOULDER_WIDTH_M,
 } from "../core/road-geometry";
 import type { RoadGraph } from "../core/road-graph";
+import type { SurfaceType } from "../core/surface-types";
 import {
   buildingBoundingRadius,
   type ClearanceBuilding,
@@ -146,6 +148,7 @@ function buildHeightfieldCollider(
   world: RAPIER.World,
   surfaceMap: SurfaceMap,
   heightfield: MapCollisionHeightfield,
+  groundSurface: SurfaceType,
 ): void {
   const centerX = heightfield.originX + heightfield.scaleX / 2;
   const centerZ = heightfield.originZ + heightfield.scaleZ / 2;
@@ -161,7 +164,7 @@ function buildHeightfieldCollider(
     ).setFriction(ROAD_FRICTION),
     body,
   );
-  surfaceMap.register(collider.handle, "grass");
+  surfaceMap.register(collider.handle, groundSurface);
 }
 
 /**
@@ -183,6 +186,7 @@ function buildRoadColliders(
   buildings: readonly MapCollisionBuilding[],
   areaId: string,
 ): void {
+  const groundSurface = groundSurfaceForArea(areaId);
   const geometry = buildRoadGeometry(graph);
   const roadBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
@@ -246,7 +250,10 @@ function buildRoadColliders(
         ).setFriction(ROAD_FRICTION),
         roadBody,
       );
-      surfaceMap.register(collider.handle, shoulder.surface);
+      surfaceMap.register(
+        collider.handle,
+        shoulder.surface === "grass" ? groundSurface : shoulder.surface,
+      );
     }
 
     // Authored crest colliders (plan 04.1-07, D-04b): this builds the SAME
@@ -270,7 +277,7 @@ function buildRoadColliders(
         ).setFriction(ROAD_FRICTION),
         roadBody,
       );
-      surfaceMap.register(collider.handle, crest.surface);
+      surfaceMap.register(collider.handle, groundSurface);
     }
   }
 }
@@ -356,7 +363,12 @@ export function createMapScene(
   // doc comment) -- optional at the type level so a hypothetical future area
   // with no heightfield block still builds a scene, with road colliders only.
   if (collision.heightfield !== undefined) {
-    buildHeightfieldCollider(world, surfaceMap, collision.heightfield);
+    buildHeightfieldCollider(
+      world,
+      surfaceMap,
+      collision.heightfield,
+      groundSurfaceForArea(collision.areaId),
+    );
   }
 
   buildRoadColliders(
