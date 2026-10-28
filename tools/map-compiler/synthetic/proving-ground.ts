@@ -231,7 +231,7 @@ const STATION_SPECS: readonly StationSpec[] = [
   {
     key: "=",
     id: "ramp-s",
-    name: "Ramp S (0.9 m lip, 12 deg): 35-45 mph",
+    name: "Ramp S (0.9 m lip, 9 deg): any speed to 85 mph",
     note: "Game-scale kerb-hop ramp. 65 m run-up; the road is shared with M and L.",
     x0: COLUMN_A_X,
     z: 980,
@@ -243,7 +243,7 @@ const STATION_SPECS: readonly StationSpec[] = [
   {
     key: "\\",
     id: "ramp-m",
-    name: "Ramp M (1.8 m lip, 16 deg): 45-60 mph",
+    name: "Ramp M (1.8 m lip, 13 deg): any speed to 85 mph",
     note: "Game-scale stunt ramp. Starts after S's landing.",
     x0: COLUMN_A_X,
     z: 980,
@@ -256,8 +256,8 @@ const STATION_SPECS: readonly StationSpec[] = [
   {
     key: "/",
     id: "ramp-l",
-    name: "Ramp L (3 m lip, 20 deg): 55-65 mph",
-    note: "Largest game-scale ramp; about 50 m of flight at 60 mph.",
+    name: "Ramp L (3 m lip, 16 deg): any speed to 85 mph",
+    note: "Largest game-scale ramp.",
     x0: COLUMN_A_X,
     z: 980,
     widthM: 12,

@@ -308,16 +308,11 @@ describe("take-off ramps", () => {
     expect(first[1]).toBeCloseTo(first[0] * 0.01, 5);
   });
 
-  it("the feel-test ramps respect the foot-load rule v^2 / R <= ~19 m/s^2 at their top design speed", () => {
-    const topMph: Readonly<Record<string, number>> = {
-      "feel-test-ramp-s": 45,
-      "feel-test-ramp-m": 60,
-      "feel-test-ramp-l": 60,
-    };
+  it("the feel-test ramps respect the foot-load rule v^2 / R <= ~19.5 m/s^2 at 85 mph", () => {
     const ramps = FEEL_TEST_CRESTS.filter((c) => c.ramp !== undefined);
     expect(ramps).toHaveLength(3);
+    const v = 85 * 0.44704;
     for (const c of ramps) {
-      const v = topMph[c.id] * 0.44704;
       expect((v * v) / (c.ramp?.footRadiusM ?? 1), c.id).toBeLessThan(19.5);
     }
   });

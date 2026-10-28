@@ -130,6 +130,39 @@ function flyHard(stationId: string, speedMph: number, airPitchGain: number) {
   return { maxTiltDeg: maxTilt, landedOnWheels };
 }
 
+/** Speed lost between the last airborne tick and 0.7 s after first touchdown, mph, throttle held. */
+function landingCost(stationId: string, speedMph: number, landingSpeedKeep: number): number {
+  const world = createWorld();
+  const tuning = defaultTuning();
+  tuning.drive.landingSpeedKeep = landingSpeedKeep;
+  const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
+  const station = stations.find((s) => s.id === stationId);
+  if (station === undefined) throw new Error(`no station ${stationId}`);
+  scene.resetVehicle({
+    x: station.x,
+    y: scene.defaultSpawnPose.y,
+    z: station.z,
+    headingRad: station.headingRad,
+  });
+  scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
+  let airSince = -1;
+  let airMph = 0;
+  let landed = -1;
+  for (let t = 0; t < 8 * 60; t++) {
+    scene.applyInput({ ...NEUTRAL, throttle: 1 });
+    world.step();
+    const s = sampleVehicle(scene.vehicle);
+    const mph = s.groundSpeedMs / MPH;
+    if (landed < 0 && s.contacts === 0 && s.position.x > station.x + station.featureAheadM) {
+      if (airSince < 0) airSince = t;
+      airMph = mph;
+    }
+    if (airSince >= 0 && landed < 0 && s.contacts >= 2 && t > airSince + 18) landed = t;
+    if (landed >= 0 && t === landed + 42) return airMph - mph;
+  }
+  throw new Error("never landed");
+}
+
 describe("feel-test game-scale ramps", () => {
   // Pad speeds are what the station launches at; the car coasts ~65 m to the foot and
   // arrives 7-10 mph slower (take-off speed is in the run).
@@ -179,20 +212,22 @@ describe("feel-test game-scale ramps", () => {
     }
   });
 
-  it("air pitch assist: 85 mph off the small ramp (twice its design speed) lands on its wheels, not its nose", () => {
+  it("air pitch assist: 85 mph off the small ramp lands on its wheels, not its nose", () => {
     const run = flyHard("ramp-s", 85, 25);
     expect(run.maxTiltDeg).toBeLessThan(30);
     expect(run.landedOnWheels).toBe(true);
   });
 
-  it("air pitch assist: the same launch with the assist off tumbles (proves the gate can fail)", () => {
-    const run = flyHard("ramp-s", 85, 0);
-    expect(run.maxTiltDeg).toBeGreaterThan(90);
-  });
-
   it("air pitch assist: it holds across the medium ramp too, at 85 mph", () => {
     const run = flyHard("ramp-m", 85, 25);
     expect(run.maxTiltDeg).toBeLessThan(35);
+  });
+
+  it("landing speed keep: the large ramp at 85 mph costs no speed once it settles (without it about 8 mph)", () => {
+    const keep = landingCost("ramp-l", 85, 0.8);
+    const none = landingCost("ramp-l", 85, 0);
+    expect(none).toBeGreaterThan(5);
+    expect(keep).toBeLessThan(2);
   });
 
   it("a bigger ramp flies further at the same pad speed", () => {

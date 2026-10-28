@@ -30,8 +30,10 @@ import { DT } from "../core/sim-clock";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 
 const GRAVITY = 9.81;
-/** How much of the flight-path angle the nose follows: 0.6 lands a touch nose-down, tail-first never. */
+/** How much of the flight-path angle the nose follows while rising. */
 const AIR_PITCH_PATH_FOLLOW = 0.6;
+/** On the way down the nose follows less, so the car meets the ground nearly level (about 5 deg nose-down). */
+const AIR_PITCH_DESCENT_FOLLOW = 0.3;
 const AIR_PITCH_MAX_RAD = (80 * Math.PI) / 180;
 const AIR_PITCH_ERR_CLAMP_RAD = (60 * Math.PI) / 180;
 
@@ -165,10 +167,11 @@ export function applyAssists(
     const pitch = Math.asin(clamp(fwd.y, -1, 1));
     if (speed > 3 && Math.abs(pitch) < AIR_PITCH_MAX_RAD) {
       const gamma = Math.atan2(v.y, groundSpeed);
-      const target = gamma * AIR_PITCH_PATH_FOLLOW;
+      const follow = gamma > 0 ? AIR_PITCH_PATH_FOLLOW : AIR_PITCH_DESCENT_FOLLOW;
+      const target = gamma * follow;
       const gammaDot = (-GRAVITY * Math.cos(gamma)) / speed;
       const err = clamp(target - pitch, -AIR_PITCH_ERR_CLAMP_RAD, AIR_PITCH_ERR_CLAMP_RAD);
-      const rateErr = dot(w, right) - gammaDot * AIR_PITCH_PATH_FOLLOW;
+      const rateErr = dot(w, right) - gammaDot * follow;
       const kp = a.airPitchGain;
       const kd = 2 * a.airPitchDamping * Math.sqrt(a.airPitchGain);
       const torque = I.x * (kp * err - kd * rateErr);

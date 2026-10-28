@@ -181,15 +181,17 @@ export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
   { id: "feel-test-kicker", centerX: 184, centerZ: 430, radiusM: 56, heightM: 5 },
   { id: "feel-test-big-air", centerX: 198, centerZ: 260, radiusM: 70, heightM: 8 },
   // Game-scale ramps, in line on one road (local z 980, east-bound). Each
-  // starts 65-70 m after its pad. Foot radius keeps v^2/R under ~19 m/s^2 at
-  // the top speed noted. Feet at local x 215 / 335 / 470 = world -485 / -365 / -230.
+  // starts 65-70 m after its pad. Foot radius 75 m keeps v^2/R under ~19 m/s^2 up to
+  // 85 mph (drive logs 2026-10-28 reached the ramps at 76-82 mph; 25-40 m feet slammed
+  // the bump stop and cost ~2.5 mph in one tick). The lip height is reached on the arc, so
+  // the launch angle comes from height / radius, not angleDeg. Feet at local x 215 / 335 / 470 = world -485 / -365 / -230.
   {
     id: "feel-test-ramp-s",
     centerX: -485,
     centerZ: 430,
     radiusM: 0,
     heightM: 0.9,
-    ramp: { headingRad: 0, widthM: 10, angleDeg: 12, footRadiusM: 25 }, // up to ~45 mph
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 20, footRadiusM: 75 }, // arc-limited: ~9 deg at the lip
   },
   {
     id: "feel-test-ramp-m",
@@ -197,7 +199,7 @@ export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
     centerZ: 430,
     radiusM: 0,
     heightM: 1.8,
-    ramp: { headingRad: 0, widthM: 10, angleDeg: 16, footRadiusM: 40 }, // up to ~60 mph
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 20, footRadiusM: 75 }, // arc-limited: ~12.6 deg at the lip
   },
   {
     id: "feel-test-ramp-l",
@@ -205,7 +207,7 @@ export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
     centerZ: 430,
     radiusM: 0,
     heightM: 3,
-    ramp: { headingRad: 0, widthM: 10, angleDeg: 20, footRadiusM: 40 }, // up to ~60 mph
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 20, footRadiusM: 75 }, // arc-limited: ~16 deg at the lip
   },
 ];
 

@@ -62,6 +62,12 @@ function smoothstep(lo: number, hi: number, x: number): number {
 
 /** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
 const FLICK_YAW_ACCEL = 8;
+const CHASSIS_FRICTION = 0.15;
+/** Landing speed keep: a flight of at least 0.3 s, then a 0.25 s window; restores this fraction of the remaining loss each tick. */
+const LANDING_MIN_AIR_TICKS = 18;
+const LANDING_WINDOW_TICKS = 15;
+const LANDING_RESTORE_PER_TICK = 0.5;
+const LANDING_MIN_SPEED_MS = 5;
 
 /** Pivot turn: fully active below this ground speed, m/s... */
 const PIVOT_FULL_SPEED_MS = 5;
@@ -260,8 +266,14 @@ export function createVehicle(
       .setAngularDamping(c.angularDamping),
   );
 
+  // Body friction is low on purpose: the wheels do the gripping. With 0.8 the
+  // underside clipping a ramp lip or scraping on a bottomed-out landing acted as
+  // a brake (5 mph in one tick off a 0.9 m lip at 90 mph; roughly half of the
+  // 15-23 mph lost on big landings in the drive logs, 2026-10-28).
   world.createCollider(
-    RAPIER.ColliderDesc.cuboid(c.halfExtents.x, c.halfExtents.y, c.halfExtents.z).setFriction(0.8),
+    RAPIER.ColliderDesc.cuboid(c.halfExtents.x, c.halfExtents.y, c.halfExtents.z).setFriction(
+      CHASSIS_FRICTION,
+    ),
     body,
   );
 
@@ -394,6 +406,12 @@ export function createVehicle(
   /** Last rear grip scale written by the tyre falloff (1 = untouched). */
   let rearGripScale = 1;
   let rollGuardWasOn = false;
+  /** Consecutive ticks with no wheel down. */
+  let airTicks = 0;
+  /** Planar velocity on the last airborne tick of a long-enough flight, while the landing window runs. */
+  let landingRef: { x: number; z: number } | null = null;
+  let landingTicksLeft = 0;
+  const lastAirVel = { x: 0, z: 0 };
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   const rearGrip = {
     sideFriction: 0,
@@ -918,6 +936,49 @@ export function createVehicle(
         if (vc.wheelIsInContact(i)) contacts++;
       }
       telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
+
+      // 6b. Landing speed keep. A hard touchdown costs forward speed (the
+      // chassis scrapes, the suspension bottoms and the wheels grip as the
+      // body is slowed vertically): 15-23 mph off a 3-6 m drop in the drive
+      // logs, which reads as hitting a wall rather than landing a jump. For a
+      // short window after a real flight, give back a fraction of the planar
+      // speed lost along the pre-landing heading. Never while braking, and
+      // never more than was lost.
+      if (contacts === 0) {
+        airTicks++;
+        landingRef = null;
+        landingTicksLeft = 0;
+        const lv = body.linvel();
+        lastAirVel.x = lv.x;
+        lastAirVel.z = lv.z;
+      } else {
+        if (airTicks >= LANDING_MIN_AIR_TICKS) {
+          landingRef = { x: lastAirVel.x, z: lastAirVel.z };
+          landingTicksLeft = LANDING_WINDOW_TICKS;
+        }
+        airTicks = 0;
+        if (landingRef !== null && landingTicksLeft > 0) {
+          landingTicksLeft--;
+          const refSpeed = Math.hypot(landingRef.x, landingRef.z);
+          if (
+            t.drive.landingSpeedKeep > 0 &&
+            frame.brake === 0 &&
+            refSpeed > LANDING_MIN_SPEED_MS
+          ) {
+            const lv = body.linvel();
+            const dx = landingRef.x / refSpeed;
+            const dz = landingRef.z / refSpeed;
+            const lost = refSpeed - (lv.x * dx + lv.z * dz);
+            if (lost > 0) {
+              const dv = lost * t.drive.landingSpeedKeep * LANDING_RESTORE_PER_TICK;
+              const m = body.mass();
+              body.applyImpulse({ x: dx * dv * m, y: 0, z: dz * dv * m }, true);
+            }
+          }
+        } else {
+          landingRef = null;
+        }
+      }
 
       // 7. Assists — impulses accumulate onto the same buffer world.step()
       // consumes next. The caller (src/loop.ts via applyInput) then calls
