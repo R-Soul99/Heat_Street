@@ -94,6 +94,7 @@ import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
 import { createAiFleet } from "./physics/ai-fleet";
+import { createGroundProbe } from "./physics/ground-probe";
 import { createMapScene } from "./physics/map-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
@@ -108,6 +109,7 @@ import {
 import { createObjectCameraTarget } from "./render/camera/object-camera-target";
 import { createOcclusionController } from "./render/camera/occlusion-controller";
 import { createOcclusionProbe } from "./render/camera/occlusion-probe";
+import { createCarShadow } from "./render/car-shadow";
 import { createCarXray } from "./render/car-xray";
 import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView } from "./render/map-view";
@@ -387,6 +389,24 @@ try {
   }
   const fx = createSurfaceFx(fxMeshes, fxSurfaces);
   view.scene.add(fx.group);
+
+  // Proving ground only: draw the hop/jump domes in a colour that stands out
+  // from the grey tarmac (they were invisible bumps), and lay a shadow patch
+  // on the ground below the car so the camera can see how high it is.
+  let carShadow: ReturnType<typeof createCarShadow> | undefined;
+  let groundProbe: ReturnType<typeof createGroundProbe> | undefined;
+  if (isFlatTestArea(AREA_ID)) {
+    for (const crest of mapView.crestMeshes) {
+      const materials = Array.isArray(crest.material) ? crest.material : [crest.material];
+      for (const m of materials) {
+        if (m instanceof THREE.MeshStandardMaterial) m.color.set(0xd9a441);
+      }
+      view.scene.add(crest);
+    }
+    carShadow = createCarShadow(tuning.chassis.halfExtents);
+    view.scene.add(carShadow.object);
+    groundProbe = createGroundProbe(world, scene.vehicle.body);
+  }
 
   /** One render frame's mutable per-wheel FX sample -- `SurfaceFxWheelInput`'s shape, but writable at this call site (the interface itself is `readonly` for `fx.update`'s own callers). */
   interface WheelFxSample {
@@ -881,6 +901,10 @@ try {
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
+      if (carShadow !== undefined && groundProbe !== undefined) {
+        const p = view.meshes[0].position;
+        carShadow.update(view.meshes[0], groundProbe(p.x, p.y + 0.5, p.z));
+      }
       // `freeLook?.restoreRigPose()` runs BEFORE `activeRig.update(dtMs)` —
       // LOAD-BEARING ordering (src/debug/free-look-camera.ts's own doc
       // comment): the rig damps `camera.position` using `camera.position`

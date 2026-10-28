@@ -57,6 +57,7 @@ const BUILDINGS_NODE_NAME = "buildings";
 
 /** The compiler's single off-road terrain node name (plan 04-10, `tools/map-compiler/author/gltf.ts`). */
 const TERRAIN_NODE_NAME = "terrain";
+const CRESTS_NODE_NAME = "crests";
 
 /**
  * One compiled `.glb`, loaded and classified: `roadMeshes`/`roadSurfaces` are
@@ -89,6 +90,14 @@ export interface MapWorldView {
    */
   readonly terrainMesh: THREE.Mesh | undefined;
 
+  /**
+   * The authored crest domes' `crests` mesh(es). NOT added to `group`: crests
+   * were never drawn (only their colliders exist), so the caller decides
+   * whether to show them (the feel-test proving ground does, so its hops
+   * read). Empty when the `.glb` has none.
+   */
+  readonly crestMeshes: readonly THREE.Mesh[];
+
   /** Dispose every geometry and material this module took ownership of. */
   dispose(): void;
 }
@@ -97,6 +106,7 @@ type NodeClassification =
   | { readonly kind: "road"; readonly surface: SurfaceType }
   | { readonly kind: "building" }
   | { readonly kind: "terrain" }
+  | { readonly kind: "crest" }
   | { readonly kind: "ignored" };
 
 /**
@@ -113,6 +123,9 @@ function classifyName(name: string): NodeClassification {
   }
   if (name === TERRAIN_NODE_NAME) {
     return { kind: "terrain" };
+  }
+  if (name === CRESTS_NODE_NAME) {
+    return { kind: "crest" };
   }
   if (name.startsWith(ROAD_NODE_PREFIX)) {
     const suffix = name.slice(ROAD_NODE_PREFIX.length);
@@ -161,6 +174,7 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
   const roadSurfaces: SurfaceType[] = [];
   const buildingMeshes: THREE.Mesh[] = [];
   let terrainMesh: THREE.Mesh | undefined;
+  const crestMeshes: THREE.Mesh[] = [];
   let ignoredCount = 0;
 
   scene.traverse((obj) => {
@@ -188,6 +202,9 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
         applyMaterialSide(obj, THREE.FrontSide);
         terrainMesh = obj;
         break;
+      case "crest":
+        crestMeshes.push(obj);
+        break;
       case "ignored":
         ignoredCount++;
         break;
@@ -213,11 +230,13 @@ export function buildMapWorldView(scene: THREE.Object3D): MapWorldView {
     roadSurfaces,
     buildingMeshes,
     terrainMesh,
+    crestMeshes,
 
     dispose(): void {
       for (const mesh of roadMeshes) disposeMesh(mesh);
       for (const mesh of buildingMeshes) disposeMesh(mesh);
       if (terrainMesh !== undefined) disposeMesh(terrainMesh);
+      for (const mesh of crestMeshes) disposeMesh(mesh);
     },
   };
 }
