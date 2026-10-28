@@ -50,7 +50,10 @@ describe("surface-telemetry: skidpad sweep (SC1)", () => {
   });
 
   it("every pair of surfaces differs by at least SURFACE_SEPARATION_MIN_G — SC1's 'distinct and measurable' claim", () => {
-    const results = runSurfaceSkidpadSweep(defaultTuning(), defaultSurfaceProfiles());
+    // Surface grip only: the lift-off hold shifts the skidpad by a few hundredths of a g.
+    const tuning = defaultTuning();
+    tuning.drive.liftOffOversteer = 0;
+    const results = runSurfaceSkidpadSweep(tuning, defaultSurfaceProfiles());
 
     for (let i = 0; i < results.length; i++) {
       for (let j = i + 1; j < results.length; j++) {

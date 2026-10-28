@@ -85,6 +85,12 @@ const PIVOT_OFF_EPS = 0.002;
 const REAR_GRIP_LOOSEN_TAU = 0.05;
 /** Lift-off oversteer: time constant of the 'recent throttle' reference. */
 const LIFT_OFF_REF_TAU = 0.3;
+/** The lift-off loosening decays over this long, so reapplying the throttle
+ * does not regrip the tail at once (drive log 2026-10-28: rear side impulse
+ * 24 to 90 in 0.1 s and yaw rate -37%). */
+const LIFT_OFF_HOLD_TAU = 0.5;
+/** Falloff grip returns over this long, so catching a slide is not a one-frame snap. */
+const FALLOFF_RECOVER_TAU = 0.12;
 /** Tyre grip falloff: slip (rad) where the rear starts to lose grip, and where the loss is complete. */
 const TYRE_FALLOFF_ONSET = 0.2;
 const TYRE_FALLOFF_FULL = 0.7;
@@ -361,6 +367,7 @@ export function createVehicle(
     pivotDir = 0;
     rearSfsSmoothed = -1;
     throttleRef = 0;
+    liftHold = 0;
     rearGripScale = 1;
   }
 
@@ -378,6 +385,7 @@ export function createVehicle(
   let rearSfsSmoothed = -1;
   /** Low-passed throttle: what the driver was recently asking for. */
   let throttleRef = 0;
+  let liftHold = 0;
   /** Last rear grip scale written by the tyre falloff (1 = untouched). */
   let rearGripScale = 1;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
@@ -636,16 +644,17 @@ export function createVehicle(
       // so the effect fades by itself. Keyed on steer like the power blend.
       const lift = Math.max(0, throttleRef - frame.throttle);
       throttleRef += (frame.throttle - throttleRef) * (1 - Math.exp(-DT / LIFT_OFF_REF_TAU));
-      const liftBlend = clamp(
+      const liftRaw = clamp(
         t.drive.liftOffOversteer *
           lift *
           Math.abs(frame.steer) *
           lockScale *
-          clamp((Math.hypot(lv.x, lv.z) - 8) / 10, 0, 1) *
-          counterSteerFade,
+          clamp((Math.hypot(lv.x, lv.z) - 8) / 10, 0, 1),
         0,
         1,
       );
+      liftHold = Math.max(liftRaw, liftHold * Math.exp(-DT / LIFT_OFF_HOLD_TAU));
+      const liftBlend = liftHold * counterSteerFade;
       const pivotBlend = pivotRear * t.drive.pivotTurn;
       const powerBlend = clamp(
         // Scaled by the speed lock fade: the blend is keyed on steer
@@ -724,7 +733,11 @@ export function createVehicle(
       );
       // Not while counter-steering: the driver catching a slide keeps full rear
       // grip (counterSteerFade is 0 once the correction is firmly applied).
-      const gripScale = 1 - t.drive.tyreFalloff * fo * fo * (3 - 2 * fo) * counterSteerFade;
+      const gripTarget = 1 - t.drive.tyreFalloff * fo * fo * (3 - 2 * fo) * counterSteerFade;
+      const gripScale =
+        gripTarget > rearGripScale
+          ? rearGripScale + (gripTarget - rearGripScale) * (1 - Math.exp(-DT / FALLOFF_RECOVER_TAU))
+          : gripTarget;
       if (t.drive.tyreFalloff > 0 || rearGripScale !== 1) {
         vc.setWheelFrictionSlip(RL, t.wheels.frictionSlip * rearForwardGrip[0] * gripScale);
         vc.setWheelFrictionSlip(RR, t.wheels.frictionSlip * rearForwardGrip[1] * gripScale);
