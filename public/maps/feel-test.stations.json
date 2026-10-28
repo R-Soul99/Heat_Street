@@ -114,7 +114,7 @@
     {
       "id": "ramp-s",
       "key": "=",
-      "name": "Ramp S (0.9 m lip, 9 deg): any speed to 85 mph",
+      "name": "Ramp S (0.9 m lip, 6 deg): any speed to 95 mph",
       "note": "Game-scale kerb-hop ramp. 65 m run-up; the road is shared with M and L.",
       "featureAheadM": 65,
       "widthM": 12,
@@ -125,7 +125,7 @@
     {
       "id": "ramp-m",
       "key": "\\",
-      "name": "Ramp M (1.8 m lip, 13 deg): any speed to 85 mph",
+      "name": "Ramp M (1.8 m lip, 10 deg): any speed to 95 mph",
       "note": "Game-scale stunt ramp. Starts after S's landing.",
       "featureAheadM": 65,
       "widthM": 12,
@@ -136,7 +136,7 @@
     {
       "id": "ramp-l",
       "key": "/",
-      "name": "Ramp L (3 m lip, 16 deg): any speed to 85 mph",
+      "name": "Ramp L (3 m lip, 13 deg): any speed to 95 mph",
       "note": "Largest game-scale ramp.",
       "featureAheadM": 70,
       "widthM": 12,

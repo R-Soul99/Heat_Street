@@ -163,52 +163,90 @@ function landingCost(stationId: string, speedMph: number, landingSpeedKeep: numb
   throw new Error("never landed");
 }
 
+/** Ground speed at the foot of the ramp and at take-off, mph, throttle held. */
+function climb(stationId: string, speedMph: number): { footMph: number; lipMph: number } {
+  const world = createWorld();
+  const scene = createMapScene(world, graph, collision, defaultTuning(), defaultSurfaceProfiles());
+  const station = stations.find((s) => s.id === stationId);
+  if (station === undefined) throw new Error(`no station ${stationId}`);
+  scene.resetVehicle({
+    x: station.x,
+    y: scene.defaultSpawnPose.y,
+    z: station.z,
+    headingRad: station.headingRad,
+  });
+  scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
+  let footMph = 0;
+  for (let t = 0; t < 6 * 60; t++) {
+    scene.applyInput({ ...NEUTRAL, throttle: 1 });
+    world.step();
+    const s = sampleVehicle(scene.vehicle);
+    const mph = s.groundSpeedMs / MPH;
+    if (footMph === 0 && s.position.x > station.x + station.featureAheadM - 2) footMph = mph;
+    if (footMph > 0 && s.contacts === 0) return { footMph, lipMph: mph };
+  }
+  throw new Error("never took off");
+}
+
 describe("feel-test game-scale ramps", () => {
   // Pad speeds are what the station launches at; the car coasts ~65 m to the foot and
-  // arrives 7-10 mph slower (take-off speed is in the run).
-  it("the small ramp is a hop that needs no run-up: airborne from a 30 mph pad launch", () => {
-    const small = fly("ramp-s", 30);
-    expect(small.airborneS).toBeGreaterThan(0.25);
-    const run = fly("ramp-s", 40);
-    expect(run.airborneS).toBeGreaterThan(0.4);
-    expect(run.airborneS).toBeLessThan(1.2);
-    expect(run.flightM).toBeGreaterThan(5);
-    expect(run.flightM).toBeLessThan(15);
-    expect(run.riseM).toBeLessThan(2);
+  // arrives 7-10 mph slower (take-off speed is in the run). The feet are 150 m radius arcs,
+  // so these are long, low ramps: the bigger the speed, the bigger the jump.
+  it("the small ramp is a hop that works from a 40 mph pad launch and grows with speed", () => {
+    const slow = fly("ramp-s", 40);
+    expect(slow.airborneS).toBeGreaterThan(0.25);
+    const fast = fly("ramp-s", 60);
+    expect(fast.airborneS).toBeGreaterThan(0.45);
+    expect(fast.airborneS).toBeLessThan(1.1);
+    expect(fast.flightM).toBeGreaterThan(8);
+    expect(fast.flightM).toBeLessThan(22);
+    expect(fast.riseM).toBeLessThan(2);
   });
 
-  it("the medium ramp at 50 mph is a ~20 m jump", () => {
-    const run = fly("ramp-m", 50);
-    expect(run.airborneS).toBeGreaterThan(0.8);
-    expect(run.airborneS).toBeLessThan(1.8);
+  it("the medium ramp at 60 mph is a ~20 m jump", () => {
+    const run = fly("ramp-m", 60);
+    expect(run.airborneS).toBeGreaterThan(0.7);
+    expect(run.airborneS).toBeLessThan(1.4);
     expect(run.flightM).toBeGreaterThan(14);
     expect(run.flightM).toBeLessThan(30);
-    expect(run.riseM).toBeGreaterThan(2);
-    expect(run.riseM).toBeLessThan(4.5);
+    expect(run.riseM).toBeGreaterThan(1.8);
+    expect(run.riseM).toBeLessThan(3.5);
   });
 
-  it("the large ramp at 60 mph is the big end: ~35 m, 6 m up", () => {
-    const run = fly("ramp-l", 60);
-    expect(run.airborneS).toBeGreaterThan(1.4);
-    expect(run.airborneS).toBeLessThan(2.6);
-    expect(run.flightM).toBeGreaterThan(28);
-    expect(run.flightM).toBeLessThan(50);
-    expect(run.riseM).toBeGreaterThan(4.5);
-    expect(run.riseM).toBeLessThan(7.5);
+  it("the large ramp is the big end: ~25 m at 60 mph, ~50 m and 5 m up at 85 mph", () => {
+    const mid = fly("ramp-l", 60);
+    expect(mid.airborneS).toBeGreaterThan(1);
+    expect(mid.airborneS).toBeLessThan(1.6);
+    expect(mid.flightM).toBeGreaterThan(18);
+    expect(mid.flightM).toBeLessThan(36);
+    const fast = fly("ramp-l", 85);
+    expect(fast.airborneS).toBeGreaterThan(1.3);
+    expect(fast.airborneS).toBeLessThan(2.1);
+    expect(fast.flightM).toBeGreaterThan(40);
+    expect(fast.flightM).toBeLessThan(70);
+    expect(fast.riseM).toBeGreaterThan(4);
+    expect(fast.riseM).toBeLessThan(6.5);
   });
 
   it("every ramp lands on its wheels and the car ends upright, at every design speed", () => {
     for (const [id, speeds] of [
-      ["ramp-s", [30, 35, 40, 45]],
-      ["ramp-m", [40, 45, 50, 55]],
-      ["ramp-l", [50, 55, 60, 65]],
+      ["ramp-s", [40, 60, 85]],
+      ["ramp-m", [40, 50, 60]],
+      ["ramp-l", [40, 60, 85]],
     ] as const) {
       for (const mph of speeds) {
         const run = fly(id, mph);
-        expect(run.airborneS, `${id} @ ${mph}`).toBeGreaterThan(0.2);
+        expect(run.airborneS, `${id} @ ${mph}`).toBeGreaterThan(0.25);
         expect(run.endContacts, `${id} @ ${mph}`).toBe(4);
         expect(run.maxTiltDeg, `${id} @ ${mph}`).toBeLessThan(45);
       }
+    }
+  });
+
+  it("the ramps do not slow the car: speed at the lip is within 2 mph of speed at the foot, at 85 mph", () => {
+    for (const id of ["ramp-s", "ramp-m", "ramp-l"]) {
+      const { footMph, lipMph } = climb(id, 85);
+      expect(lipMph, id).toBeGreaterThan(footMph - 2);
     }
   });
 
