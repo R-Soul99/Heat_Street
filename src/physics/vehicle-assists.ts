@@ -29,6 +29,12 @@ import type * as RAPIER from "@dimforge/rapier3d";
 import { DT } from "../core/sim-clock";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 
+const GRAVITY = 9.81;
+/** How much of the flight-path angle the nose follows: 0.6 lands a touch nose-down, tail-first never. */
+const AIR_PITCH_PATH_FOLLOW = 0.6;
+const AIR_PITCH_MAX_RAD = (80 * Math.PI) / 180;
+const AIR_PITCH_ERR_CLAMP_RAD = (60 * Math.PI) / 180;
+
 /** Clamp `v` into `[lo, hi]`. */
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -143,6 +149,34 @@ export function applyAssists(
       },
       true,
     );
+  }
+
+  // ---- AIR PITCH: airborne only. Nose follows the flight path ---------------
+  // A car leaving a ramp has its front wheels clear of the lip while the rear
+  // is still riding up the slope, which kicks the nose down at a rate that
+  // grows with speed (~55 deg/s at 85 mph). Nothing in the air stops it, so it
+  // lands nose-first. This is a PD torque about the chassis's right axis on
+  // (pitch - flight-path angle). The damping term is on the error RATE (pitch
+  // rate minus the path's own turn rate, -g cos(gamma) / V) so the target can
+  // fall at the ballistic rate with no steady lag. Not applied past 80 deg of
+  // pitch (an inverted car is not "levelled" by it).
+  if (contacts === 0 && a.airPitchGain > 0) {
+    const speed = Math.hypot(v.x, v.y, v.z);
+    const pitch = Math.asin(clamp(fwd.y, -1, 1));
+    if (speed > 3 && Math.abs(pitch) < AIR_PITCH_MAX_RAD) {
+      const gamma = Math.atan2(v.y, groundSpeed);
+      const target = gamma * AIR_PITCH_PATH_FOLLOW;
+      const gammaDot = (-GRAVITY * Math.cos(gamma)) / speed;
+      const err = clamp(target - pitch, -AIR_PITCH_ERR_CLAMP_RAD, AIR_PITCH_ERR_CLAMP_RAD);
+      const rateErr = dot(w, right) - gammaDot * AIR_PITCH_PATH_FOLLOW;
+      const kp = a.airPitchGain;
+      const kd = 2 * a.airPitchDamping * Math.sqrt(a.airPitchGain);
+      const torque = I.x * (kp * err - kd * rateErr);
+      body.applyTorqueImpulse(
+        { x: right.x * torque * DT, y: right.y * torque * DT, z: right.z * torque * DT },
+        true,
+      );
+    }
   }
 
   // ---- D-06 BODY ROLL: grounded only, CLAMPED and CUT OFF ------------------

@@ -321,6 +321,9 @@ describe("vehicle-telemetry: ramp (VEH-04, D-07)", () => {
     // chassis never lands on its wheels — tumbles indefinitely instead.
     const tuning = defaultTuning();
     tuning.assists.autoLevelGain = 0;
+    // The in-air pitch assist (exp/air-assist) now also keeps the car off its
+    // nose on this ramp, so the original "no in-air help" condition needs both off.
+    tuning.assists.airPitchGain = 0;
     const result = runRoutine(findRoutine("ramp"), tuning);
 
     expect(result.pass).toBe(false);
@@ -390,6 +393,10 @@ describe("vehicle-telemetry: roll assist stability (D-06, SC3, Open Question 3)"
   it("roll assist stability companion: bodyRollGain 0.20 makes at least one routine exceed 15 deg (proves the gate can fail)", () => {
     const tuning = defaultTuning();
     tuning.assists.bodyRollGain = 0.2;
+    // Re-anchored (exp/air-assist): with the in-air pitch assist on, the ramp
+    // routine lands level enough that this no longer tips any routine past
+    // 15 deg. The gate is meant to show it CAN fail, so keep the assist off here.
+    tuning.assists.airPitchGain = 0;
 
     const maxTilts = CANONICAL_ROUTINE_IDS.map((id) => {
       const wrapped = wrapWithTiltTracking(findRoutine(id));

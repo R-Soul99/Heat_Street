@@ -506,6 +506,20 @@ export function createTuningPanel(
     "autoLevelDamping",
     TUNING_RANGES.assists.autoLevelDamping,
   ).onChange(handlers.onApplyVehicle);
+  // `airPitchGain`: steers the nose toward the flight path while airborne so
+  // a ramp launch doesn't nose-dive (0 = off).
+  addNumber(
+    assistsFolder,
+    tuning.assists,
+    "airPitchGain",
+    TUNING_RANGES.assists.airPitchGain,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    assistsFolder,
+    tuning.assists,
+    "airPitchDamping",
+    TUNING_RANGES.assists.airPitchDamping,
+  ).onChange(handlers.onApplyVehicle);
   // `bodyRollGain`: [MEASURED] POSITIVE FEEDBACK — gain 0.10 -> ~5.5deg,
   // gain 0.20 -> the car flips onto its roof. `bodyRollMaxDeg` below is the
   // cutoff that keeps this assist from running away, not a decoration.

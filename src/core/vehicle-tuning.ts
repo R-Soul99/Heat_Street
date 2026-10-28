@@ -433,6 +433,16 @@ export interface VehicleTuning {
     /** Auto-level angular-rate damping term, as a multiple of the gain. */
     autoLevelDamping: number;
     /**
+     * In-air pitch assist stiffness (1/s^2; natural frequency is its square
+     * root), applied only while zero wheels touch. Steers the nose toward the
+     * flight path (nose up on the way up, down on the way down) so a car
+     * leaving a ramp does not nose-dive: a 85 mph launch off a 12 deg ramp
+     * pitched down at ~55 deg/s and landed 60 deg nose-first without it. 0 = off.
+     */
+    airPitchGain: number;
+    /** Air pitch damping ratio (1 = critically damped, no overshoot). */
+    airPitchDamping: number;
+    /**
      * Body-roll assist torque gain, applied only while >=3 wheels are
      * grounded and current roll is under `bodyRollMaxDeg`. `[MEASURED]`
      * (02-RESEARCH.md, D-06): Rapier hardcodes `roll_influence = 0.1`
@@ -598,6 +608,8 @@ export function defaultTuning(): VehicleTuning {
     assists: {
       autoLevelGain: 0.4,
       autoLevelDamping: 0.6,
+      airPitchGain: 25,
+      airPitchDamping: 1,
       bodyRollGain: 0.075,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
@@ -677,6 +689,8 @@ export const TUNING_RANGES: {
   readonly assists: {
     autoLevelGain: TuningRange;
     autoLevelDamping: TuningRange;
+    airPitchGain: TuningRange;
+    airPitchDamping: TuningRange;
     bodyRollGain: TuningRange;
     bodyRollDamping: TuningRange;
     bodyRollMaxDeg: TuningRange;
@@ -755,6 +769,8 @@ export const TUNING_RANGES: {
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },
     autoLevelDamping: { min: 0, max: 2, step: 0.05 },
+    airPitchGain: { min: 0, max: 80, step: 1 },
+    airPitchDamping: { min: 0, max: 2, step: 0.05 },
     bodyRollGain: { min: 0, max: 0.15, step: 0.005 },
     bodyRollDamping: { min: 0, max: 3, step: 0.05 },
     bodyRollMaxDeg: { min: 0, max: 25, step: 1 },
