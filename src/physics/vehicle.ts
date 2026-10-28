@@ -91,6 +91,11 @@ const LIFT_OFF_REF_TAU = 0.3;
 const LIFT_OFF_HOLD_TAU = 0.5;
 /** Falloff grip returns over this long, so catching a slide is not a one-frame snap. */
 const FALLOFF_RECOVER_TAU = 0.12;
+/** Body roll (deg) where the roll guard starts withdrawing tyre grip, and where it is complete. */
+const ROLL_GUARD_ONSET_DEG = 12;
+const ROLL_GUARD_FULL_DEG = 25;
+/** Soft ground digs in: the guard leaves these alone so the car can still trip and roll. */
+const ROLL_GUARD_EXEMPT: ReadonlySet<SurfaceType> = new Set<SurfaceType>(["grass", "sand", "mud"]);
 /** Tyre grip falloff: slip (rad) where the rear starts to lose grip, and where the loss is complete. */
 const TYRE_FALLOFF_ONSET = 0.2;
 const TYRE_FALLOFF_FULL = 0.7;
@@ -388,6 +393,7 @@ export function createVehicle(
   let liftHold = 0;
   /** Last rear grip scale written by the tyre falloff (1 = untouched). */
   let rearGripScale = 1;
+  let rollGuardWasOn = false;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   const rearGrip = {
     sideFriction: 0,
@@ -433,6 +439,7 @@ export function createVehicle(
       // the comment there.
       const rearLateralGrip: number[] = [1, 1];
       const rearForwardGrip: number[] = [1, 1];
+      const frontForwardGrip: number[] = [1, 1];
       if (surfaces) {
         for (let i = 0; i < 4; i++) {
           const ground = vc.wheelGroundObject(i);
@@ -441,6 +448,7 @@ export function createVehicle(
           const profile = surfaces.profiles[surface];
           vc.setWheelFrictionSlip(i, t.wheels.frictionSlip * profile.forwardGrip);
           if (i < 2) {
+            frontForwardGrip[i] = profile.forwardGrip;
             vc.setWheelSideFrictionStiffness(i, t.wheels.frontSideFriction * profile.lateralGrip);
           } else {
             rearLateralGrip[i - 2] = profile.lateralGrip;
@@ -744,6 +752,32 @@ export function createVehicle(
         rearGripScale = t.drive.tyreFalloff > 0 ? gripScale : 1;
       }
       rearGrip.gripScale = rearGripScale;
+
+      // Roll guard: withdraw tyre grip as the body rolls past the onset angle
+      // (previous tick's roll), per wheel, on firm ground only. Grip is the
+      // cap, so this removes the sideways force that tips a sliding car.
+      const rollFade = smoothstep01(
+        clamp(
+          (Math.abs(telemetry.rollDeg) - ROLL_GUARD_ONSET_DEG) /
+            (ROLL_GUARD_FULL_DEG - ROLL_GUARD_ONSET_DEG),
+          0,
+          1,
+        ),
+      );
+      const guardOn = t.drive.rollGuard > 0 && rollFade > 0;
+      if (guardOn || rollGuardWasOn) {
+        for (let i = 0; i < 4; i++) {
+          const g = ROLL_GUARD_EXEMPT.has(wheelSurfaces[i] as SurfaceType)
+            ? 1
+            : 1 - t.drive.rollGuard * rollFade;
+          const base =
+            i < 2
+              ? t.wheels.frictionSlip * (frontForwardGrip[i] ?? 1)
+              : t.wheels.frictionSlip * (rearForwardGrip[i - 2] ?? 1) * rearGripScale;
+          vc.setWheelFrictionSlip(i, base * g);
+        }
+        rollGuardWasOn = guardOn;
+      }
 
       // 5. Solve the vehicle — writes suspension + tire impulses onto the
       // chassis body. Imported DT, never a literal.

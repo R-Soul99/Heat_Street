@@ -409,6 +409,15 @@ export interface VehicleTuning {
      * Added 2026-10-28 (exp/tyre-falloff).
      */
     tyreFalloff: number;
+    /**
+     * Roll guard, 0..1: how much of the tyres' grip is withdrawn as the body
+     * rolls from ~12 to ~25 deg on firm ground, so a sideways slide ends in a
+     * slide, not a tip-over (drive log 2026-10-28: a recovered 13 deg slide at
+     * 93 mph rolled the car 90 deg). Only tyre grip is touched: kerb trips,
+     * hard landings, collisions and soft ground (grass/sand/mud) can still
+     * roll the car. 0 = off. Added 2026-10-28 (exp/roll-guard).
+     */
+    rollGuard: number;
   };
   readonly assists: {
     /**
@@ -584,6 +593,7 @@ export function defaultTuning(): VehicleTuning {
       slideSurge: 0.3,
       liftOffOversteer: 5,
       tyreFalloff: 0.3,
+      rollGuard: 0.85,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -662,6 +672,7 @@ export const TUNING_RANGES: {
     slideSurge: TuningRange;
     liftOffOversteer: TuningRange;
     tyreFalloff: TuningRange;
+    rollGuard: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -739,6 +750,7 @@ export const TUNING_RANGES: {
     slideSurge: { min: 0, max: 1, step: 0.05 },
     liftOffOversteer: { min: 0, max: 12, step: 0.1 },
     tyreFalloff: { min: 0, max: 0.9, step: 0.01 },
+    rollGuard: { min: 0, max: 1, step: 0.01 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

@@ -487,6 +487,9 @@ export function createTuningPanel(
   addNumber(driveFolder, tuning.drive, "tyreFalloff", TUNING_RANGES.drive.tyreFalloff).onChange(
     handlers.onApplyVehicle,
   );
+  addNumber(driveFolder, tuning.drive, "rollGuard", TUNING_RANGES.drive.rollGuard).onChange(
+    handlers.onApplyVehicle,
+  );
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
