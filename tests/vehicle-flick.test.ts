@@ -55,7 +55,8 @@ describe("weight-shift flick", () => {
     const full = feintMaxSlipDeg(1);
     expect(half).toBeGreaterThan(off + 2);
     expect(full).toBeGreaterThan(half + 2);
-    expect(full).toBeLessThan(60);
+    // Re-anchored 2026-10-28 (suspension travel 0.3 -> 0.4): 68 deg now, was <60.
+    expect(full).toBeLessThan(75);
   });
 
   it("two runs give a bit-identical result (the swing state is reset per vehicle)", () => {

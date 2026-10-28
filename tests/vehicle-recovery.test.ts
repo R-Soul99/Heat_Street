@@ -67,6 +67,11 @@ describe("vehicle-recovery: powerSlideRecoveryRoutine (260920-j4d symptom 1)", (
     // fix the old failure at gain 1.1 on their own (a 0.1 rear recovers in
     // 1.6 s), so the failing case is a rear with no baseline grip at all.
     tuning.wheels.rearSideFriction = 0;
+    // Re-anchored 2026-10-28 (suspension travel 0.3 -> 0.4): the car is steadier
+    // now, and a rear with no side friction alone still recovers in ~1.2 s, so
+    // the failing case also needs a rear that cannot hold the road (measured:
+    // frictionSlip 0.6 never recovers).
+    tuning.wheels.frictionSlip = 0.6;
     const result = runRoutine(powerSlideRecoveryRoutine, tuning);
 
     expect(result.pass).toBe(false);
@@ -121,7 +126,9 @@ describe("vehicle-recovery: highSpeedPulseRoutine (260920-j4d symptom 2)", () =>
     const result = runRoutine(highSpeedPulseRoutine, tuning);
 
     expect(Number.isFinite(result.value)).toBe(true);
-    expect(result.value).toBeGreaterThan(15);
+    // Re-anchored 2026-10-28 (suspension travel 0.3 -> 0.4): 0.12 now settles at
+    // ~9.3 deg (was 18.7); 0.1 and below still never settle.
+    expect(result.value).toBeGreaterThan(8);
     expect(result.pass).toBe(false);
   });
 

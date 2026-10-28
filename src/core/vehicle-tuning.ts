@@ -560,7 +560,7 @@ export function defaultTuning(): VehicleTuning {
       connectionY: -0.3,
       radius: 0.36,
       suspensionRestLength: 0.45,
-      maxSuspensionTravel: 0.3,
+      maxSuspensionTravel: 0.4,
       suspensionStiffness: 14,
       suspensionCompression: 1.3,
       suspensionRelaxation: 1.4,
