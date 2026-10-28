@@ -294,7 +294,7 @@ export function createVehicle(
   function applyTuning(t: VehicleTuning): void {
     const w = t.wheels;
     for (let i = 0; i < 4; i++) {
-      vc.setWheelSuspensionStiffness(i, w.suspensionStiffness);
+      vc.setWheelSuspensionStiffness(i, i < 2 ? w.frontSuspensionStiffness : w.suspensionStiffness);
       vc.setWheelSuspensionCompression(i, w.suspensionCompression);
       vc.setWheelSuspensionRelaxation(i, w.suspensionRelaxation);
       vc.setWheelMaxSuspensionTravel(i, w.maxSuspensionTravel);

@@ -329,6 +329,12 @@ export function createTuningPanel(
   addNumber(
     suspensionFolder,
     tuning.wheels,
+    "frontSuspensionStiffness",
+    TUNING_RANGES.wheels.frontSuspensionStiffness,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    suspensionFolder,
+    tuning.wheels,
     "suspensionCompression",
     TUNING_RANGES.wheels.suspensionCompression,
   ).onChange(handlers.onApplyVehicle);

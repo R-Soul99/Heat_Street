@@ -107,6 +107,8 @@ export interface VehicleTuning {
     maxSuspensionTravel: number;
     /** Suspension spring stiffness. Mass-normalised by Rapier's own solver. */
     suspensionStiffness: number;
+    /** Front-axle spring stiffness; the rear uses `suspensionStiffness`. */
+    frontSuspensionStiffness: number;
     /** Suspension compression damping ratio. */
     suspensionCompression: number;
     /** Suspension relaxation (rebound) damping ratio. */
@@ -546,6 +548,7 @@ export function defaultTuning(): VehicleTuning {
       suspensionRestLength: 0.45,
       maxSuspensionTravel: 0.3,
       suspensionStiffness: 14,
+      frontSuspensionStiffness: 14,
       suspensionCompression: 1.3,
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 20000,
@@ -623,6 +626,7 @@ export const TUNING_RANGES: {
     suspensionRestLength: TuningRange;
     maxSuspensionTravel: TuningRange;
     suspensionStiffness: TuningRange;
+    frontSuspensionStiffness: TuningRange;
     suspensionCompression: TuningRange;
     suspensionRelaxation: TuningRange;
     maxSuspensionForce: TuningRange;
@@ -688,6 +692,7 @@ export const TUNING_RANGES: {
     suspensionRestLength: { min: 0.2, max: 0.8, step: 0.01 },
     maxSuspensionTravel: { min: 0.1, max: 0.6, step: 0.01 },
     suspensionStiffness: { min: 6, max: 40, step: 0.5 },
+    frontSuspensionStiffness: { min: 6, max: 40, step: 0.5 },
     suspensionCompression: { min: 0.2, max: 4, step: 0.05 },
     suspensionRelaxation: { min: 0.2, max: 4, step: 0.05 },
     maxSuspensionForce: { min: 5000, max: 40000, step: 500 },
