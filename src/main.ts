@@ -47,6 +47,7 @@ import {
 } from "./core/camera-tuning";
 import { parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag } from "./core/feel";
+import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { resolveMapId } from "./core/map-select";
@@ -365,7 +366,26 @@ try {
   // are the parallel arrays the skid-decal pool projects onto — the same
   // contract Phase 3's `surfaceWorld.zoneMeshes`/`SURFACE_ZONE_ORDER` shipped,
   // now backed by the real compiled road meshes instead of six test bands.
-  const fx = createSurfaceFx(mapView.roadMeshes, mapView.roadSurfaces);
+  // Flat test areas have tarmac ground everywhere, but skid decals only project
+  // onto `roadMeshes`. A flat plane over the whole area stands in for the
+  // tarmac zone (two triangles: cheap to project onto) so marks show on the
+  // ground too, not just on the drawn road lines.
+  const fxMeshes = [...mapView.roadMeshes];
+  const fxSurfaces = [...mapView.roadSurfaces];
+  if (isFlatTestArea(AREA_ID)) {
+    const width = graph.bounds.maxX - graph.bounds.minX;
+    const depth = graph.bounds.maxZ - graph.bounds.minZ;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2));
+    plane.position.set(
+      (graph.bounds.minX + graph.bounds.maxX) / 2,
+      0,
+      (graph.bounds.minZ + graph.bounds.maxZ) / 2,
+    );
+    plane.updateMatrixWorld(true);
+    fxMeshes.push(plane);
+    fxSurfaces.push(groundSurfaceForArea(AREA_ID));
+  }
+  const fx = createSurfaceFx(fxMeshes, fxSurfaces);
   view.scene.add(fx.group);
 
   /** One render frame's mutable per-wheel FX sample -- `SurfaceFxWheelInput`'s shape, but writable at this call site (the interface itself is `readonly` for `fx.update`'s own callers). */
