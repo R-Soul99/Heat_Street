@@ -142,15 +142,21 @@ export const JULIETTE_GA_CRESTS: readonly AuthoredCrest[] = [
  * The feel-test proving ground's jumps, on flat tarmac ground. World
  * coordinates are the layout's local coordinates minus (700, 550) (see
  * `tools/map-compiler/synthetic/proving-ground.ts`, which ends each launch
- * road 8 m short of the dome's edge). Each dome has its own run-up. Ramp
- * slopes are kept under ~15 deg: the first kicker (20 m radius, 20 deg) cost
- * 17 mph the moment the car hit it at 70 mph, which swamped the jump.
+ * road 8 m short of the dome's edge, so centre = road end + 8 + radius).
+ * Each dome has its own run-up.
+ *
+ * Sized for the car arriving at ~100 mph. The dome's foot is concave with
+ * radius of curvature r^2 / (6 h); the car feels v^2 / R vertically there. At
+ * 93 mph the old 30-40 m domes asked for 4-6 g, the suspension (about 2 g of
+ * travel) bottomed out on the whole face and the car lost 8-10 mph (drive
+ * logs 2026-10-28, big air and small kicker). r^2 >= 618 h keeps that under
+ * ~2 g at 100 mph.
  */
 export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
-  { id: "feel-test-hop", centerX: -357, centerZ: 320, radiusM: 25, heightM: 2.5 },
-  { id: "feel-test-crest", centerX: -207, centerZ: 320, radiusM: 35, heightM: 4 },
-  { id: "feel-test-kicker", centerX: 158, centerZ: 430, radiusM: 30, heightM: 5 },
-  { id: "feel-test-big-air", centerX: 173, centerZ: 260, radiusM: 45, heightM: 8 },
+  { id: "feel-test-hop", centerX: -344, centerZ: 320, radiusM: 38, heightM: 2.5 },
+  { id: "feel-test-crest", centerX: -195, centerZ: 320, radiusM: 50, heightM: 4 },
+  { id: "feel-test-kicker", centerX: 184, centerZ: 430, radiusM: 56, heightM: 5 },
+  { id: "feel-test-big-air", centerX: 198, centerZ: 260, radiusM: 70, heightM: 8 },
 ];
 
 export const AUTHORED_CRESTS_BY_AREA: Readonly<Record<string, readonly AuthoredCrest[]>> = {
