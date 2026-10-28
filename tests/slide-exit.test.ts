@@ -4,10 +4,10 @@ import { defaultTuning } from "../src/core/vehicle-tuning";
 import { makeSlideExitRoutine } from "../src/physics/telemetry/routines";
 import { runRoutine } from "../src/physics/telemetry/run";
 
-function slideExit(mutate?: (t: VehicleTuning) => void) {
+function slideExit(mutate?: (t: VehicleTuning) => void, steerIntoSlide = false) {
   const tuning = defaultTuning();
   mutate?.(tuning);
-  const run = makeSlideExitRoutine();
+  const run = makeSlideExitRoutine({ steerIntoSlide });
   runRoutine(run.routine, tuning);
   return { ...run.metrics(), trace: run.trace };
 }
@@ -35,12 +35,14 @@ describe("slide-exit diagnostic routine", () => {
       t.drive.rearGripRecoverySec = 0;
       t.drive.slideSurge = 0;
       t.drive.liftOffOversteer = 0;
-    });
+      t.drive.tyreFalloff = 0;
+    }, true);
     const smooth = slideExit((t) => {
       t.drive.rearGripRecoverySec = 0.15;
       t.drive.slideSurge = 0;
       t.drive.liftOffOversteer = 0;
-    });
+      t.drive.tyreFalloff = 0;
+    }, true);
     expect(smooth.speedDropMs).toBeLessThan(instant.speedDropMs - 1);
   });
 
@@ -48,10 +50,12 @@ describe("slide-exit diagnostic routine", () => {
     const off = slideExit((t) => {
       t.drive.slideSurge = 0;
       t.drive.liftOffOversteer = 0;
+      t.drive.tyreFalloff = 0;
     });
     const on = slideExit((t) => {
       t.drive.slideSurge = 0.6;
       t.drive.liftOffOversteer = 0;
+      t.drive.tyreFalloff = 0;
     });
     expect(on.speedDropMs).toBeLessThan(off.speedDropMs);
   });

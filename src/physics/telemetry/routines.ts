@@ -472,7 +472,7 @@ function makeHandbrakeRoutine(): Routine {
           phase = "done";
           return null;
         }
-        const counterSteer = clamp(-s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
+        const counterSteer = clamp(s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
         return { steer: counterSteer, throttle: 0.2, brake: 0, handbrake: false };
       }
       return null;
@@ -752,7 +752,7 @@ function makePowerSlideRecoveryRoutine(): Routine {
           phase = "done";
           return null;
         }
-        const counterSteer = clamp(-s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
+        const counterSteer = clamp(s.slipAngleRad * HANDBRAKE_COUNTER_STEER_GAIN, -1, 1);
         // The one deliberate difference from `handbrakeRoutine`: full
         // throttle, not 0.2, while counter-steering out of the slide.
         return { steer: counterSteer, throttle: 1.0, brake: 0, handbrake: false };
@@ -1144,7 +1144,7 @@ const SLIDE_EXIT_RUN_TICKS = Math.round(3 / DT);
 /** Counter-steer gain on exit, steer-fraction per radian of slip (same as the handbrake routine). */
 const SLIDE_EXIT_COUNTER_STEER_GAIN = 2.0;
 
-export function makeSlideExitRoutine(): {
+export function makeSlideExitRoutine(opts: { steerIntoSlide?: boolean } = {}): {
   readonly routine: Routine;
   readonly trace: SlideExitTick[];
   metrics(): SlideExitMetrics;
@@ -1218,7 +1218,11 @@ export function makeSlideExitRoutine(): {
           return null;
         }
         // A human catches the slide: steer against the slip angle, full throttle.
-        const steer = clamp(-s.slipAngleRad * SLIDE_EXIT_COUNTER_STEER_GAIN, -1, 1);
+        // Counter-steer = the same sign as slip (measured: recovers in ~0.5 s;
+        // the opposite sign makes the slide worse). `steerIntoSlide` keeps the
+        // original, opposite-signed input for the regrip-smoothing comparison.
+        const sign = opts.steerIntoSlide ? -1 : 1;
+        const steer = clamp(sign * s.slipAngleRad * SLIDE_EXIT_COUNTER_STEER_GAIN, -1, 1);
         return { steer, throttle: 1, brake: 0, handbrake: false };
       }
       return null;

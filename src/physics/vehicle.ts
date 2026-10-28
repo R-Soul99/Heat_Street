@@ -85,6 +85,9 @@ const PIVOT_OFF_EPS = 0.002;
 const REAR_GRIP_LOOSEN_TAU = 0.05;
 /** Lift-off oversteer: time constant of the 'recent throttle' reference. */
 const LIFT_OFF_REF_TAU = 0.3;
+/** Tyre grip falloff: slip (rad) where the rear starts to lose grip, and where the loss is complete. */
+const TYRE_FALLOFF_ONSET = 0.2;
+const TYRE_FALLOFF_FULL = 0.7;
 
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
@@ -172,6 +175,8 @@ export interface RearGripDebug {
   readonly dominant: RearGripTerm;
   /** Pivot gate (speed fade x dwell ramp) before the engagement filter, 0..1. */
   readonly pivotGate: number;
+  /** Tyre-falloff multiplier on the rear's maximum grip this tick (1 = full grip). */
+  readonly gripScale: number;
 }
 
 /**
@@ -356,6 +361,7 @@ export function createVehicle(
     pivotDir = 0;
     rearSfsSmoothed = -1;
     throttleRef = 0;
+    rearGripScale = 1;
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -372,8 +378,15 @@ export function createVehicle(
   let rearSfsSmoothed = -1;
   /** Low-passed throttle: what the driver was recently asking for. */
   let throttleRef = 0;
+  /** Last rear grip scale written by the tyre falloff (1 = untouched). */
+  let rearGripScale = 1;
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
-  const rearGrip = { sideFriction: 0, dominant: "none" as RearGripTerm, pivotGate: 0 };
+  const rearGrip = {
+    sideFriction: 0,
+    dominant: "none" as RearGripTerm,
+    pivotGate: 0,
+    gripScale: 1,
+  };
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
 
   return {
@@ -411,6 +424,7 @@ export function createVehicle(
       // handbrake/power-oversteer blend that step already computes — see
       // the comment there.
       const rearLateralGrip: number[] = [1, 1];
+      const rearForwardGrip: number[] = [1, 1];
       if (surfaces) {
         for (let i = 0; i < 4; i++) {
           const ground = vc.wheelGroundObject(i);
@@ -422,6 +436,7 @@ export function createVehicle(
             vc.setWheelSideFrictionStiffness(i, t.wheels.frontSideFriction * profile.lateralGrip);
           } else {
             rearLateralGrip[i - 2] = profile.lateralGrip;
+            rearForwardGrip[i - 2] = profile.forwardGrip;
           }
         }
       }
@@ -694,6 +709,28 @@ export function createVehicle(
                 : "power";
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
+
+      // Tyre grip falloff: a real tyre gives LESS force once the slide is
+      // well past its peak slip angle, which is what lets a slide be held.
+      // Rapier's friction is a flat maximum, so at 40 deg of slip the tail
+      // still pushed back with full grip and snapped the car straight (drive
+      // log 2026-10-28, rear side impulse 90 with the side friction at its
+      // minimum). The rear's maximum grip fades with |slip| between
+      // TYRE_FALLOFF_ONSET and TYRE_FALLOFF_FULL. 0 gain = never touched.
+      const fo = clamp(
+        (Math.abs(slipRad) - TYRE_FALLOFF_ONSET) / (TYRE_FALLOFF_FULL - TYRE_FALLOFF_ONSET),
+        0,
+        1,
+      );
+      // Not while counter-steering: the driver catching a slide keeps full rear
+      // grip (counterSteerFade is 0 once the correction is firmly applied).
+      const gripScale = 1 - t.drive.tyreFalloff * fo * fo * (3 - 2 * fo) * counterSteerFade;
+      if (t.drive.tyreFalloff > 0 || rearGripScale !== 1) {
+        vc.setWheelFrictionSlip(RL, t.wheels.frictionSlip * rearForwardGrip[0] * gripScale);
+        vc.setWheelFrictionSlip(RR, t.wheels.frictionSlip * rearForwardGrip[1] * gripScale);
+        rearGripScale = t.drive.tyreFalloff > 0 ? gripScale : 1;
+      }
+      rearGrip.gripScale = rearGripScale;
 
       // 5. Solve the vehicle — writes suspension + tire impulses onto the
       // chassis body. Imported DT, never a literal.

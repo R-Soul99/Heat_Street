@@ -149,6 +149,19 @@ const SCRIPTS: readonly Script[] = [
     },
   },
   {
+    id: "hold-slide-70",
+    description:
+      "70 mph, full lock held (ramped); throttle full 0.5 s, lifted 0.5 s, then reapplied full to the end (release = the reapply). Mirrors the 2026-10-28 drive log.",
+    launchMph: 70,
+    seconds: 6,
+    drive(k, _h, st) {
+      const sec = k * DT;
+      if (st.releaseIndex < 0 && sec >= 1.0) st.releaseIndex = k;
+      const throttle = sec < 0.5 ? 1 : sec < 1.0 ? 0 : 1;
+      return frame(rampedSteer(k, 1), throttle);
+    },
+  },
+  {
     id: "power-slide",
     description:
       "15 mph, full lock + full throttle 3 s, then steer released (release), throttle held 3 s",

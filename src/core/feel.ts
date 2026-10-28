@@ -39,6 +39,8 @@ export interface FeelSettings {
   slideSurge: number;
   /** Lift-off oversteer: tail steps out when you lift the throttle mid-corner. Base 5. */
   liftOff: number;
+  /** Tyre falloff: how much rear grip is lost in a big slide, so slides can be held. Base 5. */
+  tyreFalloff: number;
   /** Slide regrip: how gradually the tail regrips after a slide. Low = snaps back. Base 5. */
   regrip: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
@@ -63,6 +65,7 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   pivotEase: 10,
   slideSurge: 5,
   liftOff: 5,
+  tyreFalloff: 5,
   regrip: 5,
   flick: 4,
 });
@@ -80,6 +83,7 @@ export const FEEL_CONTROLS: readonly { key: FeelKey; label: string }[] = Object.
   { key: "pivotEase", label: "Pivot ease-in (high = smoother)" },
   { key: "slideSurge", label: "Slide-exit surge" },
   { key: "liftOff", label: "Lift-off oversteer" },
+  { key: "tyreFalloff", label: "Tyre falloff (high = slides hold)" },
   { key: "regrip", label: "Slide regrip (low = snappy)" },
   { key: "flick", label: "Weight-shift flick" },
 ]);
@@ -122,6 +126,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     pivotEase: clamp(feel.pivotEase, FEEL_MIN, FEEL_MAX),
     slideSurge: clamp(feel.slideSurge, FEEL_MIN, FEEL_MAX),
     liftOff: clamp(feel.liftOff, FEEL_MIN, FEEL_MAX),
+    tyreFalloff: clamp(feel.tyreFalloff, FEEL_MIN, FEEL_MAX),
     regrip: clamp(feel.regrip, FEEL_MIN, FEEL_MAX),
     flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
   };
@@ -150,6 +155,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   target.drive.pivotEngageSec = base.drive.pivotEngageSec * anchored(f.pivotEase, 0.2, 1, 1.8);
   target.drive.slideSurge = base.drive.slideSurge * lerp(0, 2, f.slideSurge / 10);
   target.drive.liftOffOversteer = base.drive.liftOffOversteer * lerp(0, 2, f.liftOff / 10);
+  target.drive.tyreFalloff = base.drive.tyreFalloff * anchored(f.tyreFalloff, 0, 1, 1.5);
   target.drive.rearGripRecoverySec = base.drive.rearGripRecoverySec * anchored(f.regrip, 0, 1, 3);
 
   target.drive.flickGain = lerp(0, 1, f.flick / 10);

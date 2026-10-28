@@ -36,6 +36,7 @@ export interface DriveLogRow {
   readonly contacts: number;
   readonly rearSideFriction: number;
   readonly rearTerm: string;
+  readonly rearGripScale: number;
   readonly frontSideImpulse: number;
   readonly rearSideImpulse: number;
   readonly suspFL: number;
@@ -61,6 +62,7 @@ const COLUMNS: readonly { key: keyof DriveLogRow; name: string; digits?: number 
   { key: "contacts", name: "wheels_on_ground" },
   { key: "rearSideFriction", name: "rear_side_friction", digits: 4 },
   { key: "rearTerm", name: "rear_term" },
+  { key: "rearGripScale", name: "rear_grip_scale", digits: 3 },
   { key: "frontSideImpulse", name: "front_side_impulse", digits: 1 },
   { key: "rearSideImpulse", name: "rear_side_impulse", digits: 1 },
   { key: "suspFL", name: "susp_fl", digits: 3 },
@@ -112,6 +114,7 @@ export function sampleDriveLogRow(
     contacts: s.contacts,
     rearSideFriction: vehicle.rearGrip.sideFriction,
     rearTerm: vehicle.rearGrip.dominant,
+    rearGripScale: vehicle.rearGrip.gripScale,
     frontSideImpulse: ((c.wheelSideImpulse(FL) ?? 0) + (c.wheelSideImpulse(FR) ?? 0)) / 2,
     rearSideImpulse: ((c.wheelSideImpulse(RL) ?? 0) + (c.wheelSideImpulse(RR) ?? 0)) / 2,
     suspFL: c.wheelSuspensionLength(FL) ?? 0,

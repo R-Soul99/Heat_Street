@@ -402,6 +402,13 @@ export interface VehicleTuning {
      * over ~0.3 s. 0 = off. Added 2026-10-28 (exp/slide-sign).
      */
     liftOffOversteer: number;
+    /**
+     * Tyre grip falloff, 0..0.9: the rear's maximum grip fades by this
+     * fraction as slip goes from ~11 to ~40 deg, so a slide can be held
+     * instead of the tail snapping the car straight. 0 = off.
+     * Added 2026-10-28 (exp/tyre-falloff).
+     */
+    tyreFalloff: number;
   };
   readonly assists: {
     /**
@@ -576,6 +583,7 @@ export function defaultTuning(): VehicleTuning {
       rearGripRecoverySec: 0.15,
       slideSurge: 0.3,
       liftOffOversteer: 5,
+      tyreFalloff: 0.3,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -653,6 +661,7 @@ export const TUNING_RANGES: {
     rearGripRecoverySec: TuningRange;
     slideSurge: TuningRange;
     liftOffOversteer: TuningRange;
+    tyreFalloff: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -729,6 +738,7 @@ export const TUNING_RANGES: {
     rearGripRecoverySec: { min: 0, max: 0.8, step: 0.05 },
     slideSurge: { min: 0, max: 1, step: 0.05 },
     liftOffOversteer: { min: 0, max: 12, step: 0.1 },
+    tyreFalloff: { min: 0, max: 0.9, step: 0.01 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

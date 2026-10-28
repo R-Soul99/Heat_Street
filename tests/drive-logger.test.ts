@@ -23,6 +23,7 @@ const row: DriveLogRow = {
   contacts: 4,
   rearSideFriction: 0.184,
   rearTerm: "lift",
+  rearGripScale: 1,
   frontSideImpulse: 10,
   rearSideImpulse: 20,
   suspFL: 0.4,

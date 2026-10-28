@@ -15,6 +15,8 @@ it("feel dossier", () => {
   if (pivot !== undefined && pivot !== "") tuning.drive.pivotTurn = Number(pivot);
   const lift = process.env.FEEL_DOSSIER_LIFT;
   if (lift !== undefined && lift !== "") tuning.drive.liftOffOversteer = Number(lift);
+  const falloff = process.env.FEEL_DOSSIER_FALLOFF;
+  if (falloff !== undefined && falloff !== "") tuning.drive.tyreFalloff = Number(falloff);
   const out = process.env.FEEL_DOSSIER_OUT || join("out", "feel-dossier");
   mkdirSync(out, { recursive: true });
   const lines = [

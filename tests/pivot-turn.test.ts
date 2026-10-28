@@ -54,6 +54,7 @@ function withPivot(pivotTurn: number, mutate?: (t: VehicleTuning) => void): Vehi
   // slide surge) are on by default and blur the one-tick and speed-fade reads.
   t.drive.rearGripRecoverySec = 0;
   t.drive.slideSurge = 0;
+  t.drive.tyreFalloff = 0;
   mutate?.(t);
   return t;
 }
