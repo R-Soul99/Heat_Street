@@ -17,7 +17,8 @@
     "lint:fix": "biome check --write .",
     "check": "npm run typecheck && npm run lint && npm run test",
     "compile-map": "node tools/map-compiler/cli.ts",
-    "generate-grid-test": "node tools/map-compiler/synthetic/generate-grid-test.ts"
+    "generate-grid-test": "node tools/map-compiler/synthetic/generate-grid-test.ts",
+    "generate-feel-test": "node tools/map-compiler/synthetic/generate-feel-test.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.20.0",

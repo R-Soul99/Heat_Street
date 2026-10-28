@@ -4,7 +4,7 @@
  * (array `includes`, never an object-key lookup, so prototype keys such as
  * `toString` cannot resolve). Anything else falls back to the default map.
  */
-export const KNOWN_MAP_IDS = ["juliette-ga", "grid-test"] as const;
+export const KNOWN_MAP_IDS = ["juliette-ga", "grid-test", "feel-test"] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
 

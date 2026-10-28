@@ -80,6 +80,7 @@ import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
+import { createTestStations, launchVelocity, parseStations } from "./debug/test-stations";
 import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
@@ -783,6 +784,25 @@ try {
     scene.applyInput(frame);
     driveLogger?.record(frame);
   };
+
+  // Proving ground (`?map=feel-test`): number keys launch the car from fixed
+  // pads at a chosen speed (see src/debug/test-stations.ts).
+  if (AREA_ID === "feel-test") {
+    const stations = parseStations(
+      await fetchArtifactText(`/maps/${AREA_ID}.stations.json`),
+      AREA_ID,
+    );
+    createTestStations(stations, (station, speedMph) => {
+      scene.resetVehicle({
+        x: station.x,
+        y: scene.defaultSpawnPose.y,
+        z: station.z,
+        headingRad: station.headingRad,
+      });
+      scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
+      transforms.snapBody(0);
+    });
+  }
 
   loopClock = startLoop({
     world,

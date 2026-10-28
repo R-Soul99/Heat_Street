@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-10-28T00:00:00.000Z",
+  "endpoint": "synthetic://heat-street/feel-test",
+  "bbox": {
+    "south": 32.9945,
+    "west": -84.0095,
+    "north": 33.0055,
+    "east": -83.9905
+  },
+  "query": "synthetic feel-test buildings (none)",
+  "response": {
+    "elements": []
+  }
+}

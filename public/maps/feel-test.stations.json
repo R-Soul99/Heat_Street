@@ -1,0 +1,77 @@
+{
+  "areaId": "feel-test",
+  "stations": [
+    {
+      "id": "right-90",
+      "key": "1",
+      "name": "90 deg right (R25)",
+      "note": "Tight square-ish right-hander after a 160 m run-up.",
+      "x": -550,
+      "z": -290,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "left-90",
+      "key": "2",
+      "name": "90 deg left (R25)",
+      "note": "Mirror of station 1.",
+      "x": -40,
+      "z": -230,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "sweeper-right",
+      "key": "3",
+      "name": "Fast sweeper right (R120)",
+      "note": "Long 90 deg right for high-speed lift-off and throttle-on tests.",
+      "x": -550,
+      "z": -90,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "hairpin",
+      "key": "4",
+      "name": "Hairpin right (R30, 180 deg)",
+      "note": "Slow 180 for handbrake / pivot work.",
+      "x": -550,
+      "z": 220,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "esses",
+      "key": "5",
+      "name": "Esses (R80 right-left-right)",
+      "note": "Direction change at speed: weight transfer and recovery.",
+      "x": -40,
+      "z": -120,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "tightening",
+      "key": "6",
+      "name": "Tightening right (R150 into R50)",
+      "note": "Decreasing radius: the corner that catches you out.",
+      "x": -40,
+      "z": 40,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "straight",
+      "key": "7",
+      "name": "Long straight (330 m)",
+      "note": "Acceleration, top speed, braking, handbrake from speed.",
+      "x": -40,
+      "z": 220,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "skid-pan",
+      "key": "8",
+      "name": "Skid pan (160 x 160 m)",
+      "note": "Open tarmac: donuts, power slides, steady-state circles.",
+      "x": 505,
+      "z": 0,
+      "headingRad": -1.5707963267948966
+    }
+  ]
+}

@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "areaId": "feel-test",
+  "courses": [
+    {
+      "id": "feel-test-ring-run",
+      "name": "Ring Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 8,
+          "edgeId": 7,
+          "position": [
+            -670.0000000003189,
+            0,
+            -89.99999999980689
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 9,
+          "edgeId": 8,
+          "position": [
+            -670.0000000003189,
+            0,
+            -290.00000000025335
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 1,
+          "edgeId": 0,
+          "position": [
+            -124.99999999983156,
+            0,
+            -389.99999999968855
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 2,
+          "edgeId": 1,
+          "position": [
+            670.0000000003189,
+            0,
+            -319.9999999999263
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 3,
+          "edgeId": 2,
+          "position": [
+            599.9999999999883,
+            0,
+            389.99999999968855
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-06",
+          "nodeId": 5,
+          "edgeId": 4,
+          "position": [
+            -124.99999999983156,
+            0,
+            389.99999999968855
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 7,
+        "headingRad": 0
+      },
+      "authoring": "Runs the perimeter ring road of the proving ground, finishing along the gravel south side."
+    },
+    {
+      "id": "feel-test-ring-loop",
+      "name": "Ring Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 2,
+          "edgeId": 1,
+          "position": [
+            670.0000000003189,
+            0,
+            -319.9999999999263
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 3,
+          "edgeId": 2,
+          "position": [
+            599.9999999999883,
+            0,
+            389.99999999968855
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 5,
+          "edgeId": 4,
+          "position": [
+            -124.99999999983156,
+            0,
+            389.99999999968855
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 7,
+          "edgeId": 6,
+          "position": [
+            -670.0000000003189,
+            0,
+            219.99999999970308
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-05",
+          "nodeId": 8,
+          "edgeId": 7,
+          "position": [
+            -670.0000000003189,
+            0,
+            -89.99999999980689
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 1,
+        "headingRad": 1.6586201467267352
+      },
+      "authoring": "Three laps of the proving ground ring road, including its gravel south side."
+    }
+  ]
+}

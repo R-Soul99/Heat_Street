@@ -1,0 +1,172 @@
+{
+  "kind": "heat-street.medal-reference",
+  "version": 1,
+  "areaId": "feel-test",
+  "contractVersion": 1,
+  "handlingContentVersion": "260920-sm2",
+  "courses": [
+    {
+      "courseId": "feel-test-ring-run",
+      "mode": "p2p",
+      "laps": 1,
+      "totalTimeSec": 246,
+      "splits": [
+        {
+          "checkpointId": "p2p-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 23
+        },
+        {
+          "checkpointId": "p2p-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 37
+        },
+        {
+          "checkpointId": "p2p-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 81
+        },
+        {
+          "checkpointId": "p2p-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 140
+        },
+        {
+          "checkpointId": "p2p-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 194
+        },
+        {
+          "checkpointId": "p2p-06",
+          "lap": 1,
+          "authoredIndex": 5,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 246
+        }
+      ]
+    },
+    {
+      "courseId": "feel-test-ring-loop",
+      "mode": "circuit",
+      "laps": 3,
+      "totalTimeSec": 825,
+      "splits": [
+        {
+          "checkpointId": "circuit-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 60
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 114
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 165
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 214
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 237
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 2,
+          "authoredIndex": 0,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 354
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 2,
+          "authoredIndex": 1,
+          "hitOrder": 6,
+          "cumulativeTimeSec": 408
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 2,
+          "authoredIndex": 2,
+          "hitOrder": 7,
+          "cumulativeTimeSec": 460
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 2,
+          "authoredIndex": 3,
+          "hitOrder": 8,
+          "cumulativeTimeSec": 509
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 2,
+          "authoredIndex": 4,
+          "hitOrder": 9,
+          "cumulativeTimeSec": 531
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 3,
+          "authoredIndex": 0,
+          "hitOrder": 10,
+          "cumulativeTimeSec": 649
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 3,
+          "authoredIndex": 1,
+          "hitOrder": 11,
+          "cumulativeTimeSec": 702
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 3,
+          "authoredIndex": 2,
+          "hitOrder": 12,
+          "cumulativeTimeSec": 754
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 3,
+          "authoredIndex": 3,
+          "hitOrder": 13,
+          "cumulativeTimeSec": 803
+        },
+        {
+          "checkpointId": "circuit-05",
+          "lap": 3,
+          "authoredIndex": 4,
+          "hitOrder": 14,
+          "cumulativeTimeSec": 825
+        }
+      ]
+    }
+  ]
+}
