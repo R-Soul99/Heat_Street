@@ -6,6 +6,8 @@
       "key": "1",
       "name": "90 deg right (R25)",
       "note": "Tight square-ish right-hander after a 160 m run-up.",
+      "featureAheadM": 160,
+      "widthM": 10,
       "x": -550,
       "z": -420,
       "headingRad": -1.5707963267948966
@@ -15,6 +17,8 @@
       "key": "2",
       "name": "90 deg left (R25)",
       "note": "Mirror of station 1.",
+      "featureAheadM": 160,
+      "widthM": 10,
       "x": -40,
       "z": -360,
       "headingRad": -1.5707963267948966
@@ -24,6 +28,8 @@
       "key": "3",
       "name": "Fast sweeper right (R120)",
       "note": "Long 90 deg right for high-speed lift-off and throttle-on tests.",
+      "featureAheadM": 160,
+      "widthM": 12,
       "x": -550,
       "z": -220,
       "headingRad": -1.5707963267948966
@@ -33,6 +39,8 @@
       "key": "4",
       "name": "Hairpin right (R30, 180 deg)",
       "note": "Slow 180 for handbrake / pivot work.",
+      "featureAheadM": 160,
+      "widthM": 10,
       "x": -550,
       "z": 90,
       "headingRad": -1.5707963267948966
@@ -42,6 +50,8 @@
       "key": "5",
       "name": "Esses (R80 right-left-right)",
       "note": "Direction change at speed: weight transfer and recovery.",
+      "featureAheadM": 160,
+      "widthM": 12,
       "x": -40,
       "z": -250,
       "headingRad": -1.5707963267948966
@@ -51,6 +61,8 @@
       "key": "6",
       "name": "Tightening right (R150 into R50)",
       "note": "Decreasing radius: the corner that catches you out.",
+      "featureAheadM": 160,
+      "widthM": 12,
       "x": -40,
       "z": -90,
       "headingRad": -1.5707963267948966
@@ -60,6 +72,8 @@
       "key": "7",
       "name": "Long straight (330 m)",
       "note": "Acceleration, top speed, braking, handbrake from speed.",
+      "featureAheadM": 0,
+      "widthM": 14,
       "x": -40,
       "z": 90,
       "headingRad": -1.5707963267948966
@@ -69,6 +83,8 @@
       "key": "9",
       "name": "Hop (45 mph) then crest (50 mph)",
       "note": "Two jumps in line: take-off, landing, settle, repeat.",
+      "featureAheadM": 168,
+      "widthM": 12,
       "x": -550,
       "z": 320,
       "headingRad": -1.5707963267948966
@@ -78,6 +94,8 @@
       "key": "0",
       "name": "Kicker (25 mph) then big air (45 mph)",
       "note": "Steep short ramp, then the big one: airborne attitude and landing.",
+      "featureAheadM": 168,
+      "widthM": 12,
       "x": -40,
       "z": 430,
       "headingRad": -1.5707963267948966
@@ -87,6 +105,8 @@
       "key": "8",
       "name": "Skid pan (160 x 160 m)",
       "note": "Open tarmac: donuts, power slides, steady-state circles.",
+      "featureAheadM": 0,
+      "widthM": 12,
       "x": 505,
       "z": -130,
       "headingRad": -1.5707963267948966

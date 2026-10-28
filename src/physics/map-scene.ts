@@ -45,13 +45,13 @@ import {
   TARGET_SHOULDER_WIDTH_M,
 } from "../core/road-geometry";
 import type { RoadGraph } from "../core/road-graph";
-import type { SurfaceType } from "../core/surface-types";
 import {
   buildingBoundingRadius,
   type ClearanceBuilding,
   resolvePointShoulderWidth,
 } from "../core/shoulder-clearance";
 import type { SurfaceProfiles } from "../core/surface-tuning";
+import type { SurfaceType } from "../core/surface-types";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import { createSurfaceMap, type SurfaceContext, type SurfaceMap } from "./surface";
 import { createVehicle, type Vehicle, type VehiclePose } from "./vehicle";

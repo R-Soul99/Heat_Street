@@ -36,6 +36,9 @@ export interface Station {
   readonly note: string;
   /** Local launch point; the car faces east (+x). */
   readonly pad: Point;
+  /** Metres from the pad to the feature (corner / take-off); 0 = nothing to count down to. */
+  readonly featureAheadM: number;
+  readonly widthM: number;
 }
 
 export interface TrackWay {
@@ -102,6 +105,8 @@ interface StationSpec {
   readonly z: number;
   readonly build: (t: Turtle) => void;
   readonly widthM: number;
+  /** Set when the station has a corner / take-off to count down to: extra metres past the lead-in's end. */
+  readonly countdown?: number;
 }
 
 const STATION_SPECS: readonly StationSpec[] = [
@@ -113,6 +118,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_A_X,
     z: 130,
     widthM: 10,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(25, 90).straight(100),
   },
   {
@@ -123,6 +129,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_B_X,
     z: 190,
     widthM: 10,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(25, -90).straight(100),
   },
   {
@@ -133,6 +140,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_A_X,
     z: 330,
     widthM: 12,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(120, 90).straight(100),
   },
   {
@@ -143,6 +151,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_A_X,
     z: 640,
     widthM: 10,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(30, 180).straight(150),
   },
   {
@@ -153,6 +162,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_B_X,
     z: 300,
     widthM: 12,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(80, 45).arc(80, -90).arc(80, 45).straight(80),
   },
   {
@@ -163,6 +173,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_B_X,
     z: 460,
     widthM: 12,
+    countdown: 0,
     build: (t) => t.straight(LEAD_M).arc(150, 45).arc(50, 45).straight(40),
   },
   {
@@ -183,6 +194,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_A_X,
     z: 870,
     widthM: 12,
+    countdown: 8,
     build: (t) => t.straight(LEAD_M),
   },
   {
@@ -193,6 +205,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     x0: COLUMN_B_X,
     z: 980,
     widthM: 12,
+    countdown: 8,
     build: (t) => t.straight(LEAD_M),
   },
 ];
@@ -275,6 +288,8 @@ export function buildProvingGround(): ProvingGround {
       name: spec.name,
       note: spec.note,
       pad: { x: spec.x0 + PAD_OFFSET_M, z: spec.z },
+      featureAheadM: spec.countdown === undefined ? 0 : LEAD_M - PAD_OFFSET_M + spec.countdown,
+      widthM: spec.widthM,
     });
   }
   ways.push(SKID_PAD);
@@ -341,6 +356,8 @@ export function buildProvingGround(): ProvingGround {
     name: "Skid pan (160 x 160 m)",
     note: "Open tarmac: donuts, power slides, steady-state circles.",
     pad: { x: 1205, z: 420 },
+    featureAheadM: 0,
+    widthM: 12,
   });
   return { ways, stations };
 }

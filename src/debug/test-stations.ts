@@ -13,6 +13,9 @@ export interface TestStation {
   readonly key: string;
   readonly name: string;
   readonly note: string;
+  /** Metres ahead of the pad to the corner / take-off; 0 = no countdown boards. */
+  readonly featureAheadM: number;
+  readonly widthM: number;
   readonly x: number;
   readonly z: number;
   readonly headingRad: number;
@@ -55,6 +58,8 @@ export function parseStations(text: string, areaId: string): readonly TestStatio
       key: s.key,
       name: s.name,
       note: s.note,
+      featureAheadM: typeof s.featureAheadM === "number" ? s.featureAheadM : 0,
+      widthM: typeof s.widthM === "number" ? s.widthM : 12,
       x: s.x as number,
       z: s.z as number,
       headingRad: s.headingRad as number,
@@ -86,19 +91,23 @@ export function createTestStations(
   let speedMph = DEFAULT_STATION_SPEED_MPH;
   let last: TestStation | undefined;
 
+  // One line at the top centre by default (the map is what matters); H opens the full list.
+  let expanded = false;
   const panel = document.createElement("div");
   panel.style.cssText =
-    "position:fixed;left:8px;bottom:8px;padding:6px 10px;font:12px monospace;" +
-    "color:#fff;background:rgba(0,0,0,.65);border-radius:4px;pointer-events:none;" +
-    "z-index:9999;white-space:pre";
+    "position:fixed;left:50%;top:34px;transform:translateX(-50%);padding:3px 10px;" +
+    "font:12px monospace;color:#fff;background:rgba(0,0,0,.55);border-radius:4px;" +
+    "pointer-events:none;z-index:9999;white-space:pre";
   document.body.appendChild(panel);
 
   function paint(): void {
+    const head = `${speedMph} mph   ${last === undefined ? "press 1-9/0 to launch" : last.name}   [H] stations`;
+    if (!expanded) {
+      panel.textContent = head;
+      return;
+    }
     const lines = stations.map((s) => `[${s.key}] ${s.name}${s === last ? "  <" : ""}`);
-    panel.textContent = [
-      `launch speed ${speedMph} mph   [ ] change   [G] repeat last`,
-      ...lines,
-    ].join("\n");
+    panel.textContent = [`${head}   [ ] speed   [G] repeat`, ...lines].join("\n");
   }
 
   function go(station: TestStation): void {
@@ -116,6 +125,9 @@ export function createTestStations(
       paint();
     } else if (e.code === "BracketRight") {
       speedMph = cycleSpeed(speedMph, 1);
+      paint();
+    } else if (e.code === "KeyH") {
+      expanded = !expanded;
       paint();
     } else if (e.code === "KeyG") {
       if (last !== undefined) go(last);

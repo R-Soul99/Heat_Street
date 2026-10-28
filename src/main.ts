@@ -112,6 +112,7 @@ import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
+import { createStationMarkers } from "./render/station-markers";
 import { createSurfaceFx } from "./render/surface-fx";
 import { createVehicleView } from "./render/vehicle-view";
 
@@ -792,6 +793,7 @@ try {
       await fetchArtifactText(`/maps/${AREA_ID}.stations.json`),
       AREA_ID,
     );
+    view.scene.add(createStationMarkers(stations));
     createTestStations(stations, (station, speedMph) => {
       scene.resetVehicle({
         x: station.x,

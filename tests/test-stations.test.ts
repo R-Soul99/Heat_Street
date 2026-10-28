@@ -7,7 +7,17 @@ import {
   STATION_SPEEDS_MPH,
 } from "../src/debug/test-stations";
 
-const station = { id: "a", key: "1", name: "A", note: "n", x: 1, z: 2, headingRad: -Math.PI / 2 };
+const station = {
+  id: "a",
+  key: "1",
+  name: "A",
+  note: "n",
+  featureAheadM: 160,
+  widthM: 12,
+  x: 1,
+  z: 2,
+  headingRad: -Math.PI / 2,
+};
 
 describe("test stations", () => {
   it("parses a stations file and rejects the wrong area or a bad field", () => {

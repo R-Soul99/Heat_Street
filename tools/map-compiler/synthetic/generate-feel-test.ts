@@ -43,6 +43,8 @@ async function main(): Promise<void> {
     key: s.key,
     name: s.name,
     note: s.note,
+    featureAheadM: s.featureAheadM,
+    widthM: s.widthM,
     x: s.pad.x - WIDTH_M / 2,
     z: s.pad.z - DEPTH_M / 2,
     headingRad: -Math.PI / 2,
