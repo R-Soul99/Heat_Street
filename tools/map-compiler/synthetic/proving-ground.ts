@@ -107,6 +107,12 @@ interface StationSpec {
   readonly widthM: number;
   /** Set when the station has a corner / take-off to count down to: extra metres past the lead-in's end. */
   readonly countdown?: number;
+  /** Launch pad x (local) when it isn't `x0 + PAD_OFFSET_M`. */
+  readonly padX?: number;
+  /** Metres from the pad to the feature, overriding the lead-in arithmetic. */
+  readonly featureAheadM?: number;
+  /** Launches from a road another station already builds: no road or feeder of its own. */
+  readonly sharesRoad?: boolean;
 }
 
 const STATION_SPECS: readonly StationSpec[] = [
@@ -219,6 +225,47 @@ const STATION_SPECS: readonly StationSpec[] = [
     countdown: 8,
     build: (t) => t.straight(LEAD_M),
   },
+  // Game-scale ramps: three pads on one east-bound road in column A. The ramps
+  // themselves are in src/core/crest-geometry.ts (FEEL_TEST_CRESTS), feet at
+  // local x 215 / 335 / 470; the road runs on past the last so the landing is on tarmac.
+  {
+    key: "=",
+    id: "ramp-s",
+    name: "Ramp S (0.9 m lip, 12 deg): 35-45 mph",
+    note: "Game-scale kerb-hop ramp. 65 m run-up; the road is shared with M and L.",
+    x0: COLUMN_A_X,
+    z: 980,
+    widthM: 12,
+    padX: 150,
+    featureAheadM: 65,
+    build: (t) => t.straight(450),
+  },
+  {
+    key: "\\",
+    id: "ramp-m",
+    name: "Ramp M (1.8 m lip, 16 deg): 45-60 mph",
+    note: "Game-scale stunt ramp. Starts after S's landing.",
+    x0: COLUMN_A_X,
+    z: 980,
+    widthM: 12,
+    padX: 270,
+    featureAheadM: 65,
+    sharesRoad: true,
+    build: () => {},
+  },
+  {
+    key: "/",
+    id: "ramp-l",
+    name: "Ramp L (3 m lip, 20 deg): 55-65 mph",
+    note: "Largest game-scale ramp; about 50 m of flight at 60 mph.",
+    x0: COLUMN_A_X,
+    z: 980,
+    widthM: 12,
+    padX: 400,
+    featureAheadM: 70,
+    sharesRoad: true,
+    build: () => {},
+  },
 ];
 
 /** Skid pan: a 160 m wide, 160 m long tarmac strip (x 1195..1355) east of column B. */
@@ -284,22 +331,26 @@ export function buildProvingGround(): ProvingGround {
   const ways: TrackWay[] = [...ringWays()];
   const stations: Station[] = [];
   for (const spec of STATION_SPECS) {
-    const t = new Turtle(spec.x0, spec.z);
-    spec.build(t);
-    ways.push({
-      name: spec.id,
-      highway: "residential",
-      widthM: spec.widthM,
-      surface: "asphalt",
-      points: t.points,
-    });
+    if (spec.sharesRoad !== true) {
+      const t = new Turtle(spec.x0, spec.z);
+      spec.build(t);
+      ways.push({
+        name: spec.id,
+        highway: "residential",
+        widthM: spec.widthM,
+        surface: "asphalt",
+        points: t.points,
+      });
+    }
     stations.push({
       id: spec.id,
       key: spec.key,
       name: spec.name,
       note: spec.note,
-      pad: { x: spec.x0 + PAD_OFFSET_M, z: spec.z },
-      featureAheadM: spec.countdown === undefined ? 0 : LEAD_M - PAD_OFFSET_M + spec.countdown,
+      pad: { x: spec.padX ?? spec.x0 + PAD_OFFSET_M, z: spec.z },
+      featureAheadM:
+        spec.featureAheadM ??
+        (spec.countdown === undefined ? 0 : LEAD_M - PAD_OFFSET_M + spec.countdown),
       widthM: spec.widthM,
     });
   }
@@ -340,6 +391,7 @@ export function buildProvingGround(): ProvingGround {
   };
   const spineZs: number[] = [RING_INSET_M];
   for (const spec of STATION_SPECS) {
+    if (spec.sharesRoad === true) continue;
     const start = { x: spec.x0, z: spec.z };
     if (spec.x0 === COLUMN_A_X) {
       const joint = { x: RING_INSET_M, z: spec.z };

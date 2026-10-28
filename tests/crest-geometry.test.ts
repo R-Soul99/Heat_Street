@@ -7,7 +7,11 @@ import {
   CREST_SEGMENTS,
   crestProfileHeight,
   crestsForArea,
+  FEEL_TEST_CRESTS,
   JULIETTE_GA_CRESTS,
+  type RampSpec,
+  rampLengthM,
+  rampProfileHeight,
 } from "../src/core/crest-geometry";
 
 type Vec3 = readonly [number, number, number];
@@ -230,5 +234,91 @@ describe("crestsForArea", () => {
 
   it("AUTHORED_CRESTS_BY_AREA itself only has the expected own key", () => {
     expect(Object.hasOwn(AUTHORED_CRESTS_BY_AREA, "juliette-ga")).toBe(true);
+  });
+});
+
+describe("take-off ramps", () => {
+  const ramp: RampSpec = { headingRad: 0, widthM: 10, angleDeg: 16, footRadiusM: 40 };
+  const crest: AuthoredCrest = {
+    id: "r",
+    centerX: 100,
+    centerZ: 50,
+    radiusM: 0,
+    heightM: 1.8,
+    ramp,
+  };
+
+  it("the profile starts flat on the ground, is tangent there, and reaches the lip height at the end", () => {
+    const length = rampLengthM(1.8, ramp);
+    expect(rampProfileHeight(0, 1.8, ramp)).toBe(0);
+    // Foot is a circle of radius 40: height ~ s^2 / 80 near the start.
+    expect(rampProfileHeight(2, 1.8, ramp)).toBeCloseTo(4 / 80, 2);
+    expect(rampProfileHeight(length, 1.8, ramp)).toBeCloseTo(1.8, 6);
+    expect(length).toBeGreaterThan(10);
+    expect(length).toBeLessThan(15);
+  });
+
+  it("the profile never decreases and its slope never passes the launch angle", () => {
+    const length = rampLengthM(1.8, ramp);
+    let prev = 0;
+    for (let i = 1; i <= 200; i++) {
+      const s = (length * i) / 200;
+      const h = rampProfileHeight(s, 1.8, ramp);
+      expect(h).toBeGreaterThanOrEqual(prev);
+      expect((h - prev) / (length / 200)).toBeLessThanOrEqual(
+        Math.tan((16 * Math.PI) / 180) + 1e-3,
+      );
+      prev = h;
+    }
+  });
+
+  it("a foot that reaches the lip height before the launch angle is cut short, not overshot", () => {
+    const steep: RampSpec = { headingRad: 0, widthM: 10, angleDeg: 30, footRadiusM: 10 };
+    // The arc rises 10 * (1 - cos 30) = 1.34 m; a 1 m lip is reached on the arc.
+    const length = rampLengthM(1, steep);
+    expect(rampProfileHeight(length, 1, steep)).toBeCloseTo(1, 6);
+    expect(length).toBeLessThan(10 * Math.sin((30 * Math.PI) / 180));
+  });
+
+  it("builds a closed-ish wedge: top winds CCW from +Y, lip height matches, determinism", () => {
+    const [entry] = buildCrestGeometry([crest], () => 0);
+    expect(entry.crestId).toBe("r");
+    let lipTop = 0;
+    for (let i = 0; i < entry.positions.length / 3; i++)
+      lipTop = Math.max(lipTop, vertexAt(entry.positions, i)[1]);
+    expect(lipTop).toBeCloseTo(1.8, 5);
+    // The first third of triangles per step are the top surface; check the top-only ones wind up.
+    const length = rampLengthM(1.8, ramp);
+    const steps = Math.max(2, Math.ceil(length / 0.5));
+    for (let i = 0; i < steps; i++) {
+      for (const t of [i * 6, i * 6 + 1]) {
+        const v0 = vertexAt(entry.positions, entry.indices[t * 3]);
+        const v1 = vertexAt(entry.positions, entry.indices[t * 3 + 1]);
+        const v2 = vertexAt(entry.positions, entry.indices[t * 3 + 2]);
+        expect(triangleNormalY(v0, v1, v2)).toBeGreaterThan(0);
+      }
+    }
+    const again = buildCrestGeometry([crest], () => 0)[0];
+    expect(Array.from(again.positions)).toEqual(Array.from(entry.positions));
+  });
+
+  it("follows the terrain under it", () => {
+    const [entry] = buildCrestGeometry([crest], (x) => x * 0.01);
+    const first = vertexAt(entry.positions, 0);
+    expect(first[1]).toBeCloseTo(first[0] * 0.01, 5);
+  });
+
+  it("the feel-test ramps respect the foot-load rule v^2 / R <= ~19 m/s^2 at their top design speed", () => {
+    const topMph: Readonly<Record<string, number>> = {
+      "feel-test-ramp-s": 45,
+      "feel-test-ramp-m": 60,
+      "feel-test-ramp-l": 60,
+    };
+    const ramps = FEEL_TEST_CRESTS.filter((c) => c.ramp !== undefined);
+    expect(ramps).toHaveLength(3);
+    for (const c of ramps) {
+      const v = topMph[c.id] * 0.44704;
+      expect((v * v) / (c.ramp?.footRadiusM ?? 1), c.id).toBeLessThan(19.5);
+    }
   });
 });

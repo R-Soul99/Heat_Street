@@ -46,8 +46,31 @@ export interface AuthoredCrest {
   readonly centerZ: number;
   /** The radius at which the dome reaches exactly zero height above the terrain. */
   readonly radiusM: number;
-  /** Apex height above the sampled terrain at the centre. */
+  /** Apex height above the sampled terrain at the centre. For a ramp, the lip height. */
   readonly heightM: number;
+  /**
+   * Set for a straight take-off ramp instead of a dome. `centerX`/`centerZ`
+   * is then the START of the foot (ground level), `radiusM` is unused (0; the
+   * builder derives the length with `rampLengthM`), `heightM` is the lip.
+   */
+  readonly ramp?: RampSpec;
+}
+
+/**
+ * A game-scale take-off ramp: a concave circular foot (tangent to the ground,
+ * so the car eases on), then a straight incline, ending in an abrupt lip.
+ * The foot radius sets the vertical load the car feels, v^2 / footRadiusM;
+ * keep that under ~19 m/s^2 (about 2 g of suspension) at the top design speed.
+ * A dome of the same height needs a far longer foot to reach the same launch
+ * angle, which is why game jumps use this profile.
+ */
+export interface RampSpec {
+  /** Direction of travel, radians; 0 = +x (east), +pi/2 = +z (south). */
+  readonly headingRad: number;
+  readonly widthM: number;
+  /** Launch angle at the lip. If the foot alone reaches `heightM` first, the lip is on the arc at a smaller angle. */
+  readonly angleDeg: number;
+  readonly footRadiusM: number;
 }
 
 /**
@@ -157,6 +180,33 @@ export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
   { id: "feel-test-crest", centerX: -195, centerZ: 320, radiusM: 50, heightM: 4 },
   { id: "feel-test-kicker", centerX: 184, centerZ: 430, radiusM: 56, heightM: 5 },
   { id: "feel-test-big-air", centerX: 198, centerZ: 260, radiusM: 70, heightM: 8 },
+  // Game-scale ramps, in line on one road (local z 980, east-bound). Each
+  // starts 65-70 m after its pad. Foot radius keeps v^2/R under ~19 m/s^2 at
+  // the top speed noted. Feet at local x 215 / 335 / 470 = world -485 / -365 / -230.
+  {
+    id: "feel-test-ramp-s",
+    centerX: -485,
+    centerZ: 430,
+    radiusM: 0,
+    heightM: 0.9,
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 12, footRadiusM: 25 }, // up to ~45 mph
+  },
+  {
+    id: "feel-test-ramp-m",
+    centerX: -365,
+    centerZ: 430,
+    radiusM: 0,
+    heightM: 1.8,
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 16, footRadiusM: 40 }, // up to ~60 mph
+  },
+  {
+    id: "feel-test-ramp-l",
+    centerX: -230,
+    centerZ: 430,
+    radiusM: 0,
+    heightM: 3,
+    ramp: { headingRad: 0, widthM: 10, angleDeg: 20, footRadiusM: 40 }, // up to ~60 mph
+  },
 ];
 
 export const AUTHORED_CRESTS_BY_AREA: Readonly<Record<string, readonly AuthoredCrest[]>> = {
@@ -207,6 +257,98 @@ export function crestProfileHeight(t: number, heightM: number): number {
   return heightM * (1 - (3 * t * t - 2 * t * t * t));
 }
 
+/** Horizontal length of a ramp, foot start to lip. */
+export function rampLengthM(heightM: number, ramp: RampSpec): number {
+  const theta = (ramp.angleDeg * Math.PI) / 180;
+  const r = ramp.footRadiusM;
+  const footRise = r * (1 - Math.cos(theta));
+  if (footRise >= heightM) {
+    // The arc alone reaches the lip height, at a steeper-than-needed angle cut short.
+    return Math.sqrt(r * r - (r - heightM) * (r - heightM));
+  }
+  return r * Math.sin(theta) + (heightM - footRise) / Math.tan(theta);
+}
+
+/** Ramp surface height above the ground, `s` metres along from the foot start. */
+export function rampProfileHeight(s: number, heightM: number, ramp: RampSpec): number {
+  if (s <= 0) return 0;
+  const theta = (ramp.angleDeg * Math.PI) / 180;
+  const r = ramp.footRadiusM;
+  const footRun = r * Math.sin(theta);
+  if (s <= footRun) {
+    return Math.min(heightM, r - Math.sqrt(r * r - s * s));
+  }
+  const footRise = r * (1 - Math.cos(theta));
+  return Math.min(heightM, footRise + (s - footRun) * Math.tan(theta));
+}
+
+const RAMP_STEP_M = 0.5;
+
+function buildRampGeometry(
+  crest: AuthoredCrest,
+  ramp: RampSpec,
+  heightSampler: (x: number, z: number) => number,
+): CrestGeometryEntry {
+  const length = rampLengthM(crest.heightM, ramp);
+  const steps = Math.max(2, Math.ceil(length / RAMP_STEP_M));
+  const fx = Math.cos(ramp.headingRad);
+  const fz = Math.sin(ramp.headingRad);
+  // Right-hand side of the direction of travel (heading east: +z).
+  const rx = -fz;
+  const rz = fx;
+  const half = ramp.widthM / 2;
+  const columns = steps + 1;
+  // Vertex order: top left/right per column, then ground left/right per column.
+  const positions = new Float32Array(columns * 4 * 3);
+  const top = (i: number, side: 0 | 1): number => i * 2 + side;
+  const ground = (i: number, side: 0 | 1): number => columns * 2 + i * 2 + side;
+  for (let i = 0; i < columns; i++) {
+    const s = (length * i) / steps;
+    for (const side of [0, 1] as const) {
+      const lateral = side === 0 ? -half : half;
+      const x = crest.centerX + fx * s + rx * lateral;
+      const z = crest.centerZ + fz * s + rz * lateral;
+      const g = heightSampler(x, z);
+      const t = top(i, side) * 3;
+      positions[t] = x;
+      positions[t + 1] = g + rampProfileHeight(s, crest.heightM, ramp);
+      positions[t + 2] = z;
+      const b = ground(i, side) * 3;
+      positions[b] = x;
+      positions[b + 1] = g;
+      positions[b + 2] = z;
+    }
+  }
+  // Top: 2 triangles per step; skirts: 2 per step per side; lip face: 2.
+  const indices = new Uint32Array((steps * 6 + 2) * 3);
+  let o = 0;
+  const tri = (a: number, b: number, c: number): void => {
+    indices[o++] = a;
+    indices[o++] = b;
+    indices[o++] = c;
+  };
+  for (let i = 0; i < steps; i++) {
+    const l0 = top(i, 0);
+    const r0 = top(i, 1);
+    const l1 = top(i + 1, 0);
+    const r1 = top(i + 1, 1);
+    // CCW from +Y (heading east: L is -z, R is +z).
+    tri(l0, r0, l1);
+    tri(r0, r1, l1);
+    // Left skirt, normal pointing out to the left.
+    tri(l0, l1, ground(i, 0));
+    tri(ground(i, 0), l1, ground(i + 1, 0));
+    // Right skirt, mirrored.
+    tri(r0, ground(i, 1), r1);
+    tri(ground(i, 1), ground(i + 1, 1), r1);
+  }
+  const lastL = top(steps, 0);
+  const lastR = top(steps, 1);
+  tri(lastL, lastR, ground(steps, 0));
+  tri(lastR, ground(steps, 1), ground(steps, 0));
+  return { crestId: crest.id, surface: "grass" as SurfaceType, positions, indices };
+}
+
 /**
  * One crest's built dome geometry. Field-for-field parallel to
  * `road-geometry.ts`'s `ShoulderGeometryEntry`.
@@ -255,7 +397,7 @@ export function buildCrestGeometry(
 ): readonly CrestGeometryEntry[] {
   const seenIds = new Set<string>();
   for (const crest of crests) {
-    if (crest.radiusM <= 0) {
+    if (crest.ramp === undefined && crest.radiusM <= 0) {
       throw new Error(`buildCrestGeometry: crest "${crest.id}" has radiusM <= 0`);
     }
     if (crest.heightM <= 0) {
@@ -268,6 +410,9 @@ export function buildCrestGeometry(
   }
 
   return crests.map((crest) => {
+    if (crest.ramp !== undefined) {
+      return buildRampGeometry(crest, crest.ramp, heightSampler);
+    }
     const vertexCount = 1 + CREST_RINGS * CREST_SEGMENTS;
     const positions = new Float32Array(vertexCount * 3);
 

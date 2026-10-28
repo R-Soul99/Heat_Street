@@ -25,6 +25,14 @@ export const STATION_SPEEDS_MPH: readonly number[] = [0, 20, 30, 45, 60, 70, 80,
 export const DEFAULT_STATION_SPEED_MPH = 70;
 const MPH_TO_MS = 0.44704;
 
+/** Station keys that aren't digits, by `KeyboardEvent.code`. */
+const PUNCTUATION_KEYS: Readonly<Record<string, string>> = {
+  Minus: "-",
+  Equal: "=",
+  Backslash: "\\",
+  Slash: "/",
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -101,7 +109,7 @@ export function createTestStations(
   document.body.appendChild(panel);
 
   function paint(): void {
-    const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0 or - to launch" : last.name}   [H] stations`;
+    const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0, - = \\ / to launch" : last.name}   [H] stations`;
     if (!expanded) {
       panel.textContent = head;
       return;
@@ -131,8 +139,8 @@ export function createTestStations(
       paint();
     } else if (e.code === "KeyG") {
       if (last !== undefined) go(last);
-    } else if (e.code.startsWith("Digit") || e.code === "Minus") {
-      const key = e.code === "Minus" ? "-" : e.code.slice(5);
+    } else if (e.code.startsWith("Digit") || Object.hasOwn(PUNCTUATION_KEYS, e.code)) {
+      const key = PUNCTUATION_KEYS[e.code] ?? e.code.slice(5);
       const station = stations.find((s) => s.key === key);
       if (station !== undefined) go(station);
     }

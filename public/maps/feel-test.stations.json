@@ -112,6 +112,39 @@
       "headingRad": -1.5707963267948966
     },
     {
+      "id": "ramp-s",
+      "key": "=",
+      "name": "Ramp S (0.9 m lip, 12 deg): 35-45 mph",
+      "note": "Game-scale kerb-hop ramp. 65 m run-up; the road is shared with M and L.",
+      "featureAheadM": 65,
+      "widthM": 12,
+      "x": -550,
+      "z": 430,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "ramp-m",
+      "key": "\\",
+      "name": "Ramp M (1.8 m lip, 16 deg): 45-60 mph",
+      "note": "Game-scale stunt ramp. Starts after S's landing.",
+      "featureAheadM": 65,
+      "widthM": 12,
+      "x": -430,
+      "z": 430,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "ramp-l",
+      "key": "/",
+      "name": "Ramp L (3 m lip, 20 deg): 55-65 mph",
+      "note": "Largest game-scale ramp; about 50 m of flight at 60 mph.",
+      "featureAheadM": 70,
+      "widthM": 12,
+      "x": -300,
+      "z": 430,
+      "headingRad": -1.5707963267948966
+    },
+    {
       "id": "skid-pan",
       "key": "8",
       "name": "Skid pan (160 x 160 m)",

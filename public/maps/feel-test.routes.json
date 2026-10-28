@@ -9,8 +9,8 @@
       "checkpoints": [
         {
           "id": "p2p-01",
-          "nodeId": 9,
-          "edgeId": 8,
+          "nodeId": 10,
+          "edgeId": 9,
           "position": [
             -670.0000000003189,
             0,
@@ -24,8 +24,8 @@
         },
         {
           "id": "p2p-02",
-          "nodeId": 10,
-          "edgeId": 9,
+          "nodeId": 11,
+          "edgeId": 10,
           "position": [
             -670.0000000003189,
             0,
@@ -99,7 +99,7 @@
         }
       ],
       "start": {
-        "nodeId": 7,
+        "nodeId": 8,
         "headingRad": 0
       },
       "authoring": "Runs the perimeter ring road of the proving ground, finishing along the gravel south side."
@@ -157,8 +157,8 @@
         },
         {
           "id": "circuit-04",
-          "nodeId": 7,
-          "edgeId": 6,
+          "nodeId": 8,
+          "edgeId": 7,
           "position": [
             -670.0000000003189,
             0,
@@ -172,8 +172,8 @@
         },
         {
           "id": "circuit-05",
-          "nodeId": 9,
-          "edgeId": 8,
+          "nodeId": 10,
+          "edgeId": 9,
           "position": [
             -670.0000000003189,
             0,
