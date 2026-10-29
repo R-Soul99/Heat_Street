@@ -491,13 +491,6 @@ export function createTuningPanel(
     handlers.onApplyVehicle,
   );
 
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "landingSpeedKeep",
-    TUNING_RANGES.drive.landingSpeedKeep,
-  ).onChange(handlers.onApplyVehicle);
-
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
   // 120 mph ramp launch with an off-axis spin lands inverted every time.

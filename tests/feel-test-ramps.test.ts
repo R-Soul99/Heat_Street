@@ -130,39 +130,6 @@ function flyHard(stationId: string, speedMph: number, airPitchGain: number) {
   return { maxTiltDeg: maxTilt, landedOnWheels };
 }
 
-/** Speed lost between the last airborne tick and 0.7 s after first touchdown, mph, throttle held. */
-function landingCost(stationId: string, speedMph: number, landingSpeedKeep: number): number {
-  const world = createWorld();
-  const tuning = defaultTuning();
-  tuning.drive.landingSpeedKeep = landingSpeedKeep;
-  const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
-  const station = stations.find((s) => s.id === stationId);
-  if (station === undefined) throw new Error(`no station ${stationId}`);
-  scene.resetVehicle({
-    x: station.x,
-    y: scene.defaultSpawnPose.y,
-    z: station.z,
-    headingRad: station.headingRad,
-  });
-  scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
-  let airSince = -1;
-  let airMph = 0;
-  let landed = -1;
-  for (let t = 0; t < 8 * 60; t++) {
-    scene.applyInput({ ...NEUTRAL, throttle: 1 });
-    world.step();
-    const s = sampleVehicle(scene.vehicle);
-    const mph = s.groundSpeedMs / MPH;
-    if (landed < 0 && s.contacts === 0 && s.position.x > station.x + station.featureAheadM) {
-      if (airSince < 0) airSince = t;
-      airMph = mph;
-    }
-    if (airSince >= 0 && landed < 0 && s.contacts >= 2 && t > airSince + 18) landed = t;
-    if (landed >= 0 && t === landed + 42) return airMph - mph;
-  }
-  throw new Error("never landed");
-}
-
 /** Ground speed at the foot of the ramp and at take-off, mph, throttle held. */
 function climb(stationId: string, speedMph: number): { footMph: number; lipMph: number } {
   const world = createWorld();
@@ -186,6 +153,42 @@ function climb(stationId: string, speedMph: number): { footMph: number; lipMph: 
     if (footMph > 0 && s.contacts === 0) return { footMph, lipMph: mph };
   }
   throw new Error("never took off");
+}
+
+/** Largest drop below the last airborne speed in the 8 ticks after first touchdown, mph, throttle held. */
+function landingDip(stationId: string, speedMph: number): number {
+  const world = createWorld();
+  const scene = createMapScene(world, graph, collision, defaultTuning(), defaultSurfaceProfiles());
+  const station = stations.find((s) => s.id === stationId);
+  if (station === undefined) throw new Error(`no station ${stationId}`);
+  scene.resetVehicle({
+    x: station.x,
+    y: scene.defaultSpawnPose.y,
+    z: station.z,
+    headingRad: station.headingRad,
+  });
+  scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
+  let airTicks = 0;
+  let airMph = 0;
+  let landed = -1;
+  let minMph = Number.POSITIVE_INFINITY;
+  for (let t = 0; t < 8 * 60; t++) {
+    scene.applyInput({ ...NEUTRAL, throttle: 1 });
+    world.step();
+    const s = sampleVehicle(scene.vehicle);
+    const mph = s.groundSpeedMs / MPH;
+    if (s.contacts === 0) {
+      airTicks++;
+      airMph = mph;
+    } else if (airTicks > 18 && landed < 0) {
+      landed = t;
+    }
+    if (landed >= 0) {
+      minMph = Math.min(minMph, mph);
+      if (t > landed + 8) return airMph - minMph;
+    }
+  }
+  throw new Error("never landed");
 }
 
 describe("feel-test game-scale ramps", () => {
@@ -261,11 +264,9 @@ describe("feel-test game-scale ramps", () => {
     expect(run.maxTiltDeg).toBeLessThan(35);
   });
 
-  it("landing speed keep: the large ramp at 85 mph costs no speed once it settles (without it about 8 mph)", () => {
-    const keep = landingCost("ramp-l", 85, 0.8);
-    const none = landingCost("ramp-l", 85, 0);
-    expect(none).toBeGreaterThan(5);
-    expect(keep).toBeLessThan(2);
+  it("touchdown from the large ramp at 85 mph is not a grab: speed never dips more than 4 mph in the next 8 ticks", () => {
+    expect(landingDip("ramp-l", 85)).toBeLessThan(4);
+    expect(landingDip("ramp-m", 85)).toBeLessThan(4);
   });
 
   it("a bigger ramp flies further at the same pad speed", () => {

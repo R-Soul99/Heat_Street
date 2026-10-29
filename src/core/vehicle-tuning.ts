@@ -418,13 +418,6 @@ export interface VehicleTuning {
      * roll the car. 0 = off. Added 2026-10-28 (exp/roll-guard).
      */
     rollGuard: number;
-    /**
-     * Fraction (0..1) of the forward speed a hard landing would cost that is
-     * given back over the 0.25 s after touchdown, after a flight of 0.3 s or
-     * more. Drive logs showed 15-23 mph lost in 0.1 s off 3-6 m drops, which
-     * feels like a wall, not a landing. Not applied while braking. 0 = off.
-     */
-    landingSpeedKeep: number;
   };
   readonly assists: {
     /**
@@ -611,7 +604,6 @@ export function defaultTuning(): VehicleTuning {
       liftOffOversteer: 5,
       tyreFalloff: 0.3,
       rollGuard: 0.85,
-      landingSpeedKeep: 0.8,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -693,7 +685,6 @@ export const TUNING_RANGES: {
     liftOffOversteer: TuningRange;
     tyreFalloff: TuningRange;
     rollGuard: TuningRange;
-    landingSpeedKeep: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -774,7 +765,6 @@ export const TUNING_RANGES: {
     liftOffOversteer: { min: 0, max: 12, step: 0.1 },
     tyreFalloff: { min: 0, max: 0.9, step: 0.01 },
     rollGuard: { min: 0, max: 1, step: 0.01 },
-    landingSpeedKeep: { min: 0, max: 1, step: 0.01 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },
