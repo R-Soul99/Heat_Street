@@ -63,6 +63,10 @@ function smoothstep(lo: number, hi: number, x: number): number {
 /** Peak yaw acceleration of the flick kick at full blend, rad/s^2. */
 const FLICK_YAW_ACCEL = 8;
 const CHASSIS_FRICTION = 0.15;
+/** Fraction of the suspension travel after which the bump stop starts to stiffen the spring. */
+const BUMP_STOP_ONSET = 0.75;
+/** The weakest wheel may be this far short of the onset (m) and the stop still counts as a four-wheel load. */
+const BUMP_STOP_GATE_M = 0.06;
 
 /** Pivot turn: fully active below this ground speed, m/s... */
 const PIVOT_FULL_SPEED_MS = 5;
@@ -403,6 +407,8 @@ export function createVehicle(
   /** Last rear grip scale written by the tyre falloff (1 = untouched). */
   let rearGripScale = 1;
   let rollGuardWasOn = false;
+  /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
+  const lastSuspensionLength = [0.45, 0.45, 0.45, 0.45];
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   const rearGrip = {
     sideFriction: 0,
@@ -446,6 +452,36 @@ export function createVehicle(
       // APPLIED in step 4 below, composed onto (never replacing) the
       // handbrake/power-oversteer blend that step already computes — see
       // the comment there.
+      // Progressive bump stop: stiffen the springs near full compression so a
+      // heavy vertical load (a ramp's foot, a hard landing) is cushioned over
+      // the last of the travel instead of slamming into a hard stop. Reads last
+      // tick's suspension lengths. Only when ALL FOUR wheels are deep in their
+      // travel together (a vertical load, not cornering roll, which unloads the
+      // inside pair) and only while still compressing (the extra stiffness is not
+      // handed back on rebound, so it cushions without bouncing the car).
+      {
+        const w = t.wheels;
+        const onset = w.maxSuspensionTravel * BUMP_STOP_ONSET;
+        const span = w.maxSuspensionTravel - onset;
+        let minCompression = Number.POSITIVE_INFINITY;
+        const lengths: number[] = [0, 0, 0, 0];
+        for (let i = 0; i < 4; i++) {
+          lengths[i] = vc.wheelSuspensionLength(i) ?? w.suspensionRestLength;
+          minCompression = Math.min(minCompression, w.suspensionRestLength - lengths[i]);
+        }
+        const heavy =
+          w.bumpStopStiffness > 1 && span > 0 && minCompression > onset - BUMP_STOP_GATE_M;
+        for (let i = 0; i < 4; i++) {
+          let k = w.suspensionStiffness;
+          if (heavy && lengths[i] < lastSuspensionLength[i]) {
+            const f = clamp((w.suspensionRestLength - lengths[i] - onset) / span, 0, 1);
+            k *= 1 + (w.bumpStopStiffness - 1) * f * f;
+          }
+          vc.setWheelSuspensionStiffness(i, k);
+          lastSuspensionLength[i] = lengths[i];
+        }
+      }
+
       const rearLateralGrip: number[] = [1, 1];
       const rearForwardGrip: number[] = [1, 1];
       const frontForwardGrip: number[] = [1, 1];

@@ -25,6 +25,14 @@ export const STATION_SPEEDS_MPH: readonly number[] = [0, 20, 30, 45, 60, 70, 80,
 export const DEFAULT_STATION_SPEED_MPH = 70;
 const MPH_TO_MS = 0.44704;
 
+/**
+ * Metres above the spawn pose's height that a station launches the car. The
+ * spawn pose sits below the ride height, so the wheels start compressed to the
+ * bump stop and the car bounces (a progressive bump stop made it launch itself
+ * airborne); this puts it at its settled height.
+ */
+export const LAUNCH_RIDE_HEIGHT_LIFT_M = 0.35;
+
 /** Station keys that aren't digits, by `KeyboardEvent.code`. */
 const PUNCTUATION_KEYS: Readonly<Record<string, string>> = {
   Minus: "-",

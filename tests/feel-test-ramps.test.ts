@@ -7,7 +7,11 @@ import { parseMapCollision } from "../src/core/map-collision";
 import { parseRoadGraph } from "../src/core/road-graph";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { defaultTuning } from "../src/core/vehicle-tuning";
-import { launchVelocity, parseStations } from "../src/debug/test-stations";
+import {
+  LAUNCH_RIDE_HEIGHT_LIFT_M,
+  launchVelocity,
+  parseStations,
+} from "../src/debug/test-stations";
 import { createMapScene } from "../src/physics/map-scene";
 import { sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
@@ -43,7 +47,7 @@ function fly(stationId: string, speedMph: number): RampRun {
   if (station === undefined) throw new Error(`no station ${stationId}`);
   scene.resetVehicle({
     x: station.x,
-    y: scene.defaultSpawnPose.y,
+    y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
     z: station.z,
     headingRad: station.headingRad,
   });
@@ -107,7 +111,7 @@ function flyHard(stationId: string, speedMph: number, airPitchGain: number) {
   if (station === undefined) throw new Error(`no station ${stationId}`);
   scene.resetVehicle({
     x: station.x,
-    y: scene.defaultSpawnPose.y,
+    y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
     z: station.z,
     headingRad: station.headingRad,
   });
@@ -130,6 +134,36 @@ function flyHard(stationId: string, speedMph: number, airPitchGain: number) {
   return { maxTiltDeg: maxTilt, landedOnWheels };
 }
 
+/** Wheel-ticks spent fully compressed (length 0.05) from the foot of the ramp to take-off, throttle held. */
+function bottomedTicks(stationId: string, speedMph: number, bumpStopStiffness: number): number {
+  const world = createWorld();
+  const tuning = defaultTuning();
+  tuning.wheels.bumpStopStiffness = bumpStopStiffness;
+  const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
+  const station = stations.find((s) => s.id === stationId);
+  if (station === undefined) throw new Error(`no station ${stationId}`);
+  scene.resetVehicle({
+    x: station.x,
+    y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
+    z: station.z,
+    headingRad: station.headingRad,
+  });
+  scene.vehicle.body.setLinvel(launchVelocity(station.headingRad, speedMph), true);
+  let bottomed = 0;
+  for (let t = 0; t < 6 * 60; t++) {
+    scene.applyInput({ ...NEUTRAL, throttle: 1 });
+    world.step();
+    const s = sampleVehicle(scene.vehicle);
+    if (s.position.x < station.x + station.featureAheadM - 3) continue;
+    for (let i = 0; i < 4; i++) {
+      const length = scene.vehicle.controller.wheelSuspensionLength(i);
+      if (length !== null && length <= 0.051) bottomed++;
+    }
+    if (s.contacts === 0) return bottomed;
+  }
+  throw new Error("never took off");
+}
+
 /** Ground speed at the foot of the ramp and at take-off, mph, throttle held. */
 function climb(stationId: string, speedMph: number): { footMph: number; lipMph: number } {
   const world = createWorld();
@@ -138,7 +172,7 @@ function climb(stationId: string, speedMph: number): { footMph: number; lipMph: 
   if (station === undefined) throw new Error(`no station ${stationId}`);
   scene.resetVehicle({
     x: station.x,
-    y: scene.defaultSpawnPose.y,
+    y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
     z: station.z,
     headingRad: station.headingRad,
   });
@@ -163,7 +197,7 @@ function landingDip(stationId: string, speedMph: number): number {
   if (station === undefined) throw new Error(`no station ${stationId}`);
   scene.resetVehicle({
     x: station.x,
-    y: scene.defaultSpawnPose.y,
+    y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
     z: station.z,
     headingRad: station.headingRad,
   });
@@ -267,6 +301,13 @@ describe("feel-test game-scale ramps", () => {
   it("touchdown from the large ramp at 85 mph is not a grab: speed never dips more than 4 mph in the next 8 ticks", () => {
     expect(landingDip("ramp-l", 85)).toBeLessThan(4);
     expect(landingDip("ramp-m", 85)).toBeLessThan(4);
+  });
+
+  it("the springs cushion the climb instead of sitting on the bump stop, at 95 mph", () => {
+    const soft = bottomedTicks("ramp-l", 95, 4);
+    const hard = bottomedTicks("ramp-l", 95, 1);
+    expect(hard).toBeGreaterThan(60);
+    expect(soft).toBeLessThan(25);
   });
 
   it("a bigger ramp flies further at the same pad speed", () => {

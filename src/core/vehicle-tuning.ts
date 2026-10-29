@@ -107,6 +107,13 @@ export interface VehicleTuning {
     maxSuspensionTravel: number;
     /** Suspension spring stiffness. Mass-normalised by Rapier's own solver. */
     suspensionStiffness: number;
+    /**
+     * Progressive bump stop: the spring's stiffness is multiplied by up to
+     * this much as the wheel goes from 55% to 100% of its travel (quadratic).
+     * 1 = off (a plain linear spring that hits a hard stop). Cushions the
+     * ramp foot and hard landings without touching ordinary ride height.
+     */
+    bumpStopStiffness: number;
     /** Suspension compression damping ratio. */
     suspensionCompression: number;
     /** Suspension relaxation (rebound) damping ratio. */
@@ -572,6 +579,7 @@ export function defaultTuning(): VehicleTuning {
       suspensionRestLength: 0.45,
       maxSuspensionTravel: 0.4,
       suspensionStiffness: 14,
+      bumpStopStiffness: 4,
       suspensionCompression: 1.3,
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 20000,
@@ -653,6 +661,7 @@ export const TUNING_RANGES: {
     suspensionRestLength: TuningRange;
     maxSuspensionTravel: TuningRange;
     suspensionStiffness: TuningRange;
+    bumpStopStiffness: TuningRange;
     suspensionCompression: TuningRange;
     suspensionRelaxation: TuningRange;
     maxSuspensionForce: TuningRange;
@@ -722,6 +731,7 @@ export const TUNING_RANGES: {
     suspensionRestLength: { min: 0.2, max: 0.8, step: 0.01 },
     maxSuspensionTravel: { min: 0.1, max: 0.6, step: 0.01 },
     suspensionStiffness: { min: 6, max: 40, step: 0.5 },
+    bumpStopStiffness: { min: 1, max: 12, step: 0.5 },
     suspensionCompression: { min: 0.2, max: 4, step: 0.05 },
     suspensionRelaxation: { min: 0.2, max: 4, step: 0.05 },
     maxSuspensionForce: { min: 5000, max: 40000, step: 500 },

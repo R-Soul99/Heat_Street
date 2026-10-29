@@ -81,7 +81,12 @@ import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
-import { createTestStations, launchVelocity, parseStations } from "./debug/test-stations";
+import {
+  createTestStations,
+  LAUNCH_RIDE_HEIGHT_LIFT_M,
+  launchVelocity,
+  parseStations,
+} from "./debug/test-stations";
 import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
@@ -835,7 +840,7 @@ try {
     createTestStations(stations, (station, speedMph) => {
       scene.resetVehicle({
         x: station.x,
-        y: scene.defaultSpawnPose.y,
+        y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
         z: station.z,
         headingRad: station.headingRad,
       });
