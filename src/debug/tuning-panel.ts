@@ -445,6 +445,9 @@ export function createTuningPanel(
     "pivotEngageSec",
     TUNING_RANGES.drive.pivotEngageSec,
   ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "pivotAssist", TUNING_RANGES.drive.pivotAssist).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     driveFolder,
     tuning.drive,

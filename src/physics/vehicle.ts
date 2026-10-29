@@ -72,12 +72,9 @@ const BUMP_STOP_GATE_M = 0.06;
 const PIVOT_FULL_SPEED_MS = 5;
 /** ...fading smoothly to zero at this speed, and never engaged at or above it. */
 const PIVOT_ZERO_SPEED_MS = 12;
-/** Pivot turn: steer / throttle level that counts as "full". */
-const PIVOT_FULL_INPUT = 0.8;
-/** Pivot turn: seconds of full steer + throttle over which the engagement builds up. */
-const PIVOT_HOLD_SEC = 0.3;
-/** Pivot turn: the build-up drains this many times faster than it fills when inputs ease off. */
-const PIVOT_HOLD_DRAIN = 3;
+/** Pivot turn: steer / throttle fade in continuously between these levels (no threshold, no dwell). */
+const PIVOT_INPUT_START = 0.5;
+const PIVOT_INPUT_FULL = 0.9;
 /** Pivot turn: first-order time constants, seconds. */
 const PIVOT_TAU_OUT = 0.1;
 const PIVOT_TAU_YAW = 0.1;
@@ -379,7 +376,6 @@ export function createVehicle(
     body.wakeUp();
     steerSwing = 0;
     flickEnv = 0;
-    pivotHold = 0;
     pivotE = 0;
     pivotRear = 0;
     pivotDir = 0;
@@ -395,7 +391,6 @@ export function createVehicle(
   let steerSwing = 0;
   let flickEnv = 0;
   // Pivot turn state (see step 4 and 5d). All zero = inert.
-  let pivotHold = 0;
   let pivotE = 0;
   let pivotRear = 0;
   let pivotDir = 0;
@@ -627,13 +622,14 @@ export function createVehicle(
         1,
       );
       // Pivot-turn gate and filters (step 5d applies the impulses). Skipped
-      // entirely when off, so the physics is bit-for-bit unchanged. The gate
-      // is |steer| > 0.8 with throttle > 0.8 held for 0.3 s, scaled by a speed
-      // fade (1 below 5 m/s, linearly to 0 at 8 m/s). The handbrake is
-      // deliberately NOT part of it: it neither triggers the pivot, shifts its
-      // dwell timer, nor changes its strength. Below the gate the filters are
-      // held at exactly 0 (snapped, not decayed), so inputs that never open the
-      // gate are bit-for-bit unchanged too.
+      // entirely when off, so the physics is bit-for-bit unchanged. The gate is
+      // CONTINUOUS: smoothsteps of |steer| and throttle (0.5 to 0.9) times a
+      // speed fade (1 below 5 m/s, smoothly to 0 at 12 m/s), so it grows with
+      // how hard the inputs are held and how slow the car is, like the power
+      // oversteer it extends, with no dwell timer and no threshold to cross.
+      // The handbrake is deliberately NOT part of it. Where the gate is 0 the
+      // filters are held at exactly 0 (snapped, not decayed), so inputs that
+      // never open the gate are bit-for-bit unchanged too.
       let pivotGate = 0;
       if (t.drive.pivotTurn > 0) {
         const groundSpeed = Math.hypot(lv.x, lv.z);
@@ -644,19 +640,12 @@ export function createVehicle(
             1,
           ),
         );
-        const fullSteer = Math.abs(frame.steer) > PIVOT_FULL_INPUT;
-        if (speedFade > 0 && fullSteer && frame.throttle > PIVOT_FULL_INPUT) {
-          pivotHold = Math.min(PIVOT_HOLD_SEC, pivotHold + DT);
-          pivotDir = Math.sign(frame.steer);
-        } else {
-          pivotHold = Math.max(0, pivotHold - DT * PIVOT_HOLD_DRAIN);
-        }
-        // Continuous, not a switch: the gate grows with how long the inputs
-        // have been held and with how slow the car is, so the pivot builds up
-        // as the car crawls rather than snapping on at one threshold.
-        if (pivotHold > 0) {
-          pivotGate = speedFade * smoothstep01(pivotHold / PIVOT_HOLD_SEC);
-        }
+        const inputRamp = (x: number) =>
+          smoothstep01(
+            clamp((x - PIVOT_INPUT_START) / (PIVOT_INPUT_FULL - PIVOT_INPUT_START), 0, 1),
+          );
+        pivotGate = speedFade * inputRamp(Math.abs(frame.steer)) * inputRamp(frame.throttle);
+        if (pivotGate > 0) pivotDir = Math.sign(frame.steer);
         pivotE +=
           (pivotGate - pivotE) *
           (1 -
@@ -673,7 +662,6 @@ export function createVehicle(
           if (pivotRear < PIVOT_OFF_EPS) pivotRear = 0;
         }
       } else {
-        pivotHold = 0;
         pivotE = 0;
         pivotRear = 0;
         pivotDir = 0;
@@ -861,7 +849,7 @@ export function createVehicle(
           // (measured: pivotTurn 0.25 turned less than off). Positive angular
           // velocity about +Y turns LEFT, so steer-direction yaw is -dir * w.
           const pivotS = smoothstep01(pivotE);
-          const target = t.drive.pivotYawRate * t.drive.pivotTurn * pivotS;
+          const target = t.drive.pivotYawRate * t.drive.pivotTurn * t.drive.pivotAssist * pivotS;
           const steerYaw = -pivotDir * angvel.y;
           if (steerYaw < target) {
             body.applyTorqueImpulse(
@@ -900,7 +888,11 @@ export function createVehicle(
               const acrossX = ex * -fz + ez * fx;
               const mass = t.chassis.mass;
               const massAcross = 1 / (1 / mass + (half * half) / iy);
-              const gain = (1 - Math.exp(-DT / PIVOT_TAU_CAP)) * pivotS * t.drive.pivotTurn;
+              const gain =
+                (1 - Math.exp(-DT / PIVOT_TAU_CAP)) *
+                pivotS *
+                t.drive.pivotTurn *
+                t.drive.pivotAssist;
               const jAlong = -mass * alongX * gain;
               const jAcross = -massAcross * acrossX * gain;
               const com = body.worldCom();
