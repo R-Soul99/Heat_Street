@@ -111,6 +111,7 @@ import { createOcclusionController } from "./render/camera/occlusion-controller"
 import { createOcclusionProbe } from "./render/camera/occlusion-probe";
 import { createCarShadow } from "./render/car-shadow";
 import { createCarXray } from "./render/car-xray";
+import { shadeByHeight } from "./render/crest-shading";
 import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
@@ -397,10 +398,7 @@ try {
   let groundProbe: ReturnType<typeof createGroundProbe> | undefined;
   if (isFlatTestArea(AREA_ID)) {
     for (const crest of mapView.crestMeshes) {
-      const materials = Array.isArray(crest.material) ? crest.material : [crest.material];
-      for (const m of materials) {
-        if (m instanceof THREE.MeshStandardMaterial) m.color.set(0xd9a441);
-      }
+      shadeByHeight(crest);
       view.scene.add(crest);
     }
     carShadow = createCarShadow(tuning.chassis.halfExtents);
