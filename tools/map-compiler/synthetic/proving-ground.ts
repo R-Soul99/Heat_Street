@@ -225,11 +225,12 @@ const STATION_SPECS: readonly StationSpec[] = [
     countdown: 8,
     build: (t) => t.straight(LEAD_M),
   },
-  // Game-scale ramps: three pads on one east-bound road in column A. The ramps
+  // Game-scale ramps (no launch key: dropped from the station list 2026-10-30, kept
+  // for tests/feel-test-ramps.test.ts): three pads on one east-bound road in column A. The ramps
   // themselves are in src/core/crest-geometry.ts (FEEL_TEST_CRESTS), feet at
   // local x 215 / 335 / 470; the road runs on past the last so the landing is on tarmac.
   {
-    key: "=",
+    key: "",
     id: "ramp-s",
     name: "Ramp S (0.9 m lip, 6 deg): any speed to 95 mph",
     note: "Game-scale kerb-hop ramp. 65 m run-up; the road is shared with M and L.",
@@ -241,7 +242,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     build: (t) => t.straight(450),
   },
   {
-    key: "\\",
+    key: "",
     id: "ramp-m",
     name: "Ramp M (1.8 m lip, 10 deg): any speed to 95 mph",
     note: "Game-scale stunt ramp. Starts after S's landing.",
@@ -254,7 +255,7 @@ const STATION_SPECS: readonly StationSpec[] = [
     build: () => {},
   },
   {
-    key: "/",
+    key: "",
     id: "ramp-l",
     name: "Ramp L (3 m lip, 13 deg): any speed to 95 mph",
     note: "Largest game-scale ramp.",

@@ -117,12 +117,14 @@ export function createTestStations(
   document.body.appendChild(panel);
 
   function paint(): void {
-    const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0, - = \\ / to launch" : last.name}   [H] stations`;
+    const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0, - to launch" : last.name}   [H] stations`;
     if (!expanded) {
       panel.textContent = head;
       return;
     }
-    const lines = stations.map((s) => `[${s.key}] ${s.name}${s === last ? "  <" : ""}`);
+    const lines = stations
+      .filter((s) => s.key !== "")
+      .map((s) => `[${s.key}] ${s.name}${s === last ? "  <" : ""}`);
     panel.textContent = [`${head}   [ ] speed   [G] repeat`, ...lines].join("\n");
   }
 
@@ -135,7 +137,14 @@ export function createTestStations(
   addEventListener("keydown", (e) => {
     if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
     const el = document.activeElement as HTMLElement | null;
-    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    if (
+      el &&
+      (el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.isContentEditable)
+    )
+      return;
     if (e.code === "BracketLeft") {
       speedMph = cycleSpeed(speedMph, -1);
       paint();
@@ -149,7 +158,7 @@ export function createTestStations(
       if (last !== undefined) go(last);
     } else if (e.code.startsWith("Digit") || Object.hasOwn(PUNCTUATION_KEYS, e.code)) {
       const key = PUNCTUATION_KEYS[e.code] ?? e.code.slice(5);
-      const station = stations.find((s) => s.key === key);
+      const station = stations.find((s) => s.key !== "" && s.key === key);
       if (station !== undefined) go(station);
     }
   });

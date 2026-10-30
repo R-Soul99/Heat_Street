@@ -78,6 +78,7 @@ import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createDriveLogger } from "./debug/drive-logger";
 import { createFeelPanel, loadFeel } from "./debug/feel-panel";
 import { createFreeLookCamera } from "./debug/free-look-camera";
+import { createMapMenu } from "./debug/map-menu";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
@@ -828,6 +829,8 @@ try {
     scene.applyInput(frame);
     driveLogger?.record(frame);
   };
+
+  if (FEEL_ENABLED || DEBUG_ENABLED) createMapMenu(AREA_ID);
 
   // Proving ground (`?map=feel-test`): number keys launch the car from fixed
   // pads at a chosen speed (see src/debug/test-stations.ts).

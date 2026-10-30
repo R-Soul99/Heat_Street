@@ -59,7 +59,8 @@ function launch(stationId: string, speedMph: number, frame: InputFrame, seconds:
 describe("feel-test proving ground", () => {
   it("has no buildings and one launch pad per station key", () => {
     expect(collision.buildings).toHaveLength(0);
-    expect(new Set(stations.map((s) => s.key)).size).toBe(stations.length);
+    const keyed = stations.filter((s) => s.key !== "");
+    expect(new Set(keyed.map((s) => s.key)).size).toBe(keyed.length);
     expect(stations.length).toBeGreaterThanOrEqual(10);
   });
 

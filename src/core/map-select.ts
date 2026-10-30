@@ -14,3 +14,20 @@ export function resolveMapId(search: string): MapId {
   const match = KNOWN_MAP_IDS.find((id) => id === requested);
   return match ?? DEFAULT_MAP_ID;
 }
+
+/** Human names for the in-game map menu. */
+export const MAP_LABELS: Readonly<Record<MapId, string>> = {
+  "juliette-ga": "Juliette, GA",
+  "grid-test": "Grid test",
+  "feel-test": "Feel test (proving ground)",
+};
+
+/**
+ * `search` with `?map=` set to `id`, every other parameter kept (`feel`, `debug`...).
+ * The default map is written explicitly so a stale `?map=` can't survive.
+ */
+export function searchForMap(search: string, id: MapId): string {
+  const params = new URLSearchParams(search);
+  params.set("map", id);
+  return `?${params.toString()}`;
+}

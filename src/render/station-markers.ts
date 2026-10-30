@@ -41,7 +41,7 @@ export function createStationMarkers(stations: readonly TestStation[]): THREE.Gr
   const stripeGeometry = new THREE.PlaneGeometry(1.4, 1);
   stripeGeometry.rotateX(-Math.PI / 2);
   for (const station of stations) {
-    if (station.featureAheadM <= 0) continue;
+    if (station.key === "" || station.featureAheadM <= 0) continue;
     // Heading east (+x): the left roadside is -z.
     const side = station.widthM / 2 + 6;
     for (const board of BOARDS) {
