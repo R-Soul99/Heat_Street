@@ -74,6 +74,16 @@ function text(value: string, className?: string): HTMLDivElement {
   return element;
 }
 
+const COLLAPSED_KEY = "heat-street.coursesPanelCollapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
 export function createResultsView(
   courses: readonly Course[],
   references: readonly MedalReferenceCourse[],
@@ -83,14 +93,36 @@ export function createResultsView(
   const root = document.createElement("aside");
   root.style.cssText =
     "position:fixed;top:150px;left:16px;z-index:8;width:260px;max-height:42vh;overflow:auto;padding:12px;color:#f4fbff;background:rgba(7,16,21,.86);border:1px solid rgba(126,232,255,.55);font:700 11px/1.35 monospace;letter-spacing:.04em;pointer-events:none";
-  const heading = text("COURSES", "results-heading");
-  heading.style.cssText = "color:#ffd447;font-size:13px;margin-bottom:8px";
+  const heading = text("", "results-heading");
+  // The panel is click-through; only the heading takes the mouse so it can fold the panel away.
+  heading.style.cssText =
+    "color:#ffd447;font-size:13px;cursor:pointer;user-select:none;pointer-events:auto";
   const cards = document.createElement("div");
+  cards.style.marginTop = "8px";
   const completion = document.createElement("div");
   completion.style.cssText =
     "display:none;margin-top:12px;padding-top:10px;border-top:1px solid #456";
   root.append(heading, cards, completion);
   document.body.appendChild(root);
+
+  // Collapsed by default (it covers the view); the choice is remembered.
+  let collapsed = readCollapsed();
+  function applyCollapsed(): void {
+    heading.textContent = `${collapsed ? "▶" : "▼"} COURSES`;
+    cards.style.display = collapsed ? "none" : "block";
+    completion.style.display = collapsed || completion.childElementCount === 0 ? "none" : "block";
+    root.style.overflow = collapsed ? "hidden" : "auto";
+    root.style.width = collapsed ? "auto" : "260px";
+  }
+  function setCollapsed(next: boolean): void {
+    collapsed = next;
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+    } catch {}
+    applyCollapsed();
+  }
+  heading.addEventListener("click", () => setCollapsed(!collapsed));
+  applyCollapsed();
 
   function renderCards(nextProgress: Readonly<Record<string, MedalProgressRecord>>): void {
     cards.replaceChildren();
@@ -133,11 +165,11 @@ export function createResultsView(
         rows.appendChild(element);
       }
       completion.appendChild(rows);
-      completion.style.display = "block";
+      setCollapsed(false);
     },
     clearCompletion(): void {
       completion.replaceChildren();
-      completion.style.display = "none";
+      applyCollapsed();
     },
     dispose(): void {
       root.remove();

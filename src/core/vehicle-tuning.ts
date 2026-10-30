@@ -291,14 +291,15 @@ export interface VehicleTuning {
      * Pivot-turn strength, 0..1. 0 = off: the whole mechanic is skipped and
      * the physics is bit-for-bit what it is without it.
      *
-     * A low-speed doughnut helper. When full steer (>0.8) and throttle (>0.8)
-     * have been held for 0.3 s below 8 m/s (fully active under 5 m/s, fading
-     * linearly to zero at 8 m/s; the handbrake plays no part), an engagement
-     * filter fades in and the car is torqued
-     * toward `pivotYawRate` in the steer direction while its front axle is
-     * held under `pivotFrontSpeedCap`, so it rotates about the front axle
-     * instead of understeering out in a wide arc. On release the yaw rate is
-     * damped over ~0.15 s and the tail regrips in ~0.05 s.
+     * A low-speed doughnut helper that extends the power oversteer instead of
+     * switching on beside it. The gate is continuous (no dwell timer): smoothsteps
+     * of |steer| and throttle (0.5 to 0.9) times a speed fade (full under 5 m/s,
+     * smoothly to zero at 12 m/s; the handbrake plays no part). As it grows the
+     * tail loosens to the power-slide grip and, scaled by `pivotAssist`, the car
+     * is torqued toward `pivotYawRate` in the steer direction while its front
+     * axle is held under `pivotFrontSpeedCap`, so it rotates about the front
+     * axle instead of understeering out in a wide arc. On release the yaw rate
+     * is damped over ~0.15 s and the tail regrips in ~0.05 s.
      *
      * Added 2026-10-25 for the doughnut / pivot feel; default 0, first-guess,
      * not measured.
@@ -320,6 +321,15 @@ export interface VehicleTuning {
      * dwell ending). First-guess default, not measured beyond that trace.
      */
     pivotEngageSec: number;
+    /**
+     * How much of the artificial pivot help (the yaw torque and the front-axle
+     * speed cap) is applied, 0..1. The tail loosening is NOT scaled by it: at 0
+     * the pivot is pure tyre physics (a loosened rear), at 1 it is the full
+     * rotate-about-the-nose assist. The gate itself is continuous (no dwell).
+     *
+     * [ASSUMED] 2026-10-29, exp/pivot-blend: first guess, not measured.
+     */
+    pivotAssist: number;
     /**
      * `[ASSUMED]` (this plan, 260913-epf): reverse engine force applied to
      * each rear wheel, newtons, while `reversing` is true in
@@ -600,6 +610,7 @@ export function defaultTuning(): VehicleTuning {
       pivotYawRate: 4,
       pivotFrontSpeedCap: 3,
       pivotEngageSec: 0.25,
+      pivotAssist: 0.6,
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
@@ -682,6 +693,7 @@ export const TUNING_RANGES: {
     pivotYawRate: TuningRange;
     pivotFrontSpeedCap: TuningRange;
     pivotEngageSec: TuningRange;
+    pivotAssist: TuningRange;
     reverseEngineForcePerRearWheel: TuningRange;
     reverseEngageSpeedMs: TuningRange;
     topSpeedMs: TuningRange;
@@ -761,6 +773,7 @@ export const TUNING_RANGES: {
     pivotYawRate: { min: 0.5, max: 8, step: 0.1 },
     pivotFrontSpeedCap: { min: 0.5, max: 10, step: 0.1 },
     pivotEngageSec: { min: 0.02, max: 0.6, step: 0.01 },
+    pivotAssist: { min: 0, max: 1, step: 0.05 },
     reverseEngineForcePerRearWheel: { min: 0, max: 6000, step: 50 },
     // Max 1 m/s keeps the engage window at walking pace or below — a larger
     // max would let a slider release the brakes at real driving speed.

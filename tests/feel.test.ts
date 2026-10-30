@@ -12,7 +12,7 @@ import { classDefaultTuning } from "../src/core/vehicle-class";
 import { defaultTuning, TUNING_RANGES } from "../src/core/vehicle-tuning";
 
 // Mid-scale everywhere (5), pivot off and flick off: exactly the class base.
-const NEUTRAL: FeelSettings = { ...FEEL_DEFAULTS, flick: 0, pivotEase: 5 };
+const NEUTRAL: FeelSettings = { ...FEEL_DEFAULTS, flick: 0, pivot: 0, pivotEase: 5 };
 
 function derived(feel: FeelSettings, id: "rwd" | "fwd" | "awd" = "rwd") {
   const base = classDefaultTuning(id);
@@ -29,13 +29,19 @@ describe("applyFeel", () => {
     }
   });
 
-  it("the default settings only add the flick and the gentlest pivot ease-in on top of the base", () => {
+  it("the default settings only add the flick and the approved pivot (full strength, ease 6.4) on top of the base", () => {
     const { base, t } = derived(FEEL_DEFAULTS);
     expect(t.drive.flickGain).toBeCloseTo(0.4);
-    expect(t.drive.pivotEngageSec).toBeCloseTo(base.drive.pivotEngageSec * 1.8);
+    expect(t.drive.pivotTurn).toBe(1);
+    expect(t.drive.pivotEngageSec).toBeCloseTo(base.drive.pivotEngageSec * 1.224);
     expect({
       ...t,
-      drive: { ...t.drive, flickGain: 0, pivotEngageSec: base.drive.pivotEngageSec },
+      drive: {
+        ...t.drive,
+        flickGain: 0,
+        pivotTurn: base.drive.pivotTurn,
+        pivotEngageSec: base.drive.pivotEngageSec,
+      },
     }).toEqual(base);
   });
 

@@ -41,7 +41,7 @@ const fullHandbrake = (k: number): InputFrame => ({
   handbrake: k > 20,
 });
 const halfSteer = (k: number): InputFrame => ({
-  steer: 0.79,
+  steer: 0.49,
   throttle: 1,
   brake: 0,
   handbrake: k > 30,
@@ -89,7 +89,7 @@ describe("pivot turn: off is inert", () => {
     }
   });
 
-  it("with pivotTurn 1, any input with |steer| < 0.8 is bit-for-bit identical to off", () => {
+  it("with pivotTurn 1, any input with |steer| < 0.5 is bit-for-bit identical to off", () => {
     const off = trace(withPivot(0), halfSteer, 240);
     const on = trace(withPivot(1), halfSteer, 240);
     expect(on).toEqual(off);
@@ -107,12 +107,14 @@ describe("pivot turn: off is inert", () => {
 });
 
 describe("pivot turn: engaged", () => {
-  it("full steer + throttle from rest rotates the car much further than with it off", () => {
+  it("full steer + throttle from rest rotates the car further than with it off", () => {
     const yawOf = (pt: number) => {
       const tr = trace(withPivot(pt), full, 90);
       return Math.abs(tr[tr.length - 2]); // angvel.y of the last tick
     };
-    expect(yawOf(1)).toBeGreaterThan(yawOf(0) * 1.8);
+    // Default assist 0.6 (was a full-strength assist): 1.4x at this instant; the
+    // turned-heading margin is asserted in "eases in" below.
+    expect(yawOf(1)).toBeGreaterThan(yawOf(0) * 1.3);
   });
 
   it("holds the front axle slow, and releases cleanly with the yaw rate damped", () => {
@@ -190,8 +192,8 @@ describe("pivot turn: the handbrake is not part of it", () => {
       handbrake: true,
     });
 
-  it("the handbrake with full steer never triggers it (throttle below the gate)", () => {
-    for (const throttle of [0, 0.5, 0.8]) {
+  it("the handbrake with full steer never triggers it (throttle below the gate start)", () => {
+    for (const throttle of [0, 0.3, 0.5]) {
       const off = trace(withPivot(0), hbSteer(throttle), 240);
       const on = trace(withPivot(1), hbSteer(throttle), 240);
       expect(on).toEqual(off);

@@ -966,7 +966,7 @@ export interface PivotTurnMetrics {
   /** Largest |d(yaw rate)/dt| during the hold, rad/s^2 - the "jolt" of the engage. */
   readonly peakYawAccel: number;
   /**
-   * Largest |d(yaw rate)/dt| between the end of the 0.3 s dwell and 0.8 s into
+   * Largest |d(yaw rate)/dt| in the first 0.8 s of
    * the hold, rad/s^2: how hard the pivot kicks in. Lower = smoother.
    */
   readonly onsetPeakYawAccel: number;

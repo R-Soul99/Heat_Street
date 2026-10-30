@@ -60,9 +60,10 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   lowGearPunch: 5,
   topSpeed: 5,
   looseness: 5,
-  pivot: 0,
-  // 10 = the gentlest ramp (0.45 s): chosen by the user after trying 5 (0.25 s).
-  pivotEase: 10,
+  // User-approved 2026-10-30 on exp/pivot-blend ("absolutely perfect"): pivot on at
+  // full strength, ease 6.4 (engage 0.25 s x 1.224 = 0.31 s) with the continuous gate.
+  pivot: 10,
+  pivotEase: 6.4,
   slideSurge: 5,
   liftOff: 5,
   tyreFalloff: 5,
