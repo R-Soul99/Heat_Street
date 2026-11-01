@@ -46,7 +46,7 @@
  * see the `--area` resolution below) is the only guard against a
  * path-traversal- or arbitrary-file-read-shaped bug here.
  */
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildCrestGeometry, crestsForArea } from "../../src/core/crest-geometry.ts";
 import { FLAT_TEST_GROUND_HEX, isFlatTestArea } from "../../src/core/ground-surface.ts";
@@ -68,9 +68,13 @@ import {
 import { feelTestConfig } from "./areas/feel-test.config.ts";
 import { gridTestConfig } from "./areas/grid-test.config.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
+import { myMapConfig } from "./areas/my-map.config.ts";
+import { newtonPopplefordConfig } from "./areas/newton-poppleford.config.ts";
+import { skiddersAndPoppConfig } from "./areas/skidders-and-popp.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
 import { buildOffRoadRelief, type HeightfieldGrid } from "./author/heightfield.ts";
+import { buildRealRelief, decodeGreyPng } from "./author/real-relief.ts";
 import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
 import { applyFlatElevation, type FlatElevationReport } from "./graph/elevation.ts";
@@ -95,6 +99,9 @@ const KNOWN_AREAS: Record<string, AreaConfig> = {
   "juliette-ga": julietteGaConfig,
   "grid-test": gridTestConfig,
   "feel-test": feelTestConfig,
+  "newton-poppleford": newtonPopplefordConfig,
+  "my-map": myMapConfig,
+  "skidders-and-popp": skiddersAndPoppConfig,
 };
 
 /** Parses `--area <id>` out of an argv-shaped string array. Returns `null` if absent. */
@@ -393,7 +400,7 @@ async function main(argv: readonly string[]): Promise<void> {
   printBuildReport(config, report);
 
   const overallFallbackRatio = report.surfaceCoverage?.overall.fallbackRatio ?? 0;
-  if (overallFallbackRatio > FALLBACK_RATIO_FAIL_THRESHOLD) {
+  if (overallFallbackRatio > FALLBACK_RATIO_FAIL_THRESHOLD && !config.surfaceFallbackAcknowledged) {
     console.error(
       `compile-map: ABORTED — overall surface fallback ratio ${overallFallbackRatio.toFixed(3)} ` +
         `exceeds ${FALLBACK_RATIO_FAIL_THRESHOLD}. The compiled surfaces would be almost entirely ` +
@@ -474,11 +481,23 @@ async function main(argv: readonly string[]): Promise<void> {
   // independently, so the grid must exist first. Consumed by BOTH the
   // collision sidecar (the physics ground) and the .glb (the visible terrain
   // mesh) below, so the two artifacts describe the exact same grid.
+  const realRelief =
+    config.heightmap === undefined
+      ? undefined
+      : buildRealRelief(flatGraph, {
+          image: decodeGreyPng(await readFile(path.resolve(config.heightmap.file))),
+          rangeM: config.heightmap.rangeM,
+          reliefScale: config.heightmap.reliefScale,
+          maxReliefM: config.heightmap.maxReliefM,
+          bbox: config.bbox,
+          unproject: (x, z) => projector.unproject(x, z),
+        });
   const heightfield: HeightfieldGrid = buildOffRoadRelief(
     flatGraph,
     flatGraph.bounds,
     undefined,
     isFlatTestArea(config.areaId),
+    realRelief,
   );
   printHeightfieldSummary(heightfield);
 

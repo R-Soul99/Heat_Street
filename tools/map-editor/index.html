@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Heat Street map editor (dev only)</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #14161a; color: #ddd; font: 13px system-ui, sans-serif; }
+      #app { display: flex; height: 100%; }
+      #wrap { flex: 1; min-width: 0; position: relative; }
+      #map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+      #side { width: 300px; flex: none; padding: 10px; overflow-y: auto; background: #1d2026; border-left: 1px solid #333; }
+      h3 { margin: 12px 0 6px; font-size: 13px; color: #fff; }
+      label { display: block; margin: 6px 0 2px; color: #9aa; }
+      select, input[type="text"], input[type="number"] { width: 100%; box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 4px; }
+      button { background: #2d3440; color: #eee; border: 1px solid #556; padding: 5px 9px; margin: 3px 3px 3px 0; cursor: pointer; }
+      button:hover { background: #3a4456; }
+      button.danger { border-color: #a44; }
+      button.primary { border-color: #4a8; }
+      #status { margin-top: 8px; color: #9aa; }
+      #log { white-space: pre-wrap; font: 11px monospace; max-height: 220px; overflow-y: auto; background: #0c0d10; padding: 6px; margin-top: 8px; }
+      .legend span { display: inline-block; margin-right: 8px; }
+      .sw { display: inline-block; width: 10px; height: 10px; margin-right: 3px; vertical-align: middle; }
+      button.active { background: #2f6f55; border-color: #6c9; }
+      #hint { color: #9aa; margin-top: 6px; min-height: 2.4em; }
+      .dirty { color: #fb4; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="wrap"><canvas id="map"></canvas></div>
+      <div id="side">
+        <h3>Tool</h3>
+        <div id="tools">
+          <button type="button" data-tool="select" class="tool">Select (V)</button>
+          <button type="button" data-tool="road" class="tool">Draw road (R)</button>
+          <button type="button" data-tool="move" class="tool">Move node (M)</button>
+          <button type="button" data-tool="building" class="tool">Building (B)</button>
+        </div>
+        <div id="tool-opts"></div>
+        <h3>Area</h3>
+        <select id="area"></select>
+        <div>
+          <button type="button" id="save" class="primary">Save (S)</button>
+          <button type="button" id="compile" class="primary">Save &amp; compile</button>
+          <button type="button" id="undo">Undo (Z)</button>
+          <button type="button" id="drive" class="primary">Compile &amp; drive</button>
+        </div>
+        <div id="status"></div>
+        <div id="hint"></div>
+        <h3>Selection</h3>
+        <div id="sel">Click a road or building. Drag to pan, wheel to zoom.</div>
+        <h3>Legend</h3>
+        <div class="legend" id="legend"></div>
+        <div id="log"></div>
+      </div>
+    </div>
+    <script type="module" src="./editor.ts"></script>
+  </body>
+</html>

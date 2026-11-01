@@ -23,7 +23,14 @@ describe("resolveMapId", () => {
     }
   });
   it("lists exactly the known maps", () => {
-    expect([...KNOWN_MAP_IDS]).toEqual(["juliette-ga", "grid-test", "feel-test"]);
+    expect([...KNOWN_MAP_IDS]).toEqual([
+      "juliette-ga",
+      "grid-test",
+      "feel-test",
+      "newton-poppleford",
+      "skidders-and-popp",
+      "my-map",
+    ]);
   });
 });
 

@@ -4,7 +4,14 @@
  * (array `includes`, never an object-key lookup, so prototype keys such as
  * `toString` cannot resolve). Anything else falls back to the default map.
  */
-export const KNOWN_MAP_IDS = ["juliette-ga", "grid-test", "feel-test"] as const;
+export const KNOWN_MAP_IDS = [
+  "juliette-ga",
+  "grid-test",
+  "feel-test",
+  "newton-poppleford",
+  "skidders-and-popp",
+  "my-map",
+] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
 
@@ -20,6 +27,9 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
   "juliette-ga": "Juliette, GA",
   "grid-test": "Grid test",
   "feel-test": "Feel test (proving ground)",
+  "newton-poppleford": "Newton Poppleford, Devon",
+  "skidders-and-popp": "Skidders and Popp, Devon",
+  "my-map": "My Map (hand-authored)",
 };
 
 /**

@@ -337,6 +337,7 @@ export function buildOffRoadRelief(
   bounds: RoadGraphBounds,
   resolution: number = HEIGHTFIELD_RESOLUTION,
   flat = false,
+  relief: (x: number, z: number, distanceToPavedEdgeM: number) => number = reliefAt,
 ): HeightfieldGrid {
   const samplesPerAxis = resolution + 1;
   const scaleX = bounds.maxX - bounds.minX;
@@ -350,7 +351,7 @@ export function buildOffRoadRelief(
       const x = bounds.minX + (scaleX * col) / resolution;
       const distanceToPavedEdgeM = roadDistance.distanceToPavedEdgeM(x, z);
       heights[row + col * samplesPerAxis] =
-        (flat ? 0 : reliefAt(x, z, distanceToPavedEdgeM)) - HEIGHTFIELD_SINK_M;
+        (flat ? 0 : relief(x, z, distanceToPavedEdgeM)) - HEIGHTFIELD_SINK_M;
     }
   }
 

@@ -18,7 +18,12 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "compile-map": "node tools/map-compiler/cli.ts",
     "generate-grid-test": "node tools/map-compiler/synthetic/generate-grid-test.ts",
-    "generate-feel-test": "node tools/map-compiler/synthetic/generate-feel-test.ts"
+    "generate-feel-test": "node tools/map-compiler/synthetic/generate-feel-test.ts",
+    "import-newton-poppleford": "node tools/map-compiler/import/geojson-to-raw-osm.ts --area newton-poppleford",
+    "import-skidders-and-popp": "node tools/map-compiler/import/geojson-to-raw-osm.ts --area skidders-and-popp",
+    "author-newton-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area newton-poppleford",
+    "author-my-map-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area my-map",
+    "author-skidders-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area skidders-and-popp"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.20.0",

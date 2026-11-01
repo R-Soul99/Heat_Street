@@ -70,6 +70,24 @@ export interface AreaConfig {
    * Reliability").
    */
   readonly excludeHighwayClasses: readonly string[];
+  /**
+   * Set for imported areas whose source carries no `surface` tags at all (so
+   * the fallback ratio is 1.0 by construction). Skips the compile-map abort on
+   * a high fallback ratio; surfaces are then repainted by hand (map editor).
+   */
+  readonly surfaceFallbackAcknowledged?: boolean;
+  /**
+   * Optional real-terrain relief for the off-road heightfield (roads stay
+   * flat). `file` is a greyscale PNG covering `bbox` (repo-relative path),
+   * `rangeM` the real elevation span its 0..1 covers, `reliefScale` tames the
+   * real relative height, `maxReliefM` caps it. See `author/real-relief.ts`.
+   */
+  readonly heightmap?: {
+    readonly file: string;
+    readonly rangeM: number;
+    readonly reliefScale: number;
+    readonly maxReliefM: number;
+  };
 }
 
 export const julietteGaConfig: AreaConfig = {
