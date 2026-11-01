@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed (completed 2026-09-13)
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [ ] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001
+- [ ] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
@@ -246,6 +247,16 @@ Plans:
 - [x] 04.1-09-PLAN.md — Recompile Juliette, GA; invert the real-artifact suite to exact flatness; record the measurement baseline (wave 4)
 - [ ] 04.1-10-PLAN.md — D-06 drive-every-road human sign-off session and any retunes it forces (wave 5, checkpoint)
 - [ ] 04.1-11-PLAN.md — ADR 0001 amended in place; ADR 0004 decision 7 marked superseded (wave 6)
+
+### Phase 04.2: Driveable Terrain (INSERTED)
+
+**Goal:** A hand-sculpted, hand-painted hilly area that a car can drive over smoothly, built with a small 3D sculpt page. Terrain becomes the single source of truth (height grid + finer surface paint map, no separate road mesh on the ground); a road brush paints surface, levels heights and records the road graph. Absorbs and closes Phase 4.1 (flat terrain). Full design: `.planning/gsd-brief-driveable-terrain.md`. Prototype gate on `feel-test` first; if it fails, stop before touching the real pipeline.
+**Requirements**: TBD
+**Depends on:** Phase 4.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.2 to break down)
 
 ### Phase 5: Objectives, Navigation & Race Modes
 

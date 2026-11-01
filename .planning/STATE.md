@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-09-22T20:30:49.812Z"
-last_activity: 2026-09-22 -- Phase 07 execution started
+last_updated: "2026-11-01T21:44:38.973Z"
+last_activity: "2026-10-04 - Completed quick task 261004-otc: arcade front-drive thrust"
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 7
   total_plans: 67
-  completed_plans: 60
-  percent: 78
+  completed_plans: 66
+  percent: 70
 ---
 
 # Project State
@@ -88,6 +88,7 @@ Progress: [██████████] 100%
 ### Roadmap Evolution
 
 - Phase 4.1 inserted after Phase 4: Flatten Terrain / Remove DEM Elevation — drop real-world DEM elevation in favor of hand-authored flat/near-flat terrain, fixing oversized road-shoulder skirts; supersedes part of ADR 0001 (URGENT)
+- Phase 04.2 inserted after Phase 4: Driveable Terrain: terrain-as-single-source-of-truth heightfield, paint map, road brush, 3D sculpt page. Absorbs and closes 4.1. See .planning/gsd-brief-driveable-terrain.md
 
 ### Decisions
 
