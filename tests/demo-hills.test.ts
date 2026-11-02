@@ -65,7 +65,7 @@ describe("demo-hills (hand-sculpted demo map)", () => {
 
   it("has a default spawn on an existing node", async () => {
     const area = await loadDemo();
-    const spawn = area.graph.spawns.find((s) => s.id === "default");
+    const spawn = (area.graph.spawns ?? []).find((s) => s.id === "default");
     expect(spawn).toBeDefined();
     expect(area.graph.nodes.some((n) => n.id === spawn?.nodeId)).toBe(true);
   });
