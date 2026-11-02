@@ -1,0 +1,250 @@
+/**
+ * Compiled map -> terrain area converter (phase 04.2, plan 11; D-05, D-06, D-07).
+ *
+ * Takes the legacy compiled artifacts of a map (road graph + collision sidecar
+ * with its DEM heightfield) and produces the same map in the terrain format:
+ * a uniform height grid whose road bands are levelled to the graph's own
+ * heights, a surface paint map with every road rasterised into it, and a
+ * sidecar that carries the graph VERBATIM (ids preserved so routes and
+ * checkpoints resolve unchanged), crests as objects and buildings as boxes.
+ *
+ * Pure and deterministic: no filesystem, no clock, no randomness. The CLI
+ * (`cli.ts`) owns all I/O.
+ */
+
+import type { AuthoredCrest } from "../../../src/core/crest-geometry.ts";
+import { groundSurfaceForArea, isFlatTestArea } from "../../../src/core/ground-surface.ts";
+import { sampleHeightfieldBilinear } from "../../../src/core/heightfield-sample.ts";
+import type { MapCollision } from "../../../src/core/map-collision.ts";
+import type { RoadGraph, RoadGraphEdge } from "../../../src/core/road-graph.ts";
+import type { TerrainArea } from "../../../src/core/terrain-format.ts";
+import { createTerrainGrid, type TerrainGrid } from "../../../src/core/terrain-grid.ts";
+import { DEFAULT_COLLIDER_SUBDIV } from "../../../src/core/terrain-limits.ts";
+import {
+  createPaintMap,
+  decodePaintSurface,
+  encodePaintValue,
+  PAINT_ROAD_FLAG,
+  type PaintMap,
+} from "../../../src/core/terrain-paint.ts";
+import { levelRoadBand, roadLevelRadiusM } from "../../../src/core/terrain-road.ts";
+
+export type ConvertibleAreaId = "feel-test" | "grid-test" | "juliette-ga";
+
+export interface ConvertConfig {
+  readonly cellSizeM: number;
+  readonly paintMetresPerPixel: number;
+  readonly legacyGlbBuildings: boolean;
+}
+
+/**
+ * D-02: 3 m cells by default, coarser for big maps. Juliette at 8 m gives about
+ * 487k vertices (closest to the D-04 envelope); paint stays 0.5 m/px.
+ */
+export const CONVERT_CONFIG: Readonly<Record<ConvertibleAreaId, ConvertConfig>> = {
+  "feel-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false },
+  "grid-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: true },
+  "juliette-ga": { cellSizeM: 8, paintMetresPerPixel: 0.5, legacyGlbBuildings: true },
+};
+
+export interface ConvertInput {
+  readonly areaId: string;
+  readonly graph: RoadGraph;
+  readonly collision: MapCollision;
+  readonly crests: readonly AuthoredCrest[];
+}
+
+function configFor(areaId: string): ConvertConfig {
+  const cfg = (CONVERT_CONFIG as Readonly<Record<string, ConvertConfig | undefined>>)[areaId];
+  if (cfg === undefined || !Object.hasOwn(CONVERT_CONFIG, areaId)) {
+    throw new RangeError(`convert: no CONVERT_CONFIG for area "${areaId}"`);
+  }
+  return cfg;
+}
+
+interface XZ {
+  x: number;
+  z: number;
+}
+
+function edgeXZ(e: RoadGraphEdge): XZ[] {
+  return e.points.map((p) => ({ x: p[0], z: p[2] }));
+}
+
+/** Largest half width of the edges touching `nodeId`. */
+function incidentHalfWidth(graph: RoadGraph, nodeId: number): number {
+  let w = 0;
+  for (const e of graph.edges) if (e.from === nodeId || e.to === nodeId) w = Math.max(w, e.widthM);
+  return w / 2;
+}
+
+/**
+ * Steps (1), (2) and (4) of the conversion, without paint: grid over the graph
+ * bounds, base heights (flat areas exactly 0, otherwise legacy heightfield with
+ * its sink removed), then every road band levelled to the graph heights.
+ */
+export function convertHeights(input: ConvertInput): TerrainGrid {
+  const { areaId, graph, collision } = input;
+  const cfg = configFor(areaId);
+  const cell = cfg.cellSizeM;
+  const b = graph.bounds;
+  const cols = Math.max(1, Math.ceil((b.maxX - b.minX) / cell));
+  const rows = Math.max(1, Math.ceil((b.maxZ - b.minZ) / cell));
+  const grid = createTerrainGrid({ rows, cols, cellSizeM: cell, originX: b.minX, originZ: b.minZ });
+
+  const stride = rows + 1;
+  const flat = isFlatTestArea(areaId);
+  const legacy = collision.heightfield;
+  if (!flat && legacy !== undefined) {
+    for (let c = 0; c <= cols; c++) {
+      const x = grid.originX + c * cell;
+      for (let r = 0; r <= rows; r++) {
+        const z = grid.originZ + r * cell;
+        grid.heights[r + c * stride] = sampleHeightfieldBilinear(legacy, x, z) + legacy.sinkM;
+      }
+    }
+  }
+
+  const shoulder = 2 * cell;
+  const protect = new Uint8Array(grid.heights.length);
+  const mergeProtect = (mask: Uint8Array): void => {
+    for (let i = 0; i < mask.length; i++) if (mask[i] !== 0) protect[i] = 1;
+  };
+
+  const edges = graph.edges.slice().sort((a, c) => a.id - c.id);
+  for (const e of edges) {
+    if (e.points.length < 2) continue;
+    const pts = edgeXZ(e);
+    const heights = e.points.map((p) => p[1]);
+    const banks = e.points.map(() => 0);
+    const res = levelRoadBand(grid, pts, heights, banks, e.widthM / 2, shoulder, {
+      protect,
+    });
+    mergeProtect(res.mask);
+  }
+
+  for (const n of graph.nodes) {
+    if (!n.junction) continue;
+    const half = incidentHalfWidth(graph, n.id);
+    if (!(half > 0)) continue;
+    const eps = 0.01;
+    const res = levelRoadBand(
+      grid,
+      [
+        { x: n.x - eps, z: n.z },
+        { x: n.x + eps, z: n.z },
+      ],
+      [n.y, n.y],
+      [0, 0],
+      roadLevelRadiusM(half, cell),
+      shoulder,
+      { protect },
+    );
+    mergeProtect(res.mask);
+  }
+
+  // Normalise negative zero so flat areas are exactly +0 (Object.is).
+  for (let i = 0; i < grid.heights.length; i++) if (grid.heights[i] === 0) grid.heights[i] = 0;
+  return grid;
+}
+
+/**
+ * Writes `value` into a pixel unless a road already holds it: paved (tarmac)
+ * wins over unpaved on overlap, ties keep the first.
+ */
+function putRoadPixel(paint: PaintMap, index: number, value: number): void {
+  const cur = paint.data[index];
+  if ((cur & PAINT_ROAD_FLAG) === 0) {
+    paint.data[index] = value;
+    return;
+  }
+  const curTarmac = decodePaintSurface(cur) === "tarmac";
+  const newTarmac = decodePaintSurface(value) === "tarmac";
+  if (newTarmac && !curTarmac) paint.data[index] = value;
+}
+
+function rasteriseCapsule(paint: PaintMap, p: XZ, q: XZ, radius: number, value: number): void {
+  const m = paint.metresPerPixel;
+  const minPx = Math.max(0, Math.floor((Math.min(p.x, q.x) - radius - paint.originX) / m));
+  const maxPx = Math.min(
+    paint.width - 1,
+    Math.ceil((Math.max(p.x, q.x) + radius - paint.originX) / m),
+  );
+  const minPz = Math.max(0, Math.floor((Math.min(p.z, q.z) - radius - paint.originZ) / m));
+  const maxPz = Math.min(
+    paint.height - 1,
+    Math.ceil((Math.max(p.z, q.z) + radius - paint.originZ) / m),
+  );
+  const dx = q.x - p.x;
+  const dz = q.z - p.z;
+  const len2 = dx * dx + dz * dz;
+  const r2 = radius * radius;
+  for (let pz = minPz; pz <= maxPz; pz++) {
+    const z = paint.originZ + (pz + 0.5) * m;
+    for (let px = minPx; px <= maxPx; px++) {
+      const x = paint.originX + (px + 0.5) * m;
+      const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - p.x) * dx + (z - p.z) * dz) / len2)) : 0;
+      const ex = x - (p.x + dx * t);
+      const ez = z - (p.z + dz * t);
+      if (ex * ex + ez * ez <= r2) putRoadPixel(paint, pz * paint.width + px, value);
+    }
+  }
+}
+
+function rasteriseRoads(paint: PaintMap, graph: RoadGraph): void {
+  const edges = graph.edges.slice().sort((a, c) => a.id - c.id);
+  for (const e of edges) {
+    const value = encodePaintValue(e.surface, true);
+    const pts = edgeXZ(e);
+    for (let k = 0; k + 1 < pts.length; k++) {
+      rasteriseCapsule(paint, pts[k], pts[k + 1], e.widthM / 2, value);
+    }
+  }
+  for (const n of graph.nodes) {
+    if (!n.junction) continue;
+    const half = incidentHalfWidth(graph, n.id);
+    if (!(half > 0)) continue;
+    let surface = null as RoadGraphEdge["surface"] | null;
+    for (const e of edges) {
+      if (e.from !== n.id && e.to !== n.id) continue;
+      if (surface === null) surface = e.surface;
+      if (e.surface === "tarmac") surface = "tarmac";
+    }
+    if (surface === null) continue;
+    const p = { x: n.x, z: n.z };
+    rasteriseCapsule(paint, p, p, half, encodePaintValue(surface, true));
+  }
+}
+
+export function convertCompiledArea(input: ConvertInput): TerrainArea {
+  const { areaId, graph, collision, crests } = input;
+  const cfg = configFor(areaId);
+  const grid = convertHeights(input);
+  const groundSurface = groundSurfaceForArea(areaId);
+  const paint = createPaintMap({
+    originX: grid.originX,
+    originZ: grid.originZ,
+    widthM: grid.scaleX,
+    depthM: grid.scaleZ,
+    metresPerPixel: cfg.paintMetresPerPixel,
+    fill: groundSurface,
+  });
+  rasteriseRoads(paint, graph);
+
+  let maxEdgeId = -1;
+  for (const e of graph.edges) if (e.id > maxEdgeId) maxEdgeId = e.id;
+
+  return {
+    areaId,
+    name: graph.name,
+    grid,
+    paint,
+    colliderSubdiv: DEFAULT_COLLIDER_SUBDIV,
+    groundSurface,
+    graph,
+    objects: crests.map((crest) => ({ kind: "crest" as const, crest })),
+    buildings: collision.buildings,
+    legacyGlbBuildings: cfg.legacyGlbBuildings,
+    nextEdgeId: maxEdgeId + 1,
+  };
+}

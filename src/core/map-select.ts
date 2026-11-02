@@ -40,9 +40,9 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
  */
 export type MapFormat = "legacy" | "terrain";
 export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
-  "juliette-ga": "legacy",
-  "grid-test": "legacy",
-  "feel-test": "legacy",
+  "juliette-ga": "terrain",
+  "grid-test": "terrain",
+  "feel-test": "terrain",
   "newton-poppleford": "legacy",
   "skidders-and-popp": "legacy",
   "my-map": "legacy",
