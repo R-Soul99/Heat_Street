@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Surfaces & Helicopter Camera** - Per-wheel surface grip with A/V feedback, and the signature high-angle camera proven to convey speed (completed 2026-09-13)
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [x] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001 (closed 2026-11-02: absorbed by Phase 4.2)
-- [ ] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1
+- [x] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1 (completed 2026-11-02)
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
@@ -253,7 +253,7 @@ Plans:
 **Goal:** A hand-sculpted, hand-painted hilly area that a car can drive over smoothly, built with a small 3D sculpt page. Terrain becomes the single source of truth (height grid + finer surface paint map, no separate road mesh on the ground); a road brush paints surface, levels heights and records the road graph. Absorbs and closes Phase 4.1 (flat terrain). Full design: `.planning/gsd-brief-driveable-terrain.md`. Prototype gate on `feel-test` first; if it fails, stop before touching the real pipeline.
 **Requirements**: SC-1..SC-6 (brief success criteria) and D-01..D-16 (CONTEXT.md decision IDs) — no v1.0 REQUIREMENTS.md ID applies to this inserted architecture phase
 **Depends on:** Phase 4.1
-**Plans:** 14/15 plans executed
+**Plans:** 15/15 plans complete
 
 Plans:
 - [x] 04.2-01-PLAN.md — Core terrain grid with Rapier-proved triangle sampler, paint map with road flag, limits constants (wave 1)
@@ -270,7 +270,7 @@ Plans:
 - [x] 04.2-12-PLAN.md — Sculpt page shell: hardened dev middleware, picking, orbit/top-down, area I/O (wave 5)
 - [x] 04.2-13-PLAN.md — Sculpt page tools: dispatcher, all v1 brushes, undo/redo, Drive here (wave 7)
 - [x] 04.2-14-PLAN.md — User sculpts the demo-hills map; frame-budget measurement and revision (wave 8, checkpoint)
-- [ ] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 9, checkpoint)
+- [x] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 9, checkpoint)
 
 ### Phase 5: Objectives, Navigation & Race Modes
 

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04.2-09-PLAN.md
-last_updated: "2026-11-02T08:14:43.066Z"
+stopped_at: Completed 04.2-15-PLAN.md
+last_updated: "2026-11-02T22:25:20.841Z"
 last_activity: 2026-11-02
 progress:
   total_phases: 10
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 82
-  completed_plans: 77
-  percent: 70
+  completed_plans: 81
+  percent: 80
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 ## Current Position
 
-Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 14 of 15 complete (01-14; gate signed off 2026-11-02)
-Next: Wave 9 of 04.2 (plan 15, human: medal re-recording + migration docs)
+Phase: 04.2 (driveable-terrain) — ALL PLANS COMPLETE, awaiting phase verification
+Plan: 15 of 15 complete (01-15; gate signed off 2026-11-02; medals re-recorded, provisional)
+Next: Phase 04.2 verification (all 15 plans complete); Phase 4.1 closed, absorbed by 4.2
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
-Progress: [█████████░] 94%
+Progress: [██████████] 99%
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Progress: [█████████░] 94%
 | Phase 04.2 P01 | 10 min | 2 tasks | 5 files |
 | Phase 04.2 P05 | 40min | 3 tasks | 7 files |
 | Phase 04.2 P09 | 35min | 2 tasks | 2 files |
+| Phase 04.2 P15 | 60 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,9 @@ Recent decisions affecting current work:
 - [Phase 04.2]: Ramp routine gated on absolute band (option a); hard landings accepted in drive
 - [Phase 04.2]: DEFAULT_COLLIDER_SUBDIV locked at 2; max slope 35 and max bank 8 signed off
 - [Phase 04.2]: 04.2-09: road profile smoothing = 2.4 s of travel at design speed (15..80 m); shoulder blend protects paint and graph-edge level radius
+- [Phase 04.2]: 04.2-15: Medal references for juliette-ga and grid-test re-recorded on terrain (handlingContentVersion 261101-terrain, shipped feel-preset car); PROVISIONAL, re-record after handling work
+- [Phase 04.2]: 04.2-15: ai-lap/ai-field pin a frozen 06-03 legacy Juliette reference (AI pace calibrated against it; Circuit Race off on terrain)
+- [Phase 04.2]: 04.2-15: Phase 4.1 closed, absorbed by 4.2 (04.1-10/11 superseded by 04.2-06/15)
 
 ### Pending Todos
 
@@ -213,6 +217,7 @@ Recent decisions affecting current work:
 - **[Phase 04-11, open]** The occlusion mitigation comparison (ADR 0003) still has not been fairly run on real compiled geometry — the `DoubleSide` fix landed (04-09) but this session's attempt was confounded by the (now-fixed) floating-geometry defect instead. Re-attempt the `O`-toggle fade/steepen/off comparison in a future session; both known blockers are now clear.
 - **[Phase 04-11, open, project-level]** No phase in ROADMAP.md (5 through 8, all systems-only: navigation/medals/AI/heat) currently schedules an art-direction pass, but the developer's own verdict on the compiled area ("surreal dream," not a real town) makes one necessary before the visual result matches the envisioned chase-movie look. Decide whether to insert a dedicated art-direction phase before continuing past Phase 4, or fold it into an existing phase's scope. See STATE.md's Phase 04-11 decision entry above for full context; the developer explicitly wants to stay on the current Three.js/Rapier stack, not evaluate Unity/Godot.
 - **[Phase 04-11, open, low-cost]** Both the permanent helicopter camera and the debug chase-cam fallback read closer than the developer's envisioned finished-product angle (wants a genuinely higher, more overhead "real helicopter" view). Already live-tunable via `?debug` (`src/core/camera-tuning.ts`'s `altitudeM`/`distanceM`, range 3-80m) with zero code change — preview a value, then bake it into the defaults. Cheap to do whenever, not blocking. RESOLVED by quick task 260919-cam (below): `framing.*AltitudeM`/`*DistanceM` retuned to a constant ~79.9 deg pitch (was ~41 deg), `occlusion.basePitchDeg`/`maxPitchDeg` raised to 80/88 to match; the debug chase-cam fallback (`chaseFallback`, D-12) was deliberately left untouched — it exists to reproduce Phase 2's plan 02-10 signed-off feel-session view byte-for-byte, not to match the permanent rig's angle.
+- No boundary at the terrain edge: the car can drive off migrated terrain maps and fall off the world (follow-up: edge wall, invisible barrier or out-of-bounds respawn)
 
 ## Deferred Items
 
@@ -239,8 +244,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-02T08:14:43.049Z
-Stopped at: Completed 04.2-09-PLAN.md
+Last session: 2026-11-02T22:25:20.823Z
+Stopped at: Completed 04.2-15-PLAN.md
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
