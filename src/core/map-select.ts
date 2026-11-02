@@ -11,6 +11,7 @@ export const KNOWN_MAP_IDS = [
   "newton-poppleford",
   "skidders-and-popp",
   "my-map",
+  "demo-hills",
 ] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
@@ -30,7 +31,46 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
   "newton-poppleford": "Newton Poppleford, Devon",
   "skidders-and-popp": "Skidders and Popp, Devon",
   "my-map": "My Map (hand-authored)",
+  "demo-hills": "Demo hills (sculpted)",
 };
+
+/**
+ * Per-map data format. Chosen from this static allowlisted table, never by
+ * probing URLs (D-08: the legacy ribbon loader stays for non-migrated maps).
+ */
+export type MapFormat = "legacy" | "terrain";
+export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
+  "juliette-ga": "legacy",
+  "grid-test": "legacy",
+  "feel-test": "legacy",
+  "newton-poppleford": "legacy",
+  "skidders-and-popp": "legacy",
+  "my-map": "legacy",
+  "demo-hills": "terrain",
+};
+
+const DECIMAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * `?at=x,z` drive-here point: exactly two finite decimals inside `bounds`,
+ * raw value at most 32 characters. Anything else is ignored (undefined).
+ */
+export function parseDriveAt(
+  search: string,
+  bounds: { minX: number; minZ: number; maxX: number; maxZ: number },
+): { x: number; z: number } | undefined {
+  const raw = new URLSearchParams(search).get("at");
+  if (raw === null || raw.length === 0 || raw.length > 32) return undefined;
+  const parts = raw.split(",");
+  if (parts.length !== 2) return undefined;
+  const [xs, zs] = parts as [string, string];
+  if (!DECIMAL.test(xs.trim()) || !DECIMAL.test(zs.trim())) return undefined;
+  const x = Number(xs);
+  const z = Number(zs);
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return undefined;
+  if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return undefined;
+  return { x, z };
+}
 
 /**
  * `search` with `?map=` set to `id`, every other parameter kept (`feel`, `debug`...).

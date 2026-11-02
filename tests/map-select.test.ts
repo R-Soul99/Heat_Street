@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { KNOWN_MAP_IDS, MAP_LABELS, resolveMapId, searchForMap } from "../src/core/map-select";
+import {
+  KNOWN_MAP_IDS,
+  MAP_FORMATS,
+  MAP_LABELS,
+  parseDriveAt,
+  resolveMapId,
+  searchForMap,
+} from "../src/core/map-select";
 
 describe("resolveMapId", () => {
   it("defaults to juliette-ga", () => {
@@ -30,6 +37,7 @@ describe("resolveMapId", () => {
       "newton-poppleford",
       "skidders-and-popp",
       "my-map",
+      "demo-hills",
     ]);
   });
 });
@@ -46,5 +54,44 @@ describe("searchForMap", () => {
       expect(resolveMapId(searchForMap("?feel", id))).toBe(id);
       expect(MAP_LABELS[id].length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("demo-hills and formats", () => {
+  it("resolves demo-hills with a label", () => {
+    expect(resolveMapId("?map=demo-hills")).toBe("demo-hills");
+    expect(MAP_LABELS["demo-hills"]).toBe("Demo hills (sculpted)");
+  });
+  it("formats: demo-hills is terrain, all others legacy", () => {
+    for (const id of KNOWN_MAP_IDS) {
+      expect(MAP_FORMATS[id]).toBe(id === "demo-hills" ? "terrain" : "legacy");
+    }
+  });
+});
+
+describe("parseDriveAt", () => {
+  const b = { minX: -100, minZ: -100, maxX: 100, maxZ: 100 };
+  it("parses two finite decimals", () => {
+    expect(parseDriveAt("?at=12.5,-40", b)).toEqual({ x: 12.5, z: -40 });
+  });
+  it("rejects malformed values", () => {
+    for (const s of [
+      "",
+      "?at=",
+      "?at=1,2,3",
+      "?at=a,b",
+      "?at=NaN,1",
+      "?at=Infinity,0",
+      "?at=1e999,0",
+      "?at=1",
+      "?at=,",
+    ]) {
+      expect(parseDriveAt(s, b)).toBeUndefined();
+    }
+  });
+  it("rejects out of bounds and overlong", () => {
+    expect(parseDriveAt("?at=101,0", b)).toBeUndefined();
+    expect(parseDriveAt("?at=0,-100.5", b)).toBeUndefined();
+    expect(parseDriveAt(`?at=0.${"0".repeat(40)},0`, b)).toBeUndefined();
   });
 });
