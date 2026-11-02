@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 13 of 15 complete (01-13; gate signed off 2026-11-02)
-Next: Wave 8 of 04.2 (plan 14, human: sculpt demo map + frame budget)
+Plan: 14 of 15 complete (01-14; gate signed off 2026-11-02)
+Next: Wave 9 of 04.2 (plan 15, human: medal re-recording + migration docs)
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
