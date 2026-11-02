@@ -60,6 +60,8 @@ let lastEditMs: number | null = null;
 let topDown = false;
 let savedPose: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
 let knownAreas: string[] = [];
+let saving = false;
+let editCounter = 0;
 
 // ---------------------------------------------------------------- three setup
 
@@ -167,6 +169,9 @@ function setHint(text: string): void {
 
 function setDirty(value: boolean): void {
   dirty = value;
+  // CR-01: every edit bumps the counter, so a save can tell whether anything
+  // changed while its PUTs were in flight (and must then stay dirty).
+  if (value) editCounter++;
 }
 
 function confirmDiscard(): boolean {
@@ -300,19 +305,33 @@ async function createArea(): Promise<void> {
 }
 
 async function save(): Promise<boolean> {
-  if (!area) return false;
+  // CR-01: one save at a time; a second Ctrl+S / Drive here while a save is
+  // in flight is refused instead of racing the first one.
+  if (!area || saving) {
+    if (saving) setStatus("Save already in progress.");
+    return false;
+  }
+  saving = true;
+  const target = area;
+  const editsAtStart = editCounter;
   try {
-    const bin = await encodeTerrainBinary(area);
-    await api(`/__terrain/${area.areaId}/bin`, { method: "PUT", body: bin as BodyInit });
-    await api(`/__terrain/${area.areaId}/json`, {
-      method: "PUT",
-      body: serializeTerrainSidecar(area),
-    });
-    setDirty(false);
+    // Snapshot synchronously: the sidecar text is serialised and the binary
+    // quantised (inside encodeTerrainBinary, before its first await) at the
+    // same instant, so the pair describes one consistent state.
+    const sidecar = serializeTerrainSidecar(target);
+    const bin = await encodeTerrainBinary(target);
+    await api(`/__terrain/${target.areaId}/bin`, { method: "PUT", body: bin as BodyInit });
+    await api(`/__terrain/${target.areaId}/json`, { method: "PUT", body: sidecar });
+    const editedDuringSave = editCounter !== editsAtStart || area !== target;
+    if (!editedDuringSave) setDirty(false);
     const kb = Math.round(bin.length / 1024);
-    setStatus(`Saved ${area.areaId} v1, ${kb} KB`);
-    log(`saved ${area.areaId} (${kb} KB)`);
-    await refreshAreaList(area.areaId);
+    setStatus(
+      editedDuringSave
+        ? `Saved ${target.areaId} v1, ${kb} KB. Edits made during the save are not saved yet.`
+        : `Saved ${target.areaId} v1, ${kb} KB`,
+    );
+    log(`saved ${target.areaId} (${kb} KB)`);
+    await refreshAreaList(target.areaId);
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -320,6 +339,8 @@ async function save(): Promise<boolean> {
     setStatus(text);
     log(text);
     return false;
+  } finally {
+    saving = false;
   }
 }
 

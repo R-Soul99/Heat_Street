@@ -148,17 +148,32 @@ export async function encodeTerrainBinary(
     );
   }
 
+  // CR-01: quantise and copy the paint SYNCHRONOUSLY, before the deflate await
+  // yields to the event loop, so the file is one consistent snapshot even if
+  // the caller keeps editing `grid.heights` / `paint.data` during the save.
+  // Every quantised value is range-checked: DataView.setUint16 would silently
+  // wrap an out-of-range step (a 1 cm dip saved as +655 m).
+  const quantised = new Uint16Array(count);
+  for (let i = 0; i < count; i++) {
+    const v = Math.round(grid.heights[i] / scale) - offsetSteps;
+    if (!(v >= 0 && v <= 65535)) {
+      throw new RangeError(`height at vertex ${i} is outside the encoded 16-bit range`);
+    }
+    quantised[i] = v;
+  }
+  const paintSnapshot = paint.data.slice();
+
   const enumBytes = SURFACE_TYPES.map((s) => s.length).reduce((a, b) => a + 1 + b, 0);
   const headerBytes = pad4(FIXED_HEADER_BYTES + enumBytes);
   const heightBytes = pad4(count * 2);
   let paintSection: Uint8Array;
   if (paintEncoding === 1) {
-    const comp = await deflateRaw(paint.data);
+    const comp = await deflateRaw(paintSnapshot);
     paintSection = new Uint8Array(4 + comp.length);
     new DataView(paintSection.buffer).setUint32(0, comp.length, true);
     paintSection.set(comp, 4);
   } else {
-    paintSection = paint.data;
+    paintSection = paintSnapshot;
   }
 
   const out = new Uint8Array(headerBytes + heightBytes + paintSection.length);
@@ -188,7 +203,7 @@ export async function encodeTerrainBinary(
     for (let i = 0; i < name.length; i++) out[p++] = name.charCodeAt(i);
   }
   for (let i = 0; i < count; i++) {
-    dv.setUint16(headerBytes + i * 2, Math.round(grid.heights[i] / scale) - offsetSteps, true);
+    dv.setUint16(headerBytes + i * 2, quantised[i], true);
   }
   out.set(paintSection, headerBytes + heightBytes);
   return out;

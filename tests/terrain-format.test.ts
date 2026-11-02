@@ -196,6 +196,30 @@ describe("terrain binary codec", () => {
     expect(SURFACE_TYPES[out.paint.data[0] & 0x0f]).toBe("gravel");
   });
 
+  it("CR-01: saves a consistent snapshot even if heights and paint change during the await", async () => {
+    const grid = makeGrid(3, 3, (i) => i * 0.5);
+    const paint = createPaintMap({
+      originX: -10,
+      originZ: 20,
+      widthM: 9,
+      depthM: 9,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
+    const before = Array.from(grid.heights);
+    const paintBefore = Array.from(paint.data);
+    // The encoder is still awaiting deflate when these edits land.
+    const pending = encodeTerrainBinary({ grid, paint, colliderSubdiv: 1 });
+    grid.heights[0] = -50; // below the precomputed min: would wrap to ~+605 m
+    grid.heights[5] = 900; // above the precomputed max: would wrap too
+    paint.data[0] = 0;
+    const out = await decodeTerrainBinary(await pending, LABEL);
+    for (let i = 0; i < before.length; i++) {
+      expect(out.grid.heights[i]).toBeCloseTo(before[i], 5);
+    }
+    expect(Array.from(out.paint.data)).toEqual(paintBefore);
+  });
+
   it("rejects a height span beyond 16 bits", async () => {
     const grid = makeGrid(1, 1, (i) => (i === 0 ? 0 : 700));
     await expect(
