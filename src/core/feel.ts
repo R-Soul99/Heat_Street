@@ -52,7 +52,8 @@ export type FeelKey = keyof FeelSettings;
 export const FEEL_MIN = 0;
 export const FEEL_MAX = 10;
 
-export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
+/** Mid-scale everywhere with pivot and flick off: `applyFeel` leaves the class base untouched. */
+export const FEEL_NEUTRAL: Readonly<FeelSettings> = Object.freeze({
   grip: 5,
   steerAtSpeed: 5,
   turnIn: 5,
@@ -60,15 +61,35 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   lowGearPunch: 5,
   topSpeed: 5,
   looseness: 5,
-  // User-approved 2026-10-30 on exp/pivot-blend ("absolutely perfect"): pivot on at
-  // full strength, ease 6.4 (engage 0.25 s x 1.224 = 0.31 s) with the continuous gate.
-  pivot: 10,
-  pivotEase: 6.4,
+  pivot: 0,
+  pivotEase: 5,
   slideSurge: 5,
   liftOff: 5,
   tyreFalloff: 5,
   regrip: 5,
-  flick: 4,
+  flick: 0,
+});
+
+/**
+ * The shipped handling: the user's own feel preset, made the default for every
+ * URL on 2026-11-02 before the Phase 04.2 medal re-recording. Pivot 10 / ease
+ * 6.4 is the 2026-10-30 approval on exp/pivot-blend ("absolutely perfect").
+ */
+export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
+  grip: 10,
+  steerAtSpeed: 7,
+  turnIn: 7.2,
+  accel: 5,
+  lowGearPunch: 7,
+  topSpeed: 5,
+  looseness: 5.3,
+  pivot: 10,
+  pivotEase: 6.4,
+  slideSurge: 7.6,
+  liftOff: 5,
+  tyreFalloff: 5,
+  regrip: 8.2,
+  flick: 5.1,
 });
 
 /** Slider order and the wording shown to the player. */

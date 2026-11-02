@@ -3,6 +3,7 @@ import {
   applyFeel,
   FEEL_CONTROLS,
   FEEL_DEFAULTS,
+  FEEL_NEUTRAL,
   type FeelSettings,
   parseFeelFlag,
   parseSavedFeel,
@@ -12,7 +13,7 @@ import { classDefaultTuning } from "../src/core/vehicle-class";
 import { defaultTuning, TUNING_RANGES } from "../src/core/vehicle-tuning";
 
 // Mid-scale everywhere (5), pivot off and flick off: exactly the class base.
-const NEUTRAL: FeelSettings = { ...FEEL_DEFAULTS, flick: 0, pivot: 0, pivotEase: 5 };
+const NEUTRAL: FeelSettings = { ...FEEL_NEUTRAL };
 
 function derived(feel: FeelSettings, id: "rwd" | "fwd" | "awd" = "rwd") {
   const base = classDefaultTuning(id);
@@ -29,20 +30,30 @@ describe("applyFeel", () => {
     }
   });
 
-  it("the default settings only add the flick and the approved pivot (full strength, ease 6.4) on top of the base", () => {
+  it("the default settings are the user's 2026-11-02 preset", () => {
+    expect(FEEL_DEFAULTS).toEqual({
+      grip: 10,
+      steerAtSpeed: 7,
+      turnIn: 7.2,
+      accel: 5,
+      lowGearPunch: 7,
+      topSpeed: 5,
+      looseness: 5.3,
+      pivot: 10,
+      pivotEase: 6.4,
+      slideSurge: 7.6,
+      liftOff: 5,
+      tyreFalloff: 5,
+      regrip: 8.2,
+      flick: 5.1,
+    });
     const { base, t } = derived(FEEL_DEFAULTS);
-    expect(t.drive.flickGain).toBeCloseTo(0.4);
+    expect(t.wheels.frictionSlip).toBeCloseTo(base.wheels.frictionSlip * 1.12);
+    expect(t.drive.highSpeedSteerFraction).toBeCloseTo(0.666);
+    expect(t.drive.flickGain).toBeCloseTo(0.51);
     expect(t.drive.pivotTurn).toBe(1);
     expect(t.drive.pivotEngageSec).toBeCloseTo(base.drive.pivotEngageSec * 1.224);
-    expect({
-      ...t,
-      drive: {
-        ...t.drive,
-        flickGain: 0,
-        pivotTurn: base.drive.pivotTurn,
-        pivotEngageSec: base.drive.pivotEngageSec,
-      },
-    }).toEqual(base);
+    expect(t.drive.liftOffOversteer).toBe(base.drive.liftOffOversteer);
   });
 
   it("is idempotent: reapplying from base never drifts", () => {
