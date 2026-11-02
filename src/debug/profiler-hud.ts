@@ -103,7 +103,8 @@ export function createHud(renderer: THREE.WebGLRenderer, world: RAPIER.World): H
   // `pointer-events:none` keeps the overlay out of the input path entirely.
   // `display:none` is the default; `debug-gate`'s hotkey is what shows it.
   el.style.cssText =
-    "position:fixed;top:8px;left:8px;z-index:10;pointer-events:none;" +
+    // top:36px clears the debug map dropdown (map-menu.ts, top:8px), which otherwise hides the frame line.
+    "position:fixed;top:36px;left:8px;z-index:10;pointer-events:none;" +
     "font:11px/1.45 ui-monospace,monospace;color:#e8e8e8;background:rgba(0,0,0,.62);" +
     "padding:6px 9px;border-radius:4px;white-space:pre;display:none";
   document.body.appendChild(el);
