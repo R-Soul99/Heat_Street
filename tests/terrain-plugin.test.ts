@@ -1,3 +1,5 @@
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
@@ -8,6 +10,7 @@ import {
   readBodyCapped,
   resolveTerrainFile,
 } from "../tools/terrain-editor/paths.ts";
+import { writeAtomic } from "../tools/terrain-editor/vite-plugin.ts";
 
 describe("isSafeAreaId", () => {
   it("accepts lowercase ids", () => {
@@ -43,6 +46,26 @@ describe("readBodyCapped", () => {
   it("resolves the buffer at the cap", async () => {
     const buf = await readBodyCapped(Readable.from([Buffer.alloc(10)]), 10);
     expect(buf.length).toBe(10);
+  });
+});
+
+describe("writeAtomic (WR-07)", () => {
+  it("concurrent writes to one file all succeed and publish one intact body", async () => {
+    // Scratch directory under the OS temp dir, removed afterwards.
+    const dir = await mkdtemp(path.join(tmpdir(), "hs-write-atomic-"));
+    try {
+      const file = path.join(dir, "a.terrain.bin");
+      const bodies = Array.from({ length: 8 }, (_, i) => Buffer.alloc(256 * 1024, i + 1));
+      await Promise.all(bodies.map((b) => writeAtomic(file, b)));
+      const out = await readFile(file);
+      expect(out.length).toBe(256 * 1024);
+      // Every byte comes from the same writer (no interleaving).
+      expect(out.every((v) => v === out[0])).toBe(true);
+      // No temp files left behind.
+      expect(await readdir(dir)).toEqual(["a.terrain.bin"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

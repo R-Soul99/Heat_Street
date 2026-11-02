@@ -329,8 +329,12 @@ async function save(): Promise<boolean> {
     // same instant, so the pair describes one consistent state.
     const sidecar = serializeTerrainSidecar(target);
     const bin = await encodeTerrainBinary(target);
-    await api(`/__terrain/${target.areaId}/bin`, { method: "PUT", body: bin as BodyInit });
+    // WR-07: both halves are fully encoded before anything is written, and the
+    // sidecar goes first: it is the half the server is most likely to reject
+    // (graph validation), so a rejection leaves the old bin/json pair intact
+    // instead of a new bin beside a stale sidecar.
     await api(`/__terrain/${target.areaId}/json`, { method: "PUT", body: sidecar });
+    await api(`/__terrain/${target.areaId}/bin`, { method: "PUT", body: bin as BodyInit });
     const editedDuringSave = editCounter !== editsAtStart || area !== target;
     if (!editedDuringSave) setDirty(false);
     const kb = Math.round(bin.length / 1024);

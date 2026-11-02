@@ -8,6 +8,7 @@
  *   GET /__terrain/<id>/bin|json      -> file bytes
  *   PUT /__terrain/<id>/bin|json      -> validate, then write via temp + rename
  */
+import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
@@ -46,9 +47,12 @@ function safeMessage(err: unknown): string {
   return raw.replace(/[A-Za-z]:[\\/][^\s"']*|\/[^\s"']*\/[^\s"']*/g, "<path>");
 }
 
-async function writeAtomic(file: string, data: Buffer | string): Promise<void> {
+/** Per-file tail of the in-process write queue (WR-07). */
+const writeQueues = new Map<string, Promise<void>>();
+
+async function writeViaTemp(file: string, data: Buffer | string): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(tmp, data);
     await rename(tmp, file);
@@ -56,6 +60,24 @@ async function writeAtomic(file: string, data: Buffer | string): Promise<void> {
     await unlink(tmp).catch(() => undefined);
     throw e;
   }
+}
+
+/**
+ * Write via a temp file + rename. WR-07: every request in the dev server
+ * shares one pid, so the temp name is unique per call (no interleaved bytes,
+ * no renaming another request's temp file away), and writes to the same file
+ * are queued in-process (concurrent renames onto one target fail with EPERM
+ * on Windows). Each call still settles with its own result.
+ */
+export function writeAtomic(file: string, data: Buffer | string): Promise<void> {
+  const prev = writeQueues.get(file) ?? Promise.resolve();
+  const run = prev.catch(() => undefined).then(() => writeViaTemp(file, data));
+  const tail = run.catch(() => undefined);
+  writeQueues.set(file, tail);
+  void tail.then(() => {
+    if (writeQueues.get(file) === tail) writeQueues.delete(file);
+  });
+  return run;
 }
 
 export function terrainEditorApi(): Plugin {
