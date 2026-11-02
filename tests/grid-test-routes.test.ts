@@ -15,6 +15,11 @@ describe("grid-test shipped artifacts", () => {
     expect(validateCourseRoutes(routes, graph)).toEqual([]);
   });
 
+  // Plan 04.2-15 (D-07): grid-test medals are now a designer reference run on the
+  // migrated terrain map, NOT the synthetic average-speed formula. Re-running
+  // tools/map-compiler/synthetic/author-grid-routes.ts would overwrite them with
+  // formula values (see docs/terrain-migration.md), so this test validates the
+  // committed file against the routes instead of re-deriving the formula.
   it("has a medal reference matching the routes", () => {
     const expectations = routes.courses.map((c) => ({
       courseId: c.id,
@@ -22,8 +27,14 @@ describe("grid-test shipped artifacts", () => {
       laps: c.laps,
       checkpointIds: c.checkpoints.map((cp) => cp.id),
     }));
-    expect(() =>
-      parseMedalReference(read("medals"), "grid-test.medals.json", "grid-test", expectations),
-    ).not.toThrow();
+    const reference = parseMedalReference(
+      read("medals"),
+      "grid-test.medals.json",
+      "grid-test",
+      expectations,
+    );
+    expect(reference.handlingContentVersion).toBe("261101-terrain");
+    const totals = Object.fromEntries(reference.courses.map((c) => [c.courseId, c.totalTimeSec]));
+    expect(totals).toEqual({ "grid-test-stagger-run": 138.25, "grid-test-block-loop": 354.833 });
   });
 });

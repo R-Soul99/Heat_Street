@@ -279,6 +279,8 @@ describe("parseMedalReference", () => {
     expect(routesRaw).toContain("circuit-02");
   });
 
+  // Plan 04.2-15 (D-07): re-recorded designer reference on the migrated terrain map,
+  // driven on the shipped feel-preset car (FEEL_DEFAULTS, commit 3363300).
   it("accepts the committed Juliette reference sidecar with complete course data", () => {
     const result = parseMedalReference(
       medalReferenceRaw,
@@ -286,18 +288,18 @@ describe("parseMedalReference", () => {
       "juliette-ga",
       routeIdentity,
     );
-    expect(result.handlingContentVersion).toBe("260920-sm2");
+    expect(result.handlingContentVersion).toBe("261101-terrain");
     expect(result.courses).toHaveLength(2);
     expect(result.courses[0].splits).toHaveLength(7);
     expect(result.courses[1].splits).toHaveLength(15);
-    expect(result.courses[0].thresholds.ace).toBeCloseTo(162);
-    expect(result.courses[0].thresholds.gold).toBeCloseTo(180);
-    expect(result.courses[0].thresholds.silver).toBeCloseTo(207);
-    expect(result.courses[0].thresholds.bronze).toBeCloseTo(243);
-    expect(result.courses[1].thresholds.ace).toBeCloseTo(378);
-    expect(result.courses[1].thresholds.gold).toBeCloseTo(420);
-    expect(result.courses[1].thresholds.silver).toBeCloseTo(483);
-    expect(result.courses[1].thresholds.bronze).toBeCloseTo(567);
+    expect(result.courses[0].thresholds.ace).toBeCloseTo(153.585, 3);
+    expect(result.courses[0].thresholds.gold).toBeCloseTo(170.65, 3);
+    expect(result.courses[0].thresholds.silver).toBeCloseTo(196.2475, 3);
+    expect(result.courses[0].thresholds.bronze).toBeCloseTo(230.3775, 3);
+    expect(result.courses[1].thresholds.ace).toBeCloseTo(276.9147, 3);
+    expect(result.courses[1].thresholds.gold).toBeCloseTo(307.683, 3);
+    expect(result.courses[1].thresholds.silver).toBeCloseTo(353.83545, 3);
+    expect(result.courses[1].thresholds.bronze).toBeCloseTo(415.37205, 3);
   });
 });
 

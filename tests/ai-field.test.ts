@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 // tests/ai-lap.test.ts's own fixture-loading idiom (CIRC-02 SC1/SC2/SC4).
 import collisionRaw from "../public/maps/juliette-ga.collision.json?raw";
 import compiledRaw from "../public/maps/juliette-ga.map.json?raw";
-import medalsRaw from "../public/maps/juliette-ga.medals.json?raw";
 import routesRaw from "../public/maps/juliette-ga.routes.json?raw";
 import { defaultAiDriverParams } from "../src/core/ai-driver";
 import { detectCheckpointHit } from "../src/core/checkpoint-detection";
@@ -23,6 +22,11 @@ import { createAiFleet } from "../src/physics/ai-fleet";
 import { createMapScene } from "../src/physics/map-scene";
 import { sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
+// Plan 04.2-15: the shipped juliette-ga.medals.json was re-recorded on the migrated
+// terrain map (handlingContentVersion "261101-terrain"). Circuit Race is forced off on
+// terrain areas, and the AI pace (AI_PACE_CALIBRATION) was calibrated against the legacy
+// map + the phase 06-03 reference, so this test pins that frozen 06-03 reference.
+import medalsRaw from "./fixtures/juliette-ga.06-03-legacy.medals.json?raw";
 
 const graph = parseRoadGraph(compiledRaw, "public/maps/juliette-ga.map.json");
 const collision = parseMapCollision(
@@ -37,7 +41,7 @@ if (course === undefined) {
 }
 const medalReference = parseMedalReference(
   medalsRaw,
-  "public/maps/juliette-ga.medals.json",
+  "tests/fixtures/juliette-ga.06-03-legacy.medals.json",
   routes.areaId,
   routes.courses.map((candidate) => ({
     courseId: candidate.id,
