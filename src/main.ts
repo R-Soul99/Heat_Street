@@ -45,16 +45,20 @@ import {
   defaultCameraTuning,
   parseSavedCameraTuning,
 } from "./core/camera-tuning";
-import { parseCourseData } from "./core/course";
+import { type Course, parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag } from "./core/feel";
 import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
-import { resolveMapId } from "./core/map-select";
+import { MAP_FORMATS, resolveMapId } from "./core/map-select";
 import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
-import { parseMedalReference } from "./core/medal-reference";
+import { type MedalReferenceCourse, parseMedalReference } from "./core/medal-reference";
 import { createMedalTiming } from "./core/medal-timing";
-import { buildNavigationGraph, validateCourseRoutes } from "./core/navigation";
+import {
+  buildNavigationGraph,
+  type NavigationGraph,
+  validateCourseRoutes,
+} from "./core/navigation";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
 import { createRaceState } from "./core/race-state";
 import { buildGridPoses, buildRacingLine } from "./core/racing-line";
@@ -62,7 +66,7 @@ import { buildGridPoses, buildRacingLine } from "./core/racing-line";
 // OWN convention (`tools/map-compiler/**` needs it for Node's native
 // type-stripping resolver) — this file imports it the same, ordinary,
 // extensionless way every other `src/` consumer does.
-import { parseRoadGraph } from "./core/road-graph";
+import { parseRoadGraph, type RoadGraph } from "./core/road-graph";
 import { DT } from "./core/sim-clock";
 import {
   defaultSurfaceProfiles,
@@ -70,8 +74,14 @@ import {
   SURFACE_TUNING_STORAGE_KEY,
 } from "./core/surface-tuning";
 import type { SurfaceType } from "./core/surface-types";
+import {
+  crestsFromObjects,
+  physicsGridForArea,
+  resolveDriveHerePose,
+} from "./core/terrain-drive-setup";
+import { loadTerrainArea, type TerrainArea } from "./core/terrain-format";
 import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
-import { sampleTerrainHeight, upsampleTerrainGrid } from "./core/terrain-grid";
+import { sampleTerrainHeight, type TerrainGrid, upsampleTerrainGrid } from "./core/terrain-grid";
 import { DEFAULT_COLLIDER_SUBDIV } from "./core/terrain-limits";
 import { tyreSlipRatio } from "./core/tyre-slip";
 import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./core/vehicle-class";
@@ -93,6 +103,7 @@ import {
 } from "./debug/test-stations";
 import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
+import { createFreeDriveCoordinator } from "./gameplay/free-drive-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
 import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
@@ -104,7 +115,8 @@ import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
 import { createAiFleet } from "./physics/ai-fleet";
 import { createGroundProbe } from "./physics/ground-probe";
-import { createMapScene, SPAWN_CLEARANCE_M } from "./physics/map-scene";
+import { createMapScene, type MapScene, SPAWN_CLEARANCE_M } from "./physics/map-scene";
+import { createTerrainScene } from "./physics/terrain-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
 import { createAiVehicleViews } from "./render/ai-vehicle-view";
@@ -122,12 +134,12 @@ import { createCarShadow } from "./render/car-shadow";
 import { createCarXray } from "./render/car-xray";
 import { shadeByHeight } from "./render/crest-shading";
 import { applyAllInterpolated } from "./render/interpolator";
-import { loadMapView } from "./render/map-view";
+import { loadMapView, type MapWorldView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
 import { createStationMarkers } from "./render/station-markers";
 import { createSurfaceFx } from "./render/surface-fx";
-import { buildTerrainView } from "./render/terrain-view";
+import { buildTerrainView, type TerrainView } from "./render/terrain-view";
 import { createVehicleView } from "./render/vehicle-view";
 
 const canvasElement = document.getElementById("game");
@@ -208,6 +220,25 @@ async function fetchArtifactText(url: string): Promise<string> {
   return response.text();
 }
 
+/** Binary twin of `fetchArtifactText` (Pitfall 7: fetched from public/, never imported). */
+async function fetchArtifactBytes(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`failed to fetch "${url}": HTTP ${response.status}`);
+  }
+  return response.arrayBuffer();
+}
+
+/** `undefined` on HTTP 404 only (an optional artifact); any other failure still throws. */
+async function fetchOptionalArtifactText(url: string): Promise<string | undefined> {
+  const response = await fetch(url);
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    throw new Error(`failed to fetch "${url}": HTTP ${response.status}`);
+  }
+  return response.text();
+}
+
 // D-P27: a missing, stale or malformed map artifact must produce a named,
 // legible on-screen failure — never a blank canvas. Every statement that
 // depends on the compiled map (the fetch/parse/load above, and every
@@ -219,57 +250,89 @@ try {
   // touch these artifacts' JSON — never a bare call to JSON's own `parse`
   // at this call site (T-04-01), mirroring this file's own "never call
   // JSON's `parse` directly here" discipline for the localStorage trio above.
-  const graphText = await fetchArtifactText(MAP_GRAPH_URL);
-  const graph = parseRoadGraph(graphText, MAP_GRAPH_URL);
-  const routesText = await fetchArtifactText(MAP_ROUTES_URL);
-  const routes = parseCourseData(routesText, MAP_ROUTES_URL, graph);
-  if (routes.areaId !== graph.areaId) {
-    throw new Error(`route area mismatch: expected "${graph.areaId}", got "${routes.areaId}"`);
+  // D-08: the format is a static, allowlisted per-map choice (never a URL
+  // probe). The legacy ribbon loader is retained for non-migrated maps and
+  // future bridges; "terrain" maps load the binary heightfield + paint pair.
+  const isTerrain = MAP_FORMATS[AREA_ID] === "terrain";
+  let terrainArea: TerrainArea | undefined;
+  let graph: RoadGraph;
+  if (isTerrain) {
+    const terrainBase = `/maps/${AREA_ID}.terrain`;
+    const [binBytes, sidecarText] = await Promise.all([
+      fetchArtifactBytes(`${terrainBase}.bin`),
+      fetchArtifactText(`${terrainBase}.json`),
+    ]);
+    terrainArea = await loadTerrainArea(binBytes, sidecarText, AREA_ID, terrainBase);
+    graph = terrainArea.graph;
+  } else {
+    graph = parseRoadGraph(await fetchArtifactText(MAP_GRAPH_URL), MAP_GRAPH_URL);
   }
-  const navigation = buildNavigationGraph(graph);
-  const routeFailures = validateCourseRoutes(routes, graph);
-  if (routeFailures.length > 0)
-    throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
-  const medalsText = await fetchArtifactText(MAP_MEDALS_URL);
-  const medalReference = parseMedalReference(
-    medalsText,
-    MAP_MEDALS_URL,
-    routes.areaId,
-    routes.courses.map((candidate) => ({
-      courseId: candidate.id,
-      mode: candidate.mode,
-      laps: candidate.laps,
-      checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
-    })),
-  );
-  // Mode/course selection, moved ABOVE `createMapScene` (plan 07-02) so the
-  // choice is known before `transforms` is built below — Circuit Race needs
-  // the AI fleet's bodies folded into the SAME `TransformCache` the player's
-  // body uses, which in turn needs `course`/`navigation` known first.
-  //
-  // COURSE-DATA DECISION (07-02-PLAN.md): Circuit Race is a RUNTIME VARIANT
-  // selected by `?mode=circuit-race` over the EXISTING `mode: "circuit"`
-  // course object — `parseCourseData` hardcodes exactly one p2p + one
-  // circuit course per area file, so a third course entry would fail that
-  // parser. No new course-data entry, no new medal reference; solo Time
-  // Attack's own course id, reference and saved bests are untouched (D-05).
+  // A terrain area with no routes file opens in free-drive mode (HTTP 404 only).
+  const routesText = isTerrain
+    ? await fetchOptionalArtifactText(MAP_ROUTES_URL)
+    : await fetchArtifactText(MAP_ROUTES_URL);
   const modeParam = new URLSearchParams(location.search).get("mode");
-  const selectedMode: "p2p" | "circuit" | "circuit-race" =
-    modeParam === "circuit-race" ? "circuit-race" : modeParam === "circuit" ? "circuit" : "p2p";
-  const isCircuitRace = selectedMode === "circuit-race";
-  const courseMode = isCircuitRace ? "circuit" : selectedMode;
-  const course = routes.courses.find((candidate) => candidate.mode === courseMode);
-  if (course === undefined) throw new Error(`no ${courseMode} course in ${MAP_ROUTES_URL}`);
-  const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
-  if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
+  let raceData:
+    | {
+        readonly routes: ReturnType<typeof parseCourseData>;
+        readonly navigation: NavigationGraph;
+        readonly medalReference: ReturnType<typeof parseMedalReference>;
+        readonly course: Course;
+        readonly reference: MedalReferenceCourse;
+      }
+    | undefined;
+  let isCircuitRace = false;
+  if (routesText !== undefined) {
+    const routes = parseCourseData(routesText, MAP_ROUTES_URL, graph);
+    if (routes.areaId !== graph.areaId) {
+      throw new Error(`route area mismatch: expected "${graph.areaId}", got "${routes.areaId}"`);
+    }
+    const navigation = buildNavigationGraph(graph);
+    const routeFailures = validateCourseRoutes(routes, graph);
+    if (routeFailures.length > 0)
+      throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
+    const medalsText = await fetchArtifactText(MAP_MEDALS_URL);
+    const medalReference = parseMedalReference(
+      medalsText,
+      MAP_MEDALS_URL,
+      routes.areaId,
+      routes.courses.map((candidate) => ({
+        courseId: candidate.id,
+        mode: candidate.mode,
+        laps: candidate.laps,
+        checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
+      })),
+    );
+    // Mode/course selection, moved ABOVE `createMapScene` (plan 07-02) so the
+    // choice is known before `transforms` is built below — Circuit Race needs
+    // the AI fleet's bodies folded into the SAME `TransformCache` the player's
+    // body uses, which in turn needs `course`/`navigation` known first.
+    //
+    // COURSE-DATA DECISION (07-02-PLAN.md): Circuit Race is a RUNTIME VARIANT
+    // selected by `?mode=circuit-race` over the EXISTING `mode: "circuit"`
+    // course object — `parseCourseData` hardcodes exactly one p2p + one
+    // circuit course per area file, so a third course entry would fail that
+    // parser. No new course-data entry, no new medal reference; solo Time
+    // Attack's own course id, reference and saved bests are untouched (D-05).
+    const selectedMode: "p2p" | "circuit" | "circuit-race" =
+      modeParam === "circuit-race" ? "circuit-race" : modeParam === "circuit" ? "circuit" : "p2p";
+    const wantsCircuitRace = selectedMode === "circuit-race";
+    // Circuit race is forced off for terrain areas (no AI line on a heightfield yet).
+    isCircuitRace = wantsCircuitRace && !isTerrain;
+    const courseMode = wantsCircuitRace ? "circuit" : selectedMode;
+    const course = routes.courses.find((candidate) => candidate.mode === courseMode);
+    if (course === undefined) throw new Error(`no ${courseMode} course in ${MAP_ROUTES_URL}`);
+    const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
+    if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
+    raceData = { routes, navigation, medalReference, course, reference };
+  }
+  // Const alias so closures below keep the narrowed (non-undefined) type.
+  const rd = raceData;
 
-  const collisionText = await fetchArtifactText(MAP_COLLISION_URL);
-  const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
-  const mapView = await loadMapView(MAP_GLB_URL);
-
-  // 04.2 prototype gate (debug only): `?map=feel-test&gate` adds the gate
-  // course as an extra heightfield. Plain feel-test builds nothing extra.
-  const GATE_ENABLED = AREA_ID === "feel-test" && new URLSearchParams(location.search).has("gate");
+  // 04.2 prototype gate (debug only, legacy maps only): `?map=feel-test&gate`
+  // adds the gate course as an extra heightfield. Plain feel-test builds nothing extra.
+  const GATE_ENABLED =
+    !isTerrain && AREA_ID === "feel-test" && new URLSearchParams(location.search).has("gate");
   const gate = GATE_ENABLED ? buildGateCourse() : undefined;
   const gatePhysicsGrid =
     gate === undefined
@@ -278,17 +341,76 @@ try {
         ? upsampleTerrainGrid(gate.grid, 2)
         : gate.grid;
 
-  const scene = createMapScene(
-    world,
-    graph,
-    collision,
-    tuning,
-    surfaceProfiles,
-    CAR_CLASS.frontDriveShare,
-    gate === undefined || gatePhysicsGrid === undefined
-      ? undefined
-      : { grid: gatePhysicsGrid, paint: gate.paint },
-  );
+  let scene: MapScene;
+  let mapView: MapWorldView;
+  let terrainView: TerrainView | undefined;
+  let terrainPhysicsGrid: TerrainGrid | undefined;
+  if (terrainArea !== undefined) {
+    // One grid for BOTH the collider and the view, so they share triangles.
+    const physicsGrid = physicsGridForArea(terrainArea);
+    terrainPhysicsGrid = physicsGrid;
+    const crests = crestsFromObjects(terrainArea.objects);
+    // ?at=x,z "drive here" (D-12): validated against the GRID extent, so it
+    // works on a freshly created area with no roads yet.
+    const spawnOverride = resolveDriveHerePose(location.search, physicsGrid, graph);
+    scene = createTerrainScene(
+      world,
+      {
+        areaId: AREA_ID,
+        grid: physicsGrid,
+        paint: terrainArea.paint,
+        graph,
+        buildings: terrainArea.buildings,
+        crests,
+        groundSurface: terrainArea.groundSurface,
+        spawnOverride,
+      },
+      tuning,
+      surfaceProfiles,
+      CAR_CLASS.frontDriveShare,
+    );
+    const tView = buildTerrainView(physicsGrid, terrainArea.paint, { crests });
+    terrainView = tView;
+    // Migrated maps keep their baked building meshes only: the ribbon road
+    // and glb terrain meshes are removed so they cannot draw over the heightfield.
+    const buildingsView = terrainArea.legacyGlbBuildings
+      ? await loadMapView(MAP_GLB_URL)
+      : undefined;
+    if (buildingsView !== undefined) {
+      for (const mesh of buildingsView.roadMeshes) mesh.removeFromParent();
+      buildingsView.terrainMesh?.removeFromParent();
+    }
+    const group = new THREE.Group();
+    group.add(tView.group);
+    if (buildingsView !== undefined) group.add(buildingsView.group);
+    mapView = {
+      group,
+      roadMeshes: [],
+      roadSurfaces: [],
+      buildingMeshes: buildingsView?.buildingMeshes ?? [],
+      terrainMesh: undefined,
+      crestMeshes: tView.crestMeshes,
+      dispose(): void {
+        tView.dispose();
+        buildingsView?.dispose();
+      },
+    };
+  } else {
+    const collisionText = await fetchArtifactText(MAP_COLLISION_URL);
+    const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
+    mapView = await loadMapView(MAP_GLB_URL);
+    scene = createMapScene(
+      world,
+      graph,
+      collision,
+      tuning,
+      surfaceProfiles,
+      CAR_CLASS.frontDriveShare,
+      gate === undefined || gatePhysicsGrid === undefined
+        ? undefined
+        : { grid: gatePhysicsGrid, paint: gate.paint },
+    );
+  }
 
   // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
   // grid (player at the back, D-03), and 3 AI vehicles built through the
@@ -303,7 +425,8 @@ try {
   // the `if` below) — plan 07-04's `CircuitRaceCoordinatorDeps.line` needs it
   // at the `createCircuitRaceCoordinator` call site further down.
   let line: ReturnType<typeof buildRacingLine> | undefined;
-  if (isCircuitRace) {
+  if (isCircuitRace && rd !== undefined) {
+    const { course, navigation } = rd;
     line = buildRacingLine(course, navigation, defaultSurfaceProfiles());
     gridPoses = buildGridPoses(line, RACE_FIELD_SIZE);
     scene.resetVehicle(gridPoses[PLAYER_GRID_SLOT]);
@@ -352,9 +475,18 @@ try {
   // plan 03-08's human go/no-go session to read as "drivable floor" well past
   // where the real physics floor ends, and that finding applies directly to
   // real map bounds too.
+  const groundBounds =
+    terrainPhysicsGrid === undefined
+      ? graph.bounds
+      : {
+          minX: terrainPhysicsGrid.originX,
+          minZ: terrainPhysicsGrid.originZ,
+          maxX: terrainPhysicsGrid.originX + terrainPhysicsGrid.scaleX,
+          maxZ: terrainPhysicsGrid.originZ + terrainPhysicsGrid.scaleZ,
+        };
   const groundExtents = {
-    x: Math.max(Math.abs(graph.bounds.minX), Math.abs(graph.bounds.maxX)),
-    z: Math.max(Math.abs(graph.bounds.minZ), Math.abs(graph.bounds.maxZ)),
+    x: Math.max(Math.abs(groundBounds.minX), Math.abs(groundBounds.maxX)),
+    z: Math.max(Math.abs(groundBounds.minZ), Math.abs(groundBounds.maxZ)),
   };
   const view = createVehicleView(
     tuning.wheels.radius,
@@ -404,7 +536,7 @@ try {
   // ground too, not just on the drawn road lines.
   const fxMeshes = [...mapView.roadMeshes];
   const fxSurfaces = [...mapView.roadSurfaces];
-  if (isFlatTestArea(AREA_ID)) {
+  if (isFlatTestArea(AREA_ID) && !isTerrain) {
     const width = graph.bounds.maxX - graph.bounds.minX;
     const depth = graph.bounds.maxZ - graph.bounds.minZ;
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, depth).rotateX(-Math.PI / 2));
@@ -417,7 +549,16 @@ try {
     fxMeshes.push(plane);
     fxSurfaces.push(groundSurfaceForArea(AREA_ID));
   }
-  const fx = createSurfaceFx(fxMeshes, fxSurfaces);
+  // Terrain maps: skid decals project onto the terrain chunk under the wheel.
+  const decalView = terrainView;
+  const decalGrid = terrainPhysicsGrid;
+  const fx =
+    decalView !== undefined && decalGrid !== undefined
+      ? createSurfaceFx([], [], {
+          meshAt: (x, z) => decalView.chunkAt(x, z),
+          heightAt: (x, z) => sampleTerrainHeight(decalGrid, x, z),
+        })
+      : createSurfaceFx(fxMeshes, fxSurfaces);
   view.scene.add(fx.group);
 
   // Proving ground only: draw the hop/jump domes in a colour that stands out
@@ -425,7 +566,13 @@ try {
   // on the ground below the car so the camera can see how high it is.
   let carShadow: ReturnType<typeof createCarShadow> | undefined;
   let groundProbe: ReturnType<typeof createGroundProbe> | undefined;
-  if (isFlatTestArea(AREA_ID)) {
+  if (isTerrain) {
+    for (const crest of mapView.crestMeshes) {
+      shadeByHeight(crest);
+      view.scene.add(crest);
+    }
+  }
+  if (isFlatTestArea(AREA_ID) && !isTerrain) {
     for (const crest of mapView.crestMeshes) {
       shadeByHeight(crest);
       view.scene.add(crest);
@@ -494,19 +641,26 @@ try {
   // `selectedMode`/`course`/`reference` were already resolved above (moved
   // ahead of `createMapScene`, plan 07-02) — this block only builds what
   // depends on them.
-  const medalProgress = loadMedalProgress(
-    {
-      get: (key) => localStorage.getItem(key),
-      set: (key, value) => localStorage.setItem(key, value),
-    },
-    routes.courses.map((candidate) => candidate.id),
-  );
-  const resultsView = createResultsView(
-    routes.courses,
-    medalReference.courses,
-    course.id,
-    medalProgress.courses,
-  );
+  // Free-drive areas (no routes file) skip medals and the results view entirely.
+  const medalProgress =
+    rd === undefined
+      ? undefined
+      : loadMedalProgress(
+          {
+            get: (key) => localStorage.getItem(key),
+            set: (key, value) => localStorage.setItem(key, value),
+          },
+          rd.routes.courses.map((candidate) => candidate.id),
+        );
+  const resultsView =
+    rd === undefined || medalProgress === undefined
+      ? undefined
+      : createResultsView(
+          rd.routes.courses,
+          rd.medalReference.courses,
+          rd.course.id,
+          medalProgress.courses,
+        );
   let loopClock: LoopHandle | null = null;
 
   // Shared HUD/overlay surfaces both coordinator shapes below hand off to —
@@ -533,11 +687,11 @@ try {
   // this mode yet (D-05/SC5: solo Time Attack's own medal path is
   // completely untouched when `fleet`/`gridPoses` are undefined).
   const circuitRace =
-    fleet === undefined || gridPoses === undefined || line === undefined
+    fleet === undefined || gridPoses === undefined || line === undefined || rd === undefined
       ? undefined
       : createCircuitRaceCoordinator({
-          course,
-          navigation,
+          course: rd.course,
+          navigation: rd.navigation,
           scene,
           fleet,
           gridPoses,
@@ -555,55 +709,66 @@ try {
           onCarReset: (racerIndex) => transforms.snapBody(1 + racerIndex),
         });
   const raceCoordinator =
-    fleet !== undefined
+    fleet !== undefined || rd === undefined || medalProgress === undefined
       ? undefined
       : createRaceCoordinator({
-          course,
-          navigation,
+          course: rd.course,
+          navigation: rd.navigation,
           scene,
-          state: createRaceState(course, navigation),
+          state: createRaceState(rd.course, rd.navigation),
           objectiveView,
           minimap,
           navigationArrow,
           raceHud,
           chime: checkpointChime,
           simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
-          timing: createMedalTiming({ referenceTimeSec: reference.totalTimeSec }),
-          reference,
-          personalBest: medalProgress.courses[course.id],
+          timing: createMedalTiming({ referenceTimeSec: rd.reference.totalTimeSec }),
+          reference: rd.reference,
+          personalBest: medalProgress.courses[rd.course.id],
           onCompleted: (completion) => {
             const saved = saveMedalResult(
               {
                 get: (key) => localStorage.getItem(key),
                 set: (key, value) => localStorage.setItem(key, value),
               },
-              course.id,
+              rd.course.id,
               {
                 complete: true,
                 effectiveTimeSec: completion.effectiveTimeSec,
                 medal: completion.medal,
               },
-              routes.courses.map((candidate) => candidate.id),
+              rd.routes.courses.map((candidate) => candidate.id),
             );
             if (saved) {
-              resultsView.updateCards(
+              resultsView?.updateCards(
                 loadMedalProgress(
                   {
                     get: (key) => localStorage.getItem(key),
                     set: (key, value) => localStorage.setItem(key, value),
                   },
-                  routes.courses.map((candidate) => candidate.id),
+                  rd.routes.courses.map((candidate) => candidate.id),
                 ).courses,
               );
             }
-            resultsView.showCompletion(completion);
+            resultsView?.showCompletion(completion);
           },
-          onRestart: () => resultsView.clearCompletion(),
+          onRestart: () => resultsView?.clearCompletion(),
         });
   // Exactly one of the two is ever set (the branches above are mode-exclusive
   // on `fleet`); `activeCoordinator` is the single dispatch point the loop
   // wiring and render callback below use instead of re-checking the mode.
-  const activeCoordinator = circuitRace ?? raceCoordinator;
+  // A terrain area with no routes file gets the course-less free-drive coordinator.
+  const freeDriveGrid = terrainPhysicsGrid;
+  const freeDriveCoordinator =
+    rd === undefined && freeDriveGrid !== undefined
+      ? createFreeDriveCoordinator({
+          scene,
+          spawnPose: scene.defaultSpawnPose,
+          heightAt: (x, z) => sampleTerrainHeight(freeDriveGrid, x, z),
+          onCarReset: () => transforms.snapBody(0),
+        })
+      : undefined;
+  const activeCoordinator = circuitRace ?? raceCoordinator ?? freeDriveCoordinator;
   if (activeCoordinator === undefined) {
     throw new Error("composition root: no race coordinator was constructed for this mode");
   }
@@ -954,6 +1119,10 @@ try {
       if (gateView !== undefined) {
         const gp = view.meshes[0].position;
         gateView.updateTextures(gp.x, gp.z);
+      }
+      if (terrainView !== undefined) {
+        const tp = view.meshes[0].position;
+        terrainView.updateTextures(tp.x, tp.z);
       }
       if (carShadow !== undefined && groundProbe !== undefined) {
         const p = view.meshes[0].position;
