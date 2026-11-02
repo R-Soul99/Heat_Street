@@ -71,12 +71,43 @@ export function gateHillHeight(z: number): number {
   return 4 * (1 - Math.cos((2 * Math.PI * (z + LANE_Z_MAX)) / 200));
 }
 
-/** Lane C centreline height: 8% up from z=+400 to 24 m, flat, 8% down to z=-400. */
+/**
+ * Length (m) of every parabolic vertical curve on lane C. An 8% grade change
+ * at 25 m/s over a 60 m curve is v^2 * dg / L = 0.83 m/s^2 of vertical
+ * acceleration (a hard break is an impulse and launches the car). The map
+ * authoring road brush needs the same treatment: roughly 2.4 s of travel at
+ * the design speed per grade change (grade change x speed^2 / 60 m stays well
+ * below 1 m/s^2 for 8% at 25 m/s).
+ */
+export const GATE_VERTICAL_CURVE_M = 60;
+
+/** Integral of a 0 -> 1 linear ramp starting at `a` with length `len`, evaluated at `s`. */
+function rampIntegral(s: number, a: number, len: number): number {
+  if (s <= a) return 0;
+  if (s >= a + len) return s - a - len / 2;
+  const t = s - a;
+  return (t * t) / (2 * len);
+}
+
+/**
+ * Lane C centreline height: 8% up from z=+400, flat, 8% down to z=-400, with
+ * every grade change blended by a parabolic vertical curve of
+ * GATE_VERTICAL_CURVE_M (centred on the old breaks z = +-100; the end curves
+ * start at z = +-400 so the lane meets flat ground with zero grade). The
+ * plateau is therefore 24 - 0.04 * curve = 21.6 m.
+ */
 export function gateClimbHeight(z: number): number {
   if (z >= LANE_Z_MAX || z <= -LANE_Z_MAX) return 0;
-  if (z >= 100) return 0.08 * (LANE_Z_MAX - z);
-  if (z >= -100) return 24;
-  return 0.08 * (z + LANE_Z_MAX);
+  const s = LANE_Z_MAX - z; // distance along the climb direction
+  const len = GATE_VERTICAL_CURVE_M;
+  const half = len / 2;
+  return (
+    0.08 *
+    (rampIntegral(s, 0, len) -
+      rampIntegral(s, 300 - half, len) -
+      rampIntegral(s, 500 - half, len) +
+      rampIntegral(s, 800 - len, len))
+  );
 }
 
 interface LaneSample {

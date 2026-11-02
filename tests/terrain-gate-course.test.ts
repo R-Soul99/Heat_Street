@@ -62,23 +62,29 @@ describe("gate course geometry", () => {
     expect(maxGrade).toBeCloseTo(0.1257, 2);
   });
 
-  it("climb height formula: 8% up to 24 m, flat, 8% down", () => {
+  it("climb height: 8% grade blended by 60 m parabolic vertical curves, plateau 21.6 m", () => {
     expect(gateClimbHeight(400)).toBe(0);
-    expect(gateClimbHeight(100)).toBeCloseTo(24, 9);
-    expect(gateClimbHeight(0)).toBe(24);
-    expect(gateClimbHeight(-100)).toBeCloseTo(24, 9);
-    expect(gateClimbHeight(-400)).toBeCloseTo(0, 9);
+    expect(gateClimbHeight(-400)).toBe(0);
+    expect(gateClimbHeight(399.999)).toBeCloseTo(0, 6);
+    // Plateau: 24 - 0.04 * 60.
+    expect(gateClimbHeight(0)).toBeCloseTo(21.6, 9);
+    expect(gateClimbHeight(70)).toBeCloseTo(21.6, 9);
+    expect(gateClimbHeight(-70)).toBeCloseTo(21.6, 9);
+    // Mid-slope grade is exactly 8%.
+    expect((gateClimbHeight(250) - gateClimbHeight(251)) / 1).toBeCloseTo(0.08, 9);
+    // No grade break: finite-difference grade changes by <= 0.08 / 60 per metre everywhere.
+    const grade = (z: number): number => (gateClimbHeight(z + 0.5) - gateClimbHeight(z - 0.5)) / 1;
+    let maxChange = 0;
+    for (let z = -399; z < 399; z += 1) {
+      maxChange = Math.max(maxChange, Math.abs(grade(z + 1) - grade(z)));
+    }
+    expect(maxChange).toBeLessThan((0.08 / 60) * 1.05);
   });
 
   it("terrain equals the analytic lane height on every lane centreline", () => {
-    // A grade break (z = +-100, +-400 on lanes A/B/C) cannot be reproduced exactly
-    // by a 3 m grid whose vertices straddle it; points within 3 m of a break are
-    // exempt (worst measured error there is 0.053 m).
-    const nearBreak = (z: number): boolean =>
-      [-400, -100, 100, 400].some((zb) => Math.abs(z - zb) < 3);
+    // No grade breaks remain, so no exemption is needed.
     for (const lane of course.lanes) {
       for (const [x, y, z] of lane.points) {
-        if (nearBreak(z)) continue;
         expect(Math.abs(sampleTerrainHeight(course.grid, x, z) - y)).toBeLessThan(0.05);
       }
     }
