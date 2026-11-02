@@ -12,6 +12,7 @@ import {
   createStrokeRecorder,
   type Falloff,
   flattenBrush,
+  type HeightOpOptions,
   paintSurface,
   raiseLower,
   type StrokeDiff,
@@ -27,6 +28,7 @@ import {
   ROAD_PRESETS,
   type RoadEditTarget,
   type RoadPresetId,
+  roadVertexMask,
 } from "../../src/core/terrain-road.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
@@ -88,6 +90,15 @@ const STAMP_ROTATE_STEP_RAD = (15 * Math.PI) / 180;
 const ERASE_MSG = "Road erased. Ctrl+Z to undo.";
 
 export const SLOPE_CLAMP_HINT = `Slope limit reached (${MAX_SLOPE_DEG} degrees). Lower the radius or flatten the area first.`;
+
+/**
+ * WR-02: sculpt height ops hand the slope limiter every existing road vertex
+ * (road paint + the graph's levelled radius) so the limiter never moves road
+ * terrain and graph y stays equal to the terrain (D-16).
+ */
+function heightOpOptions(area: EditArea): HeightOpOptions {
+  return { roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win) };
+}
 
 function emptyResult(): ToolResult {
   return { graphChanged: false, slopeClamped: false, warnings: [] };
@@ -284,9 +295,10 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     }
     let r: { window?: CellWindow; slopeClamped: boolean };
-    if (s.tool === "raise") r = raiseLower(area.grid, p, s.alt ? -1 : 1, 1, s.recorder);
-    else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder);
-    else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder);
+    const hop = heightOpOptions(area);
+    if (s.tool === "raise") r = raiseLower(area.grid, p, s.alt ? -1 : 1, 1, s.recorder, hop);
+    else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder, hop);
+    else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
     res.dirtyHeights = r.window;
     res.slopeClamped = r.slopeClamped;
     if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
@@ -473,6 +485,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
             heightM: options.stampHeightM,
           },
           s.recorder,
+          heightOpOptions(area),
         );
         res.dirtyHeights = r.window;
         res.slopeClamped = r.slopeClamped;

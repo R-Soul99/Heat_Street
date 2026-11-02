@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
+import { roadVertexMask } from "../../src/core/terrain-road.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { createToolDispatcher, type EditArea, TOOL_KEYS } from "./tool-dispatch.ts";
 
@@ -162,6 +163,43 @@ describe("road and erase", () => {
     expect(area.paint.data).toEqual(paintBefore);
     expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
     expect(d.canUndo()).toBe(false);
+  });
+
+  it("WR-02: sculpting beside a road never lets the slope limiter move road vertices", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadPreset: "street" });
+    drag(d, [
+      [-60, 0],
+      [60, 0],
+    ]);
+    const road = roadVertexMask(area.grid, area.paint, area.graph, {
+      minRow: 0,
+      minCol: 0,
+      maxRow: area.grid.rows,
+      maxCol: area.grid.cols,
+    });
+    // A steep cut on both sides of the road (converted-map style): the cheapest
+    // limiter fix for any nearby dab is to raise the road out of its cutting.
+    for (let i = 0; i < road.length; i++) if (!road[i]) area.grid.heights[i] = 10;
+    const before = Float32Array.from(area.grid.heights);
+    d.setTool("raise");
+    d.setOptions({ radiusM: 4, strength: 0.5 });
+    for (const x of [-30, -10, 10, 30]) {
+      drag(d, [
+        [x, 9],
+        [x + 3, 9],
+      ]);
+    }
+    let moved = 0;
+    for (let i = 0; i < road.length; i++)
+      if (road[i] && area.grid.heights[i] !== before[i]) moved++;
+    expect(moved).toBe(0);
+    for (const e of area.graph.edges) {
+      for (const [x, y, z] of e.points) {
+        expect(Math.abs(sampleTerrainHeight(area.grid, x, z) - y)).toBeLessThan(1e-6);
+      }
+    }
   });
 
   it("erase cuts the road, drags merge into one undo step", () => {

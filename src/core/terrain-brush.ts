@@ -74,6 +74,16 @@ export interface PaintResult {
   pixelsChanged: number;
 }
 
+/** Options shared by every height op. */
+export interface HeightOpOptions {
+  /**
+   * Builds the road mask (grid.heights indexing, non-zero = road vertex) for
+   * the slope-limiter window. Masked vertices are never moved by the limiter
+   * (WR-02 / plan 07 truth 4), so roads keep their graph y (D-16).
+   */
+  roadMask?: (win: CellWindow) => Uint8Array;
+}
+
 export const MIN_RADIUS_M = 0.5;
 export const MAX_RADIUS_M = 200;
 const RELAX = 0.25;
@@ -125,6 +135,7 @@ function runHeightOp(
   compute: (x: number, z: number, h: number, snap: (r: number, c: number) => number) => number,
   rec: StrokeRecorder | undefined,
   relax: boolean,
+  opts: HeightOpOptions = {},
 ): BrushResult {
   const stride = grid.rows + 1;
   const rowsN = touched.maxRow - touched.minRow + 1;
@@ -208,7 +219,7 @@ function runHeightOp(
     }
   }
 
-  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG });
+  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: opts.roadMask?.(dirty) });
   return { window: dirty, slopeClamped: res.changed.length > 0 };
 }
 
@@ -218,6 +229,7 @@ export function raiseLower(
   sign: 1 | -1,
   rateM = 1,
   rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
   if (!p || !Number.isFinite(rateM)) return NO_OP;
@@ -232,6 +244,7 @@ export function raiseLower(
     },
     rec,
     true,
+    opts,
   );
 }
 
@@ -239,6 +252,7 @@ export function smoothBrush(
   grid: TerrainGrid,
   params: BrushParams,
   rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
   if (!p) return NO_OP;
@@ -277,6 +291,7 @@ export function smoothBrush(
     },
     rec,
     false,
+    opts,
   );
 }
 
@@ -285,6 +300,7 @@ export function flattenBrush(
   params: BrushParams,
   targetM: number,
   rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
   if (!p || !Number.isFinite(targetM)) return NO_OP;
@@ -299,6 +315,7 @@ export function flattenBrush(
     },
     rec,
     false,
+    opts,
   );
 }
 
@@ -313,7 +330,12 @@ export interface StampParams {
 }
 
 /** Wedge: ramp rising along local +X over lengthM then dropping. Mound: cosine dome of radius widthM/2. Max-blended onto existing terrain. */
-export function stampTerrain(grid: TerrainGrid, s: StampParams, rec?: StrokeRecorder): BrushResult {
+export function stampTerrain(
+  grid: TerrainGrid,
+  s: StampParams,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
   if (
     !Number.isFinite(s.x) ||
     !Number.isFinite(s.z) ||
@@ -358,6 +380,7 @@ export function stampTerrain(grid: TerrainGrid, s: StampParams, rec?: StrokeReco
     },
     rec,
     true,
+    opts,
   );
 }
 
