@@ -12,10 +12,10 @@
  */
 import type { RoadGraph } from "../../src/core/road-graph.ts";
 import { ROAD_GRAPH_SCHEMA_VERSION } from "../../src/core/road-graph.ts";
-import type { TerrainArea } from "../../src/core/terrain-format.ts";
+import { MAX_TERRAIN_VERTICES, type TerrainArea } from "../../src/core/terrain-format.ts";
 import { createTerrainGrid } from "../../src/core/terrain-grid.ts";
 import { DEFAULT_PAINT_METRES_PER_PIXEL, MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
-import { createPaintMap } from "../../src/core/terrain-paint.ts";
+import { createPaintMap, MAX_PAINT_PIXELS } from "../../src/core/terrain-paint.ts";
 
 export interface NewAreaOptions {
   areaId: string;
@@ -39,8 +39,22 @@ export function createEmptyTerrainArea(opts: NewAreaOptions): TerrainArea {
   }
   const cols = Math.max(1, Math.round(widthM / cellSizeM));
   const rows = Math.max(1, Math.round(depthM / cellSizeM));
+  // CR-02: refuse grids the encoder can never save (its cap is stricter than
+  // createTerrainGrid's), so no sculpting work is ever trapped unsaveable.
+  const vertices = (rows + 1) * (cols + 1);
+  if (vertices > MAX_TERRAIN_VERTICES) {
+    throw new RangeError(
+      `${cols}x${rows} cells is ${vertices} vertices, max ${MAX_TERRAIN_VERTICES}; use a larger cell size`,
+    );
+  }
   const scaleX = cols * cellSizeM;
   const scaleZ = rows * cellSizeM;
+  const paintPixels =
+    Math.ceil(scaleX / DEFAULT_PAINT_METRES_PER_PIXEL) *
+    Math.ceil(scaleZ / DEFAULT_PAINT_METRES_PER_PIXEL);
+  if (paintPixels > MAX_PAINT_PIXELS) {
+    throw new RangeError(`paint map would be ${paintPixels} pixels, max ${MAX_PAINT_PIXELS}`);
+  }
   const originX = -scaleX / 2;
   const originZ = -scaleZ / 2;
   const grid = createTerrainGrid({ rows, cols, cellSizeM, originX, originZ });

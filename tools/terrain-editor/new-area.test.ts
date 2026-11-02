@@ -47,4 +47,21 @@ describe("createEmptyTerrainArea", () => {
       createEmptyTerrainArea({ areaId: "x", widthM: 10, depthM: 10, cellSizeM: 0 }),
     ).toThrow();
   });
+
+  it("CR-02: refuses grids over the encoder's vertex cap at creation time", () => {
+    // 1000 m at 0.5 m cells and 2000 m at 1 m cells are both (2001)^2 = 4,004,001 vertices.
+    expect(() =>
+      createEmptyTerrainArea({ areaId: "x", widthM: 1000, depthM: 1000, cellSizeM: 0.5 }),
+    ).toThrow(/4004001 vertices, max 4000000/);
+    expect(() =>
+      createEmptyTerrainArea({ areaId: "x", widthM: 2000, depthM: 2000, cellSizeM: 1 }),
+    ).toThrow(RangeError);
+  });
+
+  it("CR-02: every area it does create can be encoded", async () => {
+    // Largest square just under the cap at 1 m cells: 1998 cells -> 1999^2 vertices.
+    const big = createEmptyTerrainArea({ areaId: "x", widthM: 1998, depthM: 1998, cellSizeM: 1 });
+    expect((big.grid.rows + 1) * (big.grid.cols + 1)).toBeLessThanOrEqual(4_000_000);
+    await expect(encodeTerrainBinary(big)).resolves.toBeInstanceOf(Uint8Array);
+  });
 });
