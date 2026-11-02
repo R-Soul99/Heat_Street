@@ -28,6 +28,7 @@
  * Layering: may import `@dimforge/rapier3d` and `src/core/`. Must not import
  * `three` and must not touch the DOM or any wall clock.
  */
+import { decodePaintSurface, type PaintMap, paintIndexAt } from "../core/terrain-paint";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
 
@@ -76,4 +77,35 @@ export function createSurfaceMap(defaultSurface: SurfaceType = "tarmac"): Surfac
 export interface SurfaceContext {
   readonly map: SurfaceMap;
   readonly profiles: SurfaceProfiles;
+  /**
+   * Position-based surface lookup for a terrain collider (one heightfield with
+   * ONE handle, so the handle cannot say which surface a wheel is on). When
+   * present, wheels whose ground collider is `paint.colliderHandle` read the
+   * paint map at their contact point; every other collider uses `map`.
+   */
+  readonly paint?: SurfacePaintLookup;
+}
+
+/** Position-based surface lookup bound to the terrain collider's handle. */
+export interface SurfacePaintLookup {
+  readonly colliderHandle: number;
+  surfaceAt(x: number, z: number): SurfaceType;
+}
+
+/**
+ * Build a `SurfacePaintLookup` closing over a paint map. No per-call
+ * allocation: `paintIndexAt` + `decodePaintSurface` are allocation-free.
+ */
+export function createPaintLookup(
+  colliderHandle: number,
+  paint: PaintMap,
+  fallback: SurfaceType,
+): SurfacePaintLookup {
+  return {
+    colliderHandle,
+    surfaceAt(x: number, z: number): SurfaceType {
+      const i = paintIndexAt(paint, x, z);
+      return i < 0 ? fallback : decodePaintSurface(paint.data[i], fallback);
+    },
+  };
 }
