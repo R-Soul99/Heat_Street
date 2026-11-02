@@ -503,6 +503,22 @@ function roadVertexMaskFromGraph(
   }
 }
 
+/**
+ * Every vertex an existing road owns inside `area`: road-flagged paint plus the
+ * full levelled radius around every graph edge. The slope limiter must treat
+ * these as fixed, or earlier roads drift away from their graph y (D-16).
+ */
+export function roadVertexMask(
+  grid: TerrainGrid,
+  paint: PaintMap,
+  graph: RoadGraph,
+  area: CellWindow,
+): Uint8Array {
+  const mask = roadVertexMaskFromPaint(grid, paint, area);
+  roadVertexMaskFromGraph(grid, graph, area, mask);
+  return mask;
+}
+
 export interface LevelBandOptions {
   recorder?: { beforeHeightsWrite(window: CellWindow): void };
   /** Vertices (heights indexing) the shoulder blend must never write. */
@@ -837,9 +853,12 @@ export function applyRoadStroke(
   if (band.window) {
     const win = expandWindow(band.window, grid, band.maxDeltaM, MAX_SLOPE_DEG);
     rec.beforeHeightsWrite(win);
+    // WR-01: fix every earlier road's vertices (paint AND the full levelled
+    // radius from the graph, over the whole limiter window), not just paint.
+    // `area.graph` is still the pre-stroke graph here.
     const mask = band.mask;
-    const paintMask = roadVertexMaskFromPaint(grid, paint, win);
-    for (let i = 0; i < mask.length; i++) if (paintMask[i]) mask[i] = 1;
+    const existing = roadVertexMask(grid, paint, area.graph, win);
+    for (let i = 0; i < mask.length; i++) if (existing[i]) mask[i] = 1;
     const res = limitSlope(grid, win, { mask });
     if (res.roadViolations > 0) warnings.push(slopeWarning());
   }

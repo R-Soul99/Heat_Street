@@ -439,6 +439,33 @@ describe("applyRoadStroke", () => {
     expect(Array.from(after)).toEqual(Array.from(before));
   });
 
+  it("WR-01: a later stroke's slope limiter never moves an earlier road's graph-levelled vertices (D-16)", () => {
+    // 8 m cells, road 1 runs mid-cell at z = 4: its paint covers no vertex, so
+    // only the graph-derived levelled radius (8*sqrt2 = 11.3 m) protects the
+    // z = 0 and z = 8 rows that form the triangles under its centreline.
+    const area = makeArea(8, 240, false);
+    applyRoadStroke(area, line(-60, 4, 60, 4, 0.7), "dirt");
+    const road1 = area.graph.edges.map((e) => e.id);
+    // A pre-existing cliff between the z = 8 row (0 m) and a 20 m plateau from z = 16.
+    const stride = area.grid.rows + 1;
+    for (let c = 0; c <= area.grid.cols; c++) {
+      for (let r = 0; r <= area.grid.rows; r++) {
+        if (area.grid.originZ + r * 8 >= 16) area.grid.heights[r + c * stride] = 20;
+      }
+    }
+    // Road 2 on the plateau: its limiter window reaches the z = 8 row.
+    applyRoadStroke(area, line(-60, 32, 60, 32, 0.7), "dirt");
+    let worst = 0;
+    for (const e of area.graph.edges) {
+      if (!road1.includes(e.id)) continue;
+      for (const [x, y, z] of e.points) {
+        worst = Math.max(worst, Math.abs(sampleTerrainHeight(area.grid, x, z) - y));
+      }
+    }
+    expect(road1.length).toBeGreaterThan(0);
+    expect(worst).toBeLessThan(1e-6);
+  });
+
   it("re-painting along an existing road replaces it (one road, D-15)", () => {
     const area = makeArea(3, 240);
     applyRoadStroke(area, line(-60, 0, 60, 0, 0.7), "street");
