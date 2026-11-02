@@ -28,6 +28,9 @@
       #log { white-space: pre-wrap; font: 400 11px monospace; max-height: 224px; overflow-y: auto; background: #0c0d10; padding: 8px; margin-top: 8px; }
       .legend span { display: inline-block; margin: 0 8px 4px 0; }
       .sw { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
+      .muted { color: #9aa; margin-top: 4px; }
+      [data-for].hidden { display: none; }
+      button:disabled { pointer-events: none; }
       .dirty { color: #fb4; }
       #new-form { display: none; }
       #new-form.open { display: block; }
@@ -54,14 +57,64 @@
           <button type="button" class="tool danger" data-tool="erase" aria-pressed="false">Erase road (E)</button>
         </div>
         <h3>Brush options</h3>
-        <div id="tool-opts"></div>
+        <div id="tool-opts">
+          <div data-for="raise smooth flatten paint erase">
+            <label for="opt-radius">Radius (m)</label>
+            <input type="number" id="opt-radius" value="12" min="0.5" max="200" step="0.5" />
+            <input type="range" id="opt-radius-r" value="12" min="0.5" max="200" step="0.5" aria-label="Radius slider" />
+          </div>
+          <div data-for="raise smooth flatten paint">
+            <label for="opt-strength">Strength (0 to 1)</label>
+            <input type="number" id="opt-strength" value="0.5" min="0" max="1" step="0.05" />
+            <input type="range" id="opt-strength-r" value="0.5" min="0" max="1" step="0.05" aria-label="Strength slider" />
+            <label for="opt-falloff">Falloff</label>
+            <select id="opt-falloff">
+              <option value="smooth">Smooth</option>
+              <option value="linear">Linear</option>
+            </select>
+          </div>
+          <div data-for="paint road">
+            <label for="opt-surface">Surface</label>
+            <select id="opt-surface"></select>
+          </div>
+          <div data-for="road">
+            <label for="opt-preset">Road class</label>
+            <select id="opt-preset">
+              <option value="street">Street</option>
+              <option value="highway">Highway</option>
+              <option value="track">Track</option>
+              <option value="dirt">Dirt road</option>
+            </select>
+            <label for="opt-width">Width (m)</label>
+            <input type="range" id="opt-width" value="8" min="3" max="20" step="0.5" />
+            <span id="opt-width-v">8 m</span>
+            <label for="opt-bank">Bank max (deg)</label>
+            <input type="number" id="opt-bank" value="0" min="0" max="15" step="1" disabled />
+          </div>
+          <div data-for="stamp">
+            <label for="opt-stamp-kind">Stamp</label>
+            <select id="opt-stamp-kind">
+              <option value="wedge">Wedge</option>
+              <option value="mound">Mound</option>
+            </select>
+            <label for="opt-stamp-height">Height (m)</label>
+            <input type="number" id="opt-stamp-height" value="4" step="0.5" />
+            <label for="opt-stamp-width">Width (m)</label>
+            <input type="number" id="opt-stamp-width" value="12" min="1" step="1" />
+            <div class="muted">[ ] rotate 15 degrees. Drag to set length.</div>
+          </div>
+        </div>
+        <div>
+          <button type="button" id="undo" disabled>Undo (Ctrl+Z)</button>
+          <button type="button" id="redo" disabled>Redo (Ctrl+Shift+Z)</button>
+        </div>
         <h3>Area</h3>
         <select id="area" aria-label="Area"></select>
         <div>
           <button type="button" id="load">Load</button>
           <button type="button" id="new">New...</button>
           <button type="button" id="save" class="primary">Save terrain</button>
-          <button type="button" id="drive" class="primary" disabled title="Wired in a later plan">Drive here</button>
+          <button type="button" id="drive" class="primary">Drive here (D)</button>
         </div>
         <div id="new-form">
           <label for="new-name">Name (a-z, 0-9, -)</label>
