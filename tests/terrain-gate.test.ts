@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateGate,
-  GATE_FACTORS,
+  flatRegressionPasses,
   type GateLaneMetrics,
   type GateVerdict,
 } from "../src/core/terrain-gate-metrics";
@@ -98,11 +98,7 @@ describe("prototype gate (D-01)", () => {
       }
       console.table(rows);
 
-      const regressionOk = regression.every(
-        (r) =>
-          Math.abs(r.terrain - r.legacy) <=
-          Math.max(GATE_FACTORS.flatTolerance * Math.abs(r.legacy), 1e-6),
-      );
+      const regressionOk = regression.every((r) => flatRegressionPasses(r));
       const failures: string[] = [];
       let anyPass = false;
       for (const subdiv of SUBDIVS) {
@@ -117,7 +113,7 @@ describe("prototype gate (D-01)", () => {
       }
       if (!regressionOk) {
         for (const r of regression) {
-          if (Math.abs(r.terrain - r.legacy) > GATE_FACTORS.flatTolerance * Math.abs(r.legacy)) {
+          if (!flatRegressionPasses(r)) {
             failures.push(`flat regression ${r.id}: legacy ${r.legacy} vs terrain ${r.terrain}`);
           }
         }

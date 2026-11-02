@@ -18,6 +18,28 @@ export const GATE_FLOORS = {
   speedJitterMs: 0.05,
 } as const;
 
+/**
+ * Absolute band for the `ramp` (hard landing) routine, which is not 1%-comparable
+ * between a cuboid and a Rapier heightfield (user chose option (a), 2026-11-02).
+ * Value is landing tilt in degrees. Re-baselined to the heightfield value 20.47
+ * with ~25% margin (26 deg); the legacy value 10.88 is far inside it. The landing
+ * rebound is hypersensitive to contact details (see 04.2-GATE.md), so the landing
+ * is also judged by feel in the plan 06 drive. The other five routines keep 1%.
+ */
+export const GATE_RAMP_BAND = { id: "ramp", maxTerrainTiltDeg: 26 } as const;
+
+/** Flat-regression pass rule: 1% vs legacy, except `ramp` which uses the absolute band. */
+export function flatRegressionPasses(r: {
+  id: string;
+  legacy: number;
+  terrain: number;
+}): boolean {
+  if (r.id === GATE_RAMP_BAND.id) {
+    return Number.isFinite(r.terrain) && r.terrain >= 0 && r.terrain <= GATE_RAMP_BAND.maxTerrainTiltDeg;
+  }
+  return relativeDiff(r.legacy, r.terrain) <= GATE_FACTORS.flatTolerance;
+}
+
 /** One lane/speed/direction run. */
 export interface GateLaneMetrics {
   readonly laneId: string;
@@ -134,7 +156,7 @@ export function evaluateGate(
   }
   const regression = flatRegression.map((r) => {
     const relDiff = relativeDiff(r.legacy, r.terrain);
-    return { ...r, relDiff, pass: relDiff <= GATE_FACTORS.flatTolerance };
+    return { ...r, relDiff, pass: flatRegressionPasses(r) };
   });
   const pass = metrics.every((m) => m.pass) && regression.every((r) => r.pass);
   return { metrics, regression, pass };
