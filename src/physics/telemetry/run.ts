@@ -115,10 +115,15 @@ export function runRoutine(
   routine: Routine,
   tuning: VehicleTuning,
   surfaceOpts?: SurfaceRunOpts,
+  groundBuilder?: (world: RAPIER.World) => RAPIER.Collider,
 ): RoutineResult {
   const world = createWorld();
   try {
-    const ground = buildTelemetryScene(world, surfaceOpts?.groundFriction);
+    // `groundBuilder` (plan 04.2-05) swaps the ground for the flat-terrain
+    // regression; when omitted the call is exactly the pre-04.2 one.
+    const ground = groundBuilder
+      ? groundBuilder(world)
+      : buildTelemetryScene(world, surfaceOpts?.groundFriction);
     const vehicle = createVehicle(world, tuning, SPAWN);
     routine.setup?.(vehicle);
 
