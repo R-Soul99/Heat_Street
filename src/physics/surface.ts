@@ -28,9 +28,10 @@
  * Layering: may import `@dimforge/rapier3d` and `src/core/`. Must not import
  * `three` and must not touch the DOM or any wall clock.
  */
-import { decodePaintSurface, type PaintMap, paintIndexAt } from "../core/terrain-paint";
+
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
+import { decodePaintSurface, type PaintMap, paintIndexAt } from "../core/terrain-paint";
 
 /**
  * `register`/`lookup` over a `ColliderHandle -> SurfaceType` table. `lookup`
