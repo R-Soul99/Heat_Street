@@ -193,21 +193,43 @@ export function terrainVertexNormal(
   return out;
 }
 
+/**
+ * Uniform Catmull-Rom between p1 and p2, clamped to [min(p1,p2), max(p1,p2)]
+ * (WR-04). The clamp removes the cubic's overshoot where curvature changes,
+ * e.g. a levelled road band next to a rising shoulder (0, 0, 0, h) would dip
+ * to -h/16 mid-cell; clamped it stays exactly flat. Linear data lies inside
+ * the bounds and is still reproduced exactly; smooth slopes are unchanged.
+ */
 function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
   const t2 = t * t;
   const t3 = t2 * t;
-  return (
+  const v =
     0.5 *
     (2 * p1 +
       (-p0 + p2) * t +
       (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-      (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
-  );
+      (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+  // Where the pair sits in a straight (collinear) run of three samples, i.e. a
+  // levelled road band (flat or on a constant grade), use the straight line:
+  // the cubic would bend toward the next sample and dip or ridge the road.
+  // Elsewhere (crests, smooth hills) the cubic is kept so the driven feel the
+  // gate signed off does not change.
+  if (
+    Math.abs(p0 - 2 * p1 + p2) <= LINEAR_RUN_EPS_M ||
+    Math.abs(p1 - 2 * p2 + p3) <= LINEAR_RUN_EPS_M
+  ) {
+    return p1 + (p2 - p1) * t;
+  }
+  return v;
 }
 
+/** Second difference (m) below which three samples count as a straight run (Float32 noise). */
+const LINEAR_RUN_EPS_M = 1e-4;
+
 /**
- * Doubles resolution with uniform Catmull-Rom (clamped edges) in both axes.
- * Original vertices are preserved exactly; linear data is reproduced.
+ * Doubles resolution with uniform Catmull-Rom (clamped edges, overshoot
+ * clamped to the bracketing samples) in both axes. Original vertices are
+ * preserved exactly; linear data is reproduced; flat levelled bands stay flat.
  */
 export function upsampleTerrainGrid(grid: TerrainGrid, factor: 2): TerrainGrid {
   const out = createTerrainGrid({

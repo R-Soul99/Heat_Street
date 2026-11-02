@@ -192,4 +192,29 @@ describe("upsampleTerrainGrid", () => {
       }
     }
   });
+
+  it("WR-04: keeps a levelled band straight next to a rising shoulder (no cubic dip)", () => {
+    // Columns: flat road 0,0,0 then a 2 m shoulder; and a graded road 0,1,2 then 10.
+    const g = createTerrainGrid({ rows: 1, cols: 7, cellSizeM: 3, originX: 0, originZ: 0 });
+    const flatRow = [0, 0, 0, 2, 2, 2, 2, 2];
+    const gradedRow = [0, 1, 2, 10, 10, 10, 10, 10];
+    for (let c = 0; c <= 7; c++) {
+      g.heights[terrainIndex(g, 0, c)] = flatRow[c];
+      g.heights[terrainIndex(g, 1, c)] = gradedRow[c];
+    }
+    const up = upsampleTerrainGrid(g, 2);
+    // Midpoint between the last two flat road vertices: was -2/16 = -0.125 m.
+    expect(up.heights[terrainIndex(up, 0, 3)]).toBe(0);
+    // Graded road: the straight midpoint 1.5 m (the plain cubic gave 1.0625 m).
+    expect(up.heights[terrainIndex(up, 2, 3)]).toBeCloseTo(1.5, 9);
+    // A curved crest keeps its cubic shape (the signed-off gate feel).
+    const crest = createTerrainGrid({ rows: 1, cols: 3, cellSizeM: 3, originX: 0, originZ: 0 });
+    [0, 3, 3, 0].forEach((h, c) => {
+      crest.heights[terrainIndex(crest, 0, c)] = h;
+      crest.heights[terrainIndex(crest, 1, c)] = h;
+    });
+    expect(
+      upsampleTerrainGrid(crest, 2).heights[terrainIndex(upsampleTerrainGrid(crest, 2), 0, 3)],
+    ).toBeCloseTo(3.375, 9);
+  });
 });
