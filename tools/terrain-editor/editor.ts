@@ -157,10 +157,19 @@ function log(line: string): void {
   el.scrollTop = el.scrollHeight;
 }
 
+// WR-06: built from DOM nodes / textContent only. Status text can echo file
+// content (sidecar parse errors) and server error bodies, so it must never be
+// parsed as HTML.
 function setStatus(text: string): void {
-  const name = area ? area.areaId : "no area";
-  const marker = dirty ? ' <span class="dirty">unsaved</span>' : "";
-  $("status").innerHTML = `${name}${marker}<br>${text}`;
+  const el = $("status");
+  el.replaceChildren(area ? area.areaId : "no area");
+  if (dirty) {
+    const marker = document.createElement("span");
+    marker.className = "dirty";
+    marker.textContent = "unsaved";
+    el.append(" ", marker);
+  }
+  el.append(document.createElement("br"), text);
 }
 
 function setHint(text: string): void {
