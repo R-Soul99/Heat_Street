@@ -343,10 +343,11 @@ try {
   // Const alias so closures below keep the narrowed (non-undefined) type.
   const rd = raceData;
 
-  // 04.2 prototype gate (debug only, legacy maps only): `?map=feel-test&gate`
-  // adds the gate course as an extra heightfield. Plain feel-test builds nothing extra.
-  const GATE_ENABLED =
-    !isTerrain && AREA_ID === "feel-test" && new URLSearchParams(location.search).has("gate");
+  // 04.2 prototype gate (debug only): `?map=feel-test&gate` adds the gate
+  // course as an extra heightfield. It sits at x >= 700, outside feel-test's
+  // own grid, so it works whether feel-test loads as terrain (the default
+  // since plan 11) or legacy. Plain feel-test builds nothing extra.
+  const GATE_ENABLED = AREA_ID === "feel-test" && new URLSearchParams(location.search).has("gate");
   const gate = GATE_ENABLED ? buildGateCourse() : undefined;
   const gatePhysicsGrid =
     gate === undefined
@@ -378,6 +379,10 @@ try {
         crests,
         groundSurface: terrainArea.groundSurface,
         spawnOverride,
+        extraTerrain:
+          gate === undefined || gatePhysicsGrid === undefined
+            ? undefined
+            : { grid: gatePhysicsGrid, paint: gate.paint },
       },
       tuning,
       surfaceProfiles,
@@ -580,17 +585,15 @@ try {
   // on the ground below the car so the camera can see how high it is.
   let carShadow: ReturnType<typeof createCarShadow> | undefined;
   let groundProbe: ReturnType<typeof createGroundProbe> | undefined;
-  if (isTerrain) {
+  if (isTerrain || isFlatTestArea(AREA_ID)) {
     for (const crest of mapView.crestMeshes) {
       shadeByHeight(crest);
       view.scene.add(crest);
     }
   }
-  if (isFlatTestArea(AREA_ID) && !isTerrain) {
-    for (const crest of mapView.crestMeshes) {
-      shadeByHeight(crest);
-      view.scene.add(crest);
-    }
+  // WR-05: feel-test keeps its shadow and ground probe whether it loads as
+  // terrain (the default since plan 11) or legacy.
+  if (isFlatTestArea(AREA_ID)) {
     carShadow = createCarShadow(tuning.chassis.halfExtents);
     view.scene.add(carShadow.object);
     groundProbe = createGroundProbe(world, scene.vehicle.body);

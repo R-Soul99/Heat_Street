@@ -46,6 +46,12 @@ export interface TerrainSceneInput {
   readonly crests: readonly AuthoredCrest[];
   readonly groundSurface: SurfaceType;
   readonly spawnOverride?: { x: number; z: number; headingRad: number };
+  /**
+   * Optional second painted heightfield that must not overlap `grid` (the
+   * 04.2 prototype gate course beside feel-test, debug `&gate` only). Absent =
+   * scene unchanged.
+   */
+  readonly extraTerrain?: { readonly grid: TerrainGrid; readonly paint: PaintMap };
 }
 
 /**
@@ -58,6 +64,7 @@ export function buildTerrainCollider(
   grid: TerrainGrid,
   paint: PaintMap,
   groundSurface: SurfaceType,
+  next?: SurfacePaintLookup,
 ): { collider: RAPIER.Collider; paint: SurfacePaintLookup } {
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.fixed().setTranslation(
@@ -76,7 +83,7 @@ export function buildTerrainCollider(
     ).setFriction(ROAD_FRICTION),
     body,
   );
-  return { collider, paint: createPaintLookup(collider.handle, paint, groundSurface) };
+  return { collider, paint: createPaintLookup(collider.handle, paint, groundSurface, next) };
 }
 
 function resolveTerrainSpawn(input: TerrainSceneInput): VehiclePose {
@@ -115,6 +122,20 @@ export function createTerrainScene(
   const surfaceMap = createSurfaceMap();
   const terrain = buildTerrainCollider(world, input.grid, input.paint, input.groundSurface);
   surfaceMap.register(terrain.collider.handle, input.groundSurface);
+  // Optional second painted heightfield (gate course): its lookup chains to
+  // the main one, so wheels on either collider read the right paint map.
+  const extra =
+    input.extraTerrain === undefined
+      ? undefined
+      : buildTerrainCollider(
+          world,
+          input.extraTerrain.grid,
+          input.extraTerrain.paint,
+          input.groundSurface,
+          terrain.paint,
+        );
+  if (extra !== undefined) surfaceMap.register(extra.collider.handle, input.groundSurface);
+  const paintLookup = extra?.paint ?? terrain.paint;
 
   // Crests keep the bilinear rim sampler so feel-test crests are identical
   // (D-07); on a flat grid bilinear and triangle sampling coincide.
@@ -147,7 +168,7 @@ export function createTerrainScene(
   let currentTuning = tuning;
 
   const surfaceContext: { map: SurfaceMap; profiles: SurfaceProfiles; paint: SurfacePaintLookup } =
-    { map: surfaceMap, profiles, paint: terrain.paint };
+    { map: surfaceMap, profiles, paint: paintLookup };
 
   const bodies: readonly RAPIER.RigidBody[] = [vehicle.body];
 

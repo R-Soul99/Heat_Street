@@ -105,6 +105,45 @@ describe("createTerrainScene", () => {
     }
   });
 
+  it("WR-05: extraTerrain (gate course) adds a second painted heightfield chained into surfaces.paint", () => {
+    const world = createWorld();
+    try {
+      const grid = flatGrid();
+      const gateGrid = createTerrainGrid({
+        rows: 10,
+        cols: 10,
+        cellSizeM: 3,
+        originX: 700,
+        originZ: 0,
+      });
+      const gatePaint = createPaintMap({
+        originX: 700,
+        originZ: 0,
+        widthM: 30,
+        depthM: 30,
+        metresPerPixel: 1,
+        fill: "tarmac",
+      });
+      const scene = createTerrainScene(
+        world,
+        input(grid, { extraTerrain: { grid: gateGrid, paint: gatePaint } }),
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      );
+      const fields = colliders(world).filter((c) => c.shapeType() === RAPIER.ShapeType.HeightField);
+      expect(fields).toHaveLength(2);
+      const handles = new Set<number>();
+      for (let p = scene.surfaces.paint; p !== undefined; p = p.next) handles.add(p.colliderHandle);
+      expect(handles).toEqual(new Set(fields.map((f) => f.handle)));
+      // The gate lookup reads the gate paint; the main one reads feel-test's.
+      const head = scene.surfaces.paint;
+      expect(head?.surfaceAt(715, 15)).toBe("tarmac");
+      expect(head?.next?.surfaceAt(0, 0)).toBe("grass");
+    } finally {
+      world.free();
+    }
+  });
+
   it("source uses HeightFieldFlags.FIX_INTERNAL_EDGES", () => {
     expect(terrainSceneSource).toContain("HeightFieldFlags.FIX_INTERNAL_EDGES");
   });

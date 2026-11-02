@@ -485,9 +485,17 @@ export function createVehicle(
       if (surfaces) {
         for (let i = 0; i < 4; i++) {
           const ground = vc.wheelGroundObject(i);
-          const paint = surfaces.paint;
+          // Find the painted heightfield this wheel stands on (usually one; the
+          // feel-test gate course adds a second). No allocation.
+          let paint = surfaces.paint;
+          while (
+            paint !== undefined &&
+            (ground === null || ground.handle !== paint.colliderHandle)
+          ) {
+            paint = paint.next;
+          }
           let surface: SurfaceType;
-          if (paint !== undefined && ground !== null && ground.handle === paint.colliderHandle) {
+          if (paint !== undefined && ground !== null) {
             const p = vc.wheelContactPoint(i, contactScratch);
             // Null contact (airborne): keep the previous surface.
             surface = p === null ? (wheelSurfaces[i] as SurfaceType) : paint.surfaceAt(p.x, p.z);

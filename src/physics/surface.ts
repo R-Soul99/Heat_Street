@@ -91,6 +91,11 @@ export interface SurfaceContext {
 export interface SurfacePaintLookup {
   readonly colliderHandle: number;
   surfaceAt(x: number, z: number): SurfaceType;
+  /**
+   * Another painted heightfield in the same scene (e.g. the 04.2 gate course
+   * beside feel-test). Wheels on `next.colliderHandle` read `next`'s paint.
+   */
+  readonly next?: SurfacePaintLookup;
 }
 
 /**
@@ -101,6 +106,7 @@ export function createPaintLookup(
   colliderHandle: number,
   paint: PaintMap,
   fallback: SurfaceType,
+  next?: SurfacePaintLookup,
 ): SurfacePaintLookup {
   return {
     colliderHandle,
@@ -108,5 +114,6 @@ export function createPaintLookup(
       const i = paintIndexAt(paint, x, z);
       return i < 0 ? fallback : decodePaintSurface(paint.data[i], fallback);
     },
+    next,
   };
 }

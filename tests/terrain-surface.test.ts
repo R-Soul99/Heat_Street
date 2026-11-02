@@ -94,6 +94,28 @@ describe("per-wheel surface from the paint map", () => {
     }
   });
 
+  it("WR-05: a chained lookup (gate course beside feel-test) reads the paint of the collider underfoot", () => {
+    const world = createWorld();
+    try {
+      const ground = buildGround(world);
+      const map = createSurfaceMap();
+      map.register(ground.handle, "grass");
+      // The head of the chain belongs to another collider; the ground's own
+      // painted lookup is chained as `next`.
+      const ownPaint = createPaintLookup(ground.handle, buildPaint(), "grass");
+      const surfaces: SurfaceContext = {
+        map,
+        profiles: defaultSurfaceProfiles(),
+        paint: createPaintLookup(ground.handle + 1000, buildPaint(), "sand", ownPaint),
+      };
+      const vehicle = createVehicle(world, defaultTuning(), { x: 0, y: 1, z: 0 });
+      settle(world, vehicle, surfaces);
+      expect(new Set(vehicle.wheelSurfaces)).toEqual(new Set(["mud", "tarmac"]));
+    } finally {
+      world.free();
+    }
+  });
+
   it("without paint the legacy handle lookup is used", () => {
     const world = createWorld();
     try {
