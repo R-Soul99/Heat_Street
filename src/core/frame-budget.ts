@@ -53,14 +53,30 @@ export const BUDGET = {
  * raised, each with roughly 15-30% headroom over the measured/computed
  * figures (matching Phase 3's own margin convention) rather than pinned
  * exactly to them: 12 draws -> 16, ~35188 triangles -> 45000, 88 bodies -> 110.
+ *
+ * Revised AGAIN in Phase 04.2 plan 14 against a REAL measured session on the
+ * terrain renderer (profiler HUD, `?debug`, busiest view while driving,
+ * 2026-11-02). Readings (physics / render cpu / draws / triangles / bodies):
+ *   demo-hills  (600 x 600 m @ 3 m)   0.37 ms / 1.61 ms / 44 / 66,506 / 1 active, 2 total
+ *   feel-test   (1041 x 1341 m @ 3 m) 1.16 ms / 1.67 ms / 22 / 73,036 / 1 active, 3 total
+ *   juliette-ga (5664 x 5512 m @ 8 m) 0.90 ms / 7.71 ms / 63 / 42,576 / 1 active, 88 total
+ * Frame ms was not captured (the map-select dropdown covered that HUD line);
+ * 0 dropped ticks on every map. Per D-04 only demo-hills and feel-test are
+ * inside the 2 x 2 km envelope, so the targets come from them: busiest
+ * in-envelope physics 1.16 ms -> 1.5, draws 44 -> 55, triangles 73,036 ->
+ * 90000 (each ~20-30% headroom). Bodies stays 110: the terrain maps read 2-3,
+ * but body count is driven by building colliders and juliette-ga's 88 still
+ * needs to pass. juliette-ga's 63 draws and 7.71 ms render submit are over
+ * (target and BUDGET.renderCpuMs respectively) and are an open item in
+ * docs/frame-budget.md, not hidden by these targets. BUDGET is unchanged.
  */
 export const SCENE_TARGETS = {
   /** Physics ms per frame. */
-  physicsMs: 0.5,
+  physicsMs: 1.5,
   /** `renderer.info.render.calls`, read after `render()`. */
-  drawCalls: 16,
+  drawCalls: 55,
   /** `renderer.info.render.triangles`, read after `render()`. */
-  triangles: 45000,
+  triangles: 90000,
   /** `world.bodies.len()`. */
   bodies: 110,
 } as const;

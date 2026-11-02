@@ -47,18 +47,68 @@ snapshot of whichever phase first wrote it.
 
 | Metric | Target |
 |--------|---------------|
-| Physics ms/frame | < 0.5 ms |
-| Draw calls | < 16 |
-| Triangles | < 45,000 |
+| Physics ms/frame | < 1.5 ms |
+| Draw calls | < 55 |
+| Triangles | < 90,000 |
 | Total bodies | < 110 |
 
 Originally authored for Phase 1's bare box-and-plane debug scene (draw calls < 20,
 bodies < 20) — a scene with no expectation of ever needing more. Draw calls and bodies
 were raised in Phase 3 (plan 03-12) against a REAL measured reading (see "Real
 measurement, plan 03-12" below, kept as a dated historical reading). All four figures
-are raised AGAIN in Phase 4 (plan 04-10) against the real compiled Juliette, GA area —
-see "Real measurement, plan 04-10" immediately below, which supersedes plan 03-12's
-reading as the current reference.
+were raised AGAIN in Phase 4 (plan 04-10) against the real compiled Juliette, GA area
+(see "Real measurement, plan 04-10" below). Physics, draw calls and triangles are
+raised once more in Phase 04.2 (plan 14) against the terrain renderer — see "Phase
+04.2 terrain measurement" immediately below, which is now the current reference.
+
+### Phase 04.2 terrain measurement (plan 14, 2026-11-02)
+
+Phase 04.2 replaced the compiled `.glb` maps with sculpted terrain areas (heights +
+paint, rendered and collided as a terrain grid). Readings are from the profiler HUD
+(`?debug`) at the busiest view while driving each map, taken by the user at the end of
+plan 14's checkpoint:
+
+| Map | Grid | Vertices | Frame | Physics ms/frame | Render (CPU submit) | Draw calls | Triangles | Bodies |
+|-----|------|---------:|------:|-----------------:|--------------------:|-----------:|----------:|-------|
+| demo-hills | 200x200 @ 3 m (600 x 600 m) | 40,401 | not captured | 0.37 ms | 1.61 ms | 44 | 66,506 | 1 active / 2 total |
+| feel-test | 347x447 @ 3 m (1041 x 1341 m) | 155,904 | not captured | 1.16 ms | 1.67 ms | 22 | 73,036 | 1 active / 3 total |
+| juliette-ga | 708x689 @ 8 m (5664 x 5512 m) | 489,210 | not captured (HUD flagged it over 16.6 ms) | 0.90 ms | **7.71 ms (over)** | 63 | 42,576 | 1 active / 88 total |
+
+No map dropped a fixed tick (dropped 0 on all three), and the user saw no stutter or
+memory trouble on juliette-ga beyond the numbers above.
+
+**Frame ms was not captured.** The map-select dropdown in the top-left corner sits on
+top of the HUD's first line, so the frame figure was unreadable in every screenshot
+(juliette-ga's line was visibly flagged as over 16.6 ms, but its value was hidden).
+Fixing that overlap and re-reading frame ms is an open follow-up.
+
+**D-04 compliance.** D-04's envelope is a 2 x 2 km area. demo-hills and feel-test are
+inside it and must meet the locked budget: 16.6 ms frame, physics ≤ 4.0 ms, render CPU
+submit ≤ 6.0 ms. Both pass physics (0.37 ms, 1.16 ms) and render (1.61 ms, 1.67 ms) with
+wide margins; their frame figure is unverified (see above). juliette-ga, at 5.5 x 5.7 km
+(8 m cells), is outside the envelope: it is measured and reported here, not promised.
+
+**Open item: juliette-ga render CPU submit is over budget.** 7.71 ms against the 6.0 ms
+render slice, with 63 draw calls (over the 55 target) and an over-16.6 ms frame flag.
+The budget is NOT raised to accommodate it. The cause has not been investigated; the
+obvious candidates are the 489k-vertex terrain grid and its 11024x11328 paint map
+(about 125 MB decoded). This needs a profiling pass (and likely chunking or a coarser
+paint resolution for large areas) before any map of that size is promised to run in
+budget.
+
+**How the targets were revised.** From the busiest in-envelope reading, with roughly
+20-30% headroom (the convention since Phase 3):
+
+- Physics 1.16 ms (feel-test) -> < 1.5 ms (was < 0.5 ms). The terrain collider costs
+  more per step than the old compiled heightfield, but this is still under a third of
+  the locked 4.0 ms physics budget.
+- Draw calls 44 (demo-hills) -> < 55 (was < 16).
+- Triangles 73,036 (feel-test) -> < 90,000 (was < 45,000).
+- Bodies unchanged at < 110. The terrain maps read 2-3 bodies; body count is driven by
+  building colliders, and juliette-ga's 88 still passes.
+
+The old targets (16 draws, 45,000 triangles) were already flagged as over on every
+terrain map, so they no longer described the shipped scene.
 
 ### Real measurement, plan 04-10 (2026-09-15)
 

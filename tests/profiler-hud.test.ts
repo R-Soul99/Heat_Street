@@ -93,9 +93,9 @@ describe("formatHudText", () => {
     expect(lineStartingWith(text, "draws")).not.toContain("!");
   });
 
-  it("marks draw calls over the current scene target: one above SCENE_TARGETS.drawCalls 16", () => {
+  it("marks draw calls over the current scene target: one above SCENE_TARGETS.drawCalls 55", () => {
     const text = formatHudText(makeInputs({ drawCalls: SCENE_TARGETS.drawCalls + 1 }));
-    expect(SCENE_TARGETS.drawCalls).toBe(16);
+    expect(SCENE_TARGETS.drawCalls).toBe(55);
     expect(lineStartingWith(text, "draws")).toContain("!");
   });
 
@@ -104,9 +104,9 @@ describe("formatHudText", () => {
     expect(lineStartingWith(text, "tris")).not.toContain("!");
   });
 
-  it("marks triangles over target: one above SCENE_TARGETS.triangles 45000", () => {
+  it("marks triangles over target: one above SCENE_TARGETS.triangles 90000", () => {
     const text = formatHudText(makeInputs({ triangles: SCENE_TARGETS.triangles + 1 }));
-    expect(SCENE_TARGETS.triangles).toBe(45000);
+    expect(SCENE_TARGETS.triangles).toBe(90000);
     expect(lineStartingWith(text, "tris")).toContain("!");
   });
 
