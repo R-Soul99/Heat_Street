@@ -155,6 +155,37 @@ any of these are ever true, the retained DEM source table above (USGS 3DEP / Cop
 selection rule, mandatory-notice text, citations) is the ready-made answer — it was kept
 verbatim for exactly this reason, not deleted when this amendment was written.
 
+### Phase 04.2 amendment: terrain is the single source of truth
+
+**What changed.** For migrated and new maps, the **terrain height grid plus its surface paint
+map** is the single source of truth for ground height and ground surface. There is no separate
+road mesh on the ground: roads are painted into the paint map and levelled into the height grid
+by the road brush, with a smoothstep shoulder blend back to the surrounding ground. The road
+brush also emits the road graph, still in road-graph v1 (`docs/schemas/road-graph.v1.md`), so
+routes, navigation and the minimap keep their existing inputs. The area format is
+`<area>.terrain.bin` plus the `<area>.terrain.json` sidecar (graph, objects, building
+colliders).
+
+**Migrated maps.** `feel-test`, `grid-test` and `juliette-ga` were converted by
+`tools/map-compiler/terrain/convert.ts` (plan 04.2-11). The road graph was copied verbatim, so
+course ids and routes are unchanged. Every difference from the legacy maps, including the
+re-recorded medal references, is listed in `docs/terrain-migration.md`.
+
+**Legacy loader retained (D-08).** The legacy ribbon-road and collision path
+(`*.map.json` + `*.collision.json` + `*.glb`) is kept, not deleted:
+- for the non-migrated maps (`my-map`, `newton-poppleford`, `skidders-and-popp`), which have no
+  medals and no guarantees;
+- as the likely basis for future bridges, overpasses and tunnels, which one height grid cannot
+  represent (deferred).
+
+**Phase 4.1 superseded.** The phase 04.1 flat-terrain decision above ("Elevation — amended
+(phase 04.1)") is superseded for migrated and new maps: terrain can now be sculpted hilly
+because levelled road bands remove the coarse-grid shoulder bridging that motivated flattening.
+Phase 4.1 is closed as absorbed by Phase 4.2. Its remaining plans 04.1-10 (drive sign-off) and
+04.1-11 (ADR amendment) are superseded by 04.2-06 (terrain gate drive and sign-off,
+`.planning/phases/04.2-driveable-terrain/04.2-GATE.md`) and 04.2-15 (this amendment). The
+OpenStreetMap road-network decision and the no-Google prohibition are unchanged.
+
 ### Prohibition — no Google-derived bytes, anywhere
 
 **No bytes derived from Google Maps, Google Earth or Google Street View may enter this

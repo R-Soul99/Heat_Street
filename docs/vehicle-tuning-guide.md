@@ -378,6 +378,28 @@ kept in sync with the permanent rig — it exists specifically to reproduce the 
 plan 02-10 feel-session view byte-for-byte, a fixed historical reference point, not a
 live-tunable extension of the permanent camera.
 
+### Slopes (Phase 04.2)
+
+Handling was re-verified on sloped terrain without changing any tuning value. The record is
+`.planning/phases/04.2-driveable-terrain/04.2-GATE.md`:
+
+- **Lanes:** the prototype gate course beside feel-test has a climb/hill lane (8% grades on 60 m
+  parabolic vertical curves), a banked bend, and a flat lane. Each was driven headlessly by a
+  pure-pursuit follower at 15 and 25 m/s in both directions, on `defaultTuning()` at fixed DT 1/60.
+- **Metrics:** vertical jitter, suspension jitter, wheel contact loss (must be 0 ticks), speed
+  jitter and max per-tick speed drop. Each threshold is max(1.5 x flat baseline, floor).
+- **Verdict:** PASS (run 3) at collider subdivision 2. All 60 lane checks pass, so
+  `DEFAULT_COLLIDER_SUBDIV` is 2.
+- **No flat-ground regression:** five of the six telemetry routines on the flat terrain
+  heightfield stay within the 1% tolerance of the legacy cuboid ground. The sixth, the
+  hard-landing `ramp` routine, is gated on its own absolute landing-tilt band ([0, 26] deg) and
+  passes it (20.47 deg).
+- **Human sign-off:** 2026-11-02, "approved", no changed values (MAX_SLOPE_DEG 35,
+  DEFAULT_MAX_BANK_DEG 8).
+
+Slopes need no slope-specific dial: grade and bank act through ordinary suspension and gravity,
+so the controls above mean the same thing on a hill as on the flat.
+
 ## 5. If X doesn't do what you expect, check Y
 
 | Symptom | Likely cause | Provenance |
