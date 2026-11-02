@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 import { mapEditorApi } from "./tools/map-editor/vite-plugin.ts";
+import { terrainEditorApi } from "./tools/terrain-editor/vite-plugin.ts";
 
 export default defineConfig({
-  plugins: [mapEditorApi()],
+  plugins: [mapEditorApi(), terrainEditorApi()],
   // DEVIATION from 01-01-PLAN.md, which forbade this key on RESEARCH.md's claim
   // that Vite 8.2.2 pre-bundles Rapier correctly. That claim was verified only at
   // the "dev server serves the rewritten wasm import with a 200" level, not by
