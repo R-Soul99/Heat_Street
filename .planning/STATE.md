@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 04.2 UI-SPEC approved
-last_updated: "2026-11-02T07:56:41.508Z"
+stopped_at: Completed 04.2-09-PLAN.md
+last_updated: "2026-11-02T08:14:43.066Z"
 last_activity: 2026-11-02
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 82
-  completed_plans: 72
+  completed_plans: 77
   percent: 70
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 10 of 15 complete (01-08, 10, 12; gate signed off 2026-11-02)
+Plan: 11 of 15 complete (01-08, 10, 12; gate signed off 2026-11-02)
 Next: Wave 6 of 04.2 (plan 09 road brush)
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Progress: [█████████░] 88%
 | Phase 06 P05 | not tracked | 3 tasks | 5 files |
 | Phase 04.2 P01 | 10 min | 2 tasks | 5 files |
 | Phase 04.2 P05 | 40min | 3 tasks | 7 files |
+| Phase 04.2 P09 | 35min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,7 @@ Recent decisions affecting current work:
 - [Phase 04.2]: 04.2-05: automated gate verdict FAIL (climb grade-break contact loss, bank 25 m/s vertical jitter, heightfield ramp-landing divergence); DEFAULT_COLLIDER_SUBDIV stays 1; thresholds untouched pending plan 06 checkpoint
 - [Phase 04.2]: Ramp routine gated on absolute band (option a); hard landings accepted in drive
 - [Phase 04.2]: DEFAULT_COLLIDER_SUBDIV locked at 2; max slope 35 and max bank 8 signed off
+- [Phase 04.2]: 04.2-09: road profile smoothing = 2.4 s of travel at design speed (15..80 m); shoulder blend protects paint and graph-edge level radius
 
 ### Pending Todos
 
@@ -237,8 +239,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-02T07:56:36.367Z
-Stopped at: Phase 04.2 UI-SPEC approved
+Last session: 2026-11-02T08:14:43.049Z
+Stopped at: Completed 04.2-09-PLAN.md
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
