@@ -270,7 +270,7 @@ Plans:
 - [ ] 04.2-12-PLAN.md — Sculpt page shell: hardened dev middleware, picking, orbit/top-down, area I/O (wave 5)
 - [ ] 04.2-13-PLAN.md — Sculpt page tools: dispatcher, all v1 brushes, undo/redo, Drive here (wave 7)
 - [ ] 04.2-14-PLAN.md — User sculpts the demo-hills map; frame-budget measurement and revision (wave 8, checkpoint)
-- [ ] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 8, checkpoint)
+- [ ] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 9, checkpoint)
 
 ### Phase 5: Objectives, Navigation & Race Modes
 
