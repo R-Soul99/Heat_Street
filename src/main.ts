@@ -236,6 +236,9 @@ async function fetchOptionalArtifactText(url: string): Promise<string | undefine
   if (!response.ok) {
     throw new Error(`failed to fetch "${url}": HTTP ${response.status}`);
   }
+  // Vite's dev server answers a missing file with index.html (HTTP 200)
+  // instead of a 404, so an HTML body for a JSON artifact also means "absent".
+  if (response.headers.get("content-type")?.includes("text/html")) return undefined;
   return response.text();
 }
 
