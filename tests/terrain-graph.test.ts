@@ -9,7 +9,9 @@ import { buildRoadGeometry } from "../src/core/road-geometry.ts";
 import { parseRoadGraph, type RoadGraph } from "../src/core/road-graph.ts";
 import {
   addRoadStroke,
+  compactNodes,
   ensureDefaultSpawn,
+  eraseGraphDisc,
   findStrokeCrossings,
   type GraphEditState,
   type RoadProfile,
@@ -283,5 +285,111 @@ describe("ensureDefaultSpawn", () => {
     expect(Number.isFinite(g.spawns?.[0].headingRad)).toBe(true);
     const s3 = ensureDefaultSpawn(s2);
     expect(s3.graph.spawns).toEqual(s2.graph.spawns);
+  });
+});
+
+describe("eraseGraphDisc", () => {
+  it("splits a straight edge: start part keeps the id, end part gets a new one", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    const r = eraseGraphDisc(s1, 0, 0, 10);
+    const g = check(r.state.graph, true);
+    expect(g.edges).toHaveLength(2);
+    const a = g.edges.find((e) => e.id === 0);
+    const b = g.edges.find((e) => e.id !== 0);
+    expect(a?.points[0]).toEqual([-50, 0, 0]);
+    expect(a?.points[a.points.length - 1][0]).toBeCloseTo(-10, 6);
+    expect(b?.points[0][0]).toBeCloseTo(10, 6);
+    expect(b?.id).toBeGreaterThanOrEqual(s1.nextEdgeId);
+    expect(r.state.nextEdgeId).toBeGreaterThanOrEqual(s1.nextEdgeId);
+    expect(g.nodes).toHaveLength(4);
+    expect(g.nodes.every((n) => degree(g, n.id) === 1)).toBe(true);
+    expect(r.removedEdgeIds).toEqual([]);
+  });
+
+  it("deletes a fully covered edge, drops orphans and compacts ids with spawns remapped", () => {
+    let s = add(emptyState(), ROAD_X).state;
+    s = add(s, [
+      [200, 0, 200],
+      [300, 0, 200],
+    ]).state;
+    s = ensureDefaultSpawn(s); // node 0 is on the first road
+    const r = eraseGraphDisc(s, 0, 0, 80);
+    expect(r.removedEdgeIds).toEqual([0]);
+    const g = check(r.state.graph);
+    expect(g.nodes.map((n) => n.id)).toEqual([0, 1]);
+    expect(g.edges).toHaveLength(1);
+    expect(g.edges[0].from).toBe(0);
+    expect(g.edges[0].to).toBe(1);
+    expect(g.spawns?.[0].id).toBe("default");
+    expect(g.spawns?.[0].nodeId).toBe(0);
+    expect(r.spawnLost).toBe(false);
+  });
+
+  it("reports spawnLost and empties spawns when no nodes remain", () => {
+    const s = ensureDefaultSpawn(add(emptyState(), ROAD_X).state);
+    const r = eraseGraphDisc(s, 0, 0, 80);
+    expect(r.spawnLost).toBe(true);
+    expect(r.state.graph.nodes).toEqual([]);
+    expect(r.state.graph.spawns).toEqual([]);
+    expect(r.state.nextEdgeId).toBe(s.nextEdgeId);
+    parseRoadGraph(JSON.stringify(r.state.graph), "empty");
+  });
+
+  it("never reuses erased edge ids", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    const r = eraseGraphDisc(s1, 0, 0, 80);
+    const a = add(r.state, ROAD_X);
+    expect(a.newEdgeIds[0]).toBeGreaterThanOrEqual(s1.nextEdgeId);
+    check(a.state.graph);
+  });
+
+  it("leaves the graph untouched when the disc misses everything", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    const r = eraseGraphDisc(s1, 0, 100, 5);
+    expect(r.state).toBe(s1);
+  });
+
+  it("does not modify bounds", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    expect(eraseGraphDisc(s1, 0, 0, 10).state.graph.bounds).toEqual(s1.graph.bounds);
+  });
+});
+
+describe("addRoadStroke replace mode", () => {
+  it("replaces an existing road repainted over it instead of drawing it twice", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    const r = add(
+      s1,
+      [
+        [-50, 0, 1],
+        [50, 0, 1],
+      ],
+      { replace: true },
+    );
+    const g = check(r.state.graph);
+    expect(g.edges).toHaveLength(1);
+    expect(g.nodes).toHaveLength(2);
+    expect(g.edges[0].id).toBeGreaterThanOrEqual(s1.nextEdgeId);
+  });
+
+  it("only splits a road that is merely crossed", () => {
+    const s1 = add(emptyState(), ROAD_X).state;
+    const r = add(
+      s1,
+      [
+        [0, 0, -50],
+        [0, 0, 50],
+      ],
+      { replace: true },
+    );
+    const g = check(r.state.graph);
+    expect(g.edges).toHaveLength(4);
+  });
+});
+
+describe("compactNodes", () => {
+  it("is a no-op (same object) when ids are already dense", () => {
+    const g = add(emptyState(), ROAD_X).state.graph;
+    expect(compactNodes(g)).toBe(g);
   });
 });
