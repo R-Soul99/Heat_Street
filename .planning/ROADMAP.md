@@ -253,7 +253,7 @@ Plans:
 **Goal:** A hand-sculpted, hand-painted hilly area that a car can drive over smoothly, built with a small 3D sculpt page. Terrain becomes the single source of truth (height grid + finer surface paint map, no separate road mesh on the ground); a road brush paints surface, levels heights and records the road graph. Absorbs and closes Phase 4.1 (flat terrain). Full design: `.planning/gsd-brief-driveable-terrain.md`. Prototype gate on `feel-test` first; if it fails, stop before touching the real pipeline.
 **Requirements**: SC-1..SC-6 (brief success criteria) and D-01..D-16 (CONTEXT.md decision IDs) — no v1.0 REQUIREMENTS.md ID applies to this inserted architecture phase
 **Depends on:** Phase 4.1
-**Plans:** 6/15 plans executed
+**Plans:** 10/15 plans executed
 
 Plans:
 - [x] 04.2-01-PLAN.md — Core terrain grid with Rapier-proved triangle sampler, paint map with road flag, limits constants (wave 1)
@@ -262,12 +262,12 @@ Plans:
 - [x] 04.2-04-PLAN.md — Chunked terrain render with physics-identical triangles and lazy paint textures (wave 2)
 - [x] 04.2-05-PLAN.md — Prototype gate course beside feel-test and the automated headless gate (wave 3)
 - [x] 04.2-06-PLAN.md — HARD GATE: gate course in the game, human drive and sign-off; stop here on failure (wave 4, checkpoint)
-- [ ] 04.2-07-PLAN.md — Sculpt core: slope limiter, brushes, stamps, stroke diffs, 50-deep undo (wave 5)
-- [ ] 04.2-08-PLAN.md — Road graph edit ops: auto-junctions, erase, replace, stable ids (wave 5)
+- [x] 04.2-07-PLAN.md — Sculpt core: slope limiter, brushes, stamps, stroke diffs, 50-deep undo (wave 5)
+- [x] 04.2-08-PLAN.md — Road graph edit ops: auto-junctions, erase, replace, stable ids (wave 5)
 - [ ] 04.2-09-PLAN.md — Road brush core: presets, profile, banking, band levelling, applyRoadStroke/eraseRoad (wave 6)
-- [ ] 04.2-10-PLAN.md — Terrain loading in the game: format table, ?at=x,z, free drive, terrain skid decals (wave 5)
+- [x] 04.2-10-PLAN.md — Terrain loading in the game: format table, ?at=x,z, free drive, terrain skid decals (wave 5)
 - [ ] 04.2-11-PLAN.md — Converter: migrate feel-test, grid-test, juliette-ga to terrain (wave 7)
-- [ ] 04.2-12-PLAN.md — Sculpt page shell: hardened dev middleware, picking, orbit/top-down, area I/O (wave 5)
+- [x] 04.2-12-PLAN.md — Sculpt page shell: hardened dev middleware, picking, orbit/top-down, area I/O (wave 5)
 - [ ] 04.2-13-PLAN.md — Sculpt page tools: dispatcher, all v1 brushes, undo/redo, Drive here (wave 7)
 - [ ] 04.2-14-PLAN.md — User sculpts the demo-hills map; frame-budget measurement and revision (wave 8, checkpoint)
 - [ ] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 9, checkpoint)
