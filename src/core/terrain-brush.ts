@@ -53,7 +53,12 @@ export interface StrokeDiff {
 export interface StrokeRecorder {
   beforeHeightsWrite(window: CellWindow): void;
   beforePaintWrite(rect: PaintRect): void;
-  recordGraph(before: string, after: string, nextEdgeIdBefore: number, nextEdgeIdAfter: number): void;
+  recordGraph(
+    before: string,
+    after: string,
+    nextEdgeIdBefore: number,
+    nextEdgeIdAfter: number,
+  ): void;
   commit(): StrokeDiff | undefined;
 }
 
@@ -178,7 +183,8 @@ function runHeightOp(
     const cur = new Float32Array(rowsN * colsN);
     k = 0;
     for (let c = touched.minCol; c <= touched.maxCol; c++) {
-      for (let r = touched.minRow; r <= touched.maxRow; r++) cur[k++] = grid.heights[r + c * stride];
+      for (let r = touched.minRow; r <= touched.maxRow; r++)
+        cur[k++] = grid.heights[r + c * stride];
     }
     const at = (r: number, c: number): number => {
       const rr = Math.min(rowsN - 1, Math.max(0, r));
@@ -229,7 +235,11 @@ export function raiseLower(
   );
 }
 
-export function smoothBrush(grid: TerrainGrid, params: BrushParams, rec?: StrokeRecorder): BrushResult {
+export function smoothBrush(
+  grid: TerrainGrid,
+  params: BrushParams,
+  rec?: StrokeRecorder,
+): BrushResult {
   const p = sanitize(params);
   if (!p) return NO_OP;
   const cw = circleWindow(grid, p.x, p.z, p.radiusM);
@@ -378,7 +388,7 @@ function paintDisc(
   let changed = 0;
   for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
     const cz = paint.originZ + (pz + 0.5) * m;
-    for (let px = rect.minPx; px <= rect.maxPx; px++) {
+    for (let px: number = rect.minPx; px <= rect.maxPx; px++) {
       const cx = paint.originX + (px + 0.5) * m;
       const dx = cx - p.x;
       const dz = cz - p.z;

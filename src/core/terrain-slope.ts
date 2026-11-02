@@ -18,9 +18,9 @@
  * Layering: pure core, no three/rapier/DOM. Never touches vertices outside the
  * window (no global pass per stroke).
  */
-import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
 
 import type { TerrainGrid } from "./terrain-grid.ts";
+import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
 
 /** Inclusive vertex index range. */
 export interface CellWindow {
@@ -61,7 +61,7 @@ function clampWindow(w: CellWindow, grid: TerrainGrid): CellWindow {
 
 /** Grows `window` by enough cells for a `maxDeltaM` height change to fade out at the slope cap. */
 export function expandWindow(
-  window: CellWindow,
+  win: CellWindow,
   grid: TerrainGrid,
   maxDeltaM: number,
   maxSlopeDeg: number = MAX_SLOPE_DEG,
@@ -71,18 +71,18 @@ export function expandWindow(
     Number.isFinite(maxDeltaM) && perCell > 0 ? Math.ceil(Math.abs(maxDeltaM) / perCell) : 0;
   return clampWindow(
     {
-      minRow: window.minRow - n,
-      minCol: window.minCol - n,
-      maxRow: window.maxRow + n,
-      maxCol: window.maxCol + n,
+      minRow: win.minRow - n,
+      minCol: win.minCol - n,
+      maxRow: win.maxRow + n,
+      maxCol: win.maxCol + n,
     },
     grid,
   );
 }
 
 /** Steepest axis-neighbour slope (degrees) among vertex pairs inside the window. */
-export function maxSlopeDegIn(grid: TerrainGrid, window: CellWindow): number {
-  const w = clampWindow(window, grid);
+export function maxSlopeDegIn(grid: TerrainGrid, win: CellWindow): number {
+  const w = clampWindow(win, grid);
   const stride = grid.rows + 1;
   const h = grid.heights;
   let maxD = 0;
@@ -229,10 +229,10 @@ function countRoadViolations(
 
 export function limitSlope(
   grid: TerrainGrid,
-  window: CellWindow,
+  win: CellWindow,
   opts: LimitSlopeOptions = {},
 ): LimitSlopeResult {
-  const w = clampWindow(window, grid);
+  const w = clampWindow(win, grid);
   if (w.minRow > w.maxRow || w.minCol > w.maxCol) {
     return { changed: new Uint32Array(0), roadViolations: 0 };
   }

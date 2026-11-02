@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SLOPE_DEG } from "../src/core/terrain-limits.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
+import { MAX_SLOPE_DEG } from "../src/core/terrain-limits.ts";
 import { expandWindow, limitSlope, maxSlopeDegIn } from "../src/core/terrain-slope.ts";
 
 const CELL = 3;

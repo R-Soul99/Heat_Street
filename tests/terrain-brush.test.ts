@@ -11,7 +11,12 @@ import {
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../src/core/terrain-limits.ts";
-import { createPaintMap, decodePaintSurface, PAINT_ROAD_FLAG, encodePaintValue } from "../src/core/terrain-paint.ts";
+import {
+  createPaintMap,
+  decodePaintSurface,
+  encodePaintValue,
+  PAINT_ROAD_FLAG,
+} from "../src/core/terrain-paint.ts";
 import { maxSlopeDegIn } from "../src/core/terrain-slope.ts";
 
 // 61x61 vertices, vertex (30,30) sits at world (0,0).
@@ -102,7 +107,8 @@ describe("smooth and flatten", () => {
     };
     const inside = (h: ArrayLike<number>) => {
       const out: number[] = [];
-      for (let r = 28; r <= 32; r++) for (let c = 28; c <= 32; c++) out.push(h[terrainIndex(g, r, c)]);
+      for (let r = 28; r <= 32; r++)
+        for (let c = 28; c <= 32; c++) out.push(h[terrainIndex(g, r, c)]);
       return out;
     };
     smoothBrush(g, brush({ strength: 1, radiusM: 12 }));
@@ -142,7 +148,15 @@ describe("stampTerrain", () => {
     expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
 
     const m = grid();
-    stampTerrain(m, { kind: "mound", x: 0, z: 0, rotationRad: 0, lengthM: 20, widthM: 20, heightM: 3 });
+    stampTerrain(m, {
+      kind: "mound",
+      x: 0,
+      z: 0,
+      rotationRad: 0,
+      lengthM: 20,
+      widthM: 20,
+      heightM: 3,
+    });
     expect(at(m, 0, 0)).toBeGreaterThan(2);
     expect(at(m, 0, 0)).toBeGreaterThan(at(m, 6, 0));
     expect(at(m, 6, 0)).toBeGreaterThan(at(m, 9, 0));
@@ -169,7 +183,15 @@ describe("stampTerrain", () => {
     g.heights.fill(10);
     const centre = terrainIndex(g, 30, 30);
     g.heights[centre] = 12;
-    stampTerrain(g, { kind: "mound", x: 0, z: 0, rotationRad: 0, lengthM: 10, widthM: 10, heightM: 1 });
+    stampTerrain(g, {
+      kind: "mound",
+      x: 0,
+      z: 0,
+      rotationRad: 0,
+      lengthM: 10,
+      widthM: 10,
+      heightM: 1,
+    });
     expect(at(g, 0, 0)).toBeGreaterThanOrEqual(12 - 1e-3);
     expect(at(g, 3, 0)).toBeGreaterThanOrEqual(10);
   });
@@ -177,7 +199,14 @@ describe("stampTerrain", () => {
 
 describe("paint", () => {
   const mk = () =>
-    createPaintMap({ originX: -30, originZ: -30, widthM: 60, depthM: 60, metresPerPixel: 0.5, fill: "grass" });
+    createPaintMap({
+      originX: -30,
+      originZ: -30,
+      widthM: 60,
+      depthM: 60,
+      metresPerPixel: 0.5,
+      fill: "grass",
+    });
 
   it("paintSurface fills pixel centres within the radius, sparing road pixels", () => {
     const p = mk();
@@ -185,7 +214,8 @@ describe("paint", () => {
     p.data[roadPx] = encodePaintValue("tarmac", true);
     const res = paintSurface(p, brush({ radiusM: 3 }), "mud");
     expect(res.pixelsChanged).toBeGreaterThan(100);
-    const wide = (x: number, z: number) => p.data[Math.floor((z + 30) / 0.5) * p.width + Math.floor((x + 30) / 0.5)];
+    const wide = (x: number, z: number) =>
+      p.data[Math.floor((z + 30) / 0.5) * p.width + Math.floor((x + 30) / 0.5)];
     expect(decodePaintSurface(wide(0.25, 0.25))).toBe("mud");
     expect(wide(0.25, 0.25)).toBe(encodePaintValue("mud", false));
     expect(wide(10, 10)).toBe(encodePaintValue("grass", false));
@@ -208,7 +238,14 @@ describe("paint", () => {
 describe("createStrokeRecorder", () => {
   it("merges overlapping dabs into one minimal, first-touch diff", () => {
     const g = grid();
-    const p = createPaintMap({ originX: -90, originZ: -90, widthM: 180, depthM: 180, metresPerPixel: 1, fill: "grass" });
+    const p = createPaintMap({
+      originX: -90,
+      originZ: -90,
+      widthM: 180,
+      depthM: 180,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
     const rec = createStrokeRecorder(g, p);
     raiseLower(g, brush(), 1, 1, rec);
     raiseLower(g, brush({ x: 3 }), 1, 1, rec);
@@ -229,7 +266,14 @@ describe("createStrokeRecorder", () => {
 
   it("commits an empty stroke to undefined", () => {
     const g = grid();
-    const p = createPaintMap({ originX: -90, originZ: -90, widthM: 180, depthM: 180, metresPerPixel: 1, fill: "grass" });
+    const p = createPaintMap({
+      originX: -90,
+      originZ: -90,
+      widthM: 180,
+      depthM: 180,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
     const rec = createStrokeRecorder(g, p);
     expect(rec.commit()).toBeUndefined();
     raiseLower(g, brush({ strength: 0 }), 1, 1, rec);
