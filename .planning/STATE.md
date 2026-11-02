@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 04.2 UI-SPEC approved
-last_updated: "2026-11-02T00:10:27.782Z"
+last_updated: "2026-11-02T00:27:53.272Z"
 last_activity: 2026-11-02
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 82
-  completed_plans: 67
+  completed_plans: 71
   percent: 70
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 2 of 15
+Plan: 3 of 15
 Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
-Progress: [████████░░] 82%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Progress: [████████░░] 82%
 | Phase 06 P04 | 18 min | 2 tasks | 5 files |
 | Phase 06 P05 | not tracked | 3 tasks | 5 files |
 | Phase 04.2 P01 | 10 min | 2 tasks | 5 files |
+| Phase 04.2 P05 | 40min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,7 @@ Recent decisions affecting current work:
 - [Debug: minimap-arrow-moves-in-the-op]: src/hud/minimap.ts (`projectMinimapPoint`) paired screen-right=world+X with screen-up=world+Z -- the MIRRORED top-down projection for a straight-down camera (non-mirrored pairing needs screen-up=world -Z, verified via cross(forward,up)=right). The prior session's `projectCarRotation` fix (`Math.PI/2 - headingRad`) was algebraically self-consistent with that mirrored mapping, so discrete checkpoint-pointing checks passed even though a real RIGHT turn (headingRad provably increasing) swept the marker COUNTERCLOCKWISE on screen -- opposite the real car. Fixed as ONE coupled change: un-mirrored the point mapping (`y: half + dz*scale`), `angleRad` to the codebase-standard `Math.atan2(dz, dx)` (minimap.ts was the only atan2(dx,-dz) outlier in the repo), the offscreen clamp to match, and `projectCarRotation` to `Math.PI/2 + headingRad`. Lesson: rotational-SENSE correctness does not survive an axis-mirroring bug even when pointing-AT-a-target correctness does -- a discrete-point check alone can mask a sign/mirroring defect. Human-confirmed fixed 2026-09-22; see .planning/debug/resolved/minimap-arrow-moves-in-the-op.md.
 - [Phase 06]: [Phase 06-05]: Consolidated results/course-card rendering into src/hud/results-view.ts as the single surface, removing a duplicate results overlay from src/hud/race-hud.ts rather than maintaining two independent renderers that could drift out of sync on restart. — Plan's own must-have required mounting the course-card/results view "without duplicating DOM overlays on restart" — a second independent overlay in race-hud.ts would have violated that directly.
 - [Phase ?]: [Phase 04.2-01]: Rapier 0.20.0 heightfield diagonal measured as row0col1-row1col0; TERRAIN_DIAGONAL set accordingly
+- [Phase 04.2]: 04.2-05: automated gate verdict FAIL (climb grade-break contact loss, bank 25 m/s vertical jitter, heightfield ramp-landing divergence); DEFAULT_COLLIDER_SUBDIV stays 1; thresholds untouched pending plan 06 checkpoint
 
 ### Pending Todos
 
@@ -233,7 +235,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-02T00:10:22.691Z
+Last session: 2026-11-02T00:27:48.502Z
 Stopped at: Phase 04.2 UI-SPEC approved
 Resume file: None
 
