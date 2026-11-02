@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 4 of 15
-Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
+Plan: 6 of 15 complete (01-06; prototype gate signed off 2026-11-02)
+Next: Wave 5 of 04.2 (plans 07, 08, 10, 12)
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
