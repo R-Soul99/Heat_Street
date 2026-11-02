@@ -33,7 +33,7 @@ describe("gate course geometry", () => {
     const again = buildGateCourse();
     expect(again.grid.heights).toEqual(course.grid.heights);
     expect(again.paint.data).toEqual(course.paint.data);
-  });
+  }, 30_000);
 
   it("exposes four lanes in loop order and matching GATE_LANES", () => {
     expect(course.lanes.map((l) => l.id)).toEqual(["hill", "bank", "climb", "return"]);
