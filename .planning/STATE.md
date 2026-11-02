@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 04.2 UI-SPEC approved
-last_updated: "2026-11-02T07:24:37.441Z"
+last_updated: "2026-11-02T07:56:41.508Z"
 last_activity: 2026-11-02
 progress:
   total_phases: 10
   completed_phases: 7
   total_plans: 82
-  completed_plans: 71
+  completed_plans: 72
   percent: 70
 ---
 
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.2 (driveable-terrain) — EXECUTING
-Plan: 3 of 15
+Plan: 4 of 15
 Next: Phase 7 (npc-driving-ai-circuit-racers) — not yet planned; run /gsd-discuss-phase 7 or /gsd-plan-phase 7
 Last activity: 2026-11-02
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
-Progress: [█████████░] 87%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -177,6 +177,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06-05]: Consolidated results/course-card rendering into src/hud/results-view.ts as the single surface, removing a duplicate results overlay from src/hud/race-hud.ts rather than maintaining two independent renderers that could drift out of sync on restart. — Plan's own must-have required mounting the course-card/results view "without duplicating DOM overlays on restart" — a second independent overlay in race-hud.ts would have violated that directly.
 - [Phase ?]: [Phase 04.2-01]: Rapier 0.20.0 heightfield diagonal measured as row0col1-row1col0; TERRAIN_DIAGONAL set accordingly
 - [Phase 04.2]: 04.2-05: automated gate verdict FAIL (climb grade-break contact loss, bank 25 m/s vertical jitter, heightfield ramp-landing divergence); DEFAULT_COLLIDER_SUBDIV stays 1; thresholds untouched pending plan 06 checkpoint
+- [Phase 04.2]: Ramp routine gated on absolute band (option a); hard landings accepted in drive
+- [Phase 04.2]: DEFAULT_COLLIDER_SUBDIV locked at 2; max slope 35 and max bank 8 signed off
 
 ### Pending Todos
 
@@ -235,7 +237,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-02T07:24:37.431Z
+Last session: 2026-11-02T07:56:36.367Z
 Stopped at: Phase 04.2 UI-SPEC approved
 Resume file: None
 
