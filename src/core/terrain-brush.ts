@@ -1,0 +1,493 @@
+/**
+ * Sculpt brushes for the terrain editor (phase 04.2, D-10 minus the road
+ * brush): raise/lower, smooth, flatten, wedge/mound stamps, surface paint and
+ * paint erase, plus the stroke recorder that produces changed-cell diffs for
+ * undo (D-11).
+ *
+ * Every height op: computes the new heights for its footprint, records the
+ * first-touch values of the (slope-expanded) window, writes, gently relaxes the
+ * changed vertices, then runs `limitSlope` on the expanded window so no pair
+ * exceeds MAX_SLOPE_DEG (D-03). Ops mutate in place and report the dirty window
+ * plus `slopeClamped` (drives the editor's slope-clamp ring).
+ *
+ * Params are sanitised (T-04.2-18): radius clamped to 0.5..200 m, strength to
+ * 0..1, non-finite input is a no-op.
+ *
+ * Layering: pure core, no three/rapier/DOM.
+ */
+import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
+import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
+import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
+import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
+import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
+
+export type Falloff = "linear" | "smooth";
+
+export interface BrushParams {
+  x: number;
+  z: number;
+  radiusM: number;
+  strength: number;
+  falloff: Falloff;
+}
+
+export interface PaintRect {
+  minPx: number;
+  minPz: number;
+  maxPx: number;
+  maxPz: number;
+}
+
+export interface StrokeDiff {
+  readonly heights?: { indices: Uint32Array; before: Float32Array; after: Float32Array };
+  readonly paint?: { indices: Uint32Array; before: Uint8Array; after: Uint8Array };
+  /** Serialized road-graph JSON snapshots (plan 09 road strokes). */
+  readonly graph?: {
+    before: string;
+    after: string;
+    nextEdgeIdBefore: number;
+    nextEdgeIdAfter: number;
+  };
+}
+
+export interface StrokeRecorder {
+  beforeHeightsWrite(window: CellWindow): void;
+  beforePaintWrite(rect: PaintRect): void;
+  recordGraph(before: string, after: string, nextEdgeIdBefore: number, nextEdgeIdAfter: number): void;
+  commit(): StrokeDiff | undefined;
+}
+
+export interface BrushResult {
+  /** Dirty vertex window (undefined when the op changed nothing). */
+  window?: CellWindow;
+  /** True when the slope limiter had to move vertices. */
+  slopeClamped: boolean;
+}
+
+export interface PaintResult {
+  rect?: PaintRect;
+  pixelsChanged: number;
+}
+
+export const MIN_RADIUS_M = 0.5;
+export const MAX_RADIUS_M = 200;
+const RELAX = 0.25;
+
+const NO_OP: BrushResult = { slopeClamped: false };
+
+function falloffAt(kind: Falloff, d: number, r: number): number {
+  const t = d / r;
+  if (t >= 1) return 0;
+  return kind === "linear" ? 1 - t : 1 - t * t * (3 - 2 * t);
+}
+
+function sanitize(p: BrushParams): BrushParams | null {
+  if (
+    !Number.isFinite(p.x) ||
+    !Number.isFinite(p.z) ||
+    !Number.isFinite(p.radiusM) ||
+    !Number.isFinite(p.strength)
+  ) {
+    return null;
+  }
+  return {
+    x: p.x,
+    z: p.z,
+    radiusM: Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, p.radiusM)),
+    strength: Math.min(1, Math.max(0, p.strength)),
+    falloff: p.falloff === "linear" ? "linear" : "smooth",
+  };
+}
+
+function circleWindow(grid: TerrainGrid, x: number, z: number, r: number): CellWindow | null {
+  const c0 = Math.ceil((x - r - grid.originX) / grid.cellSizeM);
+  const c1 = Math.floor((x + r - grid.originX) / grid.cellSizeM);
+  const r0 = Math.ceil((z - r - grid.originZ) / grid.cellSizeM);
+  const r1 = Math.floor((z + r - grid.originZ) / grid.cellSizeM);
+  const w = {
+    minRow: Math.max(0, r0),
+    minCol: Math.max(0, c0),
+    maxRow: Math.min(grid.rows, r1),
+    maxCol: Math.min(grid.cols, c1),
+  };
+  return w.minRow > w.maxRow || w.minCol > w.maxCol ? null : w;
+}
+
+/** The shared height-op pipeline. `compute` returns the new height for a vertex (or `h` to leave it). */
+function runHeightOp(
+  grid: TerrainGrid,
+  touched: CellWindow,
+  compute: (x: number, z: number, h: number, snap: (r: number, c: number) => number) => number,
+  rec: StrokeRecorder | undefined,
+  relax: boolean,
+): BrushResult {
+  const stride = grid.rows + 1;
+  const rowsN = touched.maxRow - touched.minRow + 1;
+  const colsN = touched.maxCol - touched.minCol + 1;
+  const old = new Float32Array(rowsN * colsN);
+  const next = new Float64Array(rowsN * colsN);
+  let k = 0;
+  for (let c = touched.minCol; c <= touched.maxCol; c++) {
+    for (let r = touched.minRow; r <= touched.maxRow; r++) {
+      old[k++] = grid.heights[r + c * stride];
+    }
+  }
+  // Snapshot lookup clamped into the touched window (for smoothing kernels).
+  const snap = (r: number, c: number): number => {
+    const rr = Math.min(touched.maxRow, Math.max(touched.minRow, r)) - touched.minRow;
+    const cc = Math.min(touched.maxCol, Math.max(touched.minCol, c)) - touched.minCol;
+    return old[rr + cc * rowsN];
+  };
+  let maxDelta = 0;
+  k = 0;
+  for (let c = touched.minCol; c <= touched.maxCol; c++) {
+    for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
+      const x = grid.originX + c * grid.cellSizeM;
+      const z = grid.originZ + r * grid.cellSizeM;
+      const v = compute(x, z, old[k], (rr, cc) => snap(rr, cc));
+      next[k] = Number.isFinite(v) ? v : old[k];
+      maxDelta = Math.max(maxDelta, Math.abs(Math.fround(next[k]) - old[k]));
+    }
+  }
+  if (maxDelta === 0) return NO_OP;
+
+  const dirty = expandWindow(
+    {
+      minRow: touched.minRow - 1,
+      minCol: touched.minCol - 1,
+      maxRow: touched.maxRow + 1,
+      maxCol: touched.maxCol + 1,
+    },
+    grid,
+    maxDelta,
+    MAX_SLOPE_DEG,
+  );
+  rec?.beforeHeightsWrite(dirty);
+
+  k = 0;
+  for (let c = touched.minCol; c <= touched.maxCol; c++) {
+    for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
+      grid.heights[r + c * stride] = next[k];
+    }
+  }
+
+  if (relax) {
+    // 1-2-1 kernel on vertices this op moved (keeps the radius contract).
+    const moved = new Uint8Array(rowsN * colsN);
+    for (let i = 0; i < moved.length; i++) moved[i] = Math.fround(next[i]) !== old[i] ? 1 : 0;
+    const cur = new Float32Array(rowsN * colsN);
+    k = 0;
+    for (let c = touched.minCol; c <= touched.maxCol; c++) {
+      for (let r = touched.minRow; r <= touched.maxRow; r++) cur[k++] = grid.heights[r + c * stride];
+    }
+    const at = (r: number, c: number): number => {
+      const rr = Math.min(rowsN - 1, Math.max(0, r));
+      const cc = Math.min(colsN - 1, Math.max(0, c));
+      return cur[rr + cc * rowsN];
+    };
+    for (let cc = 0; cc < colsN; cc++) {
+      for (let rr = 0; rr < rowsN; rr++) {
+        if (!moved[rr + cc * rowsN]) continue;
+        let sum = 0;
+        for (let dc = -1; dc <= 1; dc++) {
+          for (let dr = -1; dr <= 1; dr++) {
+            const wgt = (dc === 0 ? 2 : 1) * (dr === 0 ? 2 : 1);
+            sum += wgt * at(rr + dr, cc + dc);
+          }
+        }
+        const here = cur[rr + cc * rowsN];
+        const v = here + RELAX * (sum / 16 - here);
+        grid.heights[touched.minRow + rr + (touched.minCol + cc) * stride] = v;
+      }
+    }
+  }
+
+  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG });
+  return { window: dirty, slopeClamped: res.changed.length > 0 };
+}
+
+export function raiseLower(
+  grid: TerrainGrid,
+  params: BrushParams,
+  sign: 1 | -1,
+  rateM = 1,
+  rec?: StrokeRecorder,
+): BrushResult {
+  const p = sanitize(params);
+  if (!p || !Number.isFinite(rateM)) return NO_OP;
+  const w = circleWindow(grid, p.x, p.z, p.radiusM);
+  if (!w) return NO_OP;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      return f > 0 ? h + sign * rateM * p.strength * f : h;
+    },
+    rec,
+    true,
+  );
+}
+
+export function smoothBrush(grid: TerrainGrid, params: BrushParams, rec?: StrokeRecorder): BrushResult {
+  const p = sanitize(params);
+  if (!p) return NO_OP;
+  const cw = circleWindow(grid, p.x, p.z, p.radiusM);
+  if (!cw) return NO_OP;
+  // Widen by one so the kernel reads real neighbours at the footprint edge.
+  const w = {
+    minRow: Math.max(0, cw.minRow - 1),
+    minCol: Math.max(0, cw.minCol - 1),
+    maxRow: Math.min(grid.rows, cw.maxRow + 1),
+    maxCol: Math.min(grid.cols, cw.maxCol + 1),
+  };
+  const stride = grid.rows + 1;
+  const c0 = w.minCol;
+  const r0 = w.minRow;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h, snap) => {
+      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      if (f <= 0) return h;
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      let sum = 0;
+      for (let dc = -1; dc <= 1; dc++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          const rr = Math.min(grid.rows, Math.max(0, row + dr));
+          const cc = Math.min(grid.cols, Math.max(0, col + dc));
+          const wgt = (dc === 0 ? 2 : 1) * (dr === 0 ? 2 : 1);
+          // Neighbours outside the op window are unchanged, so read live there.
+          const inside = rr >= r0 && rr <= w.maxRow && cc >= c0 && cc <= w.maxCol;
+          sum += wgt * (inside ? snap(rr, cc) : grid.heights[rr + cc * stride]);
+        }
+      }
+      return h + p.strength * f * (sum / 16 - h);
+    },
+    rec,
+    false,
+  );
+}
+
+export function flattenBrush(
+  grid: TerrainGrid,
+  params: BrushParams,
+  targetM: number,
+  rec?: StrokeRecorder,
+): BrushResult {
+  const p = sanitize(params);
+  if (!p || !Number.isFinite(targetM)) return NO_OP;
+  const w = circleWindow(grid, p.x, p.z, p.radiusM);
+  if (!w) return NO_OP;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      return f > 0 ? h + (targetM - h) * p.strength * f : h;
+    },
+    rec,
+    false,
+  );
+}
+
+export interface StampParams {
+  kind: "wedge" | "mound";
+  x: number;
+  z: number;
+  rotationRad: number;
+  lengthM: number;
+  widthM: number;
+  heightM: number;
+}
+
+/** Wedge: ramp rising along local +X over lengthM then dropping. Mound: cosine dome of radius widthM/2. Max-blended onto existing terrain. */
+export function stampTerrain(grid: TerrainGrid, s: StampParams, rec?: StrokeRecorder): BrushResult {
+  if (
+    !Number.isFinite(s.x) ||
+    !Number.isFinite(s.z) ||
+    !Number.isFinite(s.rotationRad) ||
+    !Number.isFinite(s.lengthM) ||
+    !Number.isFinite(s.widthM) ||
+    !Number.isFinite(s.heightM)
+  ) {
+    return NO_OP;
+  }
+  const clampSize = (v: number): number => Math.min(MAX_RADIUS_M * 2, Math.max(1, v));
+  const length = clampSize(s.lengthM);
+  const width = clampSize(s.widthM);
+  const height = Math.min(200, Math.max(-200, s.heightM));
+  const reach = s.kind === "wedge" ? Math.hypot(length / 2, width / 2) : width / 2;
+  const w = circleWindow(grid, s.x, s.z, reach);
+  if (!w) return NO_OP;
+  const cos = Math.cos(s.rotationRad);
+  const sin = Math.sin(s.rotationRad);
+  const base = sampleTerrainHeight(grid, s.x, s.z);
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const dx = x - s.x;
+      const dz = z - s.z;
+      const lx = dx * cos + dz * sin;
+      const lz = -dx * sin + dz * cos;
+      let offset = 0;
+      if (s.kind === "wedge") {
+        if (Math.abs(lx) <= length / 2 && Math.abs(lz) <= width / 2) {
+          offset = (height * (lx + length / 2)) / length;
+        }
+      } else {
+        const R = width / 2;
+        const d = Math.hypot(lx, lz);
+        if (d < R) offset = height * 0.5 * (1 + Math.cos((Math.PI * d) / R));
+      }
+      if (offset === 0) return h;
+      const target = base + offset;
+      return height >= 0 ? Math.max(h, target) : Math.min(h, target);
+    },
+    rec,
+    true,
+  );
+}
+
+function paintDiscRect(paint: PaintMap, p: BrushParams): PaintRect | null {
+  const m = paint.metresPerPixel;
+  const rect = {
+    minPx: Math.max(0, Math.floor((p.x - p.radiusM - paint.originX) / m)),
+    maxPx: Math.min(paint.width - 1, Math.ceil((p.x + p.radiusM - paint.originX) / m)),
+    minPz: Math.max(0, Math.floor((p.z - p.radiusM - paint.originZ) / m)),
+    maxPz: Math.min(paint.height - 1, Math.ceil((p.z + p.radiusM - paint.originZ) / m)),
+  };
+  return rect.minPx > rect.maxPx || rect.minPz > rect.maxPz ? null : rect;
+}
+
+function paintDisc(
+  paint: PaintMap,
+  params: BrushParams,
+  rec: StrokeRecorder | undefined,
+  write: (old: number) => number,
+): PaintResult {
+  const p = sanitize(params);
+  if (!p) return { pixelsChanged: 0 };
+  const rect = paintDiscRect(paint, p);
+  if (!rect) return { pixelsChanged: 0 };
+  rec?.beforePaintWrite(rect);
+  const m = paint.metresPerPixel;
+  const r2 = p.radiusM * p.radiusM;
+  let changed = 0;
+  for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
+    const cz = paint.originZ + (pz + 0.5) * m;
+    for (let px = rect.minPx; px <= rect.maxPx; px++) {
+      const cx = paint.originX + (px + 0.5) * m;
+      const dx = cx - p.x;
+      const dz = cz - p.z;
+      if (dx * dx + dz * dz > r2) continue;
+      const i = pz * paint.width + px;
+      const v = write(paint.data[i]);
+      if (v !== paint.data[i]) {
+        paint.data[i] = v;
+        changed++;
+      }
+    }
+  }
+  return { rect, pixelsChanged: changed };
+}
+
+/** Paints `surface` on every pixel centre within the radius; road-flagged pixels are kept unless `overRoads`. */
+export function paintSurface(
+  paint: PaintMap,
+  params: BrushParams,
+  surface: SurfaceType,
+  opts: { road?: boolean; overRoads?: boolean } = {},
+  rec?: StrokeRecorder,
+): PaintResult {
+  if (!SURFACE_TYPES.includes(surface)) return { pixelsChanged: 0 };
+  const value = encodePaintValue(surface, opts.road === true);
+  return paintDisc(paint, params, rec, (old) =>
+    (old & PAINT_ROAD_FLAG) !== 0 && opts.overRoads !== true ? old : value,
+  );
+}
+
+/** Clears the road flag and resets to the area's ground surface inside the radius. */
+export function erasePaintDisc(
+  paint: PaintMap,
+  params: BrushParams,
+  groundSurface: SurfaceType,
+  rec?: StrokeRecorder,
+): PaintResult {
+  const value = encodePaintValue(groundSurface, false);
+  return paintDisc(paint, params, rec, () => value);
+}
+
+export function createStrokeRecorder(grid: TerrainGrid, paint: PaintMap): StrokeRecorder {
+  const heightBefore = new Map<number, number>();
+  const paintBefore = new Map<number, number>();
+  let graph: StrokeDiff["graph"];
+  const stride = grid.rows + 1;
+  return {
+    beforeHeightsWrite(w) {
+      const minRow = Math.max(0, w.minRow);
+      const maxRow = Math.min(grid.rows, w.maxRow);
+      const minCol = Math.max(0, w.minCol);
+      const maxCol = Math.min(grid.cols, w.maxCol);
+      for (let c = minCol; c <= maxCol; c++) {
+        for (let r = minRow; r <= maxRow; r++) {
+          const i = r + c * stride;
+          if (!heightBefore.has(i)) heightBefore.set(i, grid.heights[i]);
+        }
+      }
+    },
+    beforePaintWrite(rect) {
+      const minPx = Math.max(0, rect.minPx);
+      const maxPx = Math.min(paint.width - 1, rect.maxPx);
+      const minPz = Math.max(0, rect.minPz);
+      const maxPz = Math.min(paint.height - 1, rect.maxPz);
+      for (let pz = minPz; pz <= maxPz; pz++) {
+        for (let px = minPx; px <= maxPx; px++) {
+          const i = pz * paint.width + px;
+          if (!paintBefore.has(i)) paintBefore.set(i, paint.data[i]);
+        }
+      }
+    },
+    recordGraph(before, after, nextEdgeIdBefore, nextEdgeIdAfter) {
+      // First snapshot's "before" wins; the latest "after" wins.
+      graph = {
+        before: graph ? graph.before : before,
+        after,
+        nextEdgeIdBefore: graph ? graph.nextEdgeIdBefore : nextEdgeIdBefore,
+        nextEdgeIdAfter,
+      };
+    },
+    commit() {
+      let heights: StrokeDiff["heights"];
+      const hIdx: number[] = [];
+      for (const [i, v] of heightBefore) if (grid.heights[i] !== v) hIdx.push(i);
+      if (hIdx.length > 0) {
+        hIdx.sort((a, b) => a - b);
+        heights = {
+          indices: Uint32Array.from(hIdx),
+          before: Float32Array.from(hIdx, (i) => heightBefore.get(i) as number),
+          after: Float32Array.from(hIdx, (i) => grid.heights[i]),
+        };
+      }
+      let paintDiff: StrokeDiff["paint"];
+      const pIdx: number[] = [];
+      for (const [i, v] of paintBefore) if (paint.data[i] !== v) pIdx.push(i);
+      if (pIdx.length > 0) {
+        pIdx.sort((a, b) => a - b);
+        paintDiff = {
+          indices: Uint32Array.from(pIdx),
+          before: Uint8Array.from(pIdx, (i) => paintBefore.get(i) as number),
+          after: Uint8Array.from(pIdx, (i) => paint.data[i]),
+        };
+      }
+      const g = graph && graph.before !== graph.after ? graph : undefined;
+      heightBefore.clear();
+      paintBefore.clear();
+      graph = undefined;
+      if (!heights && !paintDiff && !g) return undefined;
+      return { heights, paint: paintDiff, graph: g };
+    },
+  };
+}
