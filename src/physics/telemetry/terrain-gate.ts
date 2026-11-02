@@ -5,7 +5,7 @@
  * flat-terrain baseline lane) in a throwaway Rapier world at the fixed 1/60
  * step and reports smoothness metrics. Every run owns its own `createWorld()`
  * and frees it in `finally` (T-02-06 precedent); callers pass `defaultTuning()`
- * -- there is no localStorage access anywhere in this path (Pitfall 8).
+ * -- no browser-saved tuning can leak into this path (Pitfall 8).
  *
  * Layering: may import `@dimforge/rapier3d` and `src/core/`. Must not import
  * `three`, touch the DOM, or read a wall clock.
