@@ -61,14 +61,14 @@ import { createVehicle, type Vehicle, type VehiclePose } from "./vehicle";
  * matches `surface-scene.ts`'s `SURFACE_SCENE_SPAWN` (0.6 m): the suspension
  * settles the rest of the way down on the first few ticks.
  */
-const SPAWN_CLEARANCE_M = 0.6;
+export const SPAWN_CLEARANCE_M = 0.6;
 
 /**
  * Building-collider friction matches the chassis collider's own friction
  * (`src/physics/vehicle.ts`, 0.8) so a collision reads as a wall, not ice --
  * the same value and reasoning `surface-scene.ts`'s `buildBuilding` documents.
  */
-const BUILDING_FRICTION = 0.8;
+export const BUILDING_FRICTION = 0.8;
 
 /**
  * Road-collider friction is a DELIBERATE constant, the SAME value on every
@@ -78,10 +78,10 @@ const BUILDING_FRICTION = 0.8;
  * for an oversight (verbatim reasoning from `surface-scene.ts`'s
  * `buildSurfaceZone`).
  */
-const ROAD_FRICTION = 1.0;
+export const ROAD_FRICTION = 1.0;
 
 /** The one spawn id `createMapScene` looks for (plan 04-08's `<action>`; other named spawns are reserved for future mode-specific starts, not this plan). */
-const DEFAULT_SPAWN_ID = "default";
+export const DEFAULT_SPAWN_ID = "default";
 
 /**
  * Mirrors `SurfaceScene`'s contract (`src/physics/surface-scene.ts`) exactly,
@@ -121,7 +121,7 @@ export interface MapScene {
 }
 
 /** Builds a Y-axis rotation quaternion for angle `rad`, in the SAME convention `src/physics/vehicle.ts`'s `rotateVec` documents (local +X maps to world `(cos rad, 0, -sin rad)`). */
-function yRotationQuat(rad: number): { x: number; y: number; z: number; w: number } {
+export function yRotationQuat(rad: number): { x: number; y: number; z: number; w: number } {
   return { x: 0, y: Math.sin(rad / 2), z: 0, w: Math.cos(rad / 2) };
 }
 
@@ -291,7 +291,7 @@ function buildRoadColliders(
  * documented contract -- `center` is the box's vertical MIDPOINT, so the body
  * translation IS `building.center` with no adjustment.
  */
-function buildBuildingCollider(world: RAPIER.World, building: MapCollisionBuilding): void {
+export function buildBuildingCollider(world: RAPIER.World, building: MapCollisionBuilding): void {
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.fixed()
       .setTranslation(building.center.x, building.center.y, building.center.z)

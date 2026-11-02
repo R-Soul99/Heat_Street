@@ -405,6 +405,8 @@ export function createVehicle(
   /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
   const lastSuspensionLength = [0.45, 0.45, 0.45, 0.45];
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+  /** Scratch target for `wheelContactPoint` (paint-map surface lookup): no per-tick allocation. */
+  const contactScratch = { x: 0, y: 0, z: 0 };
   const rearGrip = {
     sideFriction: 0,
     dominant: "none" as RearGripTerm,
@@ -483,7 +485,15 @@ export function createVehicle(
       if (surfaces) {
         for (let i = 0; i < 4; i++) {
           const ground = vc.wheelGroundObject(i);
-          const surface = surfaces.map.lookup(ground?.handle);
+          const paint = surfaces.paint;
+          let surface: SurfaceType;
+          if (paint !== undefined && ground !== null && ground.handle === paint.colliderHandle) {
+            const p = vc.wheelContactPoint(i, contactScratch);
+            // Null contact (airborne): keep the previous surface.
+            surface = p === null ? (wheelSurfaces[i] as SurfaceType) : paint.surfaceAt(p.x, p.z);
+          } else {
+            surface = surfaces.map.lookup(ground?.handle);
+          }
           wheelSurfaces[i] = surface;
           const profile = surfaces.profiles[surface];
           vc.setWheelFrictionSlip(i, t.wheels.frictionSlip * profile.forwardGrip);
