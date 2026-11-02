@@ -62,10 +62,14 @@ describe("demo-hills and formats", () => {
     expect(resolveMapId("?map=demo-hills")).toBe("demo-hills");
     expect(MAP_LABELS["demo-hills"]).toBe("Demo hills (sculpted)");
   });
-  it("formats: demo-hills is terrain, all others legacy", () => {
+  it("formats: migrated maps are terrain, the rest stay legacy (D-08)", () => {
+    const terrain = ["demo-hills", "feel-test", "grid-test", "juliette-ga"];
     for (const id of KNOWN_MAP_IDS) {
-      expect(MAP_FORMATS[id]).toBe(id === "demo-hills" ? "terrain" : "legacy");
+      expect(MAP_FORMATS[id]).toBe(terrain.includes(id) ? "terrain" : "legacy");
     }
+    expect(MAP_FORMATS["my-map"]).toBe("legacy");
+    expect(MAP_FORMATS["newton-poppleford"]).toBe("legacy");
+    expect(MAP_FORMATS["skidders-and-popp"]).toBe("legacy");
   });
 });
 
