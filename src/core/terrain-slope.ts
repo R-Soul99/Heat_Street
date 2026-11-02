@@ -112,7 +112,7 @@ function sweep(
   let any = false;
 
   const relax = (i: number, ni: number, lim: number): void => {
-    if (mask && mask[i]) return;
+    if (mask?.[i]) return;
     const hn = h[ni];
     let v = h[i];
     const hi = hn + lim;
