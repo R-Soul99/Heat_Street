@@ -24,17 +24,20 @@
  * Hardening (T-04.2-06..09): every size is checked against caps and the exact
  * byte length BEFORE allocating; inflation aborts once it exceeds the declared
  * paint size; the sidecar is rebuilt field by field (no spread / assign from
- * parsed data); decoded arrays are fresh copies, never views into the input.
+ * parsed data) and its crest, ramp and building numbers are range-checked
+ * (WR-08: they size allocations and Rapier shapes); decoded arrays are fresh
+ * copies, never views into the input.
  *
  * Layering: pure core. CompressionStream/DecompressionStream are platform
  * globals (browsers and Node 24).
  */
 
-import type { AuthoredCrest, RampSpec } from "./crest-geometry.ts";
+import { type AuthoredCrest, type RampSpec, rampLengthM } from "./crest-geometry.ts";
 import type { MapCollisionBuilding } from "./map-collision.ts";
 import { parseRoadGraph, type RoadGraph } from "./road-graph.ts";
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import { createTerrainGrid, type TerrainGrid } from "./terrain-grid.ts";
+import { MAX_AREA_SIZE_M } from "./terrain-limits.ts";
 import { MAX_PAINT_PIXELS, type PaintMap } from "./terrain-paint.ts";
 
 export const TERRAIN_MAGIC = "HSTR";
@@ -424,13 +427,42 @@ function reqVec3(label: string, o: Rec, key: string, ctx: string) {
   return { x: reqNum(label, r, "x", c), y: reqNum(label, r, "y", c), z: reqNum(label, r, "z", c) };
 }
 
+/**
+ * WR-08: a finite number inside `(min, max]` (or `[min, max]` when
+ * `minInclusive`). Consumers allocate from these values (ramp length ->
+ * Float32Array size) or hand them to Rapier, so "finite" alone is not enough.
+ */
+function reqRange(
+  label: string,
+  o: Rec,
+  key: string,
+  ctx: string,
+  min: number,
+  max: number,
+  minInclusive = false,
+): number {
+  const v = reqNum(label, o, key, ctx);
+  const okMin = minInclusive ? v >= min : v > min;
+  if (!okMin || v > max) {
+    fail(label, `${ctx}.${key} must be in ${minInclusive ? "[" : "("}${min}, ${max}], got ${v}`);
+  }
+  return v;
+}
+
+/** Largest crest / ramp height accepted from a sidecar (m). */
+const MAX_CREST_HEIGHT_M = 200;
+
 function parseRamp(label: string, raw: unknown, ctx: string): RampSpec {
   if (!isRec(raw)) fail(label, `${ctx} must be an object`);
+  const angleDeg = reqNum(label, raw, "angleDeg", ctx);
+  if (!(angleDeg > 0 && angleDeg < 90)) {
+    fail(label, `${ctx}.angleDeg must be in (0, 90), got ${angleDeg}`);
+  }
   return {
     headingRad: reqNum(label, raw, "headingRad", ctx),
-    widthM: reqNum(label, raw, "widthM", ctx),
-    angleDeg: reqNum(label, raw, "angleDeg", ctx),
-    footRadiusM: reqNum(label, raw, "footRadiusM", ctx),
+    widthM: reqRange(label, raw, "widthM", ctx, 0, MAX_AREA_SIZE_M),
+    angleDeg,
+    footRadiusM: reqRange(label, raw, "footRadiusM", ctx, 0, MAX_AREA_SIZE_M, true),
   };
 }
 
@@ -439,24 +471,36 @@ function parseObject(label: string, raw: unknown, index: number): TerrainObject 
   if (!isRec(raw)) fail(label, `${ctx} must be an object`);
   const kind = raw.kind;
   if (kind !== "crest") fail(label, `${ctx}.kind unknown object kind ${JSON.stringify(kind)}`);
+  const isRamp = raw.ramp !== undefined;
   const base = {
     id: reqStr(label, raw, "id", ctx),
     centerX: reqNum(label, raw, "centerX", ctx),
     centerZ: reqNum(label, raw, "centerZ", ctx),
-    radiusM: reqNum(label, raw, "radiusM", ctx),
-    heightM: reqNum(label, raw, "heightM", ctx),
+    // A ramp derives its length from the ramp spec; radiusM is unused (0).
+    radiusM: reqRange(label, raw, "radiusM", ctx, 0, MAX_AREA_SIZE_M, isRamp),
+    heightM: reqRange(label, raw, "heightM", ctx, 0, MAX_CREST_HEIGHT_M),
   };
-  const crest: AuthoredCrest =
-    raw.ramp === undefined ? base : { ...base, ramp: parseRamp(label, raw.ramp, `${ctx}.ramp`) };
-  return { kind: "crest", crest };
+  if (!isRamp) return { kind: "crest", crest: base };
+  const ramp = parseRamp(label, raw.ramp, `${ctx}.ramp`);
+  const length = rampLengthM(base.heightM, ramp);
+  if (!(Number.isFinite(length) && length <= MAX_AREA_SIZE_M)) {
+    fail(label, `${ctx}.ramp is ${length} m long, max ${MAX_AREA_SIZE_M} (angle too shallow?)`);
+  }
+  return { kind: "crest", crest: { ...base, ramp } };
 }
 
 function parseBuilding(label: string, raw: unknown, index: number): MapCollisionBuilding {
   const ctx = `buildings[${index}]`;
   if (!isRec(raw)) fail(label, `${ctx} must be an object`);
+  const he = reqRec(label, raw, "halfExtents", ctx);
+  const hctx = `${ctx}.halfExtents`;
   return {
     center: reqVec3(label, raw, "center", ctx),
-    halfExtents: reqVec3(label, raw, "halfExtents", ctx),
+    halfExtents: {
+      x: reqRange(label, he, "x", hctx, 0, MAX_AREA_SIZE_M),
+      y: reqRange(label, he, "y", hctx, 0, MAX_AREA_SIZE_M),
+      z: reqRange(label, he, "z", hctx, 0, MAX_AREA_SIZE_M),
+    },
     rotationY: reqNum(label, raw, "rotationY", ctx),
   };
 }
@@ -557,6 +601,13 @@ export function parseTerrainSidecar(
   if (!Array.isArray(parsed.objects)) fail(sourceLabel, "root.objects must be an array");
   if (!Array.isArray(parsed.buildings)) fail(sourceLabel, "root.buildings must be an array");
   const objects = parsed.objects.map((o, i) => parseObject(sourceLabel, o, i));
+  const crestIds = new Set<string>();
+  for (const [i, o] of objects.entries()) {
+    if (crestIds.has(o.crest.id)) {
+      fail(sourceLabel, `objects[${i}].id duplicate crest id ${JSON.stringify(o.crest.id)}`);
+    }
+    crestIds.add(o.crest.id);
+  }
   const buildings = parsed.buildings.map((b, i) => parseBuilding(sourceLabel, b, i));
 
   return {

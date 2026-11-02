@@ -344,6 +344,29 @@ describe("terrain sidecar", () => {
     expect(() => parseTerrainSidecar(inf, "t-area", "t.json")).toThrow(/finite/);
   });
 
+  it("WR-08: range-checks crest, ramp and building numbers and rejects duplicate crest ids", () => {
+    const p = (t: string) => () => parseTerrainSidecar(t, "t-area", "t.json");
+    type O = Record<string, unknown>;
+    const obj = (o: O, i: number) => (o.objects as O[])[i];
+    const ramp = (o: O) => obj(o, 1).ramp as O;
+    const he = (o: O) => (o.buildings as O[])[0].halfExtents as O;
+    // Ramp angle 0 made rampLengthM Infinity -> new Float32Array(Infinity) at boot.
+    expect(p(mutate((o) => (ramp(o).angleDeg = 0)))).toThrow(/angleDeg must be in \(0, 90\)/);
+    expect(p(mutate((o) => (ramp(o).angleDeg = 90)))).toThrow(/angleDeg/);
+    // A tiny angle gives a multi-kilometre ramp: rejected by length.
+    expect(p(mutate((o) => (ramp(o).angleDeg = 1e-6)))).toThrow(/ramp is .* m long/);
+    expect(p(mutate((o) => (ramp(o).widthM = 0)))).toThrow(/widthM/);
+    expect(p(mutate((o) => (ramp(o).footRadiusM = -1)))).toThrow(/footRadiusM/);
+    expect(p(mutate((o) => (obj(o, 0).radiusM = 0)))).toThrow(/radiusM/);
+    expect(p(mutate((o) => (obj(o, 0).heightM = 0)))).toThrow(/heightM/);
+    expect(p(mutate((o) => (obj(o, 0).heightM = 5000)))).toThrow(/heightM/);
+    expect(p(mutate((o) => (he(o).y = 0)))).toThrow(/halfExtents\.y/);
+    expect(p(mutate((o) => (he(o).x = -2)))).toThrow(/halfExtents\.x/);
+    expect(p(mutate((o) => (obj(o, 1).id = "c1")))).toThrow(/duplicate crest id/);
+    // A ramp keeps radiusM 0 (unused), and the sample still parses.
+    expect(p(serializeTerrainSidecar(sampleArea()))).not.toThrow();
+  });
+
   it("is not polluted by __proto__ payloads", () => {
     const text = serializeTerrainSidecar(sampleArea())
       .replace(
