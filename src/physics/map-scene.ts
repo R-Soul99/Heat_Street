@@ -52,8 +52,16 @@ import {
 } from "../core/shoulder-clearance";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
+import type { TerrainGrid } from "../core/terrain-grid";
+import type { PaintMap } from "../core/terrain-paint";
 import type { VehicleTuning } from "../core/vehicle-tuning";
-import { createSurfaceMap, type SurfaceContext, type SurfaceMap } from "./surface";
+import {
+  createSurfaceMap,
+  type SurfaceContext,
+  type SurfaceMap,
+  type SurfacePaintLookup,
+} from "./surface";
+import { buildTerrainCollider } from "./terrain-scene";
 import { createVehicle, type Vehicle, type VehiclePose } from "./vehicle";
 
 /**
@@ -356,6 +364,7 @@ export function createMapScene(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
   frontDriveShare = 0,
+  extraTerrain?: { readonly grid: TerrainGrid; readonly paint: PaintMap },
 ): MapScene {
   const surfaceMap = createSurfaceMap();
 
@@ -384,6 +393,19 @@ export function createMapScene(
     buildBuildingCollider(world, building);
   }
 
+  // Optional extra terrain (04.2 prototype gate course, debug `&gate` only):
+  // one more heightfield collider with a position-based paint lookup. Absent
+  // = scene unchanged.
+  let paintLookup: SurfacePaintLookup | undefined;
+  if (extraTerrain !== undefined) {
+    paintLookup = buildTerrainCollider(
+      world,
+      extraTerrain.grid,
+      extraTerrain.paint,
+      groundSurfaceForArea(collision.areaId),
+    ).paint;
+  }
+
   const spawn = resolveSpawn(graph);
   const vehicle = createVehicle(world, tuning, spawn, frontDriveShare);
   const defaultSpawnPose: VehiclePose = spawn;
@@ -394,10 +416,10 @@ export function createMapScene(
   // tick. `setSurfaceProfiles` swaps `.profiles` in place, never reallocates
   // `.map` -- matching `SurfaceMap`'s own "allocate once, mutate in place"
   // discipline (src/physics/surface.ts), same as surface-scene.ts.
-  const surfaceContext: { map: SurfaceMap; profiles: SurfaceProfiles } = {
-    map: surfaceMap,
-    profiles,
-  };
+  const surfaceContext: { map: SurfaceMap; profiles: SurfaceProfiles; paint?: SurfacePaintLookup } =
+    paintLookup === undefined
+      ? { map: surfaceMap, profiles }
+      : { map: surfaceMap, profiles, paint: paintLookup };
 
   // `bodies` contains the chassis body and NOTHING else -- road and building
   // bodies are all fixed with no mesh counterpart tracked here (the compiled

@@ -70,6 +70,9 @@ import {
   SURFACE_TUNING_STORAGE_KEY,
 } from "./core/surface-tuning";
 import type { SurfaceType } from "./core/surface-types";
+import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
+import { sampleTerrainHeight, upsampleTerrainGrid } from "./core/terrain-grid";
+import { DEFAULT_COLLIDER_SUBDIV } from "./core/terrain-limits";
 import { tyreSlipRatio } from "./core/tyre-slip";
 import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./core/vehicle-class";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
@@ -101,7 +104,7 @@ import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
 import { createAiFleet } from "./physics/ai-fleet";
 import { createGroundProbe } from "./physics/ground-probe";
-import { createMapScene } from "./physics/map-scene";
+import { createMapScene, SPAWN_CLEARANCE_M } from "./physics/map-scene";
 import { TransformCache } from "./physics/transform-cache";
 import { createWorld } from "./physics/world";
 import { createAiVehicleViews } from "./render/ai-vehicle-view";
@@ -124,6 +127,7 @@ import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
 import { createStationMarkers } from "./render/station-markers";
 import { createSurfaceFx } from "./render/surface-fx";
+import { buildTerrainView } from "./render/terrain-view";
 import { createVehicleView } from "./render/vehicle-view";
 
 const canvasElement = document.getElementById("game");
@@ -263,6 +267,17 @@ try {
   const collision = parseMapCollision(collisionText, graph.areaId, MAP_COLLISION_URL);
   const mapView = await loadMapView(MAP_GLB_URL);
 
+  // 04.2 prototype gate (debug only): `?map=feel-test&gate` adds the gate
+  // course as an extra heightfield. Plain feel-test builds nothing extra.
+  const GATE_ENABLED = AREA_ID === "feel-test" && new URLSearchParams(location.search).has("gate");
+  const gate = GATE_ENABLED ? buildGateCourse() : undefined;
+  const gatePhysicsGrid =
+    gate === undefined
+      ? undefined
+      : DEFAULT_COLLIDER_SUBDIV === 2
+        ? upsampleTerrainGrid(gate.grid, 2)
+        : gate.grid;
+
   const scene = createMapScene(
     world,
     graph,
@@ -270,6 +285,9 @@ try {
     tuning,
     surfaceProfiles,
     CAR_CLASS.frontDriveShare,
+    gate === undefined || gatePhysicsGrid === undefined
+      ? undefined
+      : { grid: gatePhysicsGrid, paint: gate.paint },
   );
 
   // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
@@ -346,6 +364,11 @@ try {
     { includePhase2Ground: false, groundExtents, chassisColor: CAR_CLASS.chassisColor },
   );
   view.scene.add(mapView.group);
+  const gateView =
+    gate === undefined || gatePhysicsGrid === undefined
+      ? undefined
+      : buildTerrainView(gatePhysicsGrid, gate.paint);
+  if (gateView !== undefined) view.scene.add(gateView.group);
 
   // Circuit Race only: 3 recolored AI car mesh sets added directly into THIS
   // scene (never a 4th `createVehicleView` call — RESEARCH.md Pitfall 6),
@@ -852,6 +875,27 @@ try {
     });
   }
 
+  if (gatePhysicsGrid !== undefined) {
+    const grid = gatePhysicsGrid;
+    const spawnOrder = [GATE_SPAWNS.laneA, GATE_SPAWNS.laneC, GATE_SPAWNS.cap] as const;
+    const toGateSpawn = (i: number): void => {
+      const sp = spawnOrder[i];
+      scene.resetVehicle({
+        x: sp.x,
+        y: sampleTerrainHeight(grid, sp.x, sp.z) + SPAWN_CLEARANCE_M,
+        z: sp.z,
+        headingRad: sp.headingRad,
+      });
+      transforms.snapBody(0);
+    };
+    let gateSpawnIndex = 0;
+    toGateSpawn(gateSpawnIndex);
+    onDebugKey("KeyJ", () => {
+      gateSpawnIndex = (gateSpawnIndex + 1) % spawnOrder.length;
+      toGateSpawn(gateSpawnIndex);
+    });
+  }
+
   loopClock = startLoop({
     world,
     input,
@@ -907,6 +951,10 @@ try {
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
+      if (gateView !== undefined) {
+        const gp = view.meshes[0].position;
+        gateView.updateTextures(gp.x, gp.z);
+      }
       if (carShadow !== undefined && groundProbe !== undefined) {
         const p = view.meshes[0].position;
         carShadow.update(view.meshes[0], groundProbe(p.x, p.y + 0.5, p.z));

@@ -14,6 +14,7 @@ import { type MapCollision, parseMapCollision } from "../src/core/map-collision"
 import { buildRoadGeometry } from "../src/core/road-geometry";
 import { parseRoadGraph, type RoadGraph } from "../src/core/road-graph";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
+import { buildGateCourse } from "../src/core/terrain-gate-course";
 import { defaultTuning } from "../src/core/vehicle-tuning";
 import { createMapScene } from "../src/physics/map-scene";
 // Read directly (not via import.meta.glob) so a single grep-style assertion
@@ -468,5 +469,32 @@ describe("createMapScene: SC1, the settle proof", () => {
     const sample = sampleVehicle(scene.vehicle);
     expect(Math.abs(sample.position.y - spawnY)).toBeLessThanOrEqual(1);
     expect(sample.tiltDeg).toBeLessThanOrEqual(15);
+  });
+});
+
+describe("createMapScene: optional extraTerrain (04.2 gate course)", () => {
+  it("adds exactly one heightfield collider and a paint lookup; absent leaves the scene unchanged", () => {
+    const base = buildScene();
+    const baseCount = collidersInOrder(base.world).length;
+    expect(base.scene.surfaces.paint).toBeUndefined();
+
+    const gate = buildGateCourse();
+    const world = createWorld();
+    const scene = createMapScene(
+      world,
+      graph,
+      collision,
+      defaultTuning(),
+      defaultSurfaceProfiles(),
+      0,
+      { grid: gate.grid, paint: gate.paint },
+    );
+    const all = collidersInOrder(world);
+    expect(all.length).toBe(baseCount + 1);
+    expect(all.filter((c) => c.shape.type === RAPIER.ShapeType.HeightField).length).toBe(
+      collidersInOrder(base.world).filter((c) => c.shape.type === RAPIER.ShapeType.HeightField)
+        .length + 1,
+    );
+    expect(scene.surfaces.paint).toBeDefined();
   });
 });

@@ -29,13 +29,11 @@ export const GATE_FLOORS = {
 export const GATE_RAMP_BAND = { id: "ramp", maxTerrainTiltDeg: 26 } as const;
 
 /** Flat-regression pass rule: 1% vs legacy, except `ramp` which uses the absolute band. */
-export function flatRegressionPasses(r: {
-  id: string;
-  legacy: number;
-  terrain: number;
-}): boolean {
+export function flatRegressionPasses(r: { id: string; legacy: number; terrain: number }): boolean {
   if (r.id === GATE_RAMP_BAND.id) {
-    return Number.isFinite(r.terrain) && r.terrain >= 0 && r.terrain <= GATE_RAMP_BAND.maxTerrainTiltDeg;
+    return (
+      Number.isFinite(r.terrain) && r.terrain >= 0 && r.terrain <= GATE_RAMP_BAND.maxTerrainTiltDeg
+    );
   }
   return relativeDiff(r.legacy, r.terrain) <= GATE_FACTORS.flatTolerance;
 }
