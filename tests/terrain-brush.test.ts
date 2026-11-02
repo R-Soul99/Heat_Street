@@ -94,6 +94,27 @@ describe("raiseLower", () => {
     expect(clamped).toBe(true);
     expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
   });
+
+  it("WR-03: a tiny dab on pre-existing over-cap terrain changes nothing outside its radius", () => {
+    // Converted-DEM style: a uniform 45 degree slope, already steeper than the cap.
+    const g = grid();
+    for (let c = 0; c <= g.cols; c++) {
+      for (let r = 0; r <= g.rows; r++) g.heights[terrainIndex(g, r, c)] = c * 3;
+    }
+    const before = Float32Array.from(g.heights);
+    const radiusM = 4;
+    raiseLower(g, brush({ radiusM, strength: 0.01 }), 1, 1);
+    let changed = 0;
+    for (let c = 0; c <= g.cols; c++) {
+      for (let r = 0; r <= g.rows; r++) {
+        const i = terrainIndex(g, r, c);
+        if (g.heights[i] === before[i]) continue;
+        changed++;
+        expect(Math.hypot(c * 3 - 90, r * 3 - 90)).toBeLessThanOrEqual(radiusM);
+      }
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
 });
 
 describe("smooth and flatten", () => {

@@ -87,6 +87,8 @@ export interface HeightOpOptions {
 export const MIN_RADIUS_M = 0.5;
 export const MAX_RADIUS_M = 200;
 const RELAX = 0.25;
+/** A pair only counts as pre-existing over-cap beyond this (Float32 / 0.01 m save quantisation noise). */
+const PREEXISTING_TOL_M = 0.02;
 
 const NO_OP: BrushResult = { slopeClamped: false };
 
@@ -126,6 +128,52 @@ function circleWindow(grid: TerrainGrid, x: number, z: number, r: number): CellW
     maxCol: Math.min(grid.cols, c1),
   };
   return w.minRow > w.maxRow || w.minCol > w.maxCol ? null : w;
+}
+
+/**
+ * WR-03: the limiter must only undo steepness the op itself created. Every
+ * vertex in `win` that the op does not change and that already sits in an
+ * over-cap pair (converted DEM terrain, old road shoulders) is frozen as a
+ * fixed source, so a 1 cm dab never reshapes pre-existing cliffs across the
+ * expanded window. Must run while `grid.heights` is still the pre-op state.
+ * Returns `into` (or a new grid-sized mask when something was frozen).
+ */
+function freezePreexistingSteep(
+  grid: TerrainGrid,
+  win: CellWindow,
+  opChanged: (r: number, c: number) => boolean,
+  into: Uint8Array | undefined,
+): Uint8Array | undefined {
+  const stride = grid.rows + 1;
+  const h = grid.heights;
+  const axis = Math.tan((MAX_SLOPE_DEG * Math.PI) / 180) * grid.cellSizeM;
+  const d = axis + PREEXISTING_TOL_M;
+  const dd = axis * Math.SQRT2 + PREEXISTING_TOL_M;
+  let mask = into;
+  for (let c = win.minCol; c <= win.maxCol; c++) {
+    for (let r = win.minRow; r <= win.maxRow; r++) {
+      const i = r + c * stride;
+      if (mask?.[i] || opChanged(r, c)) continue;
+      let steep = false;
+      for (let dc = -1; dc <= 1 && !steep; dc++) {
+        const nc = c + dc;
+        if (nc < 0 || nc > grid.cols) continue;
+        for (let dr = -1; dr <= 1; dr++) {
+          const nr = r + dr;
+          if ((dr === 0 && dc === 0) || nr < 0 || nr > grid.rows) continue;
+          if (Math.abs(h[i] - h[nr + nc * stride]) > (dr !== 0 && dc !== 0 ? dd : d)) {
+            steep = true;
+            break;
+          }
+        }
+      }
+      if (steep) {
+        mask ??= new Uint8Array(h.length);
+        mask[i] = 1;
+      }
+    }
+  }
+  return mask;
 }
 
 /** The shared height-op pipeline. `compute` returns the new height for a vertex (or `h` to leave it). */
@@ -180,6 +228,16 @@ function runHeightOp(
   );
   rec?.beforeHeightsWrite(dirty);
 
+  // WR-03: computed before the write, while `grid.heights` is still pre-op.
+  const opChanged = (r: number, c: number): boolean => {
+    if (r < touched.minRow || r > touched.maxRow || c < touched.minCol || c > touched.maxCol) {
+      return false;
+    }
+    const kk = r - touched.minRow + (c - touched.minCol) * rowsN;
+    return Math.fround(next[kk]) !== old[kk];
+  };
+  const limiterMask = freezePreexistingSteep(grid, dirty, opChanged, opts.roadMask?.(dirty));
+
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
     for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
@@ -219,7 +277,7 @@ function runHeightOp(
     }
   }
 
-  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: opts.roadMask?.(dirty) });
+  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: limiterMask });
   return { window: dirty, slopeClamped: res.changed.length > 0 };
 }
 

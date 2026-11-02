@@ -82,6 +82,24 @@ describe("limitSlope", () => {
     }
   });
 
+  it("WR-03: reads the ring outside the window as fixed sources, so the border never steps", () => {
+    const g = flat();
+    const win = { minRow: 10, minCol: 10, maxRow: 30, maxCol: 30 };
+    // A 20 m block inside the window on flat ground: a cliff at the window edge.
+    for (let c = 10; c <= 30; c++)
+      for (let r = 10; r <= 30; r++) g.heights[terrainIndex(g, r, c)] = 20;
+    const before = new Float32Array(g.heights);
+    limitSlope(g, win, { maxSlopeDeg: 35 });
+    for (let c = 0; c <= g.cols; c++) {
+      for (let r = 0; r <= g.rows; r++) {
+        const inside = r >= 10 && r <= 30 && c >= 10 && c <= 30;
+        const i = terrainIndex(g, r, c);
+        if (!inside) expect(g.heights[i]).toBe(before[i]);
+      }
+    }
+    assertCap(g);
+  });
+
   it("never moves masked road cells and reports unsatisfiable constraints", () => {
     const g = flat();
     const mask = new Uint8Array(g.heights.length);

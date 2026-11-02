@@ -16,7 +16,9 @@
  * Violations that remain around road cells are reported, not forced.
  *
  * Layering: pure core, no three/rapier/DOM. Never touches vertices outside the
- * window (no global pass per stroke).
+ * window (no global pass per stroke); the one-vertex ring just outside it is
+ * read as fixed sources so the window border never steps away from its
+ * unchanged neighbours (WR-03).
  */
 
 import type { TerrainGrid } from "./terrain-grid.ts";
@@ -98,10 +100,15 @@ export function maxSlopeDegIn(grid: TerrainGrid, win: CellWindow): number {
 
 type Mode = "down" | "up" | "both";
 
-/** Forward + backward chamfer sweeps; returns true if any vertex changed. */
+/**
+ * Forward + backward chamfer sweeps over `w` (which may include a read-only
+ * source ring around the write window `ww`); returns true if any vertex changed.
+ * Only vertices inside `ww` and not masked are ever written.
+ */
 function sweep(
   grid: TerrainGrid,
   w: CellWindow,
+  ww: CellWindow,
   d: number,
   mode: Mode,
   mask: Uint8Array | undefined,
@@ -128,8 +135,10 @@ function sweep(
     }
   };
 
-  for (let c = w.minCol; c <= w.maxCol; c++) {
-    for (let r = w.minRow; r <= w.maxRow; r++) {
+  // Only vertices of the write window are visited (relax writes the visited
+  // vertex only); neighbours are read from the wider sweep window `w`.
+  for (let c = ww.minCol; c <= ww.maxCol; c++) {
+    for (let r = ww.minRow; r <= ww.maxRow; r++) {
       const i = r + c * stride;
       if (c > w.minCol) relax(i, i - stride, d);
       if (r > w.minRow) {
@@ -139,8 +148,8 @@ function sweep(
       }
     }
   }
-  for (let c = w.maxCol; c >= w.minCol; c--) {
-    for (let r = w.maxRow; r >= w.minRow; r--) {
+  for (let c = ww.maxCol; c >= ww.minCol; c--) {
+    for (let r = ww.maxRow; r >= ww.minRow; r--) {
       const i = r + c * stride;
       if (c < w.maxCol) relax(i, i + stride, d);
       if (r < w.maxRow) {
@@ -156,13 +165,14 @@ function sweep(
 function runMode(
   grid: TerrainGrid,
   w: CellWindow,
+  ww: CellWindow,
   d: number,
   mode: Mode,
   mask: Uint8Array | undefined,
   iterations: number,
 ): void {
   for (let k = 0; k < iterations; k++) {
-    if (!sweep(grid, w, d, mode, mask)) break;
+    if (!sweep(grid, w, ww, d, mode, mask)) break;
   }
 }
 
@@ -200,18 +210,19 @@ function restore(grid: TerrainGrid, w: CellWindow, snap: Float32Array): void {
   }
 }
 
-function countRoadViolations(
+/** Over-cap pairs inside `w`; only pairs touching a masked vertex when `mask` is given. */
+function countViolations(
   grid: TerrainGrid,
   w: CellWindow,
   d: number,
-  mask: Uint8Array,
+  mask: Uint8Array | undefined,
 ): number {
   const stride = grid.rows + 1;
   const h = grid.heights;
   const tol = 1e-4;
   let n = 0;
   const check = (i: number, j: number, lim: number): void => {
-    if ((mask[i] || mask[j]) && Math.abs(h[i] - h[j]) > lim + tol) n++;
+    if ((!mask || mask[i] || mask[j]) && Math.abs(h[i] - h[j]) > lim + tol) n++;
   };
   for (let c = w.minCol; c <= w.maxCol; c++) {
     for (let r = w.minRow; r <= w.maxRow; r++) {
@@ -241,23 +252,43 @@ export function limitSlope(
   const mask = opts.mask;
   const d = Math.max(0, Math.tan((slopeDeg * Math.PI) / 180) * grid.cellSizeM - EPS_M);
 
+  // WR-03: the one-vertex ring just outside the window is read as fixed
+  // sources, so border vertices stay within the cap of their (unchanged)
+  // outside neighbours instead of stepping away from them.
+  const ring = clampWindow(
+    { minRow: w.minRow - 1, minCol: w.minCol - 1, maxRow: w.maxRow + 1, maxCol: w.maxCol + 1 },
+    grid,
+  );
+  const hasRing =
+    ring.minRow < w.minRow ||
+    ring.minCol < w.minCol ||
+    ring.maxRow > w.maxRow ||
+    ring.maxCol > w.maxCol;
+
   const original = snapshot(grid, w);
 
   // Try lowering the high cells, then raising the low cells; keep the cheaper.
-  runMode(grid, w, d, "down", mask, iterations);
+  // With a fixed ring, one direction may be unable to satisfy the ring (e.g. a
+  // block above its surroundings cannot be fixed by raising), so the result
+  // that leaves fewer violations wins first, then the cheaper one.
+  runMode(grid, ring, w, d, "down", mask, iterations);
   const downCost = totalDifference(grid, w, original);
   if (downCost > 0) {
     const downResult = snapshot(grid, w);
+    const downBad = hasRing ? countViolations(grid, ring, d, undefined) : 0;
     restore(grid, w, original);
-    runMode(grid, w, d, "up", mask, iterations);
+    runMode(grid, ring, w, d, "up", mask, iterations);
     const upCost = totalDifference(grid, w, original);
-    if (downCost <= upCost) restore(grid, w, downResult);
+    const upBad = hasRing ? countViolations(grid, ring, d, undefined) : 0;
+    const preferDown = downBad !== upBad ? downBad < upBad : downCost <= upCost;
+    if (preferDown) restore(grid, w, downResult);
   } else {
     // Nothing needed lowering; check for pits.
-    runMode(grid, w, d, "up", mask, iterations);
+    runMode(grid, ring, w, d, "up", mask, iterations);
   }
-  // Reconcile around road sources (a no-op without a mask once one side is done).
-  if (mask) runMode(grid, w, d, "both", mask, iterations);
+  // Reconcile around fixed sources (road cells and the outside ring); a no-op
+  // without either once one side is done.
+  if (mask || hasRing) runMode(grid, ring, w, d, "both", mask, iterations);
 
   const stride = grid.rows + 1;
   const rowsN = w.maxRow - w.minRow + 1;
@@ -271,6 +302,6 @@ export function limitSlope(
   }
   return {
     changed: Uint32Array.from(changed),
-    roadViolations: mask ? countRoadViolations(grid, w, d, mask) : 0,
+    roadViolations: mask ? countViolations(grid, w, d, mask) : 0,
   };
 }
