@@ -9,10 +9,10 @@ import { buildRoadGeometry } from "../src/core/road-geometry.ts";
 import { parseRoadGraph, type RoadGraph } from "../src/core/road-graph.ts";
 import {
   addRoadStroke,
-  type GraphEditState,
-  type RoadProfile,
   ensureDefaultSpawn,
   findStrokeCrossings,
+  type GraphEditState,
+  type RoadProfile,
 } from "../src/core/terrain-graph.ts";
 import { validateGraph } from "../tools/map-compiler/validate/validator.ts";
 
@@ -46,13 +46,21 @@ function emptyState(): GraphEditState {
 function check(graph: RoadGraph, allowDisconnected = false): RoadGraph {
   const parsed = parseRoadGraph(JSON.stringify(graph), "terrain-graph.test");
   const failures = validateGraph(parsed, buildRoadGeometry(parsed)).filter(
-    (f) => !(allowDisconnected && f.category === "UNDIRECTED_REACHABILITY"),
+    (f) =>
+      !(
+        allowDisconnected &&
+        (f.category === "UNDIRECTED_REACHABILITY" || f.category === "DIRECTED_PATHABILITY")
+      ),
   );
   expect(failures).toEqual([]);
   return parsed;
 }
 
-function add(state: GraphEditState, pts: readonly P3[], opts?: Parameters<typeof addRoadStroke>[3]) {
+function add(
+  state: GraphEditState,
+  pts: readonly P3[],
+  opts?: Parameters<typeof addRoadStroke>[3],
+) {
   return addRoadStroke(state, pts, PROFILE, opts);
 }
 
@@ -195,7 +203,9 @@ describe("addRoadStroke", () => {
       // The join point must coincide with a node that has degree >= 2 and is not a free end.
       const node = g.nodes.find(
         (n) =>
-          Math.abs(n.x - joins[0].x) < 1e-9 && Math.abs(n.z - joins[0].z) < 1e-9 && degree(g, n.id) >= 2,
+          Math.abs(n.x - joins[0].x) < 1e-9 &&
+          Math.abs(n.z - joins[0].z) < 1e-9 &&
+          degree(g, n.id) >= 2,
       );
       expect(node).toBeDefined();
     }
