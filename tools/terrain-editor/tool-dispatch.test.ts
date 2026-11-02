@@ -1,0 +1,245 @@
+import { describe, expect, it } from "vitest";
+import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
+import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
+import { createEmptyTerrainArea } from "./new-area.ts";
+import { createToolDispatcher, type EditArea, TOOL_KEYS } from "./tool-dispatch.ts";
+
+function setup() {
+  const area = {
+    ...createEmptyTerrainArea({ areaId: "t", widthM: 240, depthM: 240, cellSizeM: 3 }),
+  };
+  const d = createToolDispatcher(() => area as unknown as EditArea);
+  return { area: area as unknown as EditArea, d };
+}
+
+function drag(d: ReturnType<typeof setup>["d"], pts: [number, number][], alt = false) {
+  d.pointerDown(pts[0][0], pts[0][1], { alt });
+  for (let i = 1; i < pts.length; i++) d.pointerMove(pts[i][0], pts[i][1], { alt });
+  const last = pts[pts.length - 1];
+  return d.pointerUp(last[0], last[1]);
+}
+
+describe("TOOL_KEYS", () => {
+  it("maps the UI-SPEC keys", () => {
+    expect(TOOL_KEYS).toMatchObject({
+      KeyH: "raise",
+      KeyG: "smooth",
+      KeyF: "flatten",
+      KeyP: "paint",
+      KeyR: "road",
+      KeyW: "stamp",
+      KeyE: "erase",
+    });
+  });
+});
+
+describe("sculpt tools", () => {
+  it("raise stroke is one undo entry and raises terrain; alt lowers", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    const down = d.pointerDown(0, 0, { alt: false });
+    expect(down.dirtyHeights).toBeDefined();
+    d.pointerMove(8, 0, { alt: false });
+    d.pointerMove(16, 0, { alt: false });
+    d.pointerMove(24, 0, { alt: false });
+    d.pointerUp(24, 0);
+    expect(sampleTerrainHeight(area.grid, 10, 0)).toBeGreaterThan(0);
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(sampleTerrainHeight(area.grid, 10, 0)).toBe(0);
+
+    drag(
+      d,
+      [
+        [0, 0],
+        [10, 0],
+      ],
+      true,
+    );
+    expect(sampleTerrainHeight(area.grid, 5, 0)).toBeLessThan(0);
+  });
+
+  it("undo then redo round trips; new stroke clears redo", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    drag(d, [
+      [0, 0],
+      [10, 0],
+    ]);
+    const h = sampleTerrainHeight(area.grid, 5, 0);
+    d.undo();
+    expect(d.canRedo()).toBe(true);
+    const r = d.redo();
+    expect(r).not.toBe(false);
+    expect(sampleTerrainHeight(area.grid, 5, 0)).toBeCloseTo(h, 6);
+    d.undo();
+    drag(d, [
+      [40, 40],
+      [50, 40],
+    ]);
+    expect(d.canRedo()).toBe(false);
+  });
+
+  it("flatten levels toward the height under the pointer-down", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    drag(d, [
+      [0, 0],
+      [6, 0],
+    ]);
+    const hill = sampleTerrainHeight(area.grid, 0, 0);
+    expect(hill).toBeGreaterThan(0);
+    d.setTool("flatten");
+    d.setOptions({ strength: 1 });
+    drag(d, [
+      [60, 60],
+      [30, 0],
+      [0, 0],
+    ]);
+    // target was the flat height at (60,60) = 0, so the hill is lowered
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeLessThan(hill);
+  });
+
+  it("paint writes the surface without a road flag and no graph edges", () => {
+    const { area, d } = setup();
+    d.setTool("paint");
+    d.setOptions({ surface: "mud" });
+    const r = drag(d, [
+      [0, 0],
+      [10, 0],
+    ]);
+    expect(surfaceAt(area.paint, 5, 0)).toBe("mud");
+    expect(area.paint.data.some((v) => (v & PAINT_ROAD_FLAG) !== 0)).toBe(false);
+    expect(area.graph.edges).toHaveLength(0);
+    expect(r.graphChanged).toBe(false);
+    expect(d.canUndo()).toBe(true);
+  });
+
+  it("ignores non-finite pointer coordinates", () => {
+    const { d } = setup();
+    d.setTool("raise");
+    const r = d.pointerDown(Number.NaN, 0, { alt: false });
+    expect(r.dirtyHeights).toBeUndefined();
+    d.pointerMove(Number.POSITIVE_INFINITY, 0);
+    d.pointerUp(0, 0);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("spaces dabs at radius/4 along the drag", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    d.setOptions({ radiusM: 8, strength: 0.2 });
+    d.pointerDown(-40, 0, { alt: false });
+    d.pointerMove(40, 0, { alt: false });
+    d.pointerUp(40, 0);
+    // a long drag raises terrain along its whole length
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
+    expect(sampleTerrainHeight(area.grid, 30, 0)).toBeGreaterThan(0);
+  });
+});
+
+describe("road and erase", () => {
+  it("road moves only preview; up paints, adds edges, and undo restores exactly", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadPreset: "street" });
+    const before = Float32Array.from(area.grid.heights);
+    const paintBefore = Uint8Array.from(area.paint.data);
+    const down = d.pointerDown(-60, 0, { alt: false });
+    expect(down.previewPoints).toHaveLength(1);
+    const mv = d.pointerMove(-20, 0, { alt: false });
+    expect(mv.previewPoints?.length).toBe(2);
+    expect(area.graph.edges).toHaveLength(0);
+    expect(area.paint.data).toEqual(paintBefore);
+    const up = d.pointerUp(60, 0);
+    expect(up.graphChanged).toBe(true);
+    expect(area.graph.edges.length).toBeGreaterThan(0);
+    expect(area.paint.data.some((v) => (v & PAINT_ROAD_FLAG) !== 0)).toBe(true);
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(area.graph.edges).toHaveLength(0);
+    expect(area.paint.data).toEqual(paintBefore);
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("erase cuts the road, drags merge into one undo step", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    drag(d, [
+      [-60, 0],
+      [0, 0],
+      [60, 0],
+    ]);
+    const graphBefore = JSON.stringify(area.graph);
+    d.setTool("erase");
+    d.setOptions({ radiusM: 10 });
+    drag(d, [
+      [-5, 0],
+      [5, 0],
+    ]);
+    expect(JSON.stringify(area.graph)).not.toBe(graphBefore);
+    d.undo(); // erase stroke
+    expect(JSON.stringify(area.graph)).toBe(graphBefore);
+    expect(d.canUndo()).toBe(true); // the road stroke remains
+  });
+
+  it("erase down reports the status text when an edge was removed", () => {
+    const { d } = setup();
+    d.setTool("road");
+    drag(d, [
+      [-60, 0],
+      [60, 0],
+    ]);
+    d.setTool("erase");
+    d.setOptions({ radiusM: 10 });
+    const r = d.pointerDown(0, 0, { alt: false });
+    expect(r.status).toBe("Road erased. Ctrl+Z to undo.");
+    d.pointerUp(0, 0);
+    d.undo();
+  });
+});
+
+describe("stamp", () => {
+  it("click places a stamp; rotate steps 15 degrees; drag sets length (min 4 m)", () => {
+    const { area, d } = setup();
+    d.setTool("stamp");
+    d.setOptions({ stampKind: "wedge", stampHeightM: 3, stampWidthM: 10, stampLengthM: 20 });
+    d.rotateStamp(1);
+    expect(d.getOptions().stampRotationRad).toBeCloseTo((15 * Math.PI) / 180, 9);
+    d.rotateStamp(-1);
+    d.rotateStamp(-1);
+    expect(d.getOptions().stampRotationRad).toBeCloseTo((-15 * Math.PI) / 180, 9);
+    d.rotateStamp(1);
+    d.pointerDown(0, 0, { alt: false });
+    d.pointerUp(30, 0);
+    expect(d.getOptions().stampLengthM).toBeCloseTo(30, 6);
+    expect(sampleTerrainHeight(area.grid, 12, 0)).toBeGreaterThan(0.5);
+    expect(d.canUndo()).toBe(true);
+
+    d.pointerDown(60, 60, { alt: false });
+    d.pointerUp(61, 60);
+    expect(d.getOptions().stampLengthM).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("history", () => {
+  it("keeps 50 entries and clearHistory empties", () => {
+    const { d } = setup();
+    d.setTool("raise");
+    for (let i = 0; i < 55; i++)
+      drag(d, [
+        [-80 + i, 50],
+        [-79 + i, 50],
+      ]);
+    let n = 0;
+    while (d.canUndo()) {
+      d.undo();
+      n++;
+    }
+    expect(n).toBe(50);
+    d.clearHistory();
+    expect(d.canRedo()).toBe(false);
+  });
+});
