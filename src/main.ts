@@ -52,7 +52,11 @@ import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { MAP_FORMATS, resolveMapId } from "./core/map-select";
 import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
-import { type MedalReferenceCourse, parseMedalReference } from "./core/medal-reference";
+import {
+  buildReferenceCourseRecord,
+  type MedalReferenceCourse,
+  parseMedalReference,
+} from "./core/medal-reference";
 import { createMedalTiming } from "./core/medal-timing";
 import {
   buildNavigationGraph,
@@ -729,6 +733,19 @@ try {
           reference: rd.reference,
           personalBest: medalProgress.courses[rd.course.id],
           onCompleted: (completion) => {
+            // Plan 04.2-15 (D-07): debug-only, paste-ready medal-reference
+            // course record from this run for the designer re-record. No
+            // player-facing behaviour change.
+            if (DEBUG_ENABLED) {
+              try {
+                console.info(
+                  "[medal-reference]",
+                  JSON.stringify(buildReferenceCourseRecord(rd.course, completion)),
+                );
+              } catch (error) {
+                console.warn("[medal-reference] could not build record", error);
+              }
+            }
             const saved = saveMedalResult(
               {
                 get: (key) => localStorage.getItem(key),

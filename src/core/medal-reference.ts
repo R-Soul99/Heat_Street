@@ -168,6 +168,88 @@ function parseCourse(
   };
 }
 
+/** Course fields `buildReferenceCourseRecord` reads (a structural subset of `Course`). */
+export interface ReferenceRecordCourse {
+  readonly id: string;
+  readonly mode: "p2p" | "circuit";
+  readonly laps: number;
+  readonly checkpoints: readonly { readonly id: string }[];
+}
+
+/** Completion fields `buildReferenceCourseRecord` reads (a structural subset of `FrozenCompletion`). */
+export interface ReferenceRecordCompletion {
+  readonly effectiveTimeSec: number;
+  readonly sectors: readonly {
+    readonly checkpointId: string;
+    readonly lap: number;
+    readonly ordinal: number;
+    readonly cumulativeElapsedSec: number;
+  }[];
+}
+
+/** One medal-reference course on the wire (the `courses[]` entry shape, without derived thresholds). */
+export interface ReferenceCourseRecord {
+  readonly courseId: string;
+  readonly mode: "p2p" | "circuit";
+  readonly laps: number;
+  readonly totalTimeSec: number;
+  readonly splits: readonly MedalReferenceSplit[];
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Builds a paste-ready medal-reference course record from a completed run
+ * (plan 04.2-15, D-07). Pure: the designer copies the debug log line into
+ * `public/maps/<area>.medals.json`. Times are rounded to 0.001 s; the final
+ * split is pinned to `totalTimeSec` so `parseMedalReference` accepts it.
+ */
+export function buildReferenceCourseRecord(
+  course: ReferenceRecordCourse,
+  completion: ReferenceRecordCompletion,
+): ReferenceCourseRecord {
+  const label = `buildReferenceCourseRecord: ${course.id}`;
+  if (!Number.isFinite(completion.effectiveTimeSec) || completion.effectiveTimeSec <= 0)
+    throw new Error(`${label}: completion time must be a positive finite number`);
+  const authoredIndexById = new Map(
+    course.checkpoints.map((checkpoint, index) => [checkpoint.id, index]),
+  );
+  const ordered = [...completion.sectors].sort((a, b) => a.ordinal - b.ordinal);
+  const seen = new Set<string>();
+  for (const sector of ordered) {
+    if (!authoredIndexById.has(sector.checkpointId))
+      throw new Error(`${label}: completion has unknown checkpoint "${sector.checkpointId}"`);
+    seen.add(`${sector.lap}:${sector.checkpointId}`);
+  }
+  for (let lap = 1; lap <= course.laps; lap += 1) {
+    for (const checkpoint of course.checkpoints) {
+      if (!seen.has(`${lap}:${checkpoint.id}`))
+        throw new Error(
+          `${label}: completion is missing checkpoint "${checkpoint.id}" (lap ${lap})`,
+        );
+    }
+  }
+  if (ordered.length !== course.laps * course.checkpoints.length)
+    throw new Error(`${label}: completion has duplicate checkpoint hits`);
+  const totalTimeSec = roundMs(completion.effectiveTimeSec);
+  const splits = ordered.map((sector, index): MedalReferenceSplit => {
+    const isLast = index === ordered.length - 1;
+    const cumulative = roundMs(sector.cumulativeElapsedSec);
+    if (isLast && Math.abs(cumulative - totalTimeSec) > 0.0015)
+      throw new Error(`${label}: final split time does not match the completion time`);
+    return {
+      checkpointId: sector.checkpointId,
+      lap: sector.lap,
+      authoredIndex: authoredIndexById.get(sector.checkpointId) as number,
+      hitOrder: sector.ordinal,
+      cumulativeTimeSec: isLast ? totalTimeSec : cumulative,
+    };
+  });
+  return { courseId: course.id, mode: course.mode, laps: course.laps, totalTimeSec, splits };
+}
+
 export function parseMedalReference(
   raw: string,
   sourceLabel: string,
