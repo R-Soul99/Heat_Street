@@ -440,6 +440,15 @@ interface DecalSlot {
 }
 
 /**
+ * Optional skid-decal target for terrain-format maps: decals project onto the
+ * terrain chunk mesh under (x, z) at the terrain height, for ANY surface.
+ */
+export interface TerrainDecalTarget {
+  meshAt(x: number, z: number): THREE.Mesh | undefined;
+  heightAt(x: number, z: number): number;
+}
+
+/**
  * Build the six per-surface particle systems and the skid-decal ring
  * buffer. `zoneMeshes`/`zoneSurfaces` are the `DecalGeometry` projection
  * targets -- parallel arrays, same order, exactly `src/render/surface-
@@ -448,6 +457,7 @@ interface DecalSlot {
 export function createSurfaceFx(
   zoneMeshes: readonly THREE.Mesh[],
   zoneSurfaces: readonly SurfaceType[],
+  terrainTarget?: TerrainDecalTarget,
 ): SurfaceFx {
   const group = new THREE.Group();
 
@@ -519,14 +529,24 @@ export function createSurfaceFx(
   const DECAL_SIZE = new THREE.Vector3();
 
   function spawnDecal(position: THREE.Vector3, surface: SurfaceType): void {
-    const zoneMesh = zoneMeshBySurface.get(surface);
+    const zoneMesh = terrainTarget
+      ? terrainTarget.meshAt(position.x, position.z)
+      : zoneMeshBySurface.get(surface);
     if (!zoneMesh) return; // Defensive: an unmapped surface spawns nothing rather than throwing.
 
     const slot = decalSlots[decalWriteCursor];
     decalWriteCursor = (decalWriteCursor + 1) % DECAL_POOL_SIZE;
     const profile = SURFACE_FX_PROFILES[surface];
-    DECAL_POSITION.set(position.x, 0.02, position.z);
-    DECAL_SIZE.set(profile.decalSizeM, profile.decalSizeM, DECAL_PROJECTION_DEPTH_M);
+    DECAL_POSITION.set(
+      position.x,
+      terrainTarget ? terrainTarget.heightAt(position.x, position.z) + 0.02 : 0.02,
+      position.z,
+    );
+    DECAL_SIZE.set(
+      profile.decalSizeM,
+      profile.decalSizeM,
+      terrainTarget ? Math.max(DECAL_PROJECTION_DEPTH_M, 2.0) : DECAL_PROJECTION_DEPTH_M,
+    );
 
     // Dispose the previous geometry before assigning the new one below -- see
     // the module header's "one per-spawn allocation this file accepts" note:
