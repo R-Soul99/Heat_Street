@@ -93,7 +93,28 @@ function liftStraight(id: string, launchMph: number): Script {
   };
 }
 
+/** Lift on a bend: steer ramped to `steer` plus a `wiggle` 1 Hz correction, throttle 0.5 for 1 s then lifted. */
+function liftBend(id: string, launchMph: number, steer: number, wiggle: number): Script {
+  return {
+    id,
+    description: `${launchMph} mph, bend (steer ramped to ${steer} plus a ${wiggle} 1 Hz correction wiggle), throttle 0.5 for 1 s then lifted to 0 (release = the lift)`,
+    launchMph,
+    seconds: 5,
+    drive(k, _h, st) {
+      const sec = k * DT;
+      if (st.releaseIndex < 0 && sec >= 1.0) st.releaseIndex = k;
+      return frame(
+        rampedSteer(k, steer) + wiggle * Math.sin(2 * Math.PI * sec),
+        sec < 1.0 ? 0.5 : 0,
+      );
+    },
+  };
+}
+
 const SCRIPTS: readonly Script[] = [
+  liftBend("lift-bend-90", 90, 0.3, 0.1),
+  liftBend("lift-bend-75", 75, 0.3, 0.1),
+  liftBend("lift-bend-60-03", 60, 0.3, 0.05),
   {
     id: "pivot-turn",
     description: "standstill, full steer + throttle 1 s, release steer, throttle 3 s",
