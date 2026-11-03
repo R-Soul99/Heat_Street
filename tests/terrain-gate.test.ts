@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shippedTuning } from "../src/core/feel";
 import {
   evaluateGate,
   flatRegressionPasses,
@@ -9,6 +10,7 @@ import { defaultTuning } from "../src/core/vehicle-tuning";
 import { ROUTINES } from "../src/physics/telemetry/routines";
 import { runRoutine } from "../src/physics/telemetry/run";
 import {
+  type ContactLossDiag,
   gateCourseLanes,
   runFlatBaseline,
   runFlatRegression,
@@ -138,6 +140,92 @@ describe("prototype gate (D-01)", () => {
         ?.env;
       if (env?.GATE_ENFORCE === "1") {
         expect(anyPass, `gate failed:${NL}${failures.join(NL)}`).toBe(true);
+      }
+    },
+    HEAVY,
+  );
+});
+
+describe("shipped car gate (04.3 P43-CONTACT)", () => {
+  it(
+    "shipped feel-preset car on subdiv 2: per-lane contact loss and verdict",
+    () => {
+      const tuning = shippedTuning();
+      const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+        ?.env;
+      const diagOn = env?.GATE_DIAG === "1";
+      const diags: ContactLossDiag[] = [];
+      const onContactLoss = diagOn ? (d: ContactLossDiag) => diags.push(d) : undefined;
+
+      const regression = runFlatRegression(tuning);
+      const lanes = gateCourseLanes().filter((l) => (LANE_IDS as readonly string[]).includes(l.id));
+      const lossRows: Record<string, string | number | boolean>[] = [];
+      const failures: string[] = [];
+      let allPass = regression.every((r) => flatRegressionPasses(r));
+
+      for (const speed of SPEEDS) {
+        const base = runFlatBaseline(speed, tuning);
+        const metrics: GateLaneMetrics[] = [];
+        for (const lane of lanes) {
+          for (const dir of DIRECTIONS) {
+            metrics.push(
+              runGateLane(lane, speed, dir, tuning, { colliderSubdiv: 2, onContactLoss }),
+            );
+          }
+        }
+        const verdict = evaluateGate(metrics, base, regression);
+        for (const m of metrics) {
+          const bad = verdict.metrics.filter(
+            (v) =>
+              v.lane === m.laneId &&
+              v.speedMs === m.speedMs &&
+              v.direction === m.direction &&
+              !v.pass,
+          );
+          lossRows.push({
+            lane: m.laneId,
+            speed: m.speedMs,
+            dir: m.direction,
+            contactLossTicks: m.contactLossTicks,
+            verdict: bad.length === 0 ? "pass" : `fail: ${bad.map((b) => b.metric).join(",")}`,
+          });
+        }
+        for (const v of verdict.metrics.filter((x) => !x.pass)) {
+          failures.push(
+            `${v.lane} ${v.speedMs}m/s dir ${v.direction} ${v.metric}: ${v.value} > ${v.threshold}`,
+          );
+          allPass = false;
+        }
+      }
+      console.table(lossRows);
+      if (diagOn) {
+        console.table(
+          diags.map((d) => ({
+            lane: d.laneId,
+            tick: d.tick,
+            x: Number(d.x.toFixed(2)),
+            y: Number(d.y.toFixed(2)),
+            z: Number(d.z.toFixed(2)),
+            vy: Number(d.vy.toFixed(2)),
+            wheelsOff: d.wheelsOff.join(","),
+            susp: d.suspensionLengths.map((s) => s.toFixed(2)).join(","),
+            steer: Number(d.steer.toFixed(2)),
+            throttle: Number(d.throttle.toFixed(2)),
+            brake: d.brake,
+            rearSide: Number((d.rearSideFriction ?? 0).toFixed(3)),
+          })),
+        );
+      }
+      console.log(
+        allPass
+          ? "SHIPPED CAR GATE VERDICT: PASS"
+          : `SHIPPED CAR GATE VERDICT: FAIL${NL}${failures.join(NL)}`,
+      );
+
+      expect(lossRows.length).toBe(LANE_IDS.length * DIRECTIONS.length * SPEEDS.length);
+      // Report-only until plan 08 makes it default-fatal once green.
+      if (env?.GATE_ENFORCE === "1") {
+        expect(allPass, `shipped gate failed:${NL}${failures.join(NL)}`).toBe(true);
       }
     },
     HEAVY,

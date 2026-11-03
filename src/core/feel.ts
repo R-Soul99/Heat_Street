@@ -14,11 +14,7 @@
  * `parseSavedFeel` like every other persisted blob.
  */
 
-import {
-  classDefaultTuning,
-  DEFAULT_VEHICLE_CLASS_ID,
-  type VehicleClassId,
-} from "./vehicle-class";
+import { classDefaultTuning, DEFAULT_VEHICLE_CLASS_ID, type VehicleClassId } from "./vehicle-class";
 import { clampTuning, type VehicleTuning } from "./vehicle-tuning";
 
 export interface FeelSettings {
