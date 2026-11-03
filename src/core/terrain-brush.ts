@@ -430,7 +430,7 @@ export function raiseBlock(
  */
 export function smoothRegion(
   grid: TerrainGrid,
-  window: CellWindow,
+  region: CellWindow,
   params: { strength: number; passes: number },
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
@@ -439,10 +439,10 @@ export function smoothRegion(
   const strength = Math.min(1, Math.max(0, params.strength));
   const passes = Math.min(SMOOTH_PASSES_MAX, Math.max(1, Math.round(params.passes)));
   const win: CellWindow = {
-    minRow: Math.max(0, Math.floor(window.minRow)),
-    minCol: Math.max(0, Math.floor(window.minCol)),
-    maxRow: Math.min(grid.rows, Math.ceil(window.maxRow)),
-    maxCol: Math.min(grid.cols, Math.ceil(window.maxCol)),
+    minRow: Math.max(0, Math.floor(region.minRow)),
+    minCol: Math.max(0, Math.floor(region.minCol)),
+    maxRow: Math.min(grid.rows, Math.ceil(region.maxRow)),
+    maxCol: Math.min(grid.cols, Math.ceil(region.maxCol)),
   };
   if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return NO_OP;
   const stride = grid.rows + 1;
