@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Completed 04.2-15-PLAN.md
-last_updated: "2026-11-03T12:19:58.585Z"
+stopped_at: Phase 04.3 context gathered
+last_updated: "2026-11-03T12:38:20.013Z"
 last_activity: 2026-11-03
 progress:
   total_phases: 11
@@ -247,9 +247,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-02T22:25:20.823Z
-Stopped at: Completed 04.2-15-PLAN.md
-Resume file: None
+Last session: 2026-11-03T12:38:20.001Z
+Stopped at: Phase 04.3 context gathered
+Resume file: .planning/phases/04.3-terrain-and-feel-follow-ups/04.3-CONTEXT.md
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR
