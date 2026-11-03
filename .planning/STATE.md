@@ -193,6 +193,7 @@ Recent decisions affecting current work:
 
 - [physics] Support configurable drivetrain type (RWD/FWD/AWD) per car class — v1's engine force is hardcoded to rear wheels only (`engineForcePerRearWheel`), needed for future car classes. See `.planning/todos/pending/2026-09-20-support-configurable-drivetrain-type-per-car-class.md`.
 - [general] Author a shorter, tighter course on the Juliette map — current circuit loop has two long legs (~650m/~943m) making it hard to navigate with the slidey car; needs a tighter route from existing checkpoints or a denser map area. See `.planning/todos/pending/2026-09-22-author-a-shorter-tighter-course-on-the-juliette-map.md`.
+- [tooling] Add square raise/lower tool with separate smoothing pass. The terrain editor's soft round brushes are slow and their effect is hard to see; the user wants to step grid squares up or down, then smooth afterwards. See `.planning/todos/pending/2026-11-03-add-square-raise-lower-tool-with-separate-smoothing-pass.md`.
 
 ### Blockers/Concerns
 
