@@ -50,6 +50,11 @@ const ROAD_TINT_HEX = 0x3a3d42;
 const ROAD_TINT_AMOUNT = 0.35;
 const DEFAULT_TEXTURE_RADIUS_M = 600;
 
+/** P43-RENDER: at most this many chunk texture rebuilds per updateTextures call. */
+export const TEXTURE_REBUILDS_PER_CALL = 1;
+/** A full-res chunk only drops to low-res beyond radius + half a chunk (no boundary thrash). */
+export const TEXTURE_LOD_HYSTERESIS_M = TERRAIN_CHUNK_CELLS / 2;
+
 export interface TerrainView {
   readonly group: THREE.Group;
   readonly chunkMeshes: readonly THREE.Mesh[];
@@ -66,6 +71,8 @@ export interface TerrainView {
   ): number;
   /** Re-evaluates texture LOD around the focus; returns how many chunk textures were rebuilt. */
   updateTextures(focusX: number, focusZ: number): number;
+  /** Converges every chunk's texture LOD in one call (tests, map load). Returns rebuilds. */
+  flush(focusX: number, focusZ: number): number;
   dispose(): void;
 }
 
@@ -333,21 +340,45 @@ export function buildTerrainView(
     group.add(bermMesh);
   }
 
-  let lastFocus: { x: number; z: number } | undefined;
-
   function applyTextureLod(chunk: Chunk, full: boolean): void {
     const material = chunk.mesh.material as THREE.MeshStandardMaterial;
-    chunk.texture.dispose();
-    chunk.texture = makeTexture(chunk, full);
+    const hadMap = material.map !== null && material.map !== undefined;
+    const nr = chunk.row1 - chunk.row0;
+    const nc = chunk.col1 - chunk.col0;
+    const w = full ? Math.max(1, Math.ceil((nc * cell) / paint.metresPerPixel)) : nc;
+    const h = full ? Math.max(1, Math.ceil((nr * cell) / paint.metresPerPixel)) : nr;
+    if (chunk.texture.image.width === w && chunk.texture.image.height === h) {
+      // Same dimensions: reuse the pixel buffer and GPU texture.
+      makeTexture(chunk, full, chunk.texture);
+    } else {
+      chunk.texture.dispose();
+      chunk.texture = makeTexture(chunk, full);
+    }
     chunk.full = full;
     material.map = chunk.texture;
-    material.needsUpdate = true;
+    if (!hadMap) material.needsUpdate = true;
   }
 
-  function isNear(chunk: Chunk, fx: number, fz: number): boolean {
+  function distSq(chunk: Chunk, fx: number, fz: number): number {
     const dx = Math.max(chunk.x0 - fx, 0, fx - chunk.x1);
     const dz = Math.max(chunk.z0 - fz, 0, fz - chunk.z1);
-    return dx * dx + dz * dz <= radius * radius;
+    return dx * dx + dz * dz;
+  }
+
+  /** Desired LOD with hysteresis: enter at radius, leave at radius + margin. */
+  function wantsFull(chunk: Chunk, fx: number, fz: number): boolean {
+    const d2 = distSq(chunk, fx, fz);
+    const limit = chunk.full ? radius + TEXTURE_LOD_HYSTERESIS_M : radius;
+    return d2 <= limit * limit;
+  }
+
+  function pendingChunks(fx: number, fz: number): Chunk[] {
+    const out: Chunk[] = [];
+    for (const chunk of chunks) {
+      if (wantsFull(chunk, fx, fz) !== chunk.full) out.push(chunk);
+    }
+    out.sort((a, b) => distSq(a, fx, fz) - distSq(b, fx, fz));
+    return out;
   }
 
   return {
@@ -382,16 +413,15 @@ export function buildTerrainView(
       return count;
     },
     updateTextures(focusX: number, focusZ: number): number {
-      lastFocus = { x: focusX, z: focusZ };
-      let rebuilt = 0;
-      for (const chunk of chunks) {
-        const near = isNear(chunk, lastFocus.x, lastFocus.z);
-        if (near !== chunk.full) {
-          applyTextureLod(chunk, near);
-          rebuilt++;
-        }
-      }
-      return rebuilt;
+      const pending = pendingChunks(focusX, focusZ);
+      const n = Math.min(pending.length, TEXTURE_REBUILDS_PER_CALL);
+      for (let k = 0; k < n; k++) applyTextureLod(pending[k], !pending[k].full);
+      return n;
+    },
+    flush(focusX: number, focusZ: number): number {
+      const pending = pendingChunks(focusX, focusZ);
+      for (const chunk of pending) applyTextureLod(chunk, !chunk.full);
+      return pending.length;
     },
     dispose(): void {
       for (const chunk of chunks) {

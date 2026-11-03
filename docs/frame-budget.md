@@ -110,6 +110,48 @@ budget.
 The old targets (16 draws, 45,000 triangles) were already flagged as over on every
 terrain map, so they no longer described the shipped scene.
 
+### Phase 04.3 juliette-ga render pass (plan 09, 2026-11-03)
+
+P43-RENDER follow-up to the open item above. The `?debug` HUD gained a `terrain tex`
+line (texture-LOD cost split out from `renderer.render`, LOD flips/s, GPU texture
+count) and the frame line was confirmed readable (not hidden by the map dropdown).
+Baseline readings on juliette-ga, taken by the user on a 120 Hz display (8.33 ms
+frame is vsync, so the 16.6 ms frame budget is met):
+
+| | Steady cruise (pos -163, 453; town) | Flat out across many chunks (worst seen) |
+|---|---|---|
+| frame | 8.33 / 16.6 ms | 8.33 / 16.6 ms |
+| physics | 0.21 / 4 ms | 0.20 / 4 ms |
+| render (CPU submit) | 1.33 / 6 ms | 2.12 / 6 ms |
+| terrain tex | 0.03 ms, flips/s 0 | 0.00 at snapshot, max about 1.0 ms seen, flips/s 4 |
+| GPU textures | 18 | 13 |
+| draw calls | **63 / 55 (over, flagged)** | 33 / 55 |
+| triangles | 44,724 / 90,000 | 36,264 / 90,000 |
+| bodies | 1 active / 91 total | same |
+
+**Finding.** The 7.71 ms render figure from plan 04.2-14 does not reproduce: render CPU
+submit is 1.33-2.12 ms, well under the 6.0 ms slice. The only terrain-texture cost is
+the LOD flip at chunk crossings (about 1 ms peak, previously all flips in one call).
+
+**Change.** `TerrainView.updateTextures` now rebuilds at most
+`TEXTURE_REBUILDS_PER_CALL` (1) chunk texture per call, nearest pending chunk first,
+with enter at `textureRadiusM` and leave at `textureRadiusM + TEXTURE_LOD_HYSTERESIS_M`
+(half a chunk), so a 10 m jitter across the radius rebuilds nothing. Same-size swaps
+reuse the pixel buffer and GPU texture; a pure map swap no longer sets
+`material.needsUpdate` (no shader recompile check). `flush()` converges everything in
+one call for tests. NOT applied, because the readings do not call for them: row-wise
+paint fill, the 512 px full-res cap, and the shadow/draw-radius cull.
+`BUDGET` and `SCENE_TARGETS` are unchanged.
+
+**Open item: draw calls 63 against the < 55 target** in the town area (steady cruise),
+while render CPU is only 1.33 ms. The draw-call target is a proxy for submit cost and
+the submit cost is fine, so this is flagged rather than fixed here: the shadow pass
+re-submits every caster, and the town has building meshes on top of 132 terrain chunks.
+The plan's draw-side fallback (shadow-caster and draw-radius cull) is conditioned on
+render ms over 6.0, which did not occur. Whether to raise the draw-call target (with a
+measured justification) or cull chunk draws is for the orchestrator to decide; the
+post-change confirmation reading is taken in plan 11.
+
 ### Real measurement, plan 04-10 (2026-09-15)
 
 Phase 3's fixture scene (six bands, 14 placeholder buildings) is superseded here by

@@ -7,6 +7,8 @@ import {
   buildTerrainView,
   TERRAIN_CHUNK_CELLS,
   TERRAIN_SURFACE_PALETTE,
+  TEXTURE_LOD_HYSTERESIS_M,
+  TEXTURE_REBUILDS_PER_CALL,
 } from "../src/render/terrain-view";
 
 function bumpyGrid(rows: number, cols: number) {
@@ -167,7 +169,7 @@ describe("terrain-view paint textures", () => {
     const grid = bumpyGrid(70, 130); // 140 x 260 m
     const view = buildTerrainView(grid, paintFor(grid), { textureRadiusM: 50 });
     expect(texData(view, 0).image.width).toBe(64);
-    view.updateTextures(grid.originX + 5, grid.originZ + 5);
+    view.flush(grid.originX + 5, grid.originZ + 5);
     expect(texData(view, 0).image.width).toBe(128); // 64 cells * 2 m / 1 m per px
     expect(texData(view, 0).image.height).toBe(128);
     expect(texData(view, 5).image.width).toBe(2); // far edge chunk: 2 cells wide, one texel per cell
@@ -176,15 +178,63 @@ describe("terrain-view paint textures", () => {
   it("moving the focus away downgrades and disposes the old full-res texture", () => {
     const grid = bumpyGrid(70, 130);
     const view = buildTerrainView(grid, paintFor(grid), { textureRadiusM: 50 });
-    view.updateTextures(grid.originX + 5, grid.originZ + 5);
+    view.flush(grid.originX + 5, grid.originZ + 5);
     const old = texData(view, 0);
     const spy = vi.spyOn(old, "dispose");
-    view.updateTextures(grid.originX + 258, grid.originZ + 130);
+    view.flush(grid.originX + 258, grid.originZ + 130);
     expect(spy).toHaveBeenCalled();
     expect(texData(view, 0).image.width).toBe(64);
     let full = 0;
     for (let i = 0; i < 6; i++) if (texData(view, i).image.width > 64) full++;
     expect(full).toBeLessThanOrEqual(3);
+  });
+
+  it("updateTextures rebuilds at most one chunk per call, nearest first", () => {
+    const grid = bumpyGrid(70, 130);
+    const view = buildTerrainView(grid, paintFor(grid), { textureRadiusM: 1000 });
+    const fx = grid.originX + 5;
+    const fz = grid.originZ + 5;
+    expect(view.updateTextures(fx, fz)).toBe(TEXTURE_REBUILDS_PER_CALL);
+    expect(texData(view, 0).image.width).toBe(128); // nearest chunk first
+    expect(texData(view, 5).image.width).toBeLessThan(64 + 1);
+    let guard = 0;
+    while (view.updateTextures(fx, fz) > 0 && guard++ < 20) {}
+    expect(view.updateTextures(fx, fz)).toBe(0);
+  });
+
+  it("hysteresis: 10 m jitter across the radius causes no repeated rebuilds", () => {
+    const grid = bumpyGrid(70, 130);
+    const view = buildTerrainView(grid, paintFor(grid), { textureRadiusM: 50 });
+    const fz = grid.originZ + 5;
+    const edge = grid.originX + 128 - 50; // radius-distance point left of chunk 1 (starts +128 m)
+    view.flush(edge + 5, fz); // 45 m from chunk 1 -> full
+    expect(texData(view, 1).image.width).toBe(128);
+    for (let k = 0; k < 6; k++) {
+      expect(view.flush(edge + (k % 2 === 0 ? 5 : -5), fz)).toBe(0);
+    }
+    expect(texData(view, 1).image.width).toBe(128);
+    // well beyond radius + hysteresis it does drop
+    view.flush(edge - TEXTURE_LOD_HYSTERESIS_M - 40, fz);
+    expect(texData(view, 1).image.width).toBe(64);
+  });
+
+  it("same-size swap reuses the texture and never re-flags the material", () => {
+    const grid = createTerrainGrid({ rows: 4, cols: 4, cellSizeM: 1, originX: 0, originZ: 0 });
+    const paint = createPaintMap({
+      originX: 0,
+      originZ: 0,
+      widthM: 4,
+      depthM: 4,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
+    const view = buildTerrainView(grid, paint, { textureRadiusM: 10 });
+    const mat = view.chunkMeshes[0].material as THREE.MeshStandardMaterial;
+    const before = texData(view, 0);
+    const versionBefore = mat.version;
+    view.flush(0, 0); // 4 cells at 1 m/px: full and low-res are both 4x4
+    expect(texData(view, 0)).toBe(before);
+    expect(mat.version).toBe(versionBefore);
   });
 
   it("paints palette colours and tints road pixels", () => {
@@ -200,7 +250,7 @@ describe("terrain-view paint textures", () => {
     paint.data[0] = encodePaintValue("tarmac", true);
     paint.data[1] = encodePaintValue("tarmac", false);
     const view = buildTerrainView(grid, paint);
-    view.updateTextures(0, 0);
+    view.flush(0, 0);
     const d = texData(view, 0).image.data as unknown as Uint8Array;
     const g = TERRAIN_SURFACE_PALETTE.grass;
     expect([d[8], d[9], d[10]]).toEqual([(g >> 16) & 255, (g >> 8) & 255, g & 255]);
