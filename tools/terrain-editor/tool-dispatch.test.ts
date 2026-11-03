@@ -281,3 +281,122 @@ describe("history", () => {
     expect(d.canRedo()).toBe(false);
   });
 });
+
+describe("block and smooth tools (04.3-07)", () => {
+  it("maps KeyB to block", () => {
+    expect(TOOL_KEYS.KeyB).toBe("block");
+  });
+
+  it("has block/smooth defaults and clamps setOptions", () => {
+    const { d } = setup();
+    expect(d.getOptions()).toMatchObject({
+      blockCells: 2,
+      blockStepM: 1,
+      smoothStrength: 0.5,
+      smoothPasses: 3,
+    });
+    d.setOptions({ blockCells: 99, blockStepM: 0.1, smoothStrength: 5, smoothPasses: 99 });
+    expect(d.getOptions()).toMatchObject({
+      blockCells: 8,
+      blockStepM: 0.25,
+      smoothStrength: 1,
+      smoothPasses: 10,
+    });
+    d.setOptions({ blockCells: 2.6, blockStepM: 1.3 });
+    expect(d.getOptions().blockCells).toBe(3);
+    expect(d.getOptions().blockStepM).toBe(1.25);
+    d.setOptions({ blockCells: Number.NaN, blockStepM: Number.NaN, smoothPasses: Number.NaN });
+    expect(d.getOptions()).toMatchObject({ blockCells: 3, blockStepM: 1.25, smoothPasses: 10 });
+  });
+
+  it("block click raises one block by the step, one undo entry, bit-exact undo", () => {
+    const { area, d } = setup();
+    const before = Float32Array.from(area.grid.heights);
+    d.setTool("block");
+    d.pointerDown(1, 1, { alt: false });
+    d.pointerUp(1, 1);
+    expect(Math.max(...area.grid.heights)).toBeCloseTo(1, 5);
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
+  });
+
+  it("alt lowers the block", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.pointerDown(1, 1, { alt: true });
+    d.pointerUp(1, 1);
+    expect(Math.min(...area.grid.heights)).toBeCloseTo(-1, 5);
+  });
+
+  it("a drag steps each block exactly once, one undo entry", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.setOptions({ blockCells: 1 });
+    const pts: [number, number][] = [];
+    for (let x = 1; x <= 10; x += 0.5) pts.push([x, 1]);
+    drag(d, pts);
+    expect(Math.max(...area.grid.heights)).toBeLessThanOrEqual(1.0001);
+    expect(Math.max(...area.grid.heights)).toBeGreaterThan(0.5);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(Math.max(...area.grid.heights)).toBe(0);
+  });
+
+  it("smoothBox smooths a box as one undo step", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.setOptions({ blockCells: 2, blockStepM: 3 });
+    drag(d, [[0, 0]]);
+    const afterBlock = Float32Array.from(area.grid.heights);
+    d.setTool("smoothBox");
+    drag(d, [
+      [-12, -12],
+      [12, 12],
+    ]);
+    expect(Array.from(area.grid.heights)).not.toEqual(Array.from(afterBlock));
+    d.undo();
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(afterBlock));
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("smoothAll is one undo entry", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.setOptions({ blockStepM: 3 });
+    drag(d, [[0, 0]]);
+    const afterBlock = Float32Array.from(area.grid.heights);
+    const peak = Math.max(...afterBlock);
+    const r = d.smoothAll();
+    expect(r.dirtyHeights).toBeDefined();
+    expect(Math.max(...area.grid.heights)).toBeLessThan(peak);
+    d.undo();
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(afterBlock));
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("smoothAll never moves road vertices", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.setOptions({ blockStepM: 3 });
+    drag(d, [[30, 30]]);
+    d.setTool("road");
+    drag(d, [
+      [0, 0],
+      [40, 0],
+      [80, 0],
+    ]);
+    const mask = roadVertexMask(area.grid, area.paint, area.graph, {
+      minRow: 0,
+      minCol: 0,
+      maxRow: area.grid.rows,
+      maxCol: area.grid.cols,
+    });
+    const before = Float32Array.from(area.grid.heights);
+    d.smoothAll();
+    for (let i = 0; i < mask.length; i++) if (mask[i]) expect(area.grid.heights[i]).toBe(before[i]);
+  });
+});

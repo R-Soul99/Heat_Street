@@ -8,16 +8,24 @@
  */
 import type { SurfaceType } from "../../src/core/surface-types.ts";
 import {
+  BLOCK_CELLS_MAX,
+  BLOCK_CELLS_MIN,
+  BLOCK_STEP_MAX_M,
+  BLOCK_STEP_MIN_M,
   type BrushParams,
+  blockWindowAt,
   createStrokeRecorder,
   type Falloff,
   flattenBrush,
   type HeightOpOptions,
   paintSurface,
+  raiseBlock,
   raiseLower,
+  SMOOTH_PASSES_MAX,
   type StrokeDiff,
   type StrokeRecorder,
   smoothBrush,
+  smoothRegion,
   stampTerrain,
 } from "../../src/core/terrain-brush.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
@@ -33,7 +41,16 @@ import {
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
 
-export type Tool = "raise" | "smooth" | "flatten" | "paint" | "road" | "stamp" | "erase";
+export type Tool =
+  | "raise"
+  | "smooth"
+  | "flatten"
+  | "paint"
+  | "road"
+  | "stamp"
+  | "erase"
+  | "block"
+  | "smoothBox";
 
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyH: "raise",
@@ -43,6 +60,7 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyR: "road",
   KeyW: "stamp",
   KeyE: "erase",
+  KeyB: "block",
 };
 
 export interface ToolOptions {
@@ -58,6 +76,12 @@ export interface ToolOptions {
   stampLengthM: number;
   stampWidthM: number;
   stampHeightM: number;
+  /** Block tool edge length in cells (integer 1..8). */
+  blockCells: number;
+  /** Block tool step in metres (0.25..5, multiples of 0.25). */
+  blockStepM: number;
+  smoothStrength: number;
+  smoothPasses: number;
 }
 
 export interface ToolResult {
@@ -253,6 +277,9 @@ interface Stroke {
   points: { x: number; z: number }[];
   diffs: StrokeDiff[];
   removedAny: boolean;
+  steppedBlocks: Set<number>;
+  /** Block tool: vertices already stepped this stroke (shared block edges step once). */
+  steppedVerts?: Uint8Array;
 }
 
 export function createToolDispatcher(getArea: () => EditArea) {
@@ -273,6 +300,10 @@ export function createToolDispatcher(getArea: () => EditArea) {
     stampLengthM: 20,
     stampWidthM: 12,
     stampHeightM: 4,
+    blockCells: 2,
+    blockStepM: 1,
+    smoothStrength: 0.5,
+    smoothPasses: 3,
   };
 
   function params(x: number, z: number): BrushParams {
@@ -296,7 +327,33 @@ export function createToolDispatcher(getArea: () => EditArea) {
     }
     let r: { window?: CellWindow; slopeClamped: boolean };
     const hop = heightOpOptions(area);
-    if (s.tool === "raise") r = raiseLower(area.grid, p, s.alt ? -1 : 1, 1, s.recorder, hop);
+    if (s.tool === "block") {
+      const win = blockWindowAt(area.grid, x, z, options.blockCells);
+      if (!win) return res;
+      const key = win.minRow * 65536 + win.minCol;
+      if (s.steppedBlocks.has(key)) return res;
+      s.steppedBlocks.add(key);
+      if (!s.steppedVerts) s.steppedVerts = new Uint8Array(area.grid.heights.length);
+      const stepped = s.steppedVerts;
+      const blockOpts: HeightOpOptions = {
+        roadMask: (w) => {
+          const m = hop.roadMask ? hop.roadMask(w) : new Uint8Array(stepped.length);
+          for (let i = 0; i < m.length; i++) if (stepped[i]) m[i] = 1;
+          return m;
+        },
+      };
+      r = raiseBlock(
+        area.grid,
+        { x, z, blockCells: options.blockCells, stepM: options.blockStepM },
+        s.alt ? -1 : 1,
+        s.recorder,
+        blockOpts,
+      );
+      const stride = area.grid.rows + 1;
+      for (let c = win.minCol; c <= win.maxCol; c++) {
+        for (let rr = win.minRow; rr <= win.maxRow; rr++) stepped[rr + c * stride] = 1;
+      }
+    } else if (s.tool === "raise") r = raiseLower(area.grid, p, s.alt ? -1 : 1, 1, s.recorder, hop);
     else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder, hop);
     else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
     res.dirtyHeights = r.window;
@@ -326,7 +383,11 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
   function dabAlong(s: Stroke, x: number, z: number, fn: (px: number, pz: number) => ToolResult) {
     const res = emptyResult();
-    const spacing = Math.max(0.25, options.radiusM / 4);
+    // Block strokes must not skip a block: sample at half a cell.
+    const spacing =
+      s.tool === "block"
+        ? Math.max(0.1, getArea().grid.cellSizeM / 2)
+        : Math.max(0.25, options.radiusM / 4);
     const dx = x - s.last.x;
     const dz = z - s.last.z;
     const dist = Math.hypot(dx, dz);
@@ -345,6 +406,28 @@ export function createToolDispatcher(getArea: () => EditArea) {
   function finish(diff: StrokeDiff | undefined): void {
     if (diff) stack.push(diff);
     stroke = null;
+  }
+
+  /** Vertex window spanned by two world points, at least one cell, clipped to the grid. */
+  function windowBetween(
+    area: EditArea,
+    a: { x: number; z: number },
+    b: { x: number; z: number },
+  ): CellWindow {
+    const g = area.grid;
+    const toCol = (x: number) => (x - g.originX) / g.cellSizeM;
+    const toRow = (z: number) => (z - g.originZ) / g.cellSizeM;
+    let minCol = Math.floor(Math.min(toCol(a.x), toCol(b.x)));
+    let maxCol = Math.ceil(Math.max(toCol(a.x), toCol(b.x)));
+    let minRow = Math.floor(Math.min(toRow(a.z), toRow(b.z)));
+    let maxRow = Math.ceil(Math.max(toRow(a.z), toRow(b.z)));
+    if (maxCol === minCol) maxCol += 1;
+    if (maxRow === minRow) maxRow += 1;
+    minCol = Math.max(0, minCol);
+    minRow = Math.max(0, minRow);
+    maxCol = Math.min(g.cols, maxCol);
+    maxRow = Math.min(g.rows, maxRow);
+    return { minRow, minCol, maxRow, maxCol };
   }
 
   function toUndoResult(area: EditArea, r: ApplyResult | false): UndoRedoResult | false {
@@ -377,6 +460,27 @@ export function createToolDispatcher(getArea: () => EditArea) {
         if (patch.widthM === undefined) options.widthM = preset.widthM;
         if (patch.maxBankDeg === undefined) options.maxBankDeg = preset.maxBankDeg;
       }
+      const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+      if (patch.blockCells !== undefined) {
+        options.blockCells = clamp(
+          Math.round(options.blockCells),
+          BLOCK_CELLS_MIN,
+          BLOCK_CELLS_MAX,
+        );
+      }
+      if (patch.blockStepM !== undefined) {
+        options.blockStepM = clamp(
+          Math.round(options.blockStepM * 4) / 4,
+          BLOCK_STEP_MIN_M,
+          BLOCK_STEP_MAX_M,
+        );
+      }
+      if (patch.smoothStrength !== undefined) {
+        options.smoothStrength = clamp(options.smoothStrength, 0, 1);
+      }
+      if (patch.smoothPasses !== undefined) {
+        options.smoothPasses = clamp(Math.round(options.smoothPasses), 1, SMOOTH_PASSES_MAX);
+      }
     },
     isStroking: (): boolean => stroke !== null,
 
@@ -394,10 +498,17 @@ export function createToolDispatcher(getArea: () => EditArea) {
         points: [{ x, z }],
         diffs: [],
         removedAny: false,
+        steppedBlocks: new Set<number>(),
       };
       stroke = s;
       const res = emptyResult();
-      if (tool === "raise" || tool === "smooth" || tool === "flatten" || tool === "paint") {
+      if (
+        tool === "raise" ||
+        tool === "smooth" ||
+        tool === "flatten" ||
+        tool === "paint" ||
+        tool === "block"
+      ) {
         mergeInto(res, dab(s, x, z));
       } else if (tool === "erase") {
         mergeInto(res, doErase(s, x, z));
@@ -420,7 +531,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
           res,
           dabAlong(s, x, z, (px, pz) => doErase(s, px, pz)),
         );
-      } else if (s.tool !== "stamp") {
+      } else if (s.tool !== "stamp" && s.tool !== "smoothBox") {
         mergeInto(
           res,
           dabAlong(s, x, z, (px, pz) => dab(s, px, pz)),
@@ -493,6 +604,21 @@ export function createToolDispatcher(getArea: () => EditArea) {
         finish(s.recorder.commit());
         return res;
       }
+      if (s.tool === "smoothBox") {
+        const end = finite ? { x, z } : s.start;
+        const r = smoothRegion(
+          area.grid,
+          windowBetween(area, s.start, end),
+          { strength: options.smoothStrength, passes: options.smoothPasses },
+          s.recorder,
+          heightOpOptions(area),
+        );
+        res.dirtyHeights = r.window;
+        res.slopeClamped = r.slopeClamped;
+        if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+        finish(s.recorder.commit());
+        return res;
+      }
       if (s.tool === "erase") {
         finish(mergeDiffs(s.diffs));
         return res;
@@ -501,6 +627,25 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
+    /** D-21: smooth the whole grid as exactly one undo step. */
+    smoothAll(): ToolResult {
+      const area = getArea();
+      const res = emptyResult();
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const rec = createStrokeRecorder(area.grid, area.paint);
+      const r = smoothRegion(
+        area.grid,
+        { minRow: 0, minCol: 0, maxRow: area.grid.rows, maxCol: area.grid.cols },
+        { strength: options.smoothStrength, passes: options.smoothPasses },
+        rec,
+        heightOpOptions(area),
+      );
+      res.dirtyHeights = r.window;
+      res.slopeClamped = r.slopeClamped;
+      if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+      finish(rec.commit());
+      return res;
+    },
     rotateStamp(sign: 1 | -1): void {
       options.stampRotationRad += sign * STAMP_ROTATE_STEP_RAD;
     },
