@@ -104,8 +104,18 @@ used as the user recorded it.
 
 ## Differences the user noticed while driving
 
-- Roads on juliette-ga and grid-test feel narrow but look realistic. All roads may be widened
-  by 1 to 2 m later (follow-up, not done).
+- Roads on juliette-ga and grid-test felt narrow. Phase 04.3 (D-11..D-14) widened them: the
+  converter's `roadWidenM` (juliette-ga +2, grid-test +2, feel-test 0) adds 2 m total (1 m each
+  side) to the levelled band and the paint. demo-hills is hand-painted and was not widened.
+  The graph `edge.widthM` is written unchanged (course routes and the 20 m checkpoint sensors
+  depend on it), so converted roads are painted 2 m wider than their graph width, while new
+  editor roads store the preset width (accepted inconsistency). Editor road-brush presets are
+  now street 10, highway 14, track 8, dirt 7 m. Wider roads change lap times, so medals follow
+  in plan 04.3-12.
+- Building clearance after the widening (road-flagged paint pixel to building collider box,
+  min): grid-test +2.75 m (no overlap). juliette-ga buildings 68 and 72 already overlapped the
+  road before the widening (-2.73 m at +0, -3.43 m at +2): a data issue in the legacy building
+  sidecar, left unmoved and pinned in `tests/terrain-convert.test.ts`.
 - Lift-off oversteer is still open: releasing the throttle at speed on the narrow roads spins
   the car. This is a feel follow-up, not a terrain issue.
 - feel-test: no differences expected (identical geometry).
