@@ -10,6 +10,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { KNOWN_MAP_IDS, MAP_FORMATS, type MapId } from "../../src/core/map-select.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
+import { blockWindowAt } from "../../src/core/terrain-brush.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
@@ -18,6 +19,12 @@ import {
 } from "../../src/core/terrain-format.ts";
 import { sampleTerrainHeight, terrainTriangleNormal } from "../../src/core/terrain-grid.ts";
 import { DEFAULT_CELL_SIZE_M, MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
+import {
+  cellPixelSize,
+  contourSegments,
+  gridLineSegments,
+  needsZoomHint,
+} from "../../src/core/terrain-overlay.ts";
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
 import { ROAD_PRESETS, type RoadPresetId } from "../../src/core/terrain-road.ts";
@@ -47,6 +54,14 @@ const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT = "Left-drag to sculpt. Right-drag to orbit, middle-drag to pan, wheel to zoom.";
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
+const ZOOM_HINT = "Zoom in to see single cells.";
+const HEIGHT_TOOLS: readonly Tool[] = ["block", "raise", "smooth", "flatten", "smoothBox"];
+/** Overlay window size in cells (T-04.3-28 cap) and re-centre threshold. */
+const OVERLAY_CELLS = 64;
+const OVERLAY_RECENTRE_CELLS = 16;
+const CONTOUR_MIN_M = 0.25;
+const CONTOUR_MAX_M = 10;
+const BLOCK_YELLOW = 0xffee66;
 
 // ---------------------------------------------------------------- state
 
@@ -105,6 +120,23 @@ cursorRing.renderOrder = 999;
 cursorRing.frustumCulled = false;
 cursorRing.visible = false;
 scene.add(cursorRing);
+
+// D-22 block preview: closed rectangle on the exact cells the next click changes.
+// 8 cells max per side (BLOCK_CELLS_MAX) x 4 sides, with headroom.
+const BLOCK_OUTLINE_POINTS_MAX = 8 * 4 + 8;
+const blockOutlineGeometry = new THREE.BufferGeometry();
+blockOutlineGeometry.setAttribute(
+  "position",
+  new THREE.BufferAttribute(new Float32Array(BLOCK_OUTLINE_POINTS_MAX * 3), 3),
+);
+const blockOutline = new THREE.LineLoop(
+  blockOutlineGeometry,
+  new THREE.LineBasicMaterial({ color: BLOCK_YELLOW, depthTest: false, transparent: true }),
+);
+blockOutline.renderOrder = 999;
+blockOutline.frustumCulled = false;
+blockOutline.visible = false;
+scene.add(blockOutline);
 
 const previewMaterial = new THREE.LineBasicMaterial({
   color: RING_GREEN,
@@ -265,6 +297,9 @@ function installArea(next: TerrainArea): void {
   $("empty").style.display = "none";
   frameArea(next);
   cursorRing.visible = false;
+  blockOutline.visible = false;
+  overlayCentre = null;
+  refreshOverlays();
   syncBlockLabel();
 }
 
@@ -397,6 +432,9 @@ function selectTool(next: Tool): void {
   tool = next;
   dispatcher.setTool(next);
   updateOptionVisibility();
+  if (tool !== "block") blockOutline.visible = false;
+  if (lastHit) paintRing(lastHit);
+  updateZoomHint();
   for (const b of document.querySelectorAll<HTMLButtonElement>("#tools .tool")) {
     const on = b.dataset.tool === next;
     b.classList.toggle("active", on);
@@ -452,8 +490,55 @@ function ringRadius(): number {
   return tool === "road" || tool === "stamp" ? CURSOR_RADIUS_M : dispatcher.getOptions().radiusM;
 }
 
+/** Draws the block preview; returns the readout line, or null when off-grid. */
+function paintBlockOutline(hit: { x: number; z: number }): string | null {
+  if (!area) return null;
+  const g = area.grid;
+  const w = blockWindowAt(g, hit.x, hit.z, dispatcher.getOptions().blockCells);
+  if (!w) {
+    blockOutline.visible = false;
+    return null;
+  }
+  const pos = blockOutlineGeometry.getAttribute("position") as THREE.BufferAttribute;
+  const x0 = g.originX + w.minCol * g.cellSizeM;
+  const x1 = g.originX + w.maxCol * g.cellSizeM;
+  const z0 = g.originZ + w.minRow * g.cellSizeM;
+  const z1 = g.originZ + w.maxRow * g.cellSizeM;
+  let k = 0;
+  const put = (x: number, z: number): void => {
+    if (k >= BLOCK_OUTLINE_POINTS_MAX) return;
+    pos.setXYZ(k++, x, sampleTerrainHeight(g, x, z) + 0.05, z);
+  };
+  // Walk the perimeter vertex by vertex so every edge hugs the terrain.
+  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
+  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
+  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
+  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
+  blockOutlineGeometry.setDrawRange(0, k);
+  pos.needsUpdate = true;
+  (blockOutline.material as THREE.LineBasicMaterial).color.setHex(
+    slopeAmber ? RING_AMBER : BLOCK_YELLOW,
+  );
+  blockOutline.visible = true;
+  const stride = g.rows + 1;
+  const h = g.heights[w.minRow + w.minCol * stride];
+  const cols = w.maxCol - w.minCol;
+  const rows = w.maxRow - w.minRow;
+  const metres = Math.round(cols * g.cellSizeM * 100) / 100;
+  return `Block ${cols} x ${rows} (${metres} m) at height ${h.toFixed(2)} m`;
+}
+
+let blockReadoutLine: string | null = null;
+
 function paintRing(hit: { x: number; z: number }): void {
   if (!area) return;
+  if (tool === "block") {
+    cursorRing.visible = false;
+    blockReadoutLine = paintBlockOutline(hit);
+    return;
+  }
+  blockOutline.visible = false;
+  blockReadoutLine = null;
   const radius = ringRadius();
   const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
   for (let i = 0; i < RING_SEGMENTS; i++) {
@@ -469,22 +554,161 @@ function paintRing(hit: { x: number; z: number }): void {
   cursorRing.visible = true;
 }
 
+/** D-22 zoom check: flag cells too small to see, without clobbering other hints. */
+function updateZoomHint(): void {
+  if (!area) return;
+  let show = false;
+  if (HEIGHT_TOOLS.includes(tool)) {
+    const target = lastHit
+      ? new THREE.Vector3(
+          lastHit.x,
+          sampleTerrainHeight(area.grid, lastHit.x, lastHit.z),
+          lastHit.z,
+        )
+      : controls.target;
+    const dist = camera.position.distanceTo(target);
+    const px = cellPixelSize(dist, camera.fov, canvas.clientHeight, area.grid.cellSizeM);
+    show = needsZoomHint(px);
+  }
+  // Only swap between the default hint and ours, so other hints (slope clamp) win.
+  const current = $("hint").textContent;
+  if (show && current === DEFAULT_HINT) setHint(ZOOM_HINT);
+  else if (!show && current === ZOOM_HINT) setHint(DEFAULT_HINT);
+}
+
+// ---------------------------------------------------------------- grid / contour overlays (D-22)
+
+const gridLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.55 }),
+);
+const contourLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xff8855 }),
+);
+for (const l of [gridLines, contourLines]) {
+  l.frustumCulled = false;
+  l.visible = false;
+  scene.add(l);
+}
+let overlayCentre: { row: number; col: number } | null = null;
+
+function overlayOn(): boolean {
+  return $<HTMLInputElement>("opt-grid").checked || $<HTMLInputElement>("opt-contours").checked;
+}
+
+function contourIntervalM(): number {
+  return Math.min(CONTOUR_MAX_M, Math.max(CONTOUR_MIN_M, readNum("opt-contour-interval", 1)));
+}
+
+function overlayWindow(row: number, col: number): CellWindow | null {
+  if (!area) return null;
+  const g = area.grid;
+  const half = OVERLAY_CELLS / 2;
+  const w = {
+    minRow: Math.max(0, row - half),
+    minCol: Math.max(0, col - half),
+    maxRow: Math.min(g.rows, row + half),
+    maxCol: Math.min(g.cols, col + half),
+  };
+  return w.minRow < w.maxRow && w.minCol < w.maxCol ? w : null;
+}
+
+function setLines(target: THREE.LineSegments, data: Float32Array): void {
+  target.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(data, 3));
+  target.geometry = g;
+}
+
+function rebuildOverlays(x: number, z: number): void {
+  if (!area) return;
+  const g = area.grid;
+  const gridOn = $<HTMLInputElement>("opt-grid").checked;
+  const contoursOn = $<HTMLInputElement>("opt-contours").checked;
+  gridLines.visible = gridOn;
+  contourLines.visible = contoursOn;
+  const row = Math.round((z - g.originZ) / g.cellSizeM);
+  const col = Math.round((x - g.originX) / g.cellSizeM);
+  const w = overlayWindow(row, col);
+  if (!w) return;
+  overlayCentre = { row, col };
+  if (gridOn) setLines(gridLines, gridLineSegments(g, w));
+  if (contoursOn) setLines(contourLines, contourSegments(g, w, contourIntervalM()));
+}
+
+function overlayAnchor(): { x: number; z: number } {
+  return lastHit ?? { x: controls.target.x, z: controls.target.z };
+}
+
+function maybeRebuildOverlays(x: number, z: number): void {
+  if (!area || !overlayOn()) return;
+  const g = area.grid;
+  const row = Math.round((z - g.originZ) / g.cellSizeM);
+  const col = Math.round((x - g.originX) / g.cellSizeM);
+  if (
+    overlayCentre === null ||
+    Math.abs(row - overlayCentre.row) > OVERLAY_RECENTRE_CELLS ||
+    Math.abs(col - overlayCentre.col) > OVERLAY_RECENTRE_CELLS
+  ) {
+    rebuildOverlays(x, z);
+  }
+}
+
+function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
+  if (!w || !overlayCentre || !area || !overlayOn()) return;
+  const g = area.grid;
+  const half = OVERLAY_CELLS / 2;
+  const intersects =
+    w.maxRow >= overlayCentre.row - half &&
+    w.minRow <= overlayCentre.row + half &&
+    w.maxCol >= overlayCentre.col - half &&
+    w.minCol <= overlayCentre.col + half;
+  if (intersects) {
+    rebuildOverlays(
+      g.originX + overlayCentre.col * g.cellSizeM,
+      g.originZ + overlayCentre.row * g.cellSizeM,
+    );
+  }
+}
+
+function refreshOverlays(): void {
+  const a = overlayAnchor();
+  rebuildOverlays(a.x, a.z);
+}
+
+function toggleOverlay(id: "opt-grid" | "opt-contours"): void {
+  const el = $<HTMLInputElement>(id);
+  el.checked = !el.checked;
+  refreshOverlays();
+}
+
+function wireOverlays(): void {
+  for (const id of ["opt-grid", "opt-contours"] as const) {
+    $<HTMLInputElement>(id).addEventListener("change", refreshOverlays);
+  }
+  $<HTMLInputElement>("opt-contour-interval").addEventListener("input", refreshOverlays);
+}
+
 function updateCursor(clientX: number, clientY: number): void {
   if (!area) return;
   const hit = pickTerrain(clientX, clientY);
   if (!hit) {
     cursorRing.visible = false;
+    blockOutline.visible = false;
     lastHit = null;
     $("sel").textContent = "Cursor is off the terrain.";
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
+  maybeRebuildOverlays(hit.x, hit.z);
 
   terrainTriangleNormal(area.grid, hit.x, hit.z, normalScratch);
   const slopeDeg = (Math.acos(Math.min(1, normalScratch.y)) * 180) / Math.PI;
   const g = area.grid;
   $("sel").textContent = [
+    ...(tool === "block" && blockReadoutLine ? [blockReadoutLine] : []),
     `x ${hit.x.toFixed(1)}  z ${hit.z.toFixed(1)}`,
     `height ${hit.y.toFixed(2)} m`,
     `slope ${slopeDeg.toFixed(1)} deg`,
@@ -532,6 +756,7 @@ function validateRoads(): void {
 function applyResult(res: ToolResult, ms: number): void {
   rebuild(res.dirtyHeights, { heights: true });
   rebuild(res.dirtyPaint, { paint: true });
+  refreshOverlaysAfterEdit(res.dirtyHeights);
   const edited = res.dirtyHeights !== undefined || res.dirtyPaint !== undefined || res.graphChanged;
   if (edited) {
     setDirty(true);
@@ -595,7 +820,10 @@ canvas.addEventListener("pointercancel", (e) => {
   if (stroking) strokeEvent(e, "up");
 });
 canvas.addEventListener("pointerleave", () => {
-  if (!stroking) cursorRing.visible = false;
+  if (!stroking) {
+    cursorRing.visible = false;
+    blockOutline.visible = false;
+  }
 });
 
 function undoRedo(kind: "undo" | "redo"): void {
@@ -605,6 +833,7 @@ function undoRedo(kind: "undo" | "redo"): void {
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
   rebuild(r.dirtyPaint, { paint: true });
+  refreshOverlaysAfterEdit(r.dirtyHeights);
   setDirty(true);
   lastEditMs = performance.now() - t0;
   setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.");
@@ -750,6 +979,7 @@ async function smoothWholeMap(): Promise<void> {
   updateHistoryButtons();
 }
 wireOptions();
+wireOverlays();
 
 // ---------------------------------------------------------------- drive here
 
@@ -814,6 +1044,14 @@ window.addEventListener("keydown", (e) => {
     setTopDown(!topDown);
     return;
   }
+  if (e.code === "KeyX") {
+    toggleOverlay("opt-grid");
+    return;
+  }
+  if (e.code === "KeyC") {
+    toggleOverlay("opt-contours");
+    return;
+  }
   if (e.code === "KeyD") {
     void driveHere();
     return;
@@ -842,6 +1080,7 @@ $("legend").innerHTML = SURFACE_TYPES.map(
 
 function frame(): void {
   controls.update();
+  updateZoomHint();
   terrainView?.updateTextures(controls.target.x, controls.target.z);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
