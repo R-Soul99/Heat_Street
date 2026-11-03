@@ -35,6 +35,11 @@ export interface ConvertConfig {
   readonly cellSizeM: number;
   readonly paintMetresPerPixel: number;
   readonly legacyGlbBuildings: boolean;
+  /**
+   * Extra total road width (metres) applied to the levelled band and the paint,
+   * half on each side (04.3 D-11). The graph's own widthM is never changed.
+   */
+  readonly roadWidenM: number;
 }
 
 /**
@@ -42,9 +47,14 @@ export interface ConvertConfig {
  * 487k vertices (closest to the D-04 envelope); paint stays 0.5 m/px.
  */
 export const CONVERT_CONFIG: Readonly<Record<ConvertibleAreaId, ConvertConfig>> = {
-  "feel-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false },
-  "grid-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: true },
-  "juliette-ga": { cellSizeM: 8, paintMetresPerPixel: 0.5, legacyGlbBuildings: true },
+  "feel-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false, roadWidenM: 0 },
+  "grid-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: true, roadWidenM: 2 },
+  "juliette-ga": {
+    cellSizeM: 8,
+    paintMetresPerPixel: 0.5,
+    legacyGlbBuildings: true,
+    roadWidenM: 2,
+  },
 };
 
 export interface ConvertInput {
@@ -71,10 +81,16 @@ function edgeXZ(e: RoadGraphEdge): XZ[] {
   return e.points.map((p) => ({ x: p[0], z: p[2] }));
 }
 
+/** Road width used for levelling and paint: graph width plus the area's roadWidenM. */
+function bandWidthM(e: RoadGraphEdge, cfg: ConvertConfig): number {
+  return e.widthM + cfg.roadWidenM;
+}
+
 /** Largest half width of the edges touching `nodeId`. */
-function incidentHalfWidth(graph: RoadGraph, nodeId: number): number {
+function incidentHalfWidth(graph: RoadGraph, nodeId: number, cfg: ConvertConfig): number {
   let w = 0;
-  for (const e of graph.edges) if (e.from === nodeId || e.to === nodeId) w = Math.max(w, e.widthM);
+  for (const e of graph.edges)
+    if (e.from === nodeId || e.to === nodeId) w = Math.max(w, bandWidthM(e, cfg));
   return w / 2;
 }
 
@@ -117,7 +133,7 @@ export function convertHeights(input: ConvertInput): TerrainGrid {
     const pts = edgeXZ(e);
     const heights = e.points.map((p) => p[1]);
     const banks = e.points.map(() => 0);
-    const res = levelRoadBand(grid, pts, heights, banks, e.widthM / 2, shoulder, {
+    const res = levelRoadBand(grid, pts, heights, banks, bandWidthM(e, cfg) / 2, shoulder, {
       protect,
     });
     mergeProtect(res.mask);
@@ -125,7 +141,7 @@ export function convertHeights(input: ConvertInput): TerrainGrid {
 
   for (const n of graph.nodes) {
     if (!n.junction) continue;
-    const half = incidentHalfWidth(graph, n.id);
+    const half = incidentHalfWidth(graph, n.id, cfg);
     if (!(half > 0)) continue;
     const eps = 0.01;
     const res = levelRoadBand(
@@ -191,18 +207,18 @@ function rasteriseCapsule(paint: PaintMap, p: XZ, q: XZ, radius: number, value: 
   }
 }
 
-function rasteriseRoads(paint: PaintMap, graph: RoadGraph): void {
+function rasteriseRoads(paint: PaintMap, graph: RoadGraph, cfg: ConvertConfig): void {
   const edges = graph.edges.slice().sort((a, c) => a.id - c.id);
   for (const e of edges) {
     const value = encodePaintValue(e.surface, true);
     const pts = edgeXZ(e);
     for (let k = 0; k + 1 < pts.length; k++) {
-      rasteriseCapsule(paint, pts[k], pts[k + 1], e.widthM / 2, value);
+      rasteriseCapsule(paint, pts[k], pts[k + 1], bandWidthM(e, cfg) / 2, value);
     }
   }
   for (const n of graph.nodes) {
     if (!n.junction) continue;
-    const half = incidentHalfWidth(graph, n.id);
+    const half = incidentHalfWidth(graph, n.id, cfg);
     if (!(half > 0)) continue;
     let surface = null as RoadGraphEdge["surface"] | null;
     for (const e of edges) {
@@ -229,7 +245,7 @@ export function convertCompiledArea(input: ConvertInput): TerrainArea {
     metresPerPixel: cfg.paintMetresPerPixel,
     fill: groundSurface,
   });
-  rasteriseRoads(paint, graph);
+  rasteriseRoads(paint, graph, cfg);
 
   let maxEdgeId = -1;
   for (const e of graph.edges) if (e.id > maxEdgeId) maxEdgeId = e.id;

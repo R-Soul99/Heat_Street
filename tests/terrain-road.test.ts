@@ -125,10 +125,10 @@ describe("presets", () => {
         p.maxBankDeg,
       ];
     };
-    expect(row("street")).toEqual([8, 2, "tarmac", "residential", 40, 40, 0]);
-    expect(row("highway")).toEqual([12, 2, "tarmac", "primary", 100, 100, DEFAULT_MAX_BANK_DEG]);
-    expect(row("track")).toEqual([6, 1, "gravel", "track", 60, 60, 6]);
-    expect(row("dirt")).toEqual([5, 1, "dirt_road", "unclassified", 50, 50, 0]);
+    expect(row("street")).toEqual([10, 2, "tarmac", "residential", 40, 40, 0]);
+    expect(row("highway")).toEqual([14, 2, "tarmac", "primary", 100, 100, DEFAULT_MAX_BANK_DEG]);
+    expect(row("track")).toEqual([8, 1, "gravel", "track", 60, 60, 6]);
+    expect(row("dirt")).toEqual([7, 1, "dirt_road", "unclassified", 50, 50, 0]);
   });
 });
 
