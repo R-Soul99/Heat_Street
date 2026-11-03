@@ -231,8 +231,9 @@ describe("shipped car gate (04.3 P43-CONTACT)", () => {
       );
 
       expect(lossRows.length).toBe(LANE_IDS.length * DIRECTIONS.length * SPEEDS.length);
-      // Report-only until plan 08 makes it default-fatal once green.
-      if (env?.GATE_ENFORCE === "1") {
+      // Fatal by default (04.3-08): the wheel-ray patch removed the heightfield
+      // ray-miss flicker. GATE_ENFORCE=0 turns it report-only for diagnosis.
+      if (env?.GATE_ENFORCE !== "0") {
         expect(allPass, `shipped gate failed:${NL}${failures.join(NL)}`).toBe(true);
       }
     },
