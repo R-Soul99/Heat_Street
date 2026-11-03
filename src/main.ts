@@ -835,7 +835,18 @@ try {
 
   // The HUD is constructed only when `?debug` is present, so a normal build
   // adds zero DOM overlay and zero listeners.
-  const hud = DEBUG_ENABLED ? createHud(renderer, world) : null;
+  // P43-RENDER (04.3-09): debug-only terrain texture-LOD cost, averaged over
+  // the frames since the last HUD write, plus rebuilds in a rolling second.
+  const terrainDbg = { ms: 0, frames: 0, flips: [] as number[] };
+  const hud = DEBUG_ENABLED
+    ? createHud(renderer, world, () => {
+        const lodFlipsPerSec = terrainDbg.flips.length;
+        const terrainTexMs = terrainDbg.frames > 0 ? terrainDbg.ms / terrainDbg.frames : 0;
+        terrainDbg.ms = 0;
+        terrainDbg.frames = 0;
+        return { terrainTexMs, lodFlipsPerSec };
+      })
+    : null;
   if (hud) {
     onDebugToggle(() => hud.toggle());
   }
@@ -1146,13 +1157,26 @@ try {
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
+      const texT0 = DEBUG_ENABLED ? performance.now() : 0;
       if (gateView !== undefined) {
         const gp = view.meshes[0].position;
         gateView.updateTextures(gp.x, gp.z);
       }
       if (terrainView !== undefined) {
         const tp = view.meshes[0].position;
-        terrainView.updateTextures(tp.x, tp.z);
+        const rebuilt = terrainView.updateTextures(tp.x, tp.z);
+        if (DEBUG_ENABLED && rebuilt > 0) {
+          const nowMs = performance.now();
+          for (let k = 0; k < rebuilt; k++) terrainDbg.flips.push(nowMs);
+        }
+      }
+      if (DEBUG_ENABLED) {
+        const nowMs = performance.now();
+        terrainDbg.ms += nowMs - texT0;
+        terrainDbg.frames++;
+        while (terrainDbg.flips.length > 0 && nowMs - terrainDbg.flips[0] > 1000) {
+          terrainDbg.flips.shift();
+        }
       }
       if (carShadow !== undefined && groundProbe !== undefined) {
         const p = view.meshes[0].position;

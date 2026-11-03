@@ -38,7 +38,25 @@ export interface HudInputs {
    * zeros.
    */
   readonly carPosition?: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+   * Phase 04.3 P43-RENDER breakdown: terrain paint-texture LOD cost measured
+   * separately from `renderer.render`. Optional; omitted, the line is left out.
+   */
+  readonly terrain?: TerrainHudInputs;
 }
+
+/** Terrain texture-LOD breakdown fed by main.ts under ?debug only. */
+export interface TerrainHudInputs {
+  /** Average ms per frame spent inside the updateTextures calls. */
+  readonly terrainTexMs: number;
+  /** Chunk texture rebuilds over the last second. */
+  readonly lodFlipsPerSec: number;
+  /** renderer.info.memory.textures (live GPU textures). */
+  readonly gpuTextures: number;
+}
+
+/** Latest terrain breakdown sample; main.ts pushes it, the HUD reads it at write time. */
+export type TerrainSampler = () => Omit<TerrainHudInputs, "gpuTextures"> | undefined;
 
 /** How long the overlay stays visible between throttled DOM writes. */
 const THROTTLE_MS = 150;
@@ -58,15 +76,28 @@ function over(value: number, budget: number): string {
  * byte-identical for byte-identical inputs.
  */
 export function formatHudText(inputs: HudInputs): string {
-  const { stats, drawCalls, triangles, activeBodies, totalBodies, avgFrameMs, carPosition } =
-    inputs;
+  const {
+    stats,
+    drawCalls,
+    triangles,
+    activeBodies,
+    totalBodies,
+    avgFrameMs,
+    carPosition,
+    terrain,
+  } = inputs;
 
   const lines = [
     `frame   ${avgFrameMs.toFixed(2)}ms / ${BUDGET.frameMs}ms${over(avgFrameMs, BUDGET.frameMs)}`,
     `physics ${stats.physicsMs.toFixed(2)}ms / ${BUDGET.physicsMs}ms${over(stats.physicsMs, BUDGET.physicsMs)}  (${stats.steps} step/f)`,
     `render  ${stats.renderMs.toFixed(2)}ms / ${BUDGET.renderCpuMs}ms${over(stats.renderMs, BUDGET.renderCpuMs)}  (cpu submit)`,
+    ...(terrain
+      ? [
+          `terrain tex  ${terrain.terrainTexMs.toFixed(2)}ms  flips/s ${terrain.lodFlipsPerSec}  textures ${terrain.gpuTextures}`,
+        ]
+      : []),
     `draws   ${drawCalls} / ${SCENE_TARGETS.drawCalls}${over(drawCalls, SCENE_TARGETS.drawCalls)}`,
-    `tris    ${triangles} / ${SCENE_TARGETS.triangles}${over(triangles, SCENE_TARGETS.triangles)}`,
+    `tris   ${triangles} / ${SCENE_TARGETS.triangles}${over(triangles, SCENE_TARGETS.triangles)}`,
     `bodies  ${activeBodies} active / ${totalBodies} total`,
     `tick    ${stats.tick}   sim ${stats.simTimeSec.toFixed(3)}s   dropped ${stats.droppedTicks}`,
   ];
@@ -98,7 +129,11 @@ export interface Hud {
  * `onDebugToggle` is what flips it, and this module never checks `DEBUG_ENABLED`
  * itself so it stays independently testable and reusable.
  */
-export function createHud(renderer: THREE.WebGLRenderer, world: RAPIER.World): Hud {
+export function createHud(
+  renderer: THREE.WebGLRenderer,
+  world: RAPIER.World,
+  terrainSampler?: TerrainSampler,
+): Hud {
   const el = document.createElement("div");
   // `pointer-events:none` keeps the overlay out of the input path entirely.
   // `display:none` is the default; `debug-gate`'s hotkey is what shows it.
@@ -153,7 +188,9 @@ export function createHud(renderer: THREE.WebGLRenderer, world: RAPIER.World): H
         active++;
       });
 
+      const sample = terrainSampler?.();
       el.textContent = formatHudText({
+        terrain: sample ? { ...sample, gpuTextures: info.memory.textures } : undefined,
         stats: {
           ...stats,
           physicsMs: physicsSum / samples,
