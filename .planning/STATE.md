@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
 stopped_at: Phase 04.3 context gathered
-last_updated: "2026-11-03T20:27:46.440Z"
+last_updated: "2026-11-03T20:42:53.283Z"
 last_activity: 2026-11-03 -- Phase 04.3 execution started
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 94
-  completed_plans: 81
+  completed_plans: 88
   percent: 73
 ---
 
@@ -221,6 +221,7 @@ Recent decisions affecting current work:
 - **[Phase 04-11, open, project-level]** No phase in ROADMAP.md (5 through 8, all systems-only: navigation/medals/AI/heat) currently schedules an art-direction pass, but the developer's own verdict on the compiled area ("surreal dream," not a real town) makes one necessary before the visual result matches the envisioned chase-movie look. Decide whether to insert a dedicated art-direction phase before continuing past Phase 4, or fold it into an existing phase's scope. See STATE.md's Phase 04-11 decision entry above for full context; the developer explicitly wants to stay on the current Three.js/Rapier stack, not evaluate Unity/Godot.
 - **[Phase 04-11, open, low-cost]** Both the permanent helicopter camera and the debug chase-cam fallback read closer than the developer's envisioned finished-product angle (wants a genuinely higher, more overhead "real helicopter" view). Already live-tunable via `?debug` (`src/core/camera-tuning.ts`'s `altitudeM`/`distanceM`, range 3-80m) with zero code change — preview a value, then bake it into the defaults. Cheap to do whenever, not blocking. RESOLVED by quick task 260919-cam (below): `framing.*AltitudeM`/`*DistanceM` retuned to a constant ~79.9 deg pitch (was ~41 deg), `occlusion.basePitchDeg`/`maxPitchDeg` raised to 80/88 to match; the debug chase-cam fallback (`chaseFallback`, D-12) was deliberately left untouched — it exists to reproduce Phase 2's plan 02-10 signed-off feel-session view byte-for-byte, not to match the permanent rig's angle.
 - No boundary at the terrain edge: the car can drive off migrated terrain maps and fall off the world (follow-up: edge wall, invisible barrier or out-of-bounds respawn)
+- 04.3-05 parked (2026-11-03): lift-off spin not reproducible on flat harness; planned curve killed lift-off-60 liveliness. User to drive and locate the spin before any vehicle.ts change. SUMMARY exists but plan is NOT complete.
 
 ## Deferred Items
 
