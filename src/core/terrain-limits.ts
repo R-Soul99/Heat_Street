@@ -10,7 +10,7 @@ export const MAX_SLOPE_DEG = 35;
 /** D-14 (discretion): default maximum road bank angle (degrees). Signed off at the 04.2 prototype gate on 2026-11-02. */
 export const DEFAULT_MAX_BANK_DEG = 8;
 
-/** RESEARCH "collider resolution knob": heightfield collider subdivisions per grid cell. Signed off at the 04.2 prototype gate on 2026-11-02. Plan 05 gate: lowest subdiv passing the full verdict is 2 (subdiv 1 has a 1-tick contact flicker). */
+/** RESEARCH "collider resolution knob": heightfield collider subdivisions per grid cell. Signed off at the 04.2 prototype gate on 2026-11-02. Plan 05 gate chose 2 because subdiv 1 showed a 1-tick contact flicker; 04.3-08 found that flicker was the parry heightfield wheel-ray miss near cell lines (fixed by the wheel-ray patch, src/physics/wheel-ray-patch.ts), not a resolution effect, so this choice can be revisited. */
 export const DEFAULT_COLLIDER_SUBDIV: 1 | 2 = 2;
 
 /** D-02: default height-grid cell size in metres (per-grid value). */

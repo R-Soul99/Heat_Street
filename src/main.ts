@@ -459,7 +459,10 @@ try {
       defaultAiDriverParams(aiTuning),
       // D-10: the player's own body is an avoidance obstacle for AI too, so
       // AI never rear-ends a slow/stopped player.
-      { obstacleBodies: [scene.vehicle.body] },
+      {
+        obstacleBodies: [scene.vehicle.body],
+        wheelRayPatch: scene.createWheelRayPatch?.bind(scene),
+      },
     );
   }
 

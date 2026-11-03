@@ -40,6 +40,8 @@ import { decodePaintSurface, type PaintMap, paintIndexAt } from "../core/terrain
  */
 export interface SurfaceMap {
   register(colliderHandle: number, surface: SurfaceType): void;
+  /** Drop a handle (a removed collider, e.g. a retired wheel-ray patch window). */
+  unregister(colliderHandle: number): void;
   lookup(colliderHandle: number | undefined): SurfaceType;
 }
 
@@ -54,6 +56,9 @@ export function createSurfaceMap(defaultSurface: SurfaceType = "tarmac"): Surfac
   return {
     register(colliderHandle: number, surface: SurfaceType): void {
       table.set(colliderHandle, surface);
+    },
+    unregister(colliderHandle: number): void {
+      table.delete(colliderHandle);
     },
     lookup(colliderHandle: number | undefined): SurfaceType {
       // Explicit `=== undefined` check, NEVER a truthiness test — handle `0`
@@ -90,6 +95,12 @@ export interface SurfaceContext {
 /** Position-based surface lookup bound to the terrain collider's handle. */
 export interface SurfacePaintLookup {
   readonly colliderHandle: number;
+  /**
+   * Extra collider handles that are the SAME surface as `colliderHandle` (the
+   * per-vehicle wheel-ray patch trimeshes). Mutated by the patch as windows
+   * are rebuilt; a wheel standing on any of them reads this paint map.
+   */
+  readonly aliasHandles?: Set<number>;
   surfaceAt(x: number, z: number): SurfaceType;
   /**
    * Another painted heightfield in the same scene (e.g. the 04.2 gate course
@@ -110,6 +121,7 @@ export function createPaintLookup(
 ): SurfacePaintLookup {
   return {
     colliderHandle,
+    aliasHandles: new Set<number>(),
     surfaceAt(x: number, z: number): SurfaceType {
       const i = paintIndexAt(paint, x, z);
       return i < 0 ? fallback : decodePaintSurface(paint.data[i], fallback);
