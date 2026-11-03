@@ -142,6 +142,19 @@ describe("formatHudText", () => {
     expect(lineStartingWith(text, "pos")).toContain("x=-420.00  y=0.00  z=102.23");
   });
 
+  it("prints the terrain texture breakdown line when terrain is supplied (P43-RENDER)", () => {
+    const text = formatHudText(
+      makeInputs({ terrain: { terrainTexMs: 1.234, lodFlipsPerSec: 7, gpuTextures: 133 } }),
+    );
+    expect(lineStartingWith(text, "terrain tex")).toBe(
+      "terrain tex  1.23ms  flips/s 7  textures 133",
+    );
+  });
+
+  it("omits the terrain line when terrain is absent", () => {
+    expect(formatHudText(makeInputs())).not.toContain("terrain tex");
+  });
+
   it("is pure: a plain HudInputs object is enough, no DOM/renderer/world needed", () => {
     // No `document`, no `THREE.WebGLRenderer`, no `RAPIER.World` exist in this
     // Node test environment at all — the fact that this runs and returns a

@@ -64,7 +64,8 @@ export interface TerrainView {
     maxCol: number,
     what: { heights?: boolean; paint?: boolean },
   ): number;
-  updateTextures(focusX: number, focusZ: number): void;
+  /** Re-evaluates texture LOD around the focus; returns how many chunk textures were rebuilt. */
+  updateTextures(focusX: number, focusZ: number): number;
   dispose(): void;
 }
 
@@ -380,12 +381,17 @@ export function buildTerrainView(
       }
       return count;
     },
-    updateTextures(focusX: number, focusZ: number): void {
+    updateTextures(focusX: number, focusZ: number): number {
       lastFocus = { x: focusX, z: focusZ };
+      let rebuilt = 0;
       for (const chunk of chunks) {
         const near = isNear(chunk, lastFocus.x, lastFocus.z);
-        if (near !== chunk.full) applyTextureLod(chunk, near);
+        if (near !== chunk.full) {
+          applyTextureLod(chunk, near);
+          rebuilt++;
+        }
       }
+      return rebuilt;
     },
     dispose(): void {
       for (const chunk of chunks) {
