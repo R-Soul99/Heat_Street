@@ -78,6 +78,21 @@ const HOLD_1S = Math.round(1 / DT);
 const HOLD_HALF_S = Math.round(0.5 / DT);
 const HOLD_3S = Math.round(3 / DT);
 
+/** Straight-line lift-off: tiny keyboard-style wiggle, throttle 0.5 for 1 s, then lifted (release). */
+function liftStraight(id: string, launchMph: number): Script {
+  return {
+    id,
+    description: `${launchMph} mph, straight with a tiny steer wiggle (0.08 at 1 Hz), throttle 0.5 for 1 s then lifted to 0 (release = the lift)`,
+    launchMph,
+    seconds: 5,
+    drive(k, _h, st) {
+      const sec = k * DT;
+      if (st.releaseIndex < 0 && sec >= 1.0) st.releaseIndex = k;
+      return frame(0.08 * Math.sin(2 * Math.PI * sec), sec < 1.0 ? 0.5 : 0);
+    },
+  };
+}
+
 const SCRIPTS: readonly Script[] = [
   {
     id: "pivot-turn",
@@ -137,6 +152,21 @@ const SCRIPTS: readonly Script[] = [
       return frame(h < 120 ? rampedSteer(k, 0.8) : 0, throttle);
     },
   },
+  liftStraight("lift-straight-60", 60),
+  {
+    id: "lift-gentle-60",
+    description:
+      "60 mph, gentle bend (steer ramped to 0.2 plus a 0.05 1 Hz correction wiggle), throttle 0.5 for 1 s then lifted to 0 (release = the lift)",
+    launchMph: 60,
+    seconds: 5,
+    drive(k, _h, st) {
+      const sec = k * DT;
+      if (st.releaseIndex < 0 && sec >= 1.0) st.releaseIndex = k;
+      const steer = rampedSteer(k, 0.2) + 0.05 * Math.sin(2 * Math.PI * sec);
+      return frame(steer, sec < 1.0 ? 0.5 : 0);
+    },
+  },
+  liftStraight("lift-straight-90", 90),
   {
     id: "hold-60",
     description:
@@ -241,8 +271,15 @@ function runScript(script: Script, tuning: VehicleTuning): DossierRun {
   }
 }
 
-export function runDossier(tuning: VehicleTuning): DossierRun[] {
-  return SCRIPTS.map((s) => runScript(s, tuning));
+/** Run all routines, or only `ids` (throws on an id that matches no routine). */
+export function runDossier(tuning: VehicleTuning, ids?: readonly string[]): DossierRun[] {
+  let scripts = SCRIPTS;
+  if (ids !== undefined) {
+    const unknown = ids.filter((id) => !SCRIPTS.some((s) => s.id === id));
+    if (unknown.length > 0) throw new Error(`Unknown dossier routine id(s): ${unknown.join(", ")}`);
+    scripts = SCRIPTS.filter((s) => ids.includes(s.id));
+  }
+  return scripts.map((s) => runScript(s, tuning));
 }
 
 const HEADER =
