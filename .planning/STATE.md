@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Phase 04.2 complete (15/15) — ready to discuss Phase 05
-last_updated: 2026-11-03T08:03:36.116Z
-last_activity: 2026-11-02
+stopped_at: Completed 04.2-15-PLAN.md
+last_updated: "2026-11-03T12:19:58.585Z"
+last_activity: 2026-11-03
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 8
   total_plans: 82
   completed_plans: 81
-  percent: 80
+  percent: 73
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 05 — objectives navigation race modes
+**Current focus:** Phase 04.3 — terrain and feel follow-ups (before Phase 05)
 
 ## Current Position
 
-Phase: 05
+Phase: 04.3
 Plan: Not started
-Next: discuss/plan Phase 05 (Phase 04.2 complete 2026-11-03, human UAT passed; Phase 4.1 absorbed by 4.2)
+Next: /gsd-discuss-phase 04.3 or /gsd-plan-phase 04.3 (fix 04.2 follow-ups before Phase 05)
 Last activity: 2026-11-03
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
@@ -94,6 +94,7 @@ Progress: [██████████] 99%
 
 - Phase 4.1 inserted after Phase 4: Flatten Terrain / Remove DEM Elevation — drop real-world DEM elevation in favor of hand-authored flat/near-flat terrain, fixing oversized road-shoulder skirts; supersedes part of ADR 0001 (URGENT)
 - Phase 04.2 inserted after Phase 4: Driveable Terrain: terrain-as-single-source-of-truth heightfield, paint map, road brush, 3D sculpt page. Absorbs and closes 4.1. See .planning/gsd-brief-driveable-terrain.md
+- Phase 04.3 inserted after Phase 4.2: Terrain and Feel Follow-ups: lift-off spin, terrain edge, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (URGENT)
 
 ### Decisions
 

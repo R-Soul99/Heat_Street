@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [x] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001 (closed 2026-11-02: absorbed by Phase 4.2)
 - [x] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1 (completed 2026-11-02)
+- [ ] **Phase 4.3: Terrain and Feel Follow-ups** (INSERTED) - Lift-off spin fix, terrain-edge boundary, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record
 - [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
@@ -272,6 +273,16 @@ Plans:
 - [x] 04.2-14-PLAN.md — User sculpts the demo-hills map; frame-budget measurement and revision (wave 8, checkpoint)
 - [x] 04.2-15-PLAN.md — Medal re-record for juliette-ga/grid-test; migration, ADR, tuning-guide docs; close Phase 4.1 (wave 9, checkpoint)
 
+### Phase 04.3: Terrain and Feel Follow-ups (INSERTED)
+
+**Goal:** Close the follow-ups left by Phase 4.2 before race modes build on them. The shipped car no longer spins when the throttle is lifted on narrow, fast roads, and the 2/60 one-tick contact losses on the slope gate are gone. The terrain edge has a boundary, so the car can't drive off the world. Roads are 1-2 m wider. juliette-ga render CPU is back under its 6 ms budget (measured 7.71 ms). The road editor refuses to save a graph that fails validation, such as GEOMETRY_SELF_INTERSECTION. The terrain editor gains a square raise/lower tool with a separate smoothing pass (todo `2026-11-03-add-square-raise-lower-tool-with-separate-smoothing-pass`). Medal reference times are re-recorded last, once the car is retuned.
+**Requirements**: TBD (follow-ups from 04.2-VERIFICATION.md, 04.2-HUMAN-UAT.md and the 04.2 close-out list)
+**Depends on:** Phase 4.2
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.3 to break down)
+
 ### Phase 5: Objectives, Navigation & Race Modes
 
 **Goal**: The player can actually play — two race modes on the real map, always knowing where to go and never more than a keypress from another attempt
@@ -377,6 +388,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 3. Surfaces & Helicopter Camera | 12/12 | Complete   | 2026-09-13 |
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | Closed (absorbed by 4.2) | 2026-11-02 |
+| 4.2. Driveable Terrain (INSERTED) | 15/15 | Complete | 2026-11-03 |
+| 4.3. Terrain and Feel Follow-ups (INSERTED) | 0/TBD | Not started | - |
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
