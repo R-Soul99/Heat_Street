@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { shippedTuning } from "../src/core/feel";
+import {
+  applyFeel,
+  FEEL_DEFAULTS,
+  FEEL_NEUTRAL,
+  type FeelKey,
+  type FeelSettings,
+  shippedTuning,
+} from "../src/core/feel";
 import {
   evaluateGate,
   flatRegressionPasses,
   type GateLaneMetrics,
   type GateVerdict,
 } from "../src/core/terrain-gate-metrics";
+import { classDefaultTuning, DEFAULT_VEHICLE_CLASS_ID } from "../src/core/vehicle-class";
 import { defaultTuning } from "../src/core/vehicle-tuning";
 import { ROUTINES } from "../src/physics/telemetry/routines";
 import { runRoutine } from "../src/physics/telemetry/run";
@@ -227,6 +235,48 @@ describe("shipped car gate (04.3 P43-CONTACT)", () => {
       if (env?.GATE_ENFORCE === "1") {
         expect(allPass, `shipped gate failed:${NL}${failures.join(NL)}`).toBe(true);
       }
+    },
+    HEAVY,
+  );
+});
+
+describe("shipped car contact-loss bisect (opt-in, GATE_BISECT=1)", () => {
+  const bisectOn =
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+      ?.GATE_BISECT === "1";
+  it.skipIf(!bisectOn)(
+    "reverting one feel key to neutral: loss ticks on climb 15 m/s dir -1",
+    () => {
+      const lane = gateCourseLanes().filter((l) => l.id === "climb")[0];
+      if (lane === undefined) throw new Error("climb lane missing");
+      const rows: Record<string, string | number>[] = [];
+      const keys = Object.keys(FEEL_NEUTRAL) as FeelKey[];
+      for (const key of ["(none)" as const, ...keys]) {
+        const feel: FeelSettings = { ...FEEL_DEFAULTS };
+        if (key !== "(none)") feel[key] = FEEL_NEUTRAL[key];
+        const t = classDefaultTuning(DEFAULT_VEHICLE_CLASS_ID);
+        applyFeel(t, classDefaultTuning(DEFAULT_VEHICLE_CLASS_ID), feel);
+        const m = runGateLane(lane, 15, -1, t, { colliderSubdiv: 2 });
+        rows.push({ reverted: key, contactLossTicks: m.contactLossTicks });
+      }
+      // liftOff is already neutral (5) in FEEL_DEFAULTS, so also sweep it and nudge
+      // two keys to show how sensitive the single lost tick is.
+      const probes: [FeelKey, number][] = [
+        ["liftOff", 0],
+        ["liftOff", 10],
+        ["lowGearPunch", 6.5],
+        ["lowGearPunch", 7.5],
+        ["looseness", 5.0],
+        ["looseness", 5.6],
+      ];
+      for (const [key, val] of probes) {
+        const feel: FeelSettings = { ...FEEL_DEFAULTS, [key]: val };
+        const t = classDefaultTuning(DEFAULT_VEHICLE_CLASS_ID);
+        applyFeel(t, classDefaultTuning(DEFAULT_VEHICLE_CLASS_ID), feel);
+        const m = runGateLane(lane, 15, -1, t, { colliderSubdiv: 2 });
+        rows.push({ reverted: `${key}=${val}`, contactLossTicks: m.contactLossTicks });
+      }
+      console.table(rows);
     },
     HEAVY,
   );
