@@ -164,6 +164,9 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   target.drive.highSpeedSteerFraction =
     base.drive.highSpeedSteerFraction * anchored(f.steerAtSpeed, 0.4, 1, 2.2);
   target.drive.steerRampPerSec = base.drive.steerRampPerSec * lerp(0.4, 1.6, f.turnIn / 10);
+  // The keyboard return-to-centre rate follows the same slider, so it stays at
+  // least as fast as the wind-on (04.3-05): a short tap stays a short input.
+  target.drive.steerReturnPerSec = base.drive.steerReturnPerSec * lerp(0.4, 1.6, f.turnIn / 10);
 
   target.drive.engineForcePerRearWheel =
     base.drive.engineForcePerRearWheel * lerp(0.5, 1.5, f.accel / 10);

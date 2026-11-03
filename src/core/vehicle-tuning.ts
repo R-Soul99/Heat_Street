@@ -233,7 +233,15 @@ export interface VehicleTuning {
      * guess step, not measured.
      */
     steerRampPerSec: number;
-    /** Steering ramp-out (return to centre) rate, radians per second. */
+    /**
+     * Steering ramp-out (return to centre, or reversal) rate, full-scale units
+     * per second, keyboard only. Kept at least as fast as `steerRampPerSec`
+     * (the `?feel` turn-in slider scales both) so a short tap at speed is a
+     * short input: with the old 4.0 against a wind-on of 6.3 a 3-tick tap
+     * lingered for ~5 ticks after the key came up (drive log 2026-11-03).
+     *
+     * [TUNED, 2026-11-03, plan 04.3-05]: 4.0 -> 6.0. Pending the plan 11 sign-off drive.
+     */
     steerReturnPerSec: number;
     /**
      * Rear-axle lateral grip multiplier while the handbrake is held.
@@ -369,6 +377,12 @@ export interface VehicleTuning {
      * 100 mph spins the car.
      *
      * [TUNED, user feel report 2026-10-21]: first-guess value, not measured.
+     * [TUNED, 2026-11-03, plan 04.3-05]: 0.45 -> 0.09. The shipped car's full
+     * lock was still ~31 deg at 97 mph, so a 2-5 tick keyboard tap steered
+     * 6-16 deg and each correction over-corrected until the car spun (drive
+     * log tap-correction-spin-2026-11-03). With the `?feel` steerAtSpeed 7
+     * multiplier (x1.48) 0.09 leaves ~7 deg at 100 mph. Low-speed lock (below
+     * 12 m/s) is untouched. Pending the plan 11 sign-off drive.
      */
     highSpeedSteerFraction: number;
     /**
@@ -602,7 +616,7 @@ export function defaultTuning(): VehicleTuning {
       brakeImpulsePerWheel: 60,
       maxSteerLock: Math.PI / 4,
       steerRampPerSec: 5.0,
-      steerReturnPerSec: 4.0,
+      steerReturnPerSec: 6.0,
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
       powerOversteerRearSideFriction: 0.024,
@@ -614,7 +628,7 @@ export function defaultTuning(): VehicleTuning {
       reverseEngineForcePerRearWheel: 3000,
       reverseEngageSpeedMs: 0.1,
       topSpeedMs: 48,
-      highSpeedSteerFraction: 0.45,
+      highSpeedSteerFraction: 0.09,
       lowGearPunch: 1,
       flickGain: 0,
       flickSwingSec: 0.45,

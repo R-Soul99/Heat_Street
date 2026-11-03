@@ -50,7 +50,7 @@ describe("applyFeel", () => {
     });
     const { base, t } = derived(FEEL_DEFAULTS);
     expect(t.wheels.frictionSlip).toBeCloseTo(base.wheels.frictionSlip * 1.12);
-    expect(t.drive.highSpeedSteerFraction).toBeCloseTo(0.666);
+    expect(t.drive.highSpeedSteerFraction).toBeCloseTo(0.09 * 1.48);
     expect(t.drive.flickGain).toBeCloseTo(0.51);
     expect(t.drive.pivotTurn).toBe(1);
     expect(t.drive.pivotEngageSec).toBeCloseTo(base.drive.pivotEngageSec * 1.224);
