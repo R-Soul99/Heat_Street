@@ -57,6 +57,7 @@ value.
 - Handling target is "arcade-realistic hybrid" — not full sim, not arcade-floaty. Open research item: benchmark against Driver/Burnout/The Crew once prototyping starts.
 - A detailed technical breakdown of core shared systems (vehicle physics, surface friction, camera rig, damage/destruction, NPC driving AI, checkpoint system) already exists in `heat-street-design-doc.md` and the original project draft — useful input for research and roadmap phases.
 - Phase 1 (Engine Foundation) complete (2026-09-08): fixed-timestep sim core, Rapier/Three.js wiring, and the rAF loop are in place and proven framerate-independent (VEH-03). This is the timing substrate the vehicle-feel work in Phase 2 builds on — no player-facing driving requirements are validated yet.
+- Phase 4.2 (Driveable Terrain) complete (2026-11-03): hand-sculpted heightfield terrain is now the single source of truth for maps (height grid + surface paint map, no separate road mesh), with a road brush, a 3D sculpt page and a profiler HUD; it absorbed Phase 4.1. The user's feel-slider preset is now the shipped car. Medal times on juliette-ga and grid-test are provisional until the car is retuned (lift-off spins on narrow fast roads remain the top feel problem).
 
 ## Constraints
 
@@ -74,6 +75,7 @@ value.
 | Progression: hybrid area-unlock + freeform medal-time replay within unlocked areas | Balances a structured sense of progress with the MGS-VR-mission-style replayability the player wants | — Pending |
 | Narrative kept light — mission briefs + radio chatter only, no cutscenes/dialogue | Matches player's own low patience for story and the chase-movie tone; costs nothing extra to build on top of planned heat-system feedback | — Pending |
 | Map scale (one large mixed-terrain map vs. several smaller maps) left open | Not critical to decide now; the player's own Google Maps extraction tool can produce either, decision deferred to implementation | — Pending |
+| Terrain heightfield + paint map is the single source of truth; real-world DEM elevation dropped (ADR 0001 amendment) | DEM elevation produced oversized road-shoulder skirts and bumps; hand-sculpted hills drive smoothly | ✓ Good (Phase 4.2) |
 
 ## Evolution
 
@@ -93,4 +95,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-08 after Phase 1 (Engine Foundation) completion*
+*Last updated: 2026-11-03 after Phase 4.2 (Driveable Terrain) completion*
