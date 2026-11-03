@@ -1161,7 +1161,10 @@ try {
       }
       if (terrainView !== undefined) {
         const tp = view.meshes[0].position;
-        terrainDbg?.rebuilt(terrainView.updateTextures(tp.x, tp.z));
+        // Call unconditionally: `terrainDbg?.rebuilt(...)` would skip evaluating
+        // the argument (and so the LOD update itself) when debug is off.
+        const rebuilt = terrainView.updateTextures(tp.x, tp.z);
+        terrainDbg?.rebuilt(rebuilt);
       }
       terrainDbg?.end();
       if (carShadow !== undefined && groundProbe !== undefined) {
