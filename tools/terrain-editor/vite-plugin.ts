@@ -22,6 +22,7 @@ import {
   readBodyCapped,
   resolveTerrainFile,
 } from "./paths.ts";
+import { assertSaveableGraph } from "./save-guard.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MAPS_DIR = path.join(ROOT, "public", "maps");
@@ -80,6 +81,17 @@ export function writeAtomic(file: string, data: Buffer | string): Promise<void> 
   return run;
 }
 
+/**
+ * Validates a sidecar PUT body: codec parse, then the same road-graph save
+ * rule the editor applies client-side (D-17). Throws `terrain-format:` /
+ * `parseRoadGraph:` for malformed input and `terrain-save:` for a graph with
+ * a blocking validation failure.
+ */
+export function validateSidecarPut(text: string, id: string): void {
+  const sidecar = parseTerrainSidecar(text, id, `${id}.terrain.json`);
+  assertSaveableGraph(sidecar.graph);
+}
+
 export function terrainEditorApi(): Plugin {
   return {
     name: "heat-street-terrain-editor-api",
@@ -124,7 +136,7 @@ export function terrainEditorApi(): Plugin {
           } else {
             const body = await readBodyCapped(req, MAX_JSON_BYTES);
             const text = body.toString("utf8");
-            parseTerrainSidecar(text, id, `${id}.terrain.json`);
+            validateSidecarPut(text, id);
             await writeAtomic(file, text);
           }
           return send(res, 200, '{"ok":true}');
@@ -134,7 +146,9 @@ export function terrainEditorApi(): Plugin {
           const msg = safeMessage(err);
           // Codec/parse failures are the client's fault; filesystem failures are ours.
           const isValidation =
-            msg.startsWith("terrain-format:") || msg.startsWith("parseRoadGraph:");
+            msg.startsWith("terrain-format:") ||
+            msg.startsWith("parseRoadGraph:") ||
+            msg.startsWith("terrain-save:");
           return sendError(res, isValidation ? 400 : 500, msg);
         }
       });

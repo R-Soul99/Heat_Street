@@ -19,9 +19,8 @@ import {
  * (disconnected pieces), and terrain maps never build ribbon meshes so a
  * self-intersection is cosmetic. DIRECTED_PATHABILITY deliberately blocks.
  */
-export const NON_BLOCKING_ON_TERRAIN: ReadonlySet<ValidationFailureCategory> = new Set<
-  ValidationFailureCategory
->(["UNDIRECTED_REACHABILITY", "GEOMETRY_SELF_INTERSECTION"]);
+export const NON_BLOCKING_ON_TERRAIN: ReadonlySet<ValidationFailureCategory> =
+  new Set<ValidationFailureCategory>(["UNDIRECTED_REACHABILITY", "GEOMETRY_SELF_INTERSECTION"]);
 
 export const SAVE_GUARD_PREFIX = "terrain-save:";
 
