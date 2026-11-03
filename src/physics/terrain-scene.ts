@@ -38,6 +38,11 @@ import {
   type SurfacePaintLookup,
 } from "./surface";
 import { createVehicle, type VehiclePose } from "./vehicle";
+import {
+  createWheelRayPatch,
+  type WheelRayPatch,
+  type WheelRayPatchTarget,
+} from "./wheel-ray-patch";
 
 export interface TerrainSceneInput {
   readonly areaId: string;
@@ -59,6 +64,12 @@ export interface TerrainSceneInput {
 /** The MapScene contract plus the berm boxes the view builds its mesh from. */
 export interface TerrainScene extends MapScene {
   readonly edgeBerm: readonly BermBox[];
+  /**
+   * A fresh wheel-ray patch over this scene's terrain grids (see
+   * wheel-ray-patch.ts). The player's vehicle already carries one; AI cars
+   * built into the same world get theirs by passing this to `createAiFleet`.
+   */
+  createWheelRayPatch(): WheelRayPatch;
 }
 
 /**
@@ -183,8 +194,21 @@ export function createTerrainScene(
     surfaceMap.register(collider.handle, input.groundSurface);
   }
 
+  const patchTargets: WheelRayPatchTarget[] = [
+    { grid: input.grid, paint: terrain.paint, map: surfaceMap, groundSurface: input.groundSurface },
+  ];
+  if (input.extraTerrain !== undefined && extra !== undefined) {
+    patchTargets.push({
+      grid: input.extraTerrain.grid,
+      paint: extra.paint,
+      map: surfaceMap,
+      groundSurface: input.groundSurface,
+    });
+  }
+
   const spawn = resolveTerrainSpawn(input);
   const vehicle = createVehicle(world, tuning, spawn, frontDriveShare);
+  vehicle.attachWheelRayPatch(createWheelRayPatch(world, patchTargets));
   const defaultSpawnPose: VehiclePose = spawn;
   vehicle.resetPose(defaultSpawnPose);
   let currentTuning = tuning;
@@ -200,6 +224,10 @@ export function createTerrainScene(
     defaultSpawnPose,
     surfaces: surfaceContext,
     edgeBerm,
+
+    createWheelRayPatch(): WheelRayPatch {
+      return createWheelRayPatch(world, patchTargets);
+    },
 
     preTick(_tick: number): void {
       // No-op, as MapScene.preTick.

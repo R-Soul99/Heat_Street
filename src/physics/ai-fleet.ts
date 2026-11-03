@@ -29,6 +29,7 @@ import type { VehicleTuning } from "../core/vehicle-tuning";
 import { probeForwardGapM } from "./ai-avoidance";
 import type { SurfaceContext } from "./surface";
 import { createVehicle, sampleVehicle, type Vehicle, type VehiclePose } from "./vehicle";
+import type { WheelRayPatch } from "./wheel-ray-patch";
 
 /** Forward probe length cap, metres — the same ceiling `AVOIDANCE_PARAMS.followMaxM` uses, so the ray is never cast further than the slowdown curve could ever need (T-07-10: bounds the per-tick raycast cost). */
 const MAX_PROBE_DISTANCE_M = 30;
@@ -77,12 +78,19 @@ export function createAiFleet(
   line: RacingLine,
   gridPoses: readonly VehiclePose[],
   driverParams: AiDriverParams,
-  options?: { readonly obstacleBodies?: readonly RAPIER.RigidBody[] },
+  options?: {
+    readonly obstacleBodies?: readonly RAPIER.RigidBody[];
+    /** Terrain scenes: gives each AI car its own wheel-ray patch (heightfield ray-miss workaround). */
+    readonly wheelRayPatch?: () => WheelRayPatch;
+  },
 ): AiFleet {
   let currentTuning = tuning;
 
   const cars: AiFleetCar[] = gridPoses.map((pose) => {
     const vehicle = createVehicle(world, currentTuning, pose);
+    if (options?.wheelRayPatch !== undefined) {
+      vehicle.attachWheelRayPatch(options.wheelRayPatch());
+    }
     vehicle.resetPose(pose);
     const driver = createAiDriver(line, driverParams);
     return { vehicle, driver };

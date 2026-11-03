@@ -22,6 +22,7 @@ import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
 import { applyAssists, boxPrincipalInertia } from "./vehicle-assists";
+import type { WheelRayPatch } from "./wheel-ray-patch";
 
 /**
  * Wheel indices. Front pair sits at -Z, rear pair at +Z. This order is a
@@ -225,6 +226,12 @@ export interface Vehicle {
   applyTuning(tuning: VehicleTuning): void;
   /** Reset the existing chassis in place to an authored upright pose. */
   resetPose(pose: VehiclePose): void;
+  /**
+   * Attach a wheel-ray patch (terrain heightfield ray-miss workaround). It is
+   * re-centred from this chassis' position every tick before the wheel rays
+   * are cast, and disposed with the vehicle. Replaces any previous patch.
+   */
+  attachWheelRayPatch(patch: WheelRayPatch | undefined): void;
   /** Remove the vehicle controller from its world. */
   dispose(): void;
 }
@@ -414,6 +421,7 @@ export function createVehicle(
     gripScale: 1,
   };
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
+  let wheelRayPatch: WheelRayPatch | undefined;
 
   return {
     body,
@@ -490,7 +498,8 @@ export function createVehicle(
           let paint = surfaces.paint;
           while (
             paint !== undefined &&
-            (ground === null || ground.handle !== paint.colliderHandle)
+            (ground === null ||
+              (ground.handle !== paint.colliderHandle && !paint.aliasHandles?.has(ground.handle)))
           ) {
             paint = paint.next;
           }
@@ -832,6 +841,12 @@ export function createVehicle(
 
       // 5. Solve the vehicle — writes suspension + tire impulses onto the
       // chassis body. Imported DT, never a literal.
+      // Keep the wheel-ray patch under the car (fixed-step state only), so the
+      // wheel rays below also see the contact-free trimesh window.
+      if (wheelRayPatch !== undefined) {
+        const pos = body.translation();
+        wheelRayPatch.update(pos.x, pos.z);
+      }
       vc.updateVehicle(DT);
 
       // 5b. Front drive share as a chassis impulse along heading. The guard
@@ -983,7 +998,14 @@ export function createVehicle(
     applyTuning,
     resetPose,
 
+    attachWheelRayPatch(patch: WheelRayPatch | undefined): void {
+      if (wheelRayPatch !== undefined && wheelRayPatch !== patch) wheelRayPatch.dispose();
+      wheelRayPatch = patch;
+    },
+
     dispose(): void {
+      wheelRayPatch?.dispose();
+      wheelRayPatch = undefined;
       world.removeVehicleController(vc);
     },
   };

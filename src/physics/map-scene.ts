@@ -63,6 +63,7 @@ import {
 } from "./surface";
 import { buildTerrainCollider } from "./terrain-scene";
 import { createVehicle, type Vehicle, type VehiclePose } from "./vehicle";
+import type { WheelRayPatch } from "./wheel-ray-patch";
 
 /**
  * How far above the spawn node's authored `y` the chassis spawns, metres --
@@ -123,6 +124,9 @@ export interface MapScene {
 
   /** Reset the existing vehicle body in place to an authored pose. */
   resetVehicle(pose: VehiclePose): void;
+
+  /** Terrain scenes only: a fresh wheel-ray patch for an extra vehicle (AI) built into the same world. */
+  createWheelRayPatch?(): WheelRayPatch;
 
   /** Remove the vehicle controller from its world. */
   dispose(): void;

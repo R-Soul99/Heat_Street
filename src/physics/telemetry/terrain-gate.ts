@@ -30,6 +30,7 @@ import type { VehicleTuning } from "../../core/vehicle-tuning";
 import { createSurfaceMap, type SurfaceContext } from "../surface";
 import { buildTerrainCollider } from "../terrain-scene";
 import { createVehicle, sampleVehicle } from "../vehicle";
+import { createWheelRayPatch } from "../wheel-ray-patch";
 import { createWorld } from "../world";
 import { ROUTINES } from "./routines";
 import { runRoutine } from "./run";
@@ -105,6 +106,7 @@ function runLanePoints(
   tuning: VehicleTuning,
   colliderSubdiv: 1 | 2,
   onContactLoss?: (d: ContactLossDiag) => void,
+  noPatch = false,
 ): GateLaneMetrics {
   const pts = direction === 1 ? points : [...points].reverse();
   const n = pts.length;
@@ -121,6 +123,13 @@ function runLanePoints(
     const headingRad = Math.atan2(-(nx - sx), -(nz - sz));
     const sy = sampleTerrainHeight(colliderGrid, sx, sz) + SPAWN_CLEARANCE_M;
     const vehicle = createVehicle(world, tuning, { x: sx, y: sy, z: sz });
+    if (!noPatch) {
+      vehicle.attachWheelRayPatch(
+        createWheelRayPatch(world, [
+          { grid: colliderGrid, paint: lookup, map, groundSurface: "grass" },
+        ]),
+      );
+    }
     vehicle.resetPose({ x: sx, y: sy, z: sz, headingRad });
 
     // Spacing is ~1.5 m; 8 points ~ 12 m lookahead.
@@ -237,7 +246,12 @@ export function runGateLane(
   speedMs: number,
   direction: 1 | -1,
   tuning: VehicleTuning,
-  opts: { colliderSubdiv: 1 | 2; onContactLoss?: (d: ContactLossDiag) => void },
+  opts: {
+    colliderSubdiv: 1 | 2;
+    onContactLoss?: (d: ContactLossDiag) => void;
+    /** Control run: heightfield rays only (reproduces the ray-miss bug). */
+    noPatch?: boolean;
+  },
 ): GateLaneMetrics {
   const { grid, paint } = gateCourse();
   return runLanePoints(
@@ -250,6 +264,7 @@ export function runGateLane(
     tuning,
     opts.colliderSubdiv,
     opts.onContactLoss,
+    opts.noPatch ?? false,
   );
 }
 
