@@ -363,7 +363,7 @@ try {
     // ?at=x,z "drive here" (D-12): validated against the GRID extent, so it
     // works on a freshly created area with no roads yet.
     const spawnOverride = resolveDriveHerePose(location.search, physicsGrid, graph);
-    scene = createTerrainScene(
+    const terrainScene = createTerrainScene(
       world,
       {
         areaId: AREA_ID,
@@ -383,7 +383,12 @@ try {
       surfaceProfiles,
       CAR_CLASS.frontDriveShare,
     );
-    const tView = buildTerrainView(physicsGrid, terrainArea.paint, { crests });
+    scene = terrainScene;
+    // The visible berm is built from the very boxes the collider uses (D-09).
+    const tView = buildTerrainView(physicsGrid, terrainArea.paint, {
+      crests,
+      edgeBerm: terrainScene.edgeBerm,
+    });
     terrainView = tView;
     // Migrated maps keep their baked building meshes only: the ribbon road
     // and glb terrain meshes are removed so they cannot draw over the heightfield.

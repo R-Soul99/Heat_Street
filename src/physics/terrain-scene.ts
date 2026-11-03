@@ -19,10 +19,12 @@ import type { MapCollisionBuilding } from "../core/map-collision";
 import type { RoadGraph } from "../core/road-graph";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
+import { type BermBox, buildEdgeBerm } from "../core/terrain-edge-berm";
 import { sampleTerrainHeight, type TerrainGrid } from "../core/terrain-grid";
 import type { PaintMap } from "../core/terrain-paint";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import {
+  BUILDING_FRICTION,
   buildBuildingCollider,
   DEFAULT_SPAWN_ID,
   type MapScene,
@@ -52,6 +54,11 @@ export interface TerrainSceneInput {
    * scene unchanged.
    */
   readonly extraTerrain?: { readonly grid: TerrainGrid; readonly paint: PaintMap };
+}
+
+/** The MapScene contract plus the berm boxes the view builds its mesh from. */
+export interface TerrainScene extends MapScene {
+  readonly edgeBerm: readonly BermBox[];
 }
 
 /**
@@ -118,7 +125,7 @@ export function createTerrainScene(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
   frontDriveShare = 0,
-): MapScene {
+): TerrainScene {
   const surfaceMap = createSurfaceMap();
   const terrain = buildTerrainCollider(world, input.grid, input.paint, input.groundSurface);
   surfaceMap.register(terrain.collider.handle, input.groundSurface);
@@ -161,6 +168,21 @@ export function createTerrainScene(
     buildBuildingCollider(world, building);
   }
 
+  // Edge berm (04.3 D-06..D-10): thick fixed cuboids around the grid bounds on
+  // ONE body. A plain solid like a building: no respawn, no teleport.
+  const edgeBerm = buildEdgeBerm(input.grid);
+  const bermBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  for (const box of edgeBerm) {
+    const collider = world.createCollider(
+      RAPIER.ColliderDesc.cuboid(box.hx, box.hy, box.hz)
+        .setTranslation(box.cx, box.cy, box.cz)
+        .setFriction(BUILDING_FRICTION)
+        .setRestitution(0),
+      bermBody,
+    );
+    surfaceMap.register(collider.handle, input.groundSurface);
+  }
+
   const spawn = resolveTerrainSpawn(input);
   const vehicle = createVehicle(world, tuning, spawn, frontDriveShare);
   const defaultSpawnPose: VehiclePose = spawn;
@@ -177,6 +199,7 @@ export function createTerrainScene(
     vehicle,
     defaultSpawnPose,
     surfaces: surfaceContext,
+    edgeBerm,
 
     preTick(_tick: number): void {
       // No-op, as MapScene.preTick.

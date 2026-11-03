@@ -1,15 +1,24 @@
+import { readFileSync } from "node:fs";
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import type { AuthoredCrest } from "../src/core/crest-geometry";
+import { type InputFrame, NEUTRAL } from "../src/core/input-tape";
 import type { MapCollisionBuilding } from "../src/core/map-collision";
 import type { RoadGraph } from "../src/core/road-graph";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
+import { BERM_INSET_M, BERM_THICKNESS_M, buildEdgeBerm } from "../src/core/terrain-edge-berm";
+import { loadTerrainArea } from "../src/core/terrain-format";
 import { createTerrainGrid, sampleTerrainHeight, type TerrainGrid } from "../src/core/terrain-grid";
 import { createPaintMap } from "../src/core/terrain-paint";
 import { defaultTuning } from "../src/core/vehicle-tuning";
 import { BUILDING_FRICTION, ROAD_FRICTION } from "../src/physics/map-scene";
-import { createTerrainScene, type TerrainSceneInput } from "../src/physics/terrain-scene";
+import {
+  buildTerrainCollider,
+  createTerrainScene,
+  type TerrainSceneInput,
+} from "../src/physics/terrain-scene";
 import terrainSceneSource from "../src/physics/terrain-scene.ts?raw";
+import { sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
 
 function lcg(seed: number): () => number {
@@ -253,4 +262,122 @@ describe("createTerrainScene", () => {
       world.free();
     }
   });
+});
+
+describe("terrain edge berm (04.3 D-06..D-10)", () => {
+  const FRAME_FULL: InputFrame = { steer: 0, throttle: 1, brake: 0, handbrake: false };
+
+  function drive(opts: { upward: number; seconds: number; throttle: boolean }) {
+    const world = createWorld();
+    try {
+      const grid = flatGrid(); // x/z -30..30
+      // heading pi/2: forward = (-1, 0), straight at the west edge from x = -10
+      const scene = createTerrainScene(
+        world,
+        input(grid, { spawnOverride: { x: -10, z: 0, headingRad: Math.PI / 2 } }),
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      );
+      scene.vehicle.body.setLinvel({ x: -30, y: opts.upward, z: 0 }, true);
+      const track: { x: number; y: number }[] = [];
+      for (let t = 0; t < opts.seconds * 60; t++) {
+        scene.applyInput(opts.throttle ? FRAME_FULL : NEUTRAL);
+        world.step();
+        const s = sampleVehicle(scene.vehicle);
+        track.push({ x: s.position.x, y: s.position.y });
+      }
+      return track;
+    } finally {
+      world.free();
+    }
+  }
+
+  it("adds one fixed body carrying one cuboid per berm box, and exposes edgeBerm", () => {
+    const world = createWorld();
+    try {
+      const grid = flatGrid();
+      const scene = createTerrainScene(
+        world,
+        input(grid),
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      );
+      const berm = buildEdgeBerm(grid);
+      expect(scene.edgeBerm).toEqual(berm);
+      const cuboids = colliders(world).filter((c) => c.shapeType() === RAPIER.ShapeType.Cuboid);
+      const bermCuboids = cuboids.filter((c) => Math.abs(c.friction() - BUILDING_FRICTION) < 1e-6);
+      expect(bermCuboids.length).toBeGreaterThanOrEqual(berm.length);
+      const parents = new Set(bermCuboids.map((c) => c.parent()?.handle));
+      expect(parents.size).toBe(1);
+    } finally {
+      world.free();
+    }
+  });
+
+  it("a car driven at the edge at 30 m/s is stopped by the berm: no teleport", () => {
+    const track = drive({ upward: 0, seconds: 3, throttle: true });
+    let prev = track[0];
+    for (const p of track) {
+      expect(p.x).toBeGreaterThan(-30 - BERM_THICKNESS_M);
+      expect(Math.abs(p.y)).toBeLessThan(3);
+      expect(Math.abs(p.x - prev.x)).toBeLessThan(30 / 60 + 0.5);
+      prev = p;
+    }
+    expect(track[track.length - 1].x).toBeLessThan(-20); // it did reach the wall
+  });
+
+  it("a big jump clears the berm and the car then falls (no respawn)", () => {
+    const track = drive({ upward: 12, seconds: 3, throttle: false });
+    const end = track[track.length - 1];
+    expect(end.x).toBeLessThan(-30 - BERM_THICKNESS_M);
+    expect(end.y).toBeLessThan(0);
+  });
+
+  it("buildTerrainCollider alone creates no berm colliders", () => {
+    const world = createWorld();
+    try {
+      const grid = flatGrid();
+      const i = input(grid);
+      buildTerrainCollider(world, grid, i.paint, "grass");
+      expect(colliders(world)).toHaveLength(1);
+    } finally {
+      world.free();
+    }
+  });
+
+  it("default spawn is at least 10 m inside the berm inner face on every tracked terrain map", async () => {
+    for (const id of ["demo-hills", "feel-test", "grid-test", "juliette-ga"]) {
+      const bin = new Uint8Array(readFileSync(`public/maps/${id}.terrain.bin`));
+      const json = readFileSync(`public/maps/${id}.terrain.json`, "utf8");
+      const area = await loadTerrainArea(bin, json, id, `${id}.terrain`);
+      const world = createWorld();
+      try {
+        const scene = createTerrainScene(
+          world,
+          {
+            areaId: id,
+            grid: area.grid,
+            paint: area.paint,
+            graph: area.graph,
+            buildings: area.buildings,
+            crests: [],
+            groundSurface: area.groundSurface,
+          },
+          defaultTuning(),
+          defaultSurfaceProfiles(),
+        );
+        const g = area.grid;
+        const p = scene.defaultSpawnPose;
+        const inside = Math.min(
+          p.x - (g.originX + BERM_INSET_M),
+          g.originX + g.scaleX - BERM_INSET_M - p.x,
+          p.z - (g.originZ + BERM_INSET_M),
+          g.originZ + g.scaleZ - BERM_INSET_M - p.z,
+        );
+        expect(inside, id).toBeGreaterThanOrEqual(10);
+      } finally {
+        world.free();
+      }
+    }
+  }, 60_000);
 });
