@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   type BrushParams,
+  blockWindowAt,
   createStrokeRecorder,
   erasePaintDisc,
   flattenBrush,
   paintSurface,
+  raiseBlock,
   raiseLower,
   smoothBrush,
+  smoothRegion,
   stampTerrain,
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
@@ -299,5 +302,153 @@ describe("createStrokeRecorder", () => {
     expect(rec.commit()).toBeUndefined();
     raiseLower(g, brush({ strength: 0 }), 1, 1, rec);
     expect(rec.commit()).toBeUndefined();
+  });
+});
+
+// ---- phase 04.3 plan 02: block raise/lower and road-safe smoothing (D-18..D-21) ----
+describe("blockWindowAt", () => {
+  it("returns the vertex window of an N x N cell block anchored at the cell under (x, z)", () => {
+    const g = grid();
+    // (1, 1) sits in cell row 30 / col 30; N=2 anchor r0 = 30 - floor(1/2) = 30.
+    expect(blockWindowAt(g, 1, 1, 2)).toEqual({ minRow: 30, minCol: 30, maxRow: 32, maxCol: 32 });
+    // N=3 anchor offset floor(2/2) = 1.
+    expect(blockWindowAt(g, 1, 1, 3)).toEqual({ minRow: 29, minCol: 29, maxRow: 32, maxCol: 32 });
+  });
+  it("clamps inside the grid and returns null outside it", () => {
+    const g = grid();
+    const w = blockWindowAt(g, -89, -89, 4);
+    expect(w?.minRow).toBe(0);
+    expect(w?.minCol).toBe(0);
+    expect(blockWindowAt(g, 500, 0, 2)).toBeNull();
+    expect(blockWindowAt(g, 0, -500, 2)).toBeNull();
+    expect(blockWindowAt(g, Number.NaN, 0, 2)).toBeNull();
+  });
+});
+
+describe("raiseBlock", () => {
+  const p = (over: Partial<{ x: number; z: number; blockCells: number; stepM: number }> = {}) => ({
+    x: 1,
+    z: 1,
+    blockCells: 2,
+    stepM: 1,
+    ...over,
+  });
+
+  it("raises exactly the (N+1)^2 window by the step and leaves the rest alone", () => {
+    const g = grid();
+    const res = raiseBlock(g, p({ stepM: 0.5 }), 1);
+    expect(res.window).toBeDefined();
+    const win = blockWindowAt(g, 1, 1, 2) as NonNullable<ReturnType<typeof blockWindowAt>>;
+    for (let c = 0; c <= g.cols; c++) {
+      for (let r = 0; r <= g.rows; r++) {
+        const inside = r >= win.minRow && r <= win.maxRow && c >= win.minCol && c <= win.maxCol;
+        const h = g.heights[terrainIndex(g, r, c)];
+        if (inside) expect(h).toBeCloseTo(0.5, 5);
+        else expect(h).toBeLessThanOrEqual(0.5);
+      }
+    }
+    expect(g.heights[terrainIndex(g, 0, 0)]).toBe(0);
+  });
+
+  it("lowers with sign -1", () => {
+    const g = grid();
+    raiseBlock(g, p({ stepM: 0.5 }), -1);
+    expect(at(g, 1, 1)).toBeCloseTo(-0.5, 5);
+  });
+
+  it("a 5 m step on 3 m cells hits the slope cap", () => {
+    const g = grid();
+    const res = raiseBlock(g, p({ stepM: 5, blockCells: 3 }), 1);
+    expect(res.slopeClamped).toBe(true);
+    expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 0.01);
+  });
+
+  it("never moves road-masked vertices inside the block", () => {
+    const g = grid();
+    const win = blockWindowAt(g, 1, 1, 3) as NonNullable<ReturnType<typeof blockWindowAt>>;
+    const mask = new Uint8Array(g.heights.length);
+    for (let r = win.minRow; r <= win.maxRow; r++) mask[terrainIndex(g, r, win.minCol + 1)] = 1;
+    raiseBlock(g, p({ blockCells: 3 }), 1, undefined, { roadMask: () => mask });
+    for (let r = win.minRow; r <= win.maxRow; r++) {
+      expect(g.heights[terrainIndex(g, r, win.minCol + 1)]).toBe(0);
+    }
+    expect(g.heights[terrainIndex(g, win.minRow, win.minCol)]).toBeGreaterThan(0);
+  });
+
+  it("clamps blockCells and stepM, no-ops on non-finite input", () => {
+    const g = grid();
+    expect(raiseBlock(g, p({ stepM: Number.NaN }), 1).window).toBeUndefined();
+    expect(raiseBlock(g, p({ blockCells: Number.POSITIVE_INFINITY }), 1).window).toBeUndefined();
+    expect(raiseBlock(g, p({ x: Number.NaN }), 1).window).toBeUndefined();
+    expect(g.heights.every((h) => h === 0)).toBe(true);
+    raiseBlock(g, p({ blockCells: 99, stepM: 0.001 }), 1); // -> 8 cells, 0.25 m
+    expect(at(g, 1, 1)).toBeCloseTo(0.25, 5);
+    const w8 = blockWindowAt(g, 1, 1, 99) as NonNullable<ReturnType<typeof blockWindowAt>>;
+    expect(w8.maxRow - w8.minRow).toBe(8);
+  });
+});
+
+describe("smoothRegion", () => {
+  function noisy() {
+    const g = grid();
+    let s = 12345;
+    for (let i = 0; i < g.heights.length; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      g.heights[i] = (s / 0x7fffffff) * 0.4;
+    }
+    return g;
+  }
+  const win = { minRow: 20, minCol: 20, maxRow: 40, maxCol: 40 };
+  const variance = (g: ReturnType<typeof grid>) => {
+    let n = 0;
+    let sum = 0;
+    let sq = 0;
+    for (let c = win.minCol; c <= win.maxCol; c++) {
+      for (let r = win.minRow; r <= win.maxRow; r++) {
+        const h = g.heights[terrainIndex(g, r, c)];
+        n++;
+        sum += h;
+        sq += h * h;
+      }
+    }
+    return sq / n - (sum / n) ** 2;
+  };
+
+  it("reduces variance, leaves outside untouched, holds road vertices", () => {
+    const g = noisy();
+    const before = Float32Array.from(g.heights);
+    const v0 = variance(g);
+    const mask = new Uint8Array(g.heights.length);
+    for (let c = win.minCol; c <= win.maxCol; c++) mask[terrainIndex(g, 30, c)] = 1;
+    const res = smoothRegion(g, win, { strength: 1, passes: 3 }, undefined, {
+      roadMask: () => mask,
+    });
+    expect(res.window).toBeDefined();
+    expect(variance(g)).toBeLessThan(v0);
+    for (let c = win.minCol; c <= win.maxCol; c++) {
+      const i = terrainIndex(g, 30, c);
+      expect(g.heights[i]).toBe(before[i]);
+    }
+    expect(g.heights[terrainIndex(g, 2, 2)]).toBe(before[terrainIndex(g, 2, 2)]);
+    expect(g.heights[terrainIndex(g, 58, 58)]).toBe(before[terrainIndex(g, 58, 58)]);
+  });
+
+  it("clamps strength and passes; no-ops on non-finite", () => {
+    const a = noisy();
+    const b = noisy();
+    smoothRegion(a, win, { strength: 50, passes: 500 });
+    smoothRegion(b, win, { strength: 1, passes: 10 });
+    expect(Array.from(a.heights)).toEqual(Array.from(b.heights));
+    const c = noisy();
+    expect(smoothRegion(c, win, { strength: Number.NaN, passes: 3 }).window).toBeUndefined();
+    expect(smoothRegion(c, win, { strength: 1, passes: Number.NaN }).window).toBeUndefined();
+  });
+
+  it("more passes smooth more", () => {
+    const a = noisy();
+    const b = noisy();
+    smoothRegion(a, win, { strength: 1, passes: 1 });
+    smoothRegion(b, win, { strength: 1, passes: 4 });
+    expect(variance(b)).toBeLessThan(variance(a));
   });
 });

@@ -353,6 +353,154 @@ export function smoothBrush(
   );
 }
 
+export const BLOCK_CELLS_MIN = 1;
+export const BLOCK_CELLS_MAX = 8;
+export const BLOCK_STEP_MIN_M = 0.25;
+export const BLOCK_STEP_MAX_M = 5;
+export const SMOOTH_PASSES_MAX = 10;
+
+/**
+ * D-18 / D-22: the vertex window of the exact N x N cell block anchored at the
+ * cell containing (x, z) (anchor cell = row - floor((N-1)/2), same for columns),
+ * clipped inside the grid. Null when (x, z) is off the grid or any input is
+ * non-finite. Also used by the editor's block preview so it matches the op.
+ */
+export function blockWindowAt(
+  grid: TerrainGrid,
+  x: number,
+  z: number,
+  blockCells: number,
+): CellWindow | null {
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(blockCells)) return null;
+  const n = Math.min(BLOCK_CELLS_MAX, Math.max(BLOCK_CELLS_MIN, Math.round(blockCells)));
+  const col = Math.floor((x - grid.originX) / grid.cellSizeM);
+  const row = Math.floor((z - grid.originZ) / grid.cellSizeM);
+  if (row < 0 || row >= grid.rows || col < 0 || col >= grid.cols) return null;
+  const off = Math.floor((n - 1) / 2);
+  const r0 = Math.max(0, row - off);
+  const c0 = Math.max(0, col - off);
+  const r1 = Math.min(grid.rows - 1, row - off + n - 1);
+  const c1 = Math.min(grid.cols - 1, col - off + n - 1);
+  return { minRow: r0, minCol: c0, maxRow: r1 + 1, maxCol: c1 + 1 };
+}
+
+/**
+ * D-18..D-20: raise (sign 1) or lower (sign -1) an exact N x N cell block by a
+ * fixed step. Goes through runHeightOp so the 35 degree slope limiter and the
+ * stroke recorder apply; road-masked vertices inside the block keep their
+ * height (roadMask alone only protects the limiter). Sharp edges are intended
+ * so relax is off. Inputs are clamped (T-04.3-04); non-finite is a no-op.
+ */
+export function raiseBlock(
+  grid: TerrainGrid,
+  params: { x: number; z: number; blockCells: number; stepM: number },
+  sign: 1 | -1,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(params.stepM) || !Number.isFinite(params.blockCells)) return NO_OP;
+  const stepM = Math.min(BLOCK_STEP_MAX_M, Math.max(BLOCK_STEP_MIN_M, params.stepM));
+  const win = blockWindowAt(grid, params.x, params.z, params.blockCells);
+  if (!win) return NO_OP;
+  const stride = grid.rows + 1;
+  const mask = opts?.roadMask?.(win);
+  return runHeightOp(
+    grid,
+    win,
+    (x, z, h) => {
+      if (mask) {
+        const col = Math.round((x - grid.originX) / grid.cellSizeM);
+        const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+        if (mask[row + col * stride]) return h;
+      }
+      return h + sign * stepM;
+    },
+    rec,
+    false,
+    opts,
+  );
+}
+
+/**
+ * D-21: multi-pass 1-2-1 smoothing over a window (or the whole grid). All
+ * passes are computed in a scratch buffer (heights outside the window are fixed
+ * boundary values, road-masked vertices are held every pass), then written by a
+ * single runHeightOp so one recorder diff covers the whole op = one undo step.
+ * Strength clamps 0..1, passes to integers 1..SMOOTH_PASSES_MAX (T-04.3-05).
+ */
+export function smoothRegion(
+  grid: TerrainGrid,
+  region: CellWindow,
+  params: { strength: number; passes: number },
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(params.strength) || !Number.isFinite(params.passes)) return NO_OP;
+  const strength = Math.min(1, Math.max(0, params.strength));
+  const passes = Math.min(SMOOTH_PASSES_MAX, Math.max(1, Math.round(params.passes)));
+  const win: CellWindow = {
+    minRow: Math.max(0, Math.floor(region.minRow)),
+    minCol: Math.max(0, Math.floor(region.minCol)),
+    maxRow: Math.min(grid.rows, Math.ceil(region.maxRow)),
+    maxCol: Math.min(grid.cols, Math.ceil(region.maxCol)),
+  };
+  if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return NO_OP;
+  const stride = grid.rows + 1;
+  const rowsN = win.maxRow - win.minRow + 1;
+  const colsN = win.maxCol - win.minCol + 1;
+  const mask = opts?.roadMask?.(win);
+  let cur = new Float64Array(rowsN * colsN);
+  let nxt = new Float64Array(rowsN * colsN);
+  for (let c = 0; c < colsN; c++) {
+    for (let r = 0; r < rowsN; r++) {
+      cur[r + c * rowsN] = grid.heights[win.minRow + r + (win.minCol + c) * stride];
+    }
+  }
+  const read = (src: Float64Array, row: number, col: number): number => {
+    const rr = Math.min(grid.rows, Math.max(0, row));
+    const cc = Math.min(grid.cols, Math.max(0, col));
+    if (rr >= win.minRow && rr <= win.maxRow && cc >= win.minCol && cc <= win.maxCol) {
+      return src[rr - win.minRow + (cc - win.minCol) * rowsN];
+    }
+    return grid.heights[rr + cc * stride];
+  };
+  for (let p = 0; p < passes; p++) {
+    for (let c = 0; c < colsN; c++) {
+      for (let r = 0; r < rowsN; r++) {
+        const row = win.minRow + r;
+        const col = win.minCol + c;
+        const h = cur[r + c * rowsN];
+        if (mask?.[row + col * stride]) {
+          nxt[r + c * rowsN] = h;
+          continue;
+        }
+        let sum = 0;
+        for (let dc = -1; dc <= 1; dc++) {
+          for (let dr = -1; dr <= 1; dr++) {
+            sum += (dc === 0 ? 2 : 1) * (dr === 0 ? 2 : 1) * read(cur, row + dr, col + dc);
+          }
+        }
+        nxt[r + c * rowsN] = h + strength * (sum / 16 - h);
+      }
+    }
+    [cur, nxt] = [nxt, cur];
+  }
+  const result = cur;
+  return runHeightOp(
+    grid,
+    win,
+    (x, z, h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      if (mask?.[row + col * stride]) return h;
+      return result[row - win.minRow + (col - win.minCol) * rowsN];
+    },
+    rec,
+    false,
+    opts,
+  );
+}
+
 export function flattenBrush(
   grid: TerrainGrid,
   params: BrushParams,

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import fixtureRaw from "../fixtures/road-graph.sample.json?raw";
 import { parseRoadGraph } from "../src/core/road-graph.ts";
-import { createStrokeRecorder, paintSurface, raiseLower } from "../src/core/terrain-brush.ts";
+import {
+  createStrokeRecorder,
+  paintSurface,
+  raiseLower,
+  smoothRegion,
+} from "../src/core/terrain-brush.ts";
 import { createTerrainGrid } from "../src/core/terrain-grid.ts";
 import { createPaintMap } from "../src/core/terrain-paint.ts";
 import {
@@ -150,5 +155,45 @@ describe("undo stack", () => {
     let n = 0;
     while (stack.undo(area) !== false) n++;
     expect(n).toBe(3);
+  });
+
+  it("one whole-grid smoothing stroke (200 x 200) is one diff and undoes bit-exact (D-21)", () => {
+    const grid = createTerrainGrid({ rows: 200, cols: 200, cellSizeM: 3, originX: 0, originZ: 0 });
+    let s = 99;
+    for (let i = 0; i < grid.heights.length; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      grid.heights[i] = (s / 0x7fffffff) * 0.5;
+    }
+    const paint = createPaintMap({
+      originX: 0,
+      originZ: 0,
+      widthM: 600,
+      depthM: 600,
+      metresPerPixel: 2,
+      fill: "grass",
+    });
+    const before = Float32Array.from(grid.heights);
+    const rec = createStrokeRecorder(grid, paint);
+    const res = smoothRegion(
+      grid,
+      { minRow: 0, minCol: 0, maxRow: 200, maxCol: 200 },
+      { strength: 1, passes: 5 },
+      rec,
+    );
+    expect(res.window).toBeDefined();
+    const diff = rec.commit();
+    if (!diff) throw new Error("expected a diff");
+    const stack = createUndoStack();
+    stack.push(diff);
+    expect(Array.from(grid.heights)).not.toEqual(Array.from(before));
+    const area: UndoTarget = {
+      grid,
+      paint,
+      graph: parseRoadGraph(fixtureRaw, "f"),
+      nextEdgeId: 1,
+    };
+    expect(stack.undo(area)).not.toBe(false);
+    expect(Array.from(grid.heights)).toEqual(Array.from(before));
+    expect(stack.canUndo()).toBe(false);
   });
 });
