@@ -10,7 +10,30 @@ import {
   readBodyCapped,
   resolveTerrainFile,
 } from "../tools/terrain-editor/paths.ts";
-import { writeAtomic } from "../tools/terrain-editor/vite-plugin.ts";
+import { validateSidecarPut, writeAtomic } from "../tools/terrain-editor/vite-plugin.ts";
+
+describe("validateSidecarPut (D-17 save guard on the server)", () => {
+  const shipped = ["demo-hills", "feel-test", "grid-test", "juliette-ga"];
+  for (const id of shipped) {
+    it(`accepts the tracked ${id} sidecar`, async () => {
+      const text = await readFile(path.join("public", "maps", `${id}.terrain.json`), "utf8");
+      expect(() => validateSidecarPut(text, id)).not.toThrow();
+    });
+  }
+  it("rejects a graph with a blocking validation failure with terrain-save:", async () => {
+    const text = await readFile(path.join("public", "maps", "feel-test.terrain.json"), "utf8");
+    const json = JSON.parse(text);
+    // A 60 m spike mid-edge: parses fine but fails GEOMETRY_GRADIENT.
+    const pts = json.graph.edges[0].points;
+    pts[Math.floor(pts.length / 2)][1] += 60;
+    expect(() => validateSidecarPut(JSON.stringify(json), "feel-test")).toThrow(/^terrain-save:/);
+  });
+  it("still rejects malformed JSON as a format error", () => {
+    expect(() => validateSidecarPut("{not json", "feel-test")).toThrow(
+      /^(terrain-format|parseRoadGraph):/,
+    );
+  });
+});
 
 describe("isSafeAreaId", () => {
   it("accepts lowercase ids", () => {

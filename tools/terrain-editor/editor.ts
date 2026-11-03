@@ -27,8 +27,9 @@ import {
   TERRAIN_SURFACE_PALETTE,
   type TerrainView,
 } from "../../src/render/terrain-view.ts";
-import { formatValidationFailures, validateGraph } from "../map-compiler/validate/validator.ts";
+import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
+import { blockingRoadFailures, saveBlockMessage } from "./save-guard.ts";
 import {
   createToolDispatcher,
   type EditArea,
@@ -324,6 +325,13 @@ async function save(): Promise<boolean> {
   const target = area;
   const editsAtStart = editCounter;
   try {
+    // D-15: refuse to save a road graph with a hard validation failure; no PUT.
+    const blockText = saveBlockMessage(blockingRoadFailures(target.graph));
+    if (blockText !== null) {
+      setStatus(blockText);
+      log(blockText);
+      return false;
+    }
     // Snapshot synchronously: the sidecar text is serialised and the binary
     // quantised (inside encodeTerrainBinary, before its first await) at the
     // same instant, so the pair describes one consistent state.
@@ -503,12 +511,15 @@ function validateRoads(): void {
   try {
     const failures = validateGraph(area.graph, buildRoadGeometry(area.graph));
     const reach = failures.filter((f) => f.category === "UNDIRECTED_REACHABILITY");
-    const hard = failures.filter((f) => f.category !== "UNDIRECTED_REACHABILITY");
+    const selfX = failures.filter((f) => f.category === "GEOMETRY_SELF_INTERSECTION");
     if (reach.length > 0) {
       log(`info: ${reach.length} disconnected road piece(s); fine while the map is mid-build.`);
     }
-    if (hard.length > 0) {
-      const text = `Road graph invalid: ${formatValidationFailures(hard)}. Undo the last stroke or erase the road and repaint.`;
+    if (selfX.length > 0) {
+      log(`info: ${selfX.length} self-intersection(s) ignored on terrain maps (no ribbon mesh).`);
+    }
+    const text = saveBlockMessage(blockingRoadFailures(area.graph));
+    if (text !== null) {
       log(text);
       setStatus(text);
     }
