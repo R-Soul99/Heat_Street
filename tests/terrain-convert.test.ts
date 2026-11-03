@@ -298,10 +298,7 @@ describe("convertCompiledArea: roadWidenM (04.3 D-11..D-14)", () => {
       }
     });
     console.log(`[roadWidenM] ${id} min building clearance to a road pixel: ${minClearance}`);
-    // juliette-ga buildings 68 and 72 already overlapped the road before the widening
-    // (clearance -2.73 m at roadWidenM 0, -3.43 m at +2): data issue, not introduced here.
-    const known = id === "juliette-ga" ? [68, 72] : [];
-    expect([...new Set(hits)], `${id} buildings on road`).toEqual(known);
+    expect([...new Set(hits)], `${id} buildings on road`).toEqual([]);
   });
 });
 
