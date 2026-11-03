@@ -99,6 +99,7 @@ import { createMapMenu } from "./debug/map-menu";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createTelemetryHud } from "./debug/telemetry-hud";
+import { createTerrainTexTimer } from "./debug/terrain-tex-timer";
 import {
   createTestStations,
   LAUNCH_RIDE_HEIGHT_LIFT_M,
@@ -837,16 +838,9 @@ try {
   // adds zero DOM overlay and zero listeners.
   // P43-RENDER (04.3-09): debug-only terrain texture-LOD cost, averaged over
   // the frames since the last HUD write, plus rebuilds in a rolling second.
-  const terrainDbg = { ms: 0, frames: 0, flips: [] as number[] };
-  const hud = DEBUG_ENABLED
-    ? createHud(renderer, world, () => {
-        const lodFlipsPerSec = terrainDbg.flips.length;
-        const terrainTexMs = terrainDbg.frames > 0 ? terrainDbg.ms / terrainDbg.frames : 0;
-        terrainDbg.ms = 0;
-        terrainDbg.frames = 0;
-        return { terrainTexMs, lodFlipsPerSec };
-      })
-    : null;
+  const terrainDbg = DEBUG_ENABLED ? createTerrainTexTimer() : undefined;
+  const hud =
+    terrainDbg !== undefined ? createHud(renderer, world, () => terrainDbg.sample()) : null;
   if (hud) {
     onDebugToggle(() => hud.toggle());
   }
@@ -1157,27 +1151,16 @@ try {
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
-      const texT0 = DEBUG_ENABLED ? performance.now() : 0;
+      terrainDbg?.begin();
       if (gateView !== undefined) {
         const gp = view.meshes[0].position;
         gateView.updateTextures(gp.x, gp.z);
       }
       if (terrainView !== undefined) {
         const tp = view.meshes[0].position;
-        const rebuilt = terrainView.updateTextures(tp.x, tp.z);
-        if (DEBUG_ENABLED && rebuilt > 0) {
-          const nowMs = performance.now();
-          for (let k = 0; k < rebuilt; k++) terrainDbg.flips.push(nowMs);
-        }
+        terrainDbg?.rebuilt(terrainView.updateTextures(tp.x, tp.z));
       }
-      if (DEBUG_ENABLED) {
-        const nowMs = performance.now();
-        terrainDbg.ms += nowMs - texT0;
-        terrainDbg.frames++;
-        while (terrainDbg.flips.length > 0 && nowMs - terrainDbg.flips[0] > 1000) {
-          terrainDbg.flips.shift();
-        }
-      }
+      terrainDbg?.end();
       if (carShadow !== undefined && groundProbe !== undefined) {
         const p = view.meshes[0].position;
         carShadow.update(view.meshes[0], groundProbe(p.x, p.y + 0.5, p.z));
