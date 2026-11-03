@@ -46,7 +46,7 @@ import {
   parseSavedCameraTuning,
 } from "./core/camera-tuning";
 import { type Course, parseCourseData } from "./core/course";
-import { applyFeel, FEEL_DEFAULTS, parseFeelFlag } from "./core/feel";
+import { applyFeel, parseFeelFlag, shippedTuning } from "./core/feel";
 import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
@@ -170,17 +170,12 @@ const FEEL_ENABLED = parseFeelFlag(location.search);
 const feelSettings = loadFeel();
 // The shipped car is the class base with the default feel preset applied, so a
 // player with no saved tuning drives the same car as `?feel` at its defaults.
-const shippedTuning = () => {
-  const t = classDefaultTuning(CAR_CLASS.id);
-  applyFeel(t, classDefaultTuning(CAR_CLASS.id), FEEL_DEFAULTS);
-  return t;
-};
 const tuning = FEEL_ENABLED
   ? classDefaultTuning(CAR_CLASS.id)
   : (parseSavedTuning(
       typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
-      shippedTuning,
-    ) ?? shippedTuning());
+      () => shippedTuning(CAR_CLASS.id),
+    ) ?? shippedTuning(CAR_CLASS.id));
 if (FEEL_ENABLED) {
   applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings);
 }

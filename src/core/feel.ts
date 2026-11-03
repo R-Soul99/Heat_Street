@@ -14,6 +14,7 @@
  * `parseSavedFeel` like every other persisted blob.
  */
 
+import { classDefaultTuning, DEFAULT_VEHICLE_CLASS_ID, type VehicleClassId } from "./vehicle-class";
 import { clampTuning, type VehicleTuning } from "./vehicle-tuning";
 
 export interface FeelSettings {
@@ -183,6 +184,17 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   target.drive.flickGain = lerp(0, 1, f.flick / 10);
 
   clampTuning(target);
+}
+
+/**
+ * The car the game ships (class defaults plus FEEL_DEFAULTS). Headless tools
+ * must use this, not defaultTuning(), when they claim to test what players
+ * drive (04.3 D-03).
+ */
+export function shippedTuning(classId: VehicleClassId = DEFAULT_VEHICLE_CLASS_ID): VehicleTuning {
+  const t = classDefaultTuning(classId);
+  applyFeel(t, classDefaultTuning(classId), FEEL_DEFAULTS);
+  return t;
 }
 
 /** Serialise for persistence under `FEEL_STORAGE_KEY`. */

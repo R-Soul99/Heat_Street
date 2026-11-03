@@ -8,6 +8,7 @@ import {
   parseFeelFlag,
   parseSavedFeel,
   serializeFeel,
+  shippedTuning,
 } from "../src/core/feel";
 import { classDefaultTuning } from "../src/core/vehicle-class";
 import { defaultTuning, TUNING_RANGES } from "../src/core/vehicle-tuning";
@@ -153,5 +154,32 @@ describe("feel persistence", () => {
     expect(parseFeelFlag("?feel")).toBe(true);
     expect(parseFeelFlag("?map=grid-test&feel=1")).toBe(true);
     expect(parseFeelFlag("?debug")).toBe(false);
+  });
+});
+
+describe("shippedTuning", () => {
+  function built(id: "rwd" | "fwd" | "awd") {
+    const t = classDefaultTuning(id);
+    applyFeel(t, classDefaultTuning(id), FEEL_DEFAULTS);
+    return t;
+  }
+
+  it("defaults to the rwd class with FEEL_DEFAULTS applied", () => {
+    expect(shippedTuning()).toEqual(built("rwd"));
+  });
+
+  it("builds the same construction for other classes", () => {
+    expect(shippedTuning("fwd")).toEqual(built("fwd"));
+    expect(shippedTuning("awd")).toEqual(built("awd"));
+  });
+
+  it("returns distinct objects on each call", () => {
+    const a = shippedTuning();
+    a.drive.liftOffOversteer = 99;
+    expect(shippedTuning().drive.liftOffOversteer).not.toBe(99);
+  });
+
+  it("keeps the shipped liftOff feel value at 5 (D-02)", () => {
+    expect(shippedTuning().drive.liftOffOversteer).toBe(5);
   });
 });

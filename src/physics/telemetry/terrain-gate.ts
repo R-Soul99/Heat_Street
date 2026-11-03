@@ -42,6 +42,23 @@ const MAX_TICKS = 3600;
 const LOOKAHEAD_M = 12;
 const SPAWN_CLEARANCE_M = 0.6;
 
+/** One post-warm-up tick with fewer than four wheels in contact (opt-in diagnostics). */
+export interface ContactLossDiag {
+  laneId: string;
+  tick: number;
+  x: number;
+  y: number;
+  z: number;
+  vy: number;
+  /** Indices of wheels not touching the ground this tick. */
+  wheelsOff: number[];
+  suspensionLengths: number[];
+  steer: number;
+  throttle: number;
+  brake: number;
+  rearSideFriction?: number;
+}
+
 type LanePoints = readonly (readonly [number, number, number])[];
 
 let cachedCourse: ReturnType<typeof buildGateCourse> | null = null;
@@ -87,6 +104,7 @@ function runLanePoints(
   direction: 1 | -1,
   tuning: VehicleTuning,
   colliderSubdiv: 1 | 2,
+  onContactLoss?: (d: ContactLossDiag) => void,
 ): GateLaneMetrics {
   const pts = direction === 1 ? points : [...points].reverse();
   const n = pts.length;
@@ -161,7 +179,31 @@ function runLanePoints(
         for (let w = 0; w < 4; w++)
           susp[w][recorded] = vehicle.controller.wheelSuspensionLength(w) ?? 0;
         spd[recorded] = after.forwardSpeedMs;
-        if (after.contacts < 4) contactLoss++;
+        if (after.contacts < 4) {
+          contactLoss++;
+          if (onContactLoss !== undefined) {
+            const wheelsOff: number[] = [];
+            const suspensionLengths: number[] = [];
+            for (let w = 0; w < 4; w++) {
+              if (!vehicle.controller.wheelIsInContact(w)) wheelsOff.push(w);
+              suspensionLengths.push(vehicle.controller.wheelSuspensionLength(w) ?? 0);
+            }
+            onContactLoss({
+              laneId,
+              tick,
+              x: after.position.x,
+              y: after.position.y,
+              z: after.position.z,
+              vy: after.linvel.y,
+              wheelsOff,
+              suspensionLengths,
+              steer: frame.steer,
+              throttle: frame.throttle,
+              brake: frame.brake,
+              rearSideFriction: vehicle.rearGrip.sideFriction,
+            });
+          }
+        }
         recorded++;
       }
     }
@@ -195,7 +237,7 @@ export function runGateLane(
   speedMs: number,
   direction: 1 | -1,
   tuning: VehicleTuning,
-  opts: { colliderSubdiv: 1 | 2 },
+  opts: { colliderSubdiv: 1 | 2; onContactLoss?: (d: ContactLossDiag) => void },
 ): GateLaneMetrics {
   const { grid, paint } = gateCourse();
   return runLanePoints(
@@ -207,6 +249,7 @@ export function runGateLane(
     direction,
     tuning,
     opts.colliderSubdiv,
+    opts.onContactLoss,
   );
 }
 
