@@ -17,6 +17,7 @@ import * as THREE from "three";
 import { type AuthoredCrest, buildCrestGeometry } from "../core/crest-geometry.ts";
 import { sampleHeightfieldBilinear } from "../core/heightfield-sample.ts";
 import type { SurfaceType } from "../core/surface-types.ts";
+import type { BermBox } from "../core/terrain-edge-berm.ts";
 import {
   TERRAIN_DIAGONAL,
   type TerrainGrid,
@@ -43,6 +44,8 @@ export const TERRAIN_SURFACE_PALETTE: Readonly<Record<SurfaceType, number>> = {
   mud: 0x5b4330,
 };
 
+/** Pale concrete: reads as "the world ends here" from the helicopter cam. */
+const BERM_COLOR_HEX = 0xd8d2c4;
 const ROAD_TINT_HEX = 0x3a3d42;
 const ROAD_TINT_AMOUNT = 0.35;
 const DEFAULT_TEXTURE_RADIUS_M = 600;
@@ -95,6 +98,8 @@ export function buildTerrainView(
     palette?: Partial<Record<SurfaceType, number>>;
     textureRadiusM?: number;
     crests?: readonly AuthoredCrest[];
+    /** Terrain-edge berm boxes (game view only; physics builds colliders from the same boxes). */
+    edgeBerm?: readonly BermBox[];
   } = {},
 ): TerrainView {
   const chunkCells = opts.chunkCells ?? TERRAIN_CHUNK_CELLS;
@@ -282,6 +287,51 @@ export function buildTerrainView(
     }
   }
 
+  // Edge berm (04.3 D-09): ONE merged mesh built from the same boxes the physics
+  // scene collides with. Game view only; the editor passes no edgeBerm.
+  let bermMesh: THREE.Mesh | undefined;
+  if (opts.edgeBerm !== undefined && opts.edgeBerm.length > 0) {
+    const unit = new THREE.BoxGeometry(1, 1, 1);
+    const up = unit.getAttribute("position");
+    const un = unit.getAttribute("normal");
+    const ui = unit.getIndex();
+    if (ui === null) throw new Error("terrain-view: BoxGeometry has no index");
+    const vPer = up.count; // 24
+    const iPer = ui.count; // 36
+    const n = opts.edgeBerm.length;
+    const positions = new Float32Array(n * vPer * 3);
+    const normals = new Float32Array(n * vPer * 3);
+    const indices = new Uint32Array(n * iPer);
+    opts.edgeBerm.forEach((b, k) => {
+      for (let v = 0; v < vPer; v++) {
+        const o = (k * vPer + v) * 3;
+        positions[o] = up.getX(v) * b.hx * 2 + b.cx;
+        positions[o + 1] = up.getY(v) * b.hy * 2 + b.cy;
+        positions[o + 2] = up.getZ(v) * b.hz * 2 + b.cz;
+        normals[o] = un.getX(v);
+        normals[o + 1] = un.getY(v);
+        normals[o + 2] = un.getZ(v);
+      }
+      for (let i = 0; i < iPer; i++) indices[k * iPer + i] = ui.getX(i) + k * vPer;
+    });
+    unit.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    const mat = new THREE.MeshStandardMaterial({
+      color: BERM_COLOR_HEX,
+      roughness: 0.9,
+      metalness: 0,
+    });
+    bermMesh = new THREE.Mesh(geo, mat);
+    bermMesh.receiveShadow = true;
+    bermMesh.castShadow = false;
+    group.add(bermMesh);
+  }
+
   let lastFocus: { x: number; z: number } | undefined;
 
   function applyTextureLod(chunk: Chunk, full: boolean): void {
@@ -347,6 +397,10 @@ export function buildTerrainView(
       for (const mesh of crestMeshes) {
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
+      }
+      if (bermMesh !== undefined) {
+        bermMesh.geometry.dispose();
+        (bermMesh.material as THREE.Material).dispose();
       }
     },
   };

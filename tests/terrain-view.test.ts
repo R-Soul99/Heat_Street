@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it, vi } from "vitest";
+import { buildEdgeBerm } from "../src/core/terrain-edge-berm";
 import { createTerrainGrid, terrainIndex, terrainVertexNormal } from "../src/core/terrain-grid";
 import { createPaintMap, encodePaintValue } from "../src/core/terrain-paint";
 import {
@@ -226,5 +227,54 @@ describe("terrain-view paint textures", () => {
     const after = [0, 1, 2, 3, 4, 5].map((i) => texData(view, i).version);
     expect(after[0]).toBeGreaterThan(before[0]);
     for (let i = 1; i < 6; i++) expect(after[i]).toBe(before[i]);
+  });
+});
+
+describe("terrain-view edge berm (04.3 D-09)", () => {
+  const g = bumpyGrid(20, 20);
+
+  it("without edgeBerm the group children are unchanged", () => {
+    const v = buildTerrainView(g, paintFor(g));
+    expect(v.group.children.length).toBe(v.chunkMeshes.length);
+  });
+
+  it("with edgeBerm adds exactly one merged mesh matching the boxes", () => {
+    const boxes = buildEdgeBerm(g);
+    const plain = buildTerrainView(g, paintFor(g));
+    const v = buildTerrainView(g, paintFor(g), { edgeBerm: boxes });
+    expect(v.group.children.length).toBe(plain.group.children.length + 1);
+    const berm = v.group.children[v.group.children.length - 1] as THREE.Mesh;
+    expect(berm.geometry.getAttribute("position").count).toBe(24 * boxes.length);
+    expect(berm.geometry.getIndex()?.count).toBe(36 * boxes.length);
+    const bb = berm.geometry.boundingBox;
+    expect(bb).not.toBeNull();
+    const lo = { x: Infinity, y: Infinity, z: Infinity };
+    const hi = { x: -Infinity, y: -Infinity, z: -Infinity };
+    for (const b of boxes) {
+      lo.x = Math.min(lo.x, b.cx - b.hx);
+      hi.x = Math.max(hi.x, b.cx + b.hx);
+      lo.y = Math.min(lo.y, b.cy - b.hy);
+      hi.y = Math.max(hi.y, b.cy + b.hy);
+      lo.z = Math.min(lo.z, b.cz - b.hz);
+      hi.z = Math.max(hi.z, b.cz + b.hz);
+    }
+    expect(bb?.min.x).toBeCloseTo(lo.x, 2);
+    expect(bb?.max.x).toBeCloseTo(hi.x, 2);
+    expect(bb?.min.y).toBeCloseTo(lo.y, 2);
+    expect(bb?.max.y).toBeCloseTo(hi.y, 2);
+    expect(bb?.min.z).toBeCloseTo(lo.z, 2);
+    expect(bb?.max.z).toBeCloseTo(hi.z, 2);
+  });
+
+  it("berm mesh receives but does not cast shadow, and dispose frees it", () => {
+    const v = buildTerrainView(g, paintFor(g), { edgeBerm: buildEdgeBerm(g) });
+    const berm = v.group.children[v.group.children.length - 1] as THREE.Mesh;
+    expect(berm.receiveShadow).toBe(true);
+    expect(berm.castShadow).toBe(false);
+    const geoSpy = vi.spyOn(berm.geometry, "dispose");
+    const matSpy = vi.spyOn(berm.material as THREE.Material, "dispose");
+    v.dispose();
+    expect(geoSpy).toHaveBeenCalled();
+    expect(matSpy).toHaveBeenCalled();
   });
 });

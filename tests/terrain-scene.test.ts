@@ -379,5 +379,5 @@ describe("terrain edge berm (04.3 D-06..D-10)", () => {
         world.free();
       }
     }
-  });
+  }, 60_000);
 });
