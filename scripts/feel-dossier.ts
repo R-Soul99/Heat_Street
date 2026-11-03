@@ -13,6 +13,7 @@
 import type { InputFrame } from "../src/core/input-tape";
 import { DT } from "../src/core/sim-clock";
 import type { VehicleTuning } from "../src/core/vehicle-tuning";
+import { LiveInputSource } from "../src/input/live-input";
 import { buildTelemetryScene } from "../src/physics/telemetry/run";
 import { createVehicle, sampleVehicle, type Vehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
@@ -61,7 +62,7 @@ interface Script {
   readonly description: string;
   readonly launchMph: number;
   readonly seconds: number;
-  drive(tick: number, headingDeg: number, state: ScriptState): InputFrame;
+  drive(tick: number, headingDeg: number, state: ScriptState, tuning: VehicleTuning): InputFrame;
 }
 
 const frame = (steer: number, throttle: number, handbrake = false): InputFrame => ({
@@ -111,7 +112,78 @@ function liftBend(id: string, launchMph: number, steer: number, wiggle: number):
   };
 }
 
+/** One keyboard tap: `key` held for `ticks` ticks starting `atSec` seconds in. */
+interface Tap {
+  readonly key: "left" | "right";
+  readonly atSec: number;
+  readonly ticks: number;
+}
+
+/**
+ * Keyboard taps at speed, replayed through the SAME `LiveInputSource` ramp the
+ * game uses (steer rates from the tuning, as main.ts wires them), throttle held
+ * the whole time on a flat straight. Release = the end of the last tap. Models
+ * the 2026-11-03 drive log (logs/tap-correction-spin-2026-11-03.csv).
+ */
+function tapScript(id: string, launchMph: number, description: string, taps: Tap[]): Script {
+  let input: LiveInputSource | undefined;
+  let cur = 0;
+  const lastEnd = Math.max(...taps.map((t) => t.atSec + t.ticks * DT));
+  return {
+    id,
+    description: `${launchMph} mph, throttle held, keyboard ${description} through the live steer ramp (release = end of the last tap)`,
+    launchMph,
+    seconds: lastEnd + 3,
+    drive(k, _h, st, tuning) {
+      if (k === 0 || input === undefined) {
+        input = new LiveInputSource({
+          keys: () => {
+            const sec = cur * DT;
+            let left = false;
+            let right = false;
+            for (const t of taps) {
+              if (sec >= t.atSec - 1e-9 && sec < t.atSec + t.ticks * DT - 1e-9) {
+                if (t.key === "left") left = true;
+                else right = true;
+              }
+            }
+            return { left, right, up: true, down: false, handbrake: false };
+          },
+          readPad: () => null,
+          steerRampPerSec: tuning.drive.steerRampPerSec,
+          steerReturnPerSec: tuning.drive.steerReturnPerSec,
+        });
+      }
+      cur = k;
+      if (st.releaseIndex < 0 && k * DT >= lastEnd) st.releaseIndex = k;
+      return input.sampleForTick(k);
+    },
+  };
+}
+
+const TAP_SEQUENCE: Tap[] = [
+  { key: "right", atSec: 1.0, ticks: 3 },
+  { key: "left", atSec: 1.0 + 3 * DT + 0.25, ticks: 5 },
+  { key: "right", atSec: 1.0 + 8 * DT + 0.5, ticks: 5 },
+];
+/** Equal alternating taps, for the "oscillation does not grow" check. */
+const TAP_EQUAL: Tap[] = [0, 1, 2, 3, 4].map((i) => ({
+  key: i % 2 === 0 ? ("right" as const) : ("left" as const),
+  atSec: 1.0 + i * (4 * DT + 0.3),
+  ticks: 4,
+}));
+
 const SCRIPTS: readonly Script[] = [
+  tapScript("tap-single-70", 70, "single 3-tick right tap", [
+    { key: "right", atSec: 1.0, ticks: 3 },
+  ]),
+  tapScript("tap-single-100", 100, "single 3-tick right tap", [
+    { key: "right", atSec: 1.0, ticks: 3 },
+  ]),
+  tapScript("tap-seq-70", 70, "taps R3, L5, R5 (0.25 s pauses, as the drive log)", TAP_SEQUENCE),
+  tapScript("tap-seq-100", 100, "taps R3, L5, R5 (0.25 s pauses, as the drive log)", TAP_SEQUENCE),
+  tapScript("tap-equal-70", 70, "five equal 4-tick taps, alternating R/L", TAP_EQUAL),
+  tapScript("tap-equal-100", 100, "five equal 4-tick taps, alternating R/L", TAP_EQUAL),
   liftBend("lift-bend-90", 90, 0.3, 0.1),
   liftBend("lift-bend-75", 75, 0.3, 0.1),
   liftBend("lift-bend-60-03", 60, 0.3, 0.05),
@@ -213,6 +285,30 @@ const SCRIPTS: readonly Script[] = [
     },
   },
   {
+    id: "power-slide-30",
+    description:
+      "30 mph, full lock + full throttle 2 s, then steer released (release), throttle held (a deliberate medium-speed power slide)",
+    launchMph: 30,
+    seconds: 5,
+    drive(k, _h, st) {
+      if (k < 2 * Math.round(1 / DT)) return frame(rampedSteer(k, 1), 1);
+      if (st.releaseIndex < 0) st.releaseIndex = k;
+      return frame(0, 1);
+    },
+  },
+  {
+    id: "power-slide-40",
+    description:
+      "40 mph, full lock + full throttle 2 s, then steer released (release), throttle held (a deliberate medium-speed power slide)",
+    launchMph: 40,
+    seconds: 5,
+    drive(k, _h, st) {
+      if (k < 2 * Math.round(1 / DT)) return frame(rampedSteer(k, 1), 1);
+      if (st.releaseIndex < 0) st.releaseIndex = k;
+      return frame(0, 1);
+    },
+  },
+  {
     id: "power-slide",
     description:
       "15 mph, full lock + full throttle 3 s, then steer released (release), throttle held 3 s",
@@ -252,7 +348,7 @@ function runScript(script: Script, tuning: VehicleTuning): DossierRun {
     let heading = 0;
     const ticks = Math.round(script.seconds / DT);
     for (let k = 0; k < ticks; k++) {
-      const input = script.drive(k, heading * RAD_TO_DEG, state);
+      const input = script.drive(k, heading * RAD_TO_DEG, state, tuning);
       vehicle.tick(input, tuning);
       world.step();
       const s = sampleVehicle(vehicle);
@@ -385,6 +481,49 @@ export function summarise(run: DossierRun): Summary {
     speedPlus3: at(3),
   };
 }
+
+export interface TapMetrics {
+  /** Largest |yaw rate| (rad/s) in each tap-and-aftermath window, one per tap start. */
+  readonly yawPeaks: number[];
+  readonly peakSlipDeg: number;
+  /** Largest |heading| away from the start heading, degrees. */
+  readonly peakHeadingDeg: number;
+  /** Seconds after the last tap until |yaw| stays under 0.05 rad/s for good; null if it never does. */
+  readonly settleSec: number | null;
+}
+
+/** Metrics for a `tap-*` run. `tapStartsSec` are the tap start times used to split the yaw peaks. */
+export function tapMetrics(run: DossierRun, tapStartsSec: readonly number[]): TapMetrics {
+  const { rows } = run;
+  const ri = Math.max(0, Math.min(rows.length - 1, run.releaseIndex - 1));
+  const peaks: number[] = [];
+  for (let i = 0; i < tapStartsSec.length; i++) {
+    const from = Math.round(tapStartsSec[i] / DT);
+    const to = i + 1 < tapStartsSec.length ? Math.round(tapStartsSec[i + 1] / DT) : rows.length;
+    let peak = 0;
+    for (let r = from; r < to && r < rows.length; r++)
+      peak = Math.max(peak, Math.abs(rows[r].yawRate));
+    peaks.push(peak);
+  }
+  let settle: number | null = null;
+  for (let i = rows.length - 1; i >= ri; i--) {
+    if (Math.abs(rows[i].yawRate) >= 0.05) break;
+    settle = (i - ri) * DT;
+  }
+  return {
+    yawPeaks: peaks,
+    peakSlipDeg: rows.reduce((m, r) => Math.max(m, Math.abs(r.slipDeg)), 0),
+    peakHeadingDeg: rows.reduce((m, r) => Math.max(m, Math.abs(r.headingDeg)), 0),
+    settleSec: settle,
+  };
+}
+
+/** Tap start times of the named tap routines (for `tapMetrics`). */
+export const TAP_STARTS_SEC: Readonly<Record<string, readonly number[]>> = {
+  single: [1.0],
+  seq: TAP_SEQUENCE.map((t) => t.atSec),
+  equal: TAP_EQUAL.map((t) => t.atSec),
+};
 
 export function formatSummary(run: DossierRun, s: Summary): string {
   const sp = (v: number): string => `${v.toFixed(1)} m/s (${(v / MPH).toFixed(0)} mph)`;

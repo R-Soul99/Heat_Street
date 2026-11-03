@@ -11,7 +11,14 @@ import { join } from "node:path";
 import { it } from "vitest";
 import { shippedTuning } from "../src/core/feel";
 import { defaultTuning } from "../src/core/vehicle-tuning";
-import { formatSummary, runDossier, summarise, toCsv } from "./feel-dossier";
+import {
+  formatSummary,
+  runDossier,
+  summarise,
+  TAP_STARTS_SEC,
+  tapMetrics,
+  toCsv,
+} from "./feel-dossier";
 
 it("feel dossier", () => {
   const shipped = process.env.FEEL_DOSSIER_CAR === "shipped";
@@ -30,7 +37,15 @@ it("feel dossier", () => {
   ];
   for (const run of runDossier(tuning)) {
     writeFileSync(join(out, `${run.id}.csv`), toCsv(run));
-    lines.push(formatSummary(run, summarise(run)), "");
+    lines.push(formatSummary(run, summarise(run)));
+    const tapKind = /^tap-([a-z]+)-/.exec(run.id)?.[1];
+    if (tapKind !== undefined && TAP_STARTS_SEC[tapKind] !== undefined) {
+      const m = tapMetrics(run, TAP_STARTS_SEC[tapKind]);
+      lines.push(
+        `  tap metrics          yaw peaks ${m.yawPeaks.map((p) => p.toFixed(2)).join(" / ")} rad/s, peak slip ${m.peakSlipDeg.toFixed(1)} deg, peak heading ${m.peakHeadingDeg.toFixed(1)} deg, yaw<0.05 settle ${m.settleSec === null ? "never" : `${m.settleSec.toFixed(2)} s`}`,
+      );
+    }
+    lines.push("");
   }
   const text = lines.join("\n");
   writeFileSync(join(out, "summary.txt"), text);
