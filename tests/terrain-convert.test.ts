@@ -197,6 +197,114 @@ describe("convertCompiledArea: roads in paint and heights", () => {
   });
 });
 
+describe("convertCompiledArea: roadWidenM (04.3 D-11..D-14)", () => {
+  it("configures +2 m on grid-test and juliette-ga and 0 on feel-test", () => {
+    expect(CONVERT_CONFIG["feel-test"].roadWidenM).toBe(0);
+    expect(CONVERT_CONFIG["grid-test"].roadWidenM).toBe(2);
+    expect(CONVERT_CONFIG["juliette-ga"].roadWidenM).toBe(2);
+  });
+
+  const julietteArea = convertCompiledArea(input(JULIETTE));
+
+  /** Smallest (distance to an edge centreline) - (that edge's widened half width). */
+  function excess(f: Fixture, x: number, z: number): number {
+    let best = Number.POSITIVE_INFINITY;
+    for (const e of f.graph.edges) {
+      const half = (e.widthM + 2) / 2;
+      for (let k = 0; k + 1 < e.points.length; k++) {
+        const p = e.points[k];
+        const q = e.points[k + 1];
+        const dx = q[0] - p[0];
+        const dz = q[2] - p[2];
+        const len2 = dx * dx + dz * dz;
+        const t =
+          len2 > 0 ? Math.min(1, Math.max(0, ((x - p[0]) * dx + (z - p[2]) * dz) / len2)) : 0;
+        best = Math.min(best, Math.hypot(x - (p[0] + dx * t), z - (p[2] + dz * t)) - half);
+      }
+    }
+    return best;
+  }
+
+  it.each([
+    ["grid-test", GRID, gridArea],
+    ["juliette-ga", JULIETTE, julietteArea],
+  ])("%s: paint road flag follows (widthM + 2) / 2 around each centreline", (_id, f, area) => {
+    const m = area.paint.metresPerPixel;
+    let inside = 0;
+    let outside = 0;
+    for (const e of f.graph.edges) {
+      const half = (e.widthM + 2) / 2;
+      for (let k = 0; k + 1 < e.points.length; k++) {
+        const a = e.points[k];
+        const b = e.points[k + 1];
+        const dx = b[0] - a[0];
+        const dz = b[2] - a[2];
+        const len = Math.hypot(dx, dz);
+        if (len < 1) continue;
+        const nx = -dz / len;
+        const nz = dx / len;
+        const cx = (a[0] + b[0]) / 2;
+        const cz = (a[2] + b[2]) / 2;
+        for (const s of [-1, 1]) {
+          const near = half - m;
+          const px = cx + nx * near * s;
+          const pz = cz + nz * near * s;
+          const idx = paintIndexAt(area.paint, px, pz);
+          expect((area.paint.data[idx] & PAINT_ROAD_FLAG) !== 0, `edge ${e.id} inside`).toBe(true);
+          inside++;
+          const far = half + m;
+          const qx = cx + nx * far * s;
+          const qz = cz + nz * far * s;
+          if (excess(f, qx, qz) > m) {
+            const j = paintIndexAt(area.paint, qx, qz);
+            expect(area.paint.data[j] & PAINT_ROAD_FLAG, `edge ${e.id} outside`).toBe(0);
+            outside++;
+          }
+        }
+      }
+    }
+    expect(inside).toBeGreaterThan(0);
+    expect(outside).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["grid-test", GRID, gridArea],
+    ["juliette-ga", JULIETTE, julietteArea],
+  ])("%s: no building collider box intersects a road-flagged paint pixel", (id, f, area) => {
+    const m = area.paint.metresPerPixel;
+    let minClearance = Number.POSITIVE_INFINITY;
+    const hits: number[] = [];
+    f.collision.buildings.forEach((bd, i) => {
+      const cos = Math.cos(bd.rotationY);
+      const sin = Math.sin(bd.rotationY);
+      const hx = bd.halfExtents.x;
+      const hz = bd.halfExtents.z;
+      const r = Math.hypot(hx, hz);
+      const minPx = Math.floor((bd.center.x - r - area.paint.originX) / m);
+      const maxPx = Math.ceil((bd.center.x + r - area.paint.originX) / m);
+      const minPz = Math.floor((bd.center.z - r - area.paint.originZ) / m);
+      const maxPz = Math.ceil((bd.center.z + r - area.paint.originZ) / m);
+      for (let pz = Math.max(0, minPz); pz <= Math.min(area.paint.height - 1, maxPz); pz++) {
+        for (let px = Math.max(0, minPx); px <= Math.min(area.paint.width - 1, maxPx); px++) {
+          if ((area.paint.data[pz * area.paint.width + px] & PAINT_ROAD_FLAG) === 0) continue;
+          const x = area.paint.originX + (px + 0.5) * m - bd.center.x;
+          const z = area.paint.originZ + (pz + 0.5) * m - bd.center.z;
+          const lx = x * cos - z * sin;
+          const lz = x * sin + z * cos;
+          const gap = Math.max(Math.abs(lx) - hx, Math.abs(lz) - hz);
+          minClearance = Math.min(minClearance, gap);
+          if (gap < 0) hits.push(i);
+        }
+      }
+    });
+    console.log(`[roadWidenM] ${id} min building clearance to a road pixel: ${minClearance}`);
+    // juliette-ga buildings 68 and 72 already overlapped the road before the widening
+    // (clearance -2.73 m at roadWidenM 0, -3.43 m at +2): data issue, not introduced here.
+    const known = id === "juliette-ga" ? [68, 72] : [];
+    expect([...new Set(hits)], `${id} buildings on road`).toEqual(known);
+  });
+});
+
 describe("convertHeights: levelled roads read their graph height (D-06, D-16)", () => {
   it.each([
     ["grid-test", GRID],
