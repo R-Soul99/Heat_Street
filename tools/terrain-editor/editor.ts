@@ -265,6 +265,7 @@ function installArea(next: TerrainArea): void {
   $("empty").style.display = "none";
   frameArea(next);
   cursorRing.visible = false;
+  syncBlockLabel();
 }
 
 async function loadArea(id: string): Promise<void> {
@@ -686,7 +687,67 @@ function wireOptions(): void {
   $<HTMLInputElement>("opt-stamp-width").addEventListener("input", () =>
     dispatcher.setOptions({ stampWidthM: readNum("opt-stamp-width", 12) }),
   );
+  wireBlockAndSmooth();
   syncRoadControls();
+}
+
+/** D-18: the block size label shows metres (N x cell size) for the loaded area. */
+function syncBlockLabel(): void {
+  const n = dispatcher.getOptions().blockCells;
+  const cell = area ? area.grid.cellSizeM : DEFAULT_CELL_SIZE_M;
+  const metres = Math.round(n * cell * 100) / 100;
+  $("opt-block-cells-v").textContent = `${n} x ${n} (${metres} m)`;
+}
+
+function wireBlockAndSmooth(): void {
+  const bind = (id: string, apply: (v: number) => void, label: () => void) => {
+    $<HTMLInputElement>(id).addEventListener("input", () => {
+      apply(readNum(id, 0));
+      label();
+    });
+  };
+  bind(
+    "opt-block-cells",
+    (v) => dispatcher.setOptions({ blockCells: v }),
+    () => syncBlockLabel(),
+  );
+  bind(
+    "opt-block-step",
+    (v) => dispatcher.setOptions({ blockStepM: v }),
+    () => {
+      $("opt-block-step-v").textContent = `${dispatcher.getOptions().blockStepM} m`;
+    },
+  );
+  bind(
+    "opt-smooth-strength",
+    (v) => dispatcher.setOptions({ smoothStrength: v }),
+    () => {
+      $("opt-smooth-strength-v").textContent = String(dispatcher.getOptions().smoothStrength);
+    },
+  );
+  bind(
+    "opt-smooth-passes",
+    (v) => dispatcher.setOptions({ smoothPasses: v }),
+    () => {
+      $("opt-smooth-passes-v").textContent = String(dispatcher.getOptions().smoothPasses);
+    },
+  );
+  $("smooth-all").addEventListener("click", () => void smoothWholeMap());
+  syncBlockLabel();
+}
+
+async function smoothWholeMap(): Promise<void> {
+  if (!area || stroking) return;
+  const passes = dispatcher.getOptions().smoothPasses;
+  setStatus("Smoothing whole map...");
+  // Yield one frame so the status paints before the synchronous smooth runs.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (!area) return;
+  const t0 = performance.now();
+  const res = dispatcher.smoothAll();
+  res.status = `Smoothed whole map (${passes} passes). Ctrl+Z undoes it.`;
+  applyResult(res, performance.now() - t0);
+  updateHistoryButtons();
 }
 wireOptions();
 

@@ -21,10 +21,10 @@ import {
   paintSurface,
   raiseBlock,
   raiseLower,
+  SMOOTH_PASSES_MAX,
   type StrokeDiff,
   type StrokeRecorder,
   smoothBrush,
-  SMOOTH_PASSES_MAX,
   smoothRegion,
   stampTerrain,
 } from "../../src/core/terrain-brush.ts";
@@ -333,7 +333,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const key = win.minRow * 65536 + win.minCol;
       if (s.steppedBlocks.has(key)) return res;
       s.steppedBlocks.add(key);
-      const stepped = (s.steppedVerts ??= new Uint8Array(area.grid.heights.length));
+      if (!s.steppedVerts) s.steppedVerts = new Uint8Array(area.grid.heights.length);
+      const stepped = s.steppedVerts;
       const blockOpts: HeightOpOptions = {
         roadMask: (w) => {
           const m = hop.roadMask ? hop.roadMask(w) : new Uint8Array(stepped.length);
@@ -461,7 +462,11 @@ export function createToolDispatcher(getArea: () => EditArea) {
       }
       const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
       if (patch.blockCells !== undefined) {
-        options.blockCells = clamp(Math.round(options.blockCells), BLOCK_CELLS_MIN, BLOCK_CELLS_MAX);
+        options.blockCells = clamp(
+          Math.round(options.blockCells),
+          BLOCK_CELLS_MIN,
+          BLOCK_CELLS_MAX,
+        );
       }
       if (patch.blockStepM !== undefined) {
         options.blockStepM = clamp(
