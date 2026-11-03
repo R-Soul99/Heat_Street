@@ -362,6 +362,49 @@ describe("block and smooth tools (04.3-07)", () => {
     expect(d.canUndo()).toBe(false);
   });
 
+  it("smoothBox is a corner-to-corner drag rectangle; preview matches the edit", () => {
+    const { area, d } = setup();
+    d.setTool("block");
+    d.setOptions({ blockCells: 2, blockStepM: 3 });
+    drag(d, [[0, 0]]);
+    d.setTool("smoothBox");
+    expect(d.smoothBoxWindow(0, 0)).toBeNull();
+    d.pointerDown(-10, -10, { alt: false });
+    const g = area.grid;
+    const col = (x: number) => (x - g.originX) / g.cellSizeM;
+    const row = (z: number) => (z - g.originZ) / g.cellSizeM;
+    const w = d.smoothBoxWindow(14, 8);
+    expect(w).toEqual({
+      minCol: Math.floor(col(-10)),
+      maxCol: Math.ceil(col(14)),
+      minRow: Math.floor(row(-10)),
+      maxRow: Math.ceil(row(8)),
+    });
+    // Dragging the other way gives the same window (true corner-to-corner).
+    expect(d.smoothBoxWindow(-30, -20)).toEqual({
+      minCol: Math.floor(col(-30)),
+      maxCol: Math.ceil(col(-10)),
+      minRow: Math.floor(row(-20)),
+      maxRow: Math.ceil(row(-10)),
+    });
+    const up = d.pointerUp(14, 8);
+    expect(up.dirtyHeights).toBeDefined();
+    // The dirty rebuild window may pad the box by up to two cells for normals, never more.
+    expect(up.dirtyHeights?.minCol).toBeGreaterThanOrEqual((w?.minCol ?? 0) - 2);
+    expect(up.dirtyHeights?.maxCol).toBeLessThanOrEqual((w?.maxCol ?? 0) + 2);
+    expect(d.smoothBoxWindow(14, 8)).toBeNull();
+  });
+
+  it("cancelBoxDrag drops a smoothBox drag without an undo entry", () => {
+    const { d } = setup();
+    d.setTool("smoothBox");
+    d.pointerDown(0, 0, { alt: false });
+    expect(d.cancelBoxDrag()).toBe(true);
+    expect(d.isStroking()).toBe(false);
+    expect(d.canUndo()).toBe(false);
+    expect(d.cancelBoxDrag()).toBe(false);
+  });
+
   it("smoothAll is one undo entry", () => {
     const { area, d } = setup();
     d.setTool("block");

@@ -484,6 +484,24 @@ export function createToolDispatcher(getArea: () => EditArea) {
     },
     isStroking: (): boolean => stroke !== null,
 
+    /**
+     * Smooth-area box for the active drag: the exact cell window pointerUp will smooth
+     * (same windowBetween math), from the drag start corner to (x, z). Null when no
+     * smoothBox drag is in progress.
+     */
+    smoothBoxWindow(x: number, z: number): CellWindow | null {
+      const s = stroke;
+      if (s?.tool !== "smoothBox" || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return windowBetween(getArea(), s.start, { x, z });
+    },
+
+    /** Drops an in-progress smoothBox drag without editing anything (Escape). */
+    cancelBoxDrag(): boolean {
+      if (stroke?.tool !== "smoothBox") return false;
+      stroke = null;
+      return true;
+    },
+
     pointerDown(x: number, z: number, mods: Modifiers): ToolResult {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       if (stroke) this.pointerUp(x, z);

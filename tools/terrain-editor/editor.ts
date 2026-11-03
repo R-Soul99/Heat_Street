@@ -62,6 +62,7 @@ const OVERLAY_RECENTRE_CELLS = 16;
 const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
 const BLOCK_YELLOW = 0xffee66;
+const BOX_CYAN = 0x44ddff;
 
 // ---------------------------------------------------------------- state
 
@@ -137,6 +138,22 @@ blockOutline.renderOrder = 999;
 blockOutline.frustumCulled = false;
 blockOutline.visible = false;
 scene.add(blockOutline);
+
+// Smooth-area drag box: cyan terrain-hugging rectangle, rebuilt per drag move (size is unbounded).
+const boxOutline = new THREE.LineLoop(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: BOX_CYAN, depthTest: false, transparent: true }),
+);
+boxOutline.renderOrder = 999;
+boxOutline.frustumCulled = false;
+boxOutline.visible = false;
+scene.add(boxOutline);
+
+function clearBoxOutline(): void {
+  boxOutline.visible = false;
+  boxOutline.geometry.dispose();
+  boxOutline.geometry = new THREE.BufferGeometry();
+}
 
 const previewMaterial = new THREE.LineBasicMaterial({
   color: RING_GREEN,
@@ -298,6 +315,7 @@ function installArea(next: TerrainArea): void {
   frameArea(next);
   cursorRing.visible = false;
   blockOutline.visible = false;
+  clearBoxOutline();
   overlayCentre = null;
   refreshOverlays();
   syncBlockLabel();
@@ -433,6 +451,11 @@ function selectTool(next: Tool): void {
   dispatcher.setTool(next);
   updateOptionVisibility();
   if (tool !== "block") blockOutline.visible = false;
+  if (tool !== "smoothBox") {
+    dispatcher.cancelBoxDrag();
+    stroking = stroking && dispatcher.isStroking();
+    clearBoxOutline();
+  }
   if (lastHit) paintRing(lastHit);
   updateZoomHint();
   for (const b of document.querySelectorAll<HTMLButtonElement>("#tools .tool")) {
@@ -487,7 +510,9 @@ function pickTerrain(clientX: number, clientY: number) {
 }
 
 function ringRadius(): number {
-  return tool === "road" || tool === "stamp" ? CURSOR_RADIUS_M : dispatcher.getOptions().radiusM;
+  return tool === "road" || tool === "stamp" || tool === "smoothBox"
+    ? CURSOR_RADIUS_M
+    : dispatcher.getOptions().radiusM;
 }
 
 /** Draws the block preview; returns the readout line, or null when off-grid. */
@@ -530,15 +555,59 @@ function paintBlockOutline(hit: { x: number; z: number }): string | null {
 
 let blockReadoutLine: string | null = null;
 
+/** Draws the smooth-area box from the drag start to the cursor; returns the readout line. */
+function paintSmoothBox(hit: { x: number; z: number }): string | null {
+  if (!area) return null;
+  const g = area.grid;
+  const o = dispatcher.getOptions();
+  const w = dispatcher.smoothBoxWindow(hit.x, hit.z);
+  if (!w) {
+    clearBoxOutline();
+    return `Smooth area: press and drag a box (${o.smoothPasses} passes, strength ${o.smoothStrength})`;
+  }
+  const pts: number[] = [];
+  const put = (x: number, z: number): void => {
+    pts.push(x, sampleTerrainHeight(g, x, z) + 0.12, z);
+  };
+  const x0 = g.originX + w.minCol * g.cellSizeM;
+  const x1 = g.originX + w.maxCol * g.cellSizeM;
+  const z0 = g.originZ + w.minRow * g.cellSizeM;
+  const z1 = g.originZ + w.maxRow * g.cellSizeM;
+  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
+  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
+  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
+  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
+  boxOutline.geometry.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
+  boxOutline.geometry = geo;
+  boxOutline.visible = true;
+  const cols = w.maxCol - w.minCol;
+  const rows = w.maxRow - w.minRow;
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return `Smooth area ${cols} x ${rows} cells (${round(cols * g.cellSizeM)} x ${round(rows * g.cellSizeM)} m), ${o.smoothPasses} passes`;
+}
+
 function paintRing(hit: { x: number; z: number }): void {
   if (!area) return;
+  if (tool === "smoothBox") {
+    blockOutline.visible = false;
+    blockReadoutLine = paintSmoothBox(hit);
+    const dragging = dispatcher.smoothBoxWindow(hit.x, hit.z) !== null;
+    if (dragging) {
+      cursorRing.visible = false;
+      return;
+    }
+  } else {
+    clearBoxOutline();
+  }
   if (tool === "block") {
     cursorRing.visible = false;
     blockReadoutLine = paintBlockOutline(hit);
     return;
   }
   blockOutline.visible = false;
-  blockReadoutLine = null;
+  if (tool !== "smoothBox") blockReadoutLine = null;
   const radius = ringRadius();
   const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
   for (let i = 0; i < RING_SEGMENTS; i++) {
@@ -549,7 +618,7 @@ function paintRing(hit: { x: number; z: number }): void {
   }
   pos.needsUpdate = true;
   (cursorRing.material as THREE.LineBasicMaterial).color.setHex(
-    slopeAmber ? RING_AMBER : RING_GREEN,
+    slopeAmber ? RING_AMBER : tool === "smoothBox" ? BOX_CYAN : RING_GREEN,
   );
   cursorRing.visible = true;
 }
@@ -696,6 +765,7 @@ function updateCursor(clientX: number, clientY: number): void {
   if (!hit) {
     cursorRing.visible = false;
     blockOutline.visible = false;
+    if (!stroking) clearBoxOutline();
     lastHit = null;
     $("sel").textContent = "Cursor is off the terrain.";
     return;
@@ -708,7 +778,7 @@ function updateCursor(clientX: number, clientY: number): void {
   const slopeDeg = (Math.acos(Math.min(1, normalScratch.y)) * 180) / Math.PI;
   const g = area.grid;
   $("sel").textContent = [
-    ...(tool === "block" && blockReadoutLine ? [blockReadoutLine] : []),
+    ...((tool === "block" || tool === "smoothBox") && blockReadoutLine ? [blockReadoutLine] : []),
     `x ${hit.x.toFixed(1)}  z ${hit.z.toFixed(1)}`,
     `height ${hit.y.toFixed(2)} m`,
     `slope ${slopeDeg.toFixed(1)} deg`,
@@ -823,6 +893,7 @@ canvas.addEventListener("pointerleave", () => {
   if (!stroking) {
     cursorRing.visible = false;
     blockOutline.visible = false;
+    clearBoxOutline();
   }
 });
 
@@ -1040,6 +1111,13 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (mod || e.altKey) return;
+  if (e.code === "Escape" && dispatcher.cancelBoxDrag()) {
+    stroking = false;
+    clearBoxOutline();
+    if (lastHit) paintRing(lastHit);
+    setStatus("Smooth area cancelled.");
+    return;
+  }
   if (e.code === "KeyT") {
     setTopDown(!topDown);
     return;
