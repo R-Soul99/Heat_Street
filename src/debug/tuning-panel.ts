@@ -499,6 +499,54 @@ export function createTuningPanel(
   addNumber(driveFolder, tuning.drive, "rollGuard", TUNING_RANGES.drive.rollGuard).onChange(
     handlers.onApplyVehicle,
   );
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "powerFadeStartMs",
+    TUNING_RANGES.drive.powerFadeStartMs,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "powerFadeEndMs",
+    TUNING_RANGES.drive.powerFadeEndMs,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "powerSlipOpenDeg",
+    TUNING_RANGES.drive.powerSlipOpenDeg,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "yawDampingGain",
+    TUNING_RANGES.drive.yawDampingGain,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "yawDampingStartMs",
+    TUNING_RANGES.drive.yawDampingStartMs,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "yawDampingFullMs",
+    TUNING_RANGES.drive.yawDampingFullMs,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "yawDampingSteerOff",
+    TUNING_RANGES.drive.yawDampingSteerOff,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "yawDampingSlipOffDeg",
+    TUNING_RANGES.drive.yawDampingSlipOffDeg,
+  ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a

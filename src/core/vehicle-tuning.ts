@@ -449,6 +449,45 @@ export interface VehicleTuning {
      * roll the car. 0 = off. Added 2026-10-28 (exp/roll-guard).
      */
     rollGuard: number;
+    /**
+     * Speed (m/s) above which the throttle power-oversteer blend starts to
+     * fade out; fully off at `powerFadeEndMs`. Below the start it is
+     * unchanged. Drive log 2026-11-03: at 104 mph a 5-tick keyboard tap with
+     * the throttle held cut rear side friction 0.277 -> 0.205 (term `power`)
+     * and the slip kept growing. A power slide belongs at low/medium speed.
+     * Pending the plan 11 sign-off drive. Added 2026-11-03 (plan 04.3-05).
+     */
+    powerFadeStartMs: number;
+    /** Speed (m/s) at which the power-oversteer blend is fully faded out (unless the rear is already sliding, see `powerSlipOpenDeg`). */
+    powerFadeEndMs: number;
+    /**
+     * Slip angle (degrees) at which the power-oversteer blend re-opens at high
+     * speed, fully open 6 deg later: once the rear is actually sliding the
+     * driver is in a deliberate power slide, so the speed fade is bypassed.
+     * Plan 04.3-05.
+     */
+    powerSlipOpenDeg: number;
+    /**
+     * High-speed yaw damping assist, 1/s: removes this fraction of the yaw
+     * rate the steering did not ask for, per second, at full gate (the
+     * arcade-assist layer CLAUDE.md recommends). Applied as a chassis torque
+     * impulse in the fixed tick only. Gates: zero below `yawDampingStartMs`,
+     * full at `yawDampingFullMs`; fades out as |steer| rises toward
+     * `yawDampingSteerOff`; fades out as slip rises toward
+     * `yawDampingSlipOffDeg`; off with the handbrake. The yaw the steering
+     * demands (speed * tan(wheel angle) / wheelbase) is left alone. 0 = off.
+     * Drive log 2026-11-03: yaw stayed ~0.16 rad/s for 0.7 s with steer 0 at
+     * 104 mph. Pending the plan 11 sign-off drive. Plan 04.3-05.
+     */
+    yawDampingGain: number;
+    /** Speed (m/s) above which the yaw damping assist starts. */
+    yawDampingStartMs: number;
+    /** Speed (m/s) at which the yaw damping assist is at full strength. */
+    yawDampingFullMs: number;
+    /** |steer| (0..1) at which the yaw damping assist is fully off; it fades from a third of this. */
+    yawDampingSteerOff: number;
+    /** Slip angle (degrees) at which the yaw damping assist is fully off; it fades from half this. */
+    yawDampingSlipOffDeg: number;
   };
   readonly assists: {
     /**
@@ -637,6 +676,14 @@ export function defaultTuning(): VehicleTuning {
       liftOffOversteer: 5,
       tyreFalloff: 0.3,
       rollGuard: 0.85,
+      powerFadeStartMs: 25,
+      powerFadeEndMs: 40,
+      powerSlipOpenDeg: 6,
+      yawDampingGain: 5,
+      yawDampingStartMs: 14,
+      yawDampingFullMs: 30,
+      yawDampingSteerOff: 0.5,
+      yawDampingSlipOffDeg: 10,
     },
     assists: {
       autoLevelGain: 0.4,
@@ -720,6 +767,14 @@ export const TUNING_RANGES: {
     liftOffOversteer: TuningRange;
     tyreFalloff: TuningRange;
     rollGuard: TuningRange;
+    powerFadeStartMs: TuningRange;
+    powerFadeEndMs: TuningRange;
+    powerSlipOpenDeg: TuningRange;
+    yawDampingGain: TuningRange;
+    yawDampingStartMs: TuningRange;
+    yawDampingFullMs: TuningRange;
+    yawDampingSteerOff: TuningRange;
+    yawDampingSlipOffDeg: TuningRange;
   };
   readonly assists: {
     autoLevelGain: TuningRange;
@@ -802,6 +857,14 @@ export const TUNING_RANGES: {
     liftOffOversteer: { min: 0, max: 12, step: 0.1 },
     tyreFalloff: { min: 0, max: 0.9, step: 0.01 },
     rollGuard: { min: 0, max: 1, step: 0.01 },
+    powerFadeStartMs: { min: 5, max: 60, step: 1 },
+    powerFadeEndMs: { min: 10, max: 80, step: 1 },
+    powerSlipOpenDeg: { min: 0, max: 30, step: 0.5 },
+    yawDampingGain: { min: 0, max: 20, step: 0.25 },
+    yawDampingStartMs: { min: 0, max: 60, step: 1 },
+    yawDampingFullMs: { min: 5, max: 80, step: 1 },
+    yawDampingSteerOff: { min: 0.1, max: 1, step: 0.05 },
+    yawDampingSlipOffDeg: { min: 2, max: 40, step: 0.5 },
   },
   assists: {
     autoLevelGain: { min: 0, max: 2, step: 0.05 },

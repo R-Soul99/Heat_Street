@@ -46,6 +46,8 @@ export interface FeelSettings {
   regrip: number;
   /** Weight-shift flick: steer one way, then hard the other to kick the tail out. 0 = off. */
   flick: number;
+  /** High-speed stability: yaw damping assist that calms a car wobbling at speed. Base 5, 0 = off. */
+  stability: number;
 }
 
 export type FeelKey = keyof FeelSettings;
@@ -69,6 +71,7 @@ export const FEEL_NEUTRAL: Readonly<FeelSettings> = Object.freeze({
   tyreFalloff: 5,
   regrip: 5,
   flick: 0,
+  stability: 5,
 });
 
 /**
@@ -91,6 +94,7 @@ export const FEEL_DEFAULTS: Readonly<FeelSettings> = Object.freeze({
   tyreFalloff: 5,
   regrip: 8.2,
   flick: 5.1,
+  stability: 5,
 });
 
 /** Slider order and the wording shown to the player. */
@@ -109,6 +113,7 @@ export const FEEL_CONTROLS: readonly { key: FeelKey; label: string }[] = Object.
   { key: "tyreFalloff", label: "Tyre falloff (high = slides hold)" },
   { key: "regrip", label: "Slide regrip (low = snappy)" },
   { key: "flick", label: "Weight-shift flick" },
+  { key: "stability", label: "High-speed stability (0 = off)" },
 ]);
 
 export const FEEL_STORAGE_KEY = "heat-street.feel.v1";
@@ -152,6 +157,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
     tyreFalloff: clamp(feel.tyreFalloff, FEEL_MIN, FEEL_MAX),
     regrip: clamp(feel.regrip, FEEL_MIN, FEEL_MAX),
     flick: clamp(feel.flick, FEEL_MIN, FEEL_MAX),
+    stability: clamp(feel.stability, FEEL_MIN, FEEL_MAX),
   };
 
   // Grip: scales the friction circle. Above ~1.8 the body-roll assist and ramp
@@ -185,6 +191,9 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   target.drive.rearGripRecoverySec = base.drive.rearGripRecoverySec * anchored(f.regrip, 0, 1, 3);
 
   target.drive.flickGain = lerp(0, 1, f.flick / 10);
+
+  // High-speed yaw damping assist (04.3-05): 0 = off, 5 = the class base, 10 = double.
+  target.drive.yawDampingGain = base.drive.yawDampingGain * lerp(0, 2, f.stability / 10);
 
   clampTuning(target);
 }

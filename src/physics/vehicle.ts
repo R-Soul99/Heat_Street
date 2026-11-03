@@ -724,6 +724,24 @@ export function createVehicle(
       liftHold = Math.max(liftRaw, liftHold * Math.exp(-DT / LIFT_OFF_HOLD_TAU));
       const liftBlend = liftHold * counterSteerFade;
       const pivotBlend = pivotRear * t.drive.pivotTurn;
+      // Power oversteer is a low/medium-speed move: faded out by speed
+      // (powerFadeStartMs..powerFadeEndMs) unless the rear is already sliding
+      // (slip past powerSlipOpenDeg), so a keyboard tap with the throttle held
+      // at 100 mph cannot free the tail (drive log 2026-11-03).
+      const powerGroundSpeed = Math.hypot(lv.x, lv.z);
+      const powerSpeedFade =
+        1 -
+        smoothstep(
+          t.drive.powerFadeStartMs,
+          Math.max(t.drive.powerFadeEndMs, t.drive.powerFadeStartMs + 0.1),
+          powerGroundSpeed,
+        );
+      const powerSlipOpen = smoothstep(
+        (t.drive.powerSlipOpenDeg * Math.PI) / 180,
+        ((t.drive.powerSlipOpenDeg + 6) * Math.PI) / 180,
+        Math.abs(slipRad),
+      );
+      const powerGate = Math.max(powerSpeedFade, powerSlipOpen);
       const powerBlend = clamp(
         // Scaled by the speed lock fade: the blend is keyed on steer
         // INPUT, so at speed it must shrink with the real wheel angle
@@ -733,7 +751,8 @@ export function createVehicle(
           Math.abs(frame.steer) *
           lockScale *
           crawlFade *
-          counterSteerFade,
+          counterSteerFade *
+          powerGate,
         0,
         1,
       );
@@ -980,6 +999,42 @@ export function createVehicle(
           },
           true,
         );
+      }
+
+      // 5e. High-speed yaw damping assist (plan 04.3-05): opposes the yaw rate
+      // the steering did not ask for. Impulse form like the other assists, in
+      // the fixed tick only, a pure function of this tick's state (medal times
+      // stay deterministic). Zero at low speed, strongest with steer near 0,
+      // backs off for big steer, large slip and the handbrake. Needs a rear
+      // wheel on the ground (the airborne assists own the in-air case).
+      if (t.drive.yawDampingGain > 0 && !frame.handbrake) {
+        const dampSpeed = Math.hypot(lv.x, lv.z);
+        const speedGate = smoothstep(
+          t.drive.yawDampingStartMs,
+          Math.max(t.drive.yawDampingFullMs, t.drive.yawDampingStartMs + 0.1),
+          dampSpeed,
+        );
+        const steerOff = Math.max(0.1, t.drive.yawDampingSteerOff);
+        const steerGate = 1 - smoothstep(steerOff / 3, steerOff, Math.abs(frame.steer));
+        const slipOff = (Math.max(2, t.drive.yawDampingSlipOffDeg) * Math.PI) / 180;
+        const slipGate = 1 - smoothstep(slipOff / 2, slipOff, Math.abs(slipRad));
+        const gate = speedGate * steerGate * slipGate;
+        const groundedRear = (vc.wheelIsInContact(RL) ? 1 : 0) + (vc.wheelIsInContact(RR) ? 1 : 0);
+        if (gate > 0 && groundedRear > 0 && forwardSpeedMs > 0) {
+          const av = body.angvel();
+          // Yaw the steering demands (kinematic, positive = left like angvel.y).
+          const demanded =
+            (forwardSpeedMs * Math.tan(steerAngle)) / (2 * Math.max(0.1, t.wheels.halfWheelbase));
+          // One-sided: only ever REDUCES |yaw| (toward the demanded yaw when it
+          // has the same sign, else toward 0). It never adds rotation, so an
+          // understeering car on a low-grip surface is not helped round.
+          const target = demanded * av.y > 0 ? demanded : 0;
+          const unwanted = av.y - target;
+          if (unwanted * av.y > 0) {
+            const k = 1 - Math.exp(-t.drive.yawDampingGain * gate * DT);
+            body.applyTorqueImpulse({ x: 0, y: -inertia.y * unwanted * k, z: 0 }, true);
+          }
+        }
       }
 
       // 6. Fresh telemetry — valid only AFTER updateVehicle.

@@ -47,6 +47,7 @@ describe("applyFeel", () => {
       tyreFalloff: 5,
       regrip: 8.2,
       flick: 5.1,
+      stability: 5,
     });
     const { base, t } = derived(FEEL_DEFAULTS);
     expect(t.wheels.frictionSlip).toBeCloseTo(base.wheels.frictionSlip * 1.12);
@@ -100,6 +101,19 @@ describe("applyFeel", () => {
       lo("regrip").drive.rearGripRecoverySec,
     );
     expect(hi("flick").drive.flickGain).toBeGreaterThan(lo("flick").drive.flickGain);
+  });
+
+  it("stability scales the high-speed yaw damping (0 = off, 5 = base, 10 = double); turn-in scales keyboard return with the wind-on", () => {
+    expect(derived({ ...NEUTRAL, stability: 0 }).t.drive.yawDampingGain).toBe(0);
+    const { base, t } = derived({ ...NEUTRAL, stability: 10 });
+    expect(t.drive.yawDampingGain).toBeCloseTo(base.drive.yawDampingGain * 2);
+    expect(derived({ ...NEUTRAL, stability: 5 }).t.drive.yawDampingGain).toBe(
+      base.drive.yawDampingGain,
+    );
+    for (const turnIn of [0, 3, 5, 7.2, 10]) {
+      const d = derived({ ...NEUTRAL, turnIn }).t.drive;
+      expect(d.steerReturnPerSec).toBeGreaterThanOrEqual(d.steerRampPerSec);
+    }
   });
 
   it("cuts the roll assist when grip is raised, to stay inside the roll gates", () => {

@@ -123,6 +123,10 @@ describe("vehicle-recovery: highSpeedPulseRoutine (260920-j4d symptom 2)", () =>
     // below ~0.16 (0.12 -> 18.7 deg).
     const tuning = defaultTuning();
     tuning.wheels.rearSideFriction = 0.12;
+    // 2026-11-03 (04.3-05): measured with the high-speed yaw damping assist OFF.
+    // The assist is orthogonal to what this proves (the routine CAN fail on a
+    // loose rear) and, switched on, it stabilises this very car (next test).
+    tuning.drive.yawDampingGain = 0;
     const result = runRoutine(highSpeedPulseRoutine, tuning);
 
     expect(Number.isFinite(result.value)).toBe(true);
@@ -130,6 +134,18 @@ describe("vehicle-recovery: highSpeedPulseRoutine (260920-j4d symptom 2)", () =>
     // ~9.3 deg (was 18.7); 0.1 and below still never settle.
     expect(result.value).toBeGreaterThan(8);
     expect(result.pass).toBe(false);
+  });
+
+  it("the yaw damping assist (04.3-05) lets the same loose rear (0.12) pass the band, and a very loose one (0.05) still fails it", () => {
+    const loose = defaultTuning();
+    loose.wheels.rearSideFriction = 0.12;
+    const withAssist = runRoutine(highSpeedPulseRoutine, loose);
+    expect(withAssist.pass).toBe(true);
+    expect(withAssist.value).toBeLessThan(8);
+
+    const veryLoose = defaultTuning();
+    veryLoose.wheels.rearSideFriction = 0.05;
+    expect(runRoutine(highSpeedPulseRoutine, veryLoose).pass).toBe(false);
   });
 
   it("two runs in a row produce a bit-identical result at default tuning (setup() resets closure state)", () => {
