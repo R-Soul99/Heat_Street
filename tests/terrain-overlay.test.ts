@@ -76,7 +76,7 @@ describe("contourSegments", () => {
     const g = flat();
     g.heights[terrainIndex(g, 0, 0)] = 1;
     g.heights[terrainIndex(g, 1, 1)] = 1;
-    const seg = contourSegments(g, { minRow: 0, minCol: 0, maxRow: 1, maxCol: 1 }, 0.5);
+    const seg = contourSegments(g, { minRow: 0, minCol: 0, maxRow: 1, maxCol: 1 }, 1);
     expect(seg.length).toBe(2 * 6);
   });
 });
