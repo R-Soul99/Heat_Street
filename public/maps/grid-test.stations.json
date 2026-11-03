@@ -1,0 +1,27 @@
+{
+  "areaId": "grid-test",
+  "stations": [
+    {
+      "id": "wide-avenue",
+      "key": "1",
+      "name": "Wide avenue (24 m), west end",
+      "note": "Sign-off drive, key 1: check the roads read about 2 m wider. 700 m straight with a good view of the road edges.",
+      "featureAheadM": 0,
+      "widthM": 24,
+      "x": -330,
+      "z": -10,
+      "headingRad": -1.5708
+    },
+    {
+      "id": "junction-approach",
+      "key": "2",
+      "name": "Junction approach (14 m avenue)",
+      "note": "Sign-off drive, key 2: check road width at a junction with a cross street 80 m ahead.",
+      "featureAheadM": 80,
+      "widthM": 14,
+      "x": 190,
+      "z": 140,
+      "headingRad": -1.5708
+    }
+  ]
+}

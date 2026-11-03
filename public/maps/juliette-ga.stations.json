@@ -1,0 +1,71 @@
+{
+  "areaId": "juliette-ga",
+  "stations": [
+    {
+      "id": "fast-straight",
+      "key": "1",
+      "name": "Long fast straight (1.3 km)",
+      "note": "Sign-off drive, key 1: tap corrections at 70-100 mph and lift-off on a straight. Pad is at the start of a 1.3 km dead-straight road.",
+      "featureAheadM": 0,
+      "widthM": 7,
+      "x": 1308,
+      "z": 2171.6,
+      "headingRad": 0.8053
+    },
+    {
+      "id": "gentle-bend",
+      "key": "2",
+      "name": "Gentle bend (R~230 m, 44 deg)",
+      "note": "Sign-off drive, key 2: lift-off on a gentle bend. 200 m run-up, then a long sweeper.",
+      "featureAheadM": 200,
+      "widthM": 7,
+      "x": 832.3,
+      "z": -653.8,
+      "headingRad": 0.4039
+    },
+    {
+      "id": "tight-corner",
+      "key": "3",
+      "name": "Tight corner (~86 deg, two-stage)",
+      "note": "Sign-off drive, key 3: lift mid-corner and the deliberate full-lock slide. 150 m run-up to a sharp ~86 deg turn.",
+      "featureAheadM": 150,
+      "widthM": 7,
+      "x": -833.3,
+      "z": 209.2,
+      "headingRad": -1.5531
+    },
+    {
+      "id": "edge-berm",
+      "key": "4",
+      "name": "Edge berm (150 m to the map edge)",
+      "note": "Sign-off drive, key 4: drive straight into the terrain-edge berm at speed. The road runs out at the south edge of the map.",
+      "featureAheadM": 0,
+      "widthM": 7,
+      "x": -1107.8,
+      "z": -2325.9,
+      "headingRad": 0.073
+    },
+    {
+      "id": "town",
+      "key": "6",
+      "name": "Busiest town view (34 buildings, 2.2 km of road within 300 m)",
+      "note": "Sign-off drive, key 6: HUD draws/render reading in the densest built-up spot. Use a low launch speed (0-20 mph).",
+      "featureAheadM": 0,
+      "widthM": 7,
+      "x": 952.5,
+      "z": 286.4,
+      "headingRad": 0.9647
+    },
+    {
+      "id": "area-crossing",
+      "key": "7",
+      "name": "Area-crossing run (1.1 km)",
+      "note": "Sign-off drive, key 7: flat-out HUD reading while crossing several 256 m terrain chunk boundaries. A different road from key 1.",
+      "featureAheadM": 0,
+      "widthM": 7,
+      "x": -210.3,
+      "z": 448.6,
+      "headingRad": -1.3847
+    }
+  ]
+}

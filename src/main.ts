@@ -1059,17 +1059,44 @@ try {
   if (FEEL_ENABLED || DEBUG_ENABLED) createMapMenu(AREA_ID);
 
   // Proving ground (`?map=feel-test`): number keys launch the car from fixed
-  // pads at a chosen speed (see src/debug/test-stations.ts).
-  if (AREA_ID === "feel-test") {
-    const stations = parseStations(
-      await fetchArtifactText(`/maps/${AREA_ID}.stations.json`),
-      AREA_ID,
-    );
+  // pads at a chosen speed (see src/debug/test-stations.ts). Other terrain maps
+  // get the same pads from an optional `<id>.stations.json` (sign-off drives),
+  // in `?feel` / `?debug` sessions only; a missing file (404) skips quietly.
+  const stationGrid = terrainPhysicsGrid;
+  const stationsText =
+    AREA_ID === "feel-test"
+      ? await fetchArtifactText(`/maps/${AREA_ID}.stations.json`)
+      : (FEEL_ENABLED || DEBUG_ENABLED) && stationGrid !== undefined
+        ? await fetchOptionalArtifactText(`/maps/${AREA_ID}.stations.json`)
+        : undefined;
+  let stationList: ReturnType<typeof parseStations> | undefined;
+  if (stationsText !== undefined) {
+    try {
+      stationList = parseStations(stationsText, AREA_ID);
+    } catch (err) {
+      // feel-test's file is required (as before); an optional file never breaks the map.
+      if (AREA_ID === "feel-test") throw err;
+      console.warn(`stations file for "${AREA_ID}" ignored:`, err);
+    }
+  }
+  if (stationList !== undefined) {
+    const stations = stationList;
+    // feel-test launches relative to the spawn height (flat); terrain maps
+    // add the spawn pose's own clearance above the ground under each pad.
+    const spawn = scene.defaultSpawnPose;
+    const spawnClearance =
+      AREA_ID !== "feel-test" && stationGrid !== undefined
+        ? spawn.y - sampleTerrainHeight(stationGrid, spawn.x, spawn.z)
+        : 0;
     view.scene.add(createStationMarkers(stations));
     createTestStations(stations, (station, speedMph) => {
+      const baseY =
+        AREA_ID !== "feel-test" && stationGrid !== undefined
+          ? sampleTerrainHeight(stationGrid, station.x, station.z) + spawnClearance
+          : spawn.y;
       scene.resetVehicle({
         x: station.x,
-        y: scene.defaultSpawnPose.y + LAUNCH_RIDE_HEIGHT_LIFT_M,
+        y: baseY + LAUNCH_RIDE_HEIGHT_LIFT_M,
         z: station.z,
         headingRad: station.headingRad,
       });
