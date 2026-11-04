@@ -141,7 +141,7 @@ export function createDriveLogger(getVehicle: () => Vehicle): DriveLogger {
 
   const badge = document.createElement("div");
   badge.style.cssText =
-    "position:fixed;left:50%;top:8px;transform:translateX(-50%);padding:4px 10px;" +
+    "position:fixed;left:50%;bottom:8px;transform:translateX(-50%);padding:4px 10px;" +
     "font:12px monospace;color:#fff;background:rgba(0,0,0,.65);border-radius:4px;" +
     "pointer-events:none;z-index:9999;white-space:pre";
   document.body.appendChild(badge);
