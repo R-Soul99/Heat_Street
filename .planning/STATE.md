@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.3 (terrain-and-feel-follow-ups) — EXECUTING
-Plan: 1 of 12
-Next: /gsd-discuss-phase 04.3 or /gsd-plan-phase 04.3 (fix 04.2 follow-ups before Phase 05)
-Last activity: 2026-11-03 -- Phase 04.3 execution started
+Plan: 12 of 12 (plans 1-11 complete)
+Next: plan 12, re-record juliette-ga and grid-test medals from clean human runs (feel-test excluded)
+Last activity: 2026-11-04 -- plan 04.3-11 sign-off complete; draw-call target raised to 80
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 Progress: [██████████] 99%
