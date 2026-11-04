@@ -278,7 +278,7 @@ Plans:
 **Goal:** Close the follow-ups left by Phase 4.2 before race modes build on them. The shipped car no longer spins when the throttle is lifted on narrow, fast roads, and the 2/60 one-tick contact losses on the slope gate are gone. The terrain edge has a boundary, so the car can't drive off the world. Roads are 1-2 m wider. juliette-ga render CPU is back under its 6 ms budget (measured 7.71 ms). The road editor refuses to save a graph that fails validation, such as GEOMETRY_SELF_INTERSECTION. The terrain editor gains a square raise/lower tool with a separate smoothing pass (todo `2026-11-03-add-square-raise-lower-tool-with-separate-smoothing-pass`). Medal reference times are re-recorded last, once the car is retuned.
 **Requirements**: P43-LIFT, P43-CONTACT, P43-EDGE, P43-ROAD, P43-RENDER, P43-SAVE, P43-SQUARE, P43-MEDAL (working IDs from 04.3-RESEARCH.md; follow-ups from 04.2-VERIFICATION.md, 04.2-HUMAN-UAT.md and the 04.2 close-out list)
 **Depends on:** Phase 4.2
-**Plans:** 10/12 plans executed
+**Plans:** 12/12 plans complete
 
 Plans:
 - [x] 04.3-01-PLAN.md — Shared shippedTuning(), selectable dossier + new lift routines, shipped-car gate case; baselines (wave 1)
@@ -291,8 +291,8 @@ Plans:
 - [x] 04.3-08-PLAN.md — Diagnose and fix the shipped-car 2/60 contact losses; gate default-fatal (wave 3)
 - [x] 04.3-09-PLAN.md — juliette-ga render: HUD breakdown, baseline reading, bounded texture LOD (wave 3, checkpoint)
 - [x] 04.3-10-PLAN.md — Editor aids: block preview, grid, contours, zoom hint; user approval (wave 3, checkpoint)
-- [ ] 04.3-11-PLAN.md — Sign-off drives (lift-off, berm, roads) and final render reading (wave 4, checkpoint)
-- [ ] 04.3-12-PLAN.md — Medal re-record last (wave 5, checkpoint)
+- [x] 04.3-11-PLAN.md — Sign-off drives (lift-off, berm, roads) and final render reading (wave 4, checkpoint)
+- [x] 04.3-12-PLAN.md — Medal re-record last (wave 5, checkpoint)
 
 ### Phase 5: Objectives, Navigation & Race Modes
 
