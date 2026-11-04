@@ -111,12 +111,30 @@ export function createTestStations(
   let expanded = false;
   const panel = document.createElement("div");
   panel.style.cssText =
-    "position:fixed;left:50%;top:34px;transform:translateX(-50%);padding:3px 10px;" +
+    "position:fixed;left:50%;top:64px;transform:translateX(-50%);padding:3px 10px;" +
     "font:12px monospace;color:#fff;background:rgba(0,0,0,.55);border-radius:4px;" +
     "pointer-events:none;z-index:9999;white-space:pre";
   document.body.appendChild(panel);
 
+  // Description banner along the very top of the screen: the active test's
+  // name and note, shown from the first launch until the page is reloaded.
+  const banner = document.createElement("div");
+  banner.style.cssText =
+    "position:fixed;left:0;right:0;top:0;padding:6px 16px;text-align:center;" +
+    "font:14px/1.35 monospace;color:#fff;background:rgba(0,0,0,.7);" +
+    "pointer-events:none;z-index:10000;display:none";
+  const bannerTitle = document.createElement("div");
+  bannerTitle.style.cssText = "font-weight:bold;color:#ffd24a";
+  const bannerNote = document.createElement("div");
+  banner.append(bannerTitle, bannerNote);
+  document.body.appendChild(banner);
+
   function paint(): void {
+    if (last !== undefined) {
+      banner.style.display = "block";
+      bannerTitle.textContent = `TEST [${last.key}] ${last.name}  @ ${speedMph} mph`;
+      bannerNote.textContent = last.note;
+    }
     const head = `${speedMph} mph   ${last === undefined ? "press 1-9, 0, - to launch" : last.name}   [H] stations`;
     if (!expanded) {
       panel.textContent = head;
