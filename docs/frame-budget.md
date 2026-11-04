@@ -152,6 +152,23 @@ render ms over 6.0, which did not occur. Whether to raise the draw-call target (
 measured justification) or cull chunk draws is for the orchestrator to decide; the
 post-change confirmation reading is taken in plan 11.
 
+#### Plan 11 confirmation readings (2026-11-04)
+
+Taken in Chrome with `?map=juliette-ga&debug`, driven by the user, sampled from the HUD text every 250 ms (stale
+launch-frame values excluded). Display refresh unknown; frame ms is the HUD figure. Render budget is 6.0 ms.
+
+| | Station 6, busiest town view (47 samples, ~45 s) | Station 7, area-crossing run (138 samples, ~34 s) |
+|---|---|---|
+| render (CPU submit) | avg 1.43 ms, max **8.02 ms** (one sample), all others under 6.0 | avg 1.23 ms, max 3.89 ms (**under 6.0 ms**) |
+| frame | avg 10.1, max 31.7 ms | avg 8.3, max 9.4 ms |
+| terrain tex | avg 0.04, max 0.16 ms | avg 0.06, max 1.97 ms, flips/s up to 46 |
+| draw calls | up to 64 / 55 (over) | 9 to 65 / 55 (over at peak) |
+| triangles | up to 52,890 / 90,000 | up to 61,130 / 90,000 |
+
+Verdict: render is under 6.0 ms on average and in every sample except one 8.02 ms spike in the town (a single 250 ms
+sample, not repeated; the user accepted both stations as a pass on render after seeing it). Budgets unchanged. The draw-call
+open item stands: peaks of 64 and 65 against 55, with render CPU 1.2-1.4 ms on average, so the same reasoning as plan 09 applies.
+
 ### Real measurement, plan 04-10 (2026-09-15)
 
 Phase 3's fixture scene (six bands, 14 placeholder buildings) is superseded here by

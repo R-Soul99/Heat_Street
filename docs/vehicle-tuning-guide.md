@@ -388,7 +388,7 @@ live-tunable extension of the permanent camera.
 
 ### High-speed tap correction (04.3-05)
 
-> Changes below are **pending the plan 11 sign-off drive**. The first draft of this plan targeted a lift-off spin; the user's drive log of 2026-11-03 (`logs/tap-correction-spin-2026-11-03.csv`, keyboard, 70-105 mph) showed the real fault: each short correction tap over-corrected and the swings grew until the car spun.
+> Signed off in plan 11, 2026-11-04 (see "Lift-off sign-off (Phase 04.3)" below). The first draft of this plan targeted a lift-off spin; the user's drive log of 2026-11-03 (`logs/tap-correction-spin-2026-11-03.csv`, keyboard, 70-105 mph) showed the real fault: each short correction tap over-corrected and the swings grew until the car spun.
 
 Three causes, three fixes, all on the shipped car (`shippedTuning()`):
 
@@ -397,6 +397,22 @@ Three causes, three fixes, all on the shipped car (`shippedTuning()`):
 3. **Yaw damping assist** (`yawDampingGain` and its four gates, `?feel` "High-speed stability"). Opposes yaw the steering did not ask for, only at speed and with small steer and small slip.
 
 Tuning tip: if a slide at 60-90 mph feels too hard to start, raise `powerFadeStartMs` and `powerFadeEndMs` (or lower `powerSlipOpenDeg`); if the car still wobbles after a tap, raise `yawDampingGain` or the `?feel` stability slider.
+
+### Lift-off sign-off (Phase 04.3)
+
+Plan 11, 2026-11-04. Maps driven by the user: juliette-ga (stations 1-4), feel-test (step 3), with grid-test and juliette-ga
+for road width. Verdicts, in the user's words: "test 1 definitely passed, car is beautifully driveable at high speed now.",
+"test 2 - car handles beautifully", "3 is a pass, only my bad driving let me down!", "3 tail step out feels good, slides are
+catchable", the full-lock slide at ~36 mph "that was nice", feel-test "drives well" and "lift mid-corner makes the tail step out".
+Known and accepted: the plan-05 speed fade means a full-lock throttle slide at 55-60 mph reaches only ~4-8 deg of slip (strong at
+or below ~45 mph, 25 deg at 30 mph); to make it stronger raise `powerFadeStartMs` / `powerFadeEndMs`, `powerOversteerGain`
+(?feel "Rear looseness") or lower `powerSlipOpenDeg`.
+
+Final constants (shipped car): `highSpeedSteerFraction` 0.09, `powerFadeStartMs` 25, `powerFadeEndMs` 40, `yawDampingGain` 5.
+Dossier numbers (04.3-05, flat telemetry scene, before to after): full lock at 97 mph 30.7 to 7.8 deg; 3-tick tap at 100 mph peak
+heading 65.4 to 3.1 deg; five equal taps at 100 mph yaw peaks flat at 0.44-0.47 (was growing to 1.14); `lift-straight-90` peak
+slip 13.5 to 1.2 deg; `power-slide-30` 24.7 to 25.1 deg. There was no earlier feel-test lap to compare against, so lap pace
+change is unknown and the feel-test medals were not re-recorded.
 
 ### Slopes (Phase 04.2)
 
