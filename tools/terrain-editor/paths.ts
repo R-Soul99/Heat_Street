@@ -30,7 +30,11 @@ export interface StatusError extends Error {
   status: number;
 }
 
-/** Reads a request body, rejecting with `{ status: 413 }` and destroying the stream past `maxBytes`. */
+/**
+ * Reads a request body, rejecting with `{ status: 413 }` past `maxBytes`. The stream is paused,
+ * not destroyed, so the caller can still send the 413 response; it should close the connection
+ * after that response is flushed (WR-03).
+ */
 export function readBodyCapped(req: IncomingMessage | Readable, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -44,7 +48,7 @@ export function readBodyCapped(req: IncomingMessage | Readable, maxBytes: number
         done = true;
         const err = new Error("request body too large") as StatusError;
         err.status = 413;
-        req.destroy();
+        req.pause();
         reject(err);
         return;
       }

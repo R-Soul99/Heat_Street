@@ -14,7 +14,11 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
-import { decodeTerrainBinary, parseTerrainSidecar } from "../../src/core/terrain-format.ts";
+import {
+  decodeTerrainBinary,
+  loadTerrainArea,
+  parseTerrainSidecar,
+} from "../../src/core/terrain-format.ts";
 import {
   isSafeAreaId,
   MAX_BIN_BYTES,
@@ -42,10 +46,14 @@ function sendError(res: ServerResponse, status: number, message: string): void {
   send(res, status, JSON.stringify({ error: message }));
 }
 
-/** Strips anything path-like from a message before it reaches the browser (T-04.2-37). */
-function safeMessage(err: unknown): string {
+/**
+ * Strips anything path-like from a message before it reaches the browser (T-04.2-37). A path runs
+ * to the next quote or line break, not the next space, so Windows paths such as
+ * `d:\Projects 2\...` are redacted whole (WR-01).
+ */
+export function safeMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  return raw.replace(/[A-Za-z]:[\\/][^\s"']*|\/[^\s"']*\/[^\s"']*/g, "<path>");
+  return raw.replace(/[A-Za-z]:[\\/][^"'\r\n]*|\/[^\s"']*\/[^"'\r\n]*/g, "<path>");
 }
 
 /** Per-file tail of the in-process write queue (WR-07). */
@@ -92,6 +100,25 @@ export function validateSidecarPut(text: string, id: string): void {
   assertSaveableGraph(sidecar.graph);
 }
 
+/**
+ * Cross-checks the two halves of an area (WR-02): the graph bounds must lie inside the grid
+ * extent, exactly as `loadTerrainArea` requires at load time. Skipped while only one half
+ * exists (a new area). Throws `terrain-format:` on a mismatch.
+ */
+export async function validateAreaPair(
+  id: string,
+  bin: Uint8Array | undefined,
+  sidecarText: string | undefined,
+): Promise<void> {
+  if (bin === undefined || sidecarText === undefined) return;
+  await loadTerrainArea(bin, sidecarText, id, id);
+}
+
+async function readIfExists(file: string | null): Promise<Buffer | undefined> {
+  if (file === null || !existsSync(file)) return undefined;
+  return readFile(file);
+}
+
 export function terrainEditorApi(): Plugin {
   return {
     name: "heat-street-terrain-editor-api",
@@ -131,18 +158,28 @@ export function terrainEditorApi(): Plugin {
           // PUT: cap, validate with the shared codec, then write atomically.
           if (kind === "bin") {
             const body = await readBodyCapped(req, MAX_BIN_BYTES);
-            await decodeTerrainBinary(new Uint8Array(body), `${id}.terrain.bin`);
+            const bytes = new Uint8Array(body);
+            await decodeTerrainBinary(bytes, `${id}.terrain.bin`);
+            const side = await readIfExists(resolveTerrainFile(ROOT, id, "json"));
+            await validateAreaPair(id, bytes, side?.toString("utf8"));
             await writeAtomic(file, body);
           } else {
             const body = await readBodyCapped(req, MAX_JSON_BYTES);
             const text = body.toString("utf8");
             validateSidecarPut(text, id);
+            const bin = await readIfExists(resolveTerrainFile(ROOT, id, "bin"));
+            await validateAreaPair(id, bin === undefined ? undefined : new Uint8Array(bin), text);
             await writeAtomic(file, text);
           }
           return send(res, 200, '{"ok":true}');
         } catch (err) {
           const status = (err as { status?: number }).status;
-          if (status === 413) return sendError(res, 413, "request body too large");
+          if (status === 413) {
+            // WR-03: answer first, then drop the connection so the client sees the 413.
+            res.setHeader("Connection", "close");
+            res.once("finish", () => req.destroy());
+            return sendError(res, 413, "request body too large");
+          }
           const msg = safeMessage(err);
           // Codec/parse failures are the client's fault; filesystem failures are ours.
           const isValidation =

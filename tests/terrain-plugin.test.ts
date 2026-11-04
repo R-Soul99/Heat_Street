@@ -10,7 +10,12 @@ import {
   readBodyCapped,
   resolveTerrainFile,
 } from "../tools/terrain-editor/paths.ts";
-import { validateSidecarPut, writeAtomic } from "../tools/terrain-editor/vite-plugin.ts";
+import {
+  safeMessage,
+  validateAreaPair,
+  validateSidecarPut,
+  writeAtomic,
+} from "../tools/terrain-editor/vite-plugin.ts";
 
 describe("validateSidecarPut (D-17 save guard on the server)", () => {
   const shipped = ["demo-hills", "feel-test", "grid-test", "juliette-ga"];
@@ -31,6 +36,46 @@ describe("validateSidecarPut (D-17 save guard on the server)", () => {
   it("still rejects malformed JSON as a format error", () => {
     expect(() => validateSidecarPut("{not json", "feel-test")).toThrow(
       /^(terrain-format|parseRoadGraph):/,
+    );
+  });
+});
+
+describe("safeMessage (WR-01)", () => {
+  it("redacts a Windows path that contains spaces, whole", () => {
+    const winPath = String.raw`d:\Projects 2\Heat Street - Copy\public\maps\x.bin`;
+    const msg = safeMessage(new Error(`ENOENT: cannot open ${winPath}`));
+    expect(msg).toBe("ENOENT: cannot open <path>");
+  });
+  it("still redacts a path inside quotes and a POSIX path", () => {
+    const quoted = String.raw`failed "C:\a b\c" now`;
+    expect(safeMessage(new Error(quoted))).toBe('failed "<path>" now');
+    expect(safeMessage(new Error("bad /home/me/dir/file.bin"))).toBe("bad <path>");
+  });
+  it("leaves validation prefixes and plain text alone", () => {
+    expect(safeMessage(new Error("terrain-format: x.bin: bad magic"))).toBe(
+      "terrain-format: x.bin: bad magic",
+    );
+  });
+});
+
+describe("validateAreaPair (WR-02)", () => {
+  const read = (ext: string) => readFile(path.join("public", "maps", `feel-test.terrain.${ext}`));
+  it("accepts the tracked feel-test pair", async () => {
+    const bin = new Uint8Array(await read("bin"));
+    const text = (await read("json")).toString("utf8");
+    await expect(validateAreaPair("feel-test", bin, text)).resolves.toBeUndefined();
+  });
+  it("skips the check while one half is missing (new area)", async () => {
+    const bin = new Uint8Array(await read("bin"));
+    await expect(validateAreaPair("feel-test", bin, undefined)).resolves.toBeUndefined();
+    await expect(validateAreaPair("feel-test", undefined, "{}")).resolves.toBeUndefined();
+  });
+  it("rejects a sidecar whose graph lies outside the saved grid", async () => {
+    const bin = new Uint8Array(await read("bin"));
+    const json = JSON.parse((await read("json")).toString("utf8"));
+    json.graph.bounds.maxX += 5000;
+    await expect(validateAreaPair("feel-test", bin, JSON.stringify(json))).rejects.toThrow(
+      /^terrain-format:/,
     );
   });
 });
@@ -65,6 +110,12 @@ describe("readBodyCapped", () => {
   it("rejects with status 413 over the cap", async () => {
     const stream = Readable.from([Buffer.alloc(10)]);
     await expect(readBodyCapped(stream, 5)).rejects.toMatchObject({ status: 413 });
+  });
+  it("leaves the stream alive so the 413 response can still be sent (WR-03)", async () => {
+    const stream = Readable.from([Buffer.alloc(10), Buffer.alloc(10), Buffer.alloc(10)]);
+    await expect(readBodyCapped(stream, 5)).rejects.toMatchObject({ status: 413 });
+    expect(stream.destroyed).toBe(false);
+    expect(stream.isPaused()).toBe(true);
   });
   it("resolves the buffer at the cap", async () => {
     const buf = await readBodyCapped(Readable.from([Buffer.alloc(10)]), 10);
