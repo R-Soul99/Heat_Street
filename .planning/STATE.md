@@ -245,6 +245,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261004-gmu | FWD and 4WD vehicle classes (`?car=rwd|fwd|awd`; red/green/blue are temporary test colours), per-class drive split, tuning and saved-tuning key | 2026-10-04 | bb0958d | [261004-gmu-add-fwd-and-4wd-vehicle-classes-with-col](./quick/261004-gmu-add-fwd-and-4wd-vehicle-classes-with-col/) |
 | 261104-tdb | On-screen test name + description banner along the top when a feel-playground test station is launched | 2026-11-04 | 67685f7 | [261104-tdb-test-description-banner](./quick/261104-tdb-test-description-banner/) |
 | 261004-otc | Arcade front-drive thrust for FWD/AWD: front-axle share applied as a chassis impulse along heading (scaled by front contact) so throttle works while cornering; FWD engine force back to 4800. Feel not yet user-verified | 2026-10-04 | ca9daae | [261004-otc-arcade-front-drive-thrust-for-fwd-and-aw](./quick/261004-otc-arcade-front-drive-thrust-for-fwd-and-aw/) |
+| 261104-o1l | Playground map step 2: dome field, gap jumps with landing ramps, ovals | 2026-11-04 | ec9d016 | [261104-o1l-playground-map-step-2-dome-field-big-ram](./quick/261104-o1l-playground-map-step-2-dome-field-big-ram/) |
 
 ## Session Continuity
 
