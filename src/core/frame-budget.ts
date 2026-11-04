@@ -69,12 +69,17 @@ export const BUDGET = {
  * needs to pass. juliette-ga's 63 draws and 7.71 ms render submit are over
  * (target and BUDGET.renderCpuMs respectively) and are an open item in
  * docs/frame-budget.md, not hidden by these targets. BUDGET is unchanged.
+ *
+ * Draw-call target raised 55 -> 80 in plan 04.3-11 (2026-11-04), by the user's decision, on
+ * measured readings: juliette-ga peaks of 64 (town) and 65 (area crossing) with render CPU
+ * averaging 1.2-1.4 ms against its 6.0 ms slice, so the count was a proxy that did not
+ * predict cost. 80 is 65 plus ~20% headroom. The shadow pass and 130+ terrain chunks drive it.
  */
 export const SCENE_TARGETS = {
   /** Physics ms per frame. */
   physicsMs: 1.5,
   /** `renderer.info.render.calls`, read after `render()`. */
-  drawCalls: 55,
+  drawCalls: 80,
   /** `renderer.info.render.triangles`, read after `render()`. */
   triangles: 90000,
   /** `world.bodies.len()`. */

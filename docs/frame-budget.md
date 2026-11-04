@@ -48,7 +48,7 @@ snapshot of whichever phase first wrote it.
 | Metric | Target |
 |--------|---------------|
 | Physics ms/frame | < 1.5 ms |
-| Draw calls | < 55 |
+| Draw calls | < 80 |
 | Triangles | < 90,000 |
 | Total bodies | < 110 |
 
@@ -143,7 +143,7 @@ one call for tests. NOT applied, because the readings do not call for them: row-
 paint fill, the 512 px full-res cap, and the shadow/draw-radius cull.
 `BUDGET` and `SCENE_TARGETS` are unchanged.
 
-**Open item: draw calls 63 against the < 55 target** in the town area (steady cruise),
+**Open item (RESOLVED in plan 11, target raised to < 80): draw calls 63 against the then < 55 target** in the town area (steady cruise),
 while render CPU is only 1.33 ms. The draw-call target is a proxy for submit cost and
 the submit cost is fine, so this is flagged rather than fixed here: the shadow pass
 re-submits every caster, and the town has building meshes on top of 132 terrain chunks.
@@ -300,3 +300,10 @@ remains a future action item, not something this plan resolves.
 - The render / game-logic / headroom split is a recommendation. Plan 03-10 revisited it
   with an ESTIMATE (see "Phase 3 additions" above) rather than a measured browser
   session; a real measurement is still an open follow-up.
+
+#### Draw-call target raised to < 80 (plan 11, 2026-11-04)
+
+The user chose to raise the target rather than cull chunk or shadow draws. Measured juliette-ga peaks were 64 (town) and 65 (area crossing)
+while render CPU averaged 1.2-1.4 ms of its 6.0 ms slice, so the count was not predicting cost. New target `< 80` (65 plus about 20% headroom,
+the margin used for the other targets); `SCENE_TARGETS.drawCalls` is 80. Render CPU 6.0 ms and every other budget are unchanged. The plan 09
+draw-side cull stays unbuilt and would be the next step only if render ms went over 6.0.

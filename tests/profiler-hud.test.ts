@@ -93,9 +93,9 @@ describe("formatHudText", () => {
     expect(lineStartingWith(text, "draws")).not.toContain("!");
   });
 
-  it("marks draw calls over the current scene target: one above SCENE_TARGETS.drawCalls 55", () => {
+  it("marks draw calls over the current scene target: one above SCENE_TARGETS.drawCalls 80", () => {
     const text = formatHudText(makeInputs({ drawCalls: SCENE_TARGETS.drawCalls + 1 }));
-    expect(SCENE_TARGETS.drawCalls).toBe(55);
+    expect(SCENE_TARGETS.drawCalls).toBe(80);
     expect(lineStartingWith(text, "draws")).toContain("!");
   });
 
