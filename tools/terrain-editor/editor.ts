@@ -37,6 +37,7 @@ import {
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { blockingRoadFailures, saveBlockMessage } from "./save-guard.ts";
+import { putTerrainPair } from "./save-pair.ts";
 import {
   createToolDispatcher,
   type EditArea,
@@ -391,12 +392,15 @@ async function save(): Promise<boolean> {
     // same instant, so the pair describes one consistent state.
     const sidecar = serializeTerrainSidecar(target);
     const bin = await encodeTerrainBinary(target);
-    // WR-07: both halves are fully encoded before anything is written, and the
-    // sidecar goes first: it is the half the server is most likely to reject
-    // (graph validation), so a rejection leaves the old bin/json pair intact
-    // instead of a new bin beside a stale sidecar.
-    await api(`/__terrain/${target.areaId}/json`, { method: "PUT", body: sidecar });
-    await api(`/__terrain/${target.areaId}/bin`, { method: "PUT", body: bin as BodyInit });
+    // WR-07 / WR-06: both halves are fully encoded before anything is written;
+    // bin first, then sidecar, with a half-written pair reported by name. The
+    // graph was already validated client-side above (D-15), so the sidecar is
+    // the half least likely to be rejected.
+    await putTerrainPair(
+      (kind, body) => api(`/__terrain/${target.areaId}/${kind}`, { method: "PUT", body }),
+      bin as BodyInit,
+      sidecar,
+    );
     const editedDuringSave = editCounter !== editsAtStart || area !== target;
     if (!editedDuringSave) setDirty(false);
     const kb = Math.round(bin.length / 1024);

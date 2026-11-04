@@ -79,7 +79,8 @@ export interface HeightOpOptions {
   /**
    * Builds the road mask (grid.heights indexing, non-zero = road vertex) for
    * the slope-limiter window. Masked vertices are never moved by the limiter
-   * (WR-02 / plan 07 truth 4), so roads keep their graph y (D-16).
+   * (WR-02 / plan 07 truth 4), so roads keep their graph y (D-16). Also queried
+   * for the op's own window: masked vertices are held by every height op (WR-03).
    */
   roadMask?: (win: CellWindow) => Uint8Array;
 }
@@ -202,13 +203,16 @@ function runHeightOp(
     const cc = Math.min(touched.maxCol, Math.max(touched.minCol, c)) - touched.minCol;
     return old[rr + cc * rowsN];
   };
+  // WR-03 (D-16): every op holds road-masked vertices, not just the limiter, so
+  // sculpting over a road never moves road terrain away from its graph y.
+  const hold = opts.roadMask?.(touched);
   let maxDelta = 0;
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
     for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
       const x = grid.originX + c * grid.cellSizeM;
       const z = grid.originZ + r * grid.cellSizeM;
-      const v = compute(x, z, old[k], (rr, cc) => snap(rr, cc));
+      const v = hold?.[r + c * stride] ? old[k] : compute(x, z, old[k], (rr, cc) => snap(rr, cc));
       next[k] = Number.isFinite(v) ? v : old[k];
       maxDelta = Math.max(maxDelta, Math.abs(Math.fround(next[k]) - old[k]));
     }

@@ -388,6 +388,61 @@ describe("raiseBlock", () => {
   });
 });
 
+describe("road mask holds vertices in every height op (WR-03 / D-16)", () => {
+  const roadAtCentre = (g: ReturnType<typeof grid>) => {
+    const mask = new Uint8Array(g.heights.length);
+    for (let c = 28; c <= 32; c++) for (let r = 28; r <= 32; r++) mask[terrainIndex(g, r, c)] = 1;
+    return { roadMask: () => mask };
+  };
+  const heldAndMoved = (g: ReturnType<typeof grid>) => {
+    for (let c = 28; c <= 32; c++) {
+      for (let r = 28; r <= 32; r++) expect(g.heights[terrainIndex(g, r, c)]).toBe(0);
+    }
+    expect(g.heights.some((h) => h !== 0)).toBe(true);
+  };
+
+  it("raiseLower", () => {
+    const g = grid();
+    raiseLower(g, brush({ radiusM: 15, strength: 1 }), 1, 2, undefined, roadAtCentre(g));
+    heldAndMoved(g);
+  });
+
+  it("flattenBrush", () => {
+    const g = grid();
+    flattenBrush(g, brush({ radiusM: 15, strength: 1 }), 3, undefined, roadAtCentre(g));
+    heldAndMoved(g);
+  });
+
+  it("stampTerrain", () => {
+    const g = grid();
+    stampTerrain(
+      g,
+      { kind: "mound", x: 0, z: 0, rotationRad: 0, lengthM: 20, widthM: 30, heightM: 3 },
+      undefined,
+      roadAtCentre(g),
+    );
+    heldAndMoved(g);
+  });
+
+  it("smoothBrush", () => {
+    const g = grid();
+    let s = 99;
+    for (let i = 0; i < g.heights.length; i++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      g.heights[i] = (s / 0x7fffffff) * 0.4;
+    }
+    const before = Float32Array.from(g.heights);
+    smoothBrush(g, brush({ radiusM: 15, strength: 1 }), undefined, roadAtCentre(g));
+    for (let c = 28; c <= 32; c++) {
+      for (let r = 28; r <= 32; r++) {
+        const i = terrainIndex(g, r, c);
+        expect(g.heights[i]).toBe(before[i]);
+      }
+    }
+    expect(Array.from(g.heights)).not.toEqual(Array.from(before));
+  });
+});
+
 describe("smoothRegion", () => {
   function noisy() {
     const g = grid();

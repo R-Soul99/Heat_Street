@@ -266,7 +266,19 @@ describe("roadBankAngles", () => {
     for (let i = 1; i < capped.length; i++)
       maxStep = Math.max(maxStep, Math.abs(capped[i] - capped[i - 1]));
     expect(maxStep).toBeLessThan((8 * Math.PI) / 180 / 3);
-    expect(capped[0]).toBe(0);
+    // WR-04: the padded start window is as wide as the end's, so the first point is
+    // a partial ramp (well below the cap) that mirrors the last one, not a collapsed 0.
+    const last = capped[capped.length - 1];
+    expect(Math.abs(capped[0])).toBeLessThan(Math.abs(mid) / 2);
+    expect(capped[0]).toBeCloseTo(last, 9);
+  });
+
+  it("ramps symmetrically: a reversed stroke gives the mirrored, sign-flipped profile (WR-04)", () => {
+    const curved = arc(60, 1.6);
+    const fwd = roadBankAngles(curved, ROAD_PRESETS.highway, 8);
+    const rev = roadBankAngles([...curved].reverse(), ROAD_PRESETS.highway, 8);
+    const n = curved.length;
+    for (let i = 0; i < n; i++) expect(rev[n - 1 - i]).toBeCloseTo(-fwd[i], 9);
   });
 });
 

@@ -60,7 +60,7 @@ export interface AiFleet {
   avoidanceScale(carIndex: number): number;
   /** Resets car `carIndex`'s chassis in place and forces its driver to re-seed its nearest-line-point search next tick. */
   resetCar(carIndex: number, pose: VehiclePose): void;
-  /** D-02: retunes every AI vehicle identically to the player's own live tune — never a second, independent tuning surface. */
+  /** D-02: retunes every AI vehicle identically to the player's own live tune (drive layout excepted: AI cars are always RWD) — never a second, independent tuning surface. */
   setTuning(t: VehicleTuning): void;
   dispose(): void;
 }
@@ -68,8 +68,10 @@ export interface AiFleet {
 /**
  * Builds `gridPoses.length` AI vehicles into `world`, each spawned at its own
  * grid pose and driven by its own `AiDriver` over the SHARED `line` (D-02:
- * identical car, tune and racing line for every AI racer — they differ only
- * by starting grid slot).
+ * identical tune and racing line for every AI racer — they differ only by
+ * starting grid slot). The cars are always built rear-drive
+ * (`frontDriveShare` 0) whatever drive layout the player has chosen; that is
+ * deliberate (see main.ts).
  */
 export function createAiFleet(
   world: RAPIER.World,

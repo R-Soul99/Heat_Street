@@ -85,7 +85,7 @@
       ],
       "start": {
         "nodeId": 5,
-        "headingRad": 0.059757826387555515
+        "headingRad": -0.059757826387555515
       },
       "authoring": "Runs the perimeter ring road of the proving ground, finishing along the gravel south side."
     },
@@ -173,7 +173,7 @@
       ],
       "start": {
         "nodeId": 1,
-        "headingRad": 1.657001900470421
+        "headingRad": -1.657001900470421
       },
       "authoring": "Three laps of the proving ground ring road, including its gravel south side."
     }

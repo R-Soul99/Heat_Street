@@ -10,6 +10,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCourseData } from "../../../src/core/course.ts";
+import { yawFromTravelDirection } from "../../../src/core/heading.ts";
 import {
   buildNavigationGraph,
   DEFECT_CLEARANCE_M,
@@ -133,7 +134,7 @@ async function run(): Promise<void> {
     const closure =
       mode === "circuit" ? lengthOf(pathOf(sequence[sequence.length - 1] as number, start.id)) : 0;
     const first = byId.get(pathOf(start.id, sequence[1] as number)[1] as number) as RoadGraphNode;
-    const headingRad = Math.atan2(first.x - start.x, -(first.z - start.z));
+    const headingRad = yawFromTravelDirection(first.x - start.x, first.z - start.z);
     const edgeById = new Map(graph.edges.map((e) => [e.id, e]));
     const usesDirt = [...sequence, ...(mode === "circuit" ? [start.id] : [])].some((id, i, seq) => {
       const next = seq[i + 1];

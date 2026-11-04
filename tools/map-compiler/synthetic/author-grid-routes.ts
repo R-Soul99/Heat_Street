@@ -16,6 +16,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCourseData } from "../../../src/core/course.ts";
+import { yawFromTravelDirection } from "../../../src/core/heading.ts";
 import {
   buildNavigationGraph,
   DEFECT_CLEARANCE_M,
@@ -146,7 +147,7 @@ async function run(): Promise<void> {
     const closure = mode === "circuit" ? pathLength(sequence[sequence.length - 1], sequence[0]) : 0;
     const firstPath = findRoadPath(navigation, sequence[0], sequence[1]);
     const next = graph.nodes[firstPath[1]];
-    const headingRad = Math.atan2(next.x - startNode.x, -(next.z - startNode.z));
+    const headingRad = yawFromTravelDirection(next.x - startNode.x, next.z - startNode.z);
     const checkpoints = cpNodes.map((node, i) =>
       checkpointFor(`${prefix}-${pad(i + 1)}`, node, routeNodes),
     );

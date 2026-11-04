@@ -364,6 +364,38 @@ function printCollisionSummary(
   );
 }
 
+/**
+ * Synthetic areas (`synthetic://` osmExtract) have no Overpass source: their
+ * raw caches are written by `generate-<area>`. Returns why compile-map must
+ * not fetch for one (`--refresh`, or a missing/bbox-mismatched cache), or
+ * `null` when the area is real or its caches are usable as-is.
+ */
+async function syntheticCacheProblem(config: AreaConfig, refresh: boolean): Promise<string | null> {
+  if (!config.osmExtract?.startsWith("synthetic://")) return null;
+  const fix = `run "npm run generate-${config.areaId}" to (re)generate its raw caches`;
+  if (refresh) {
+    return `"${config.areaId}" is a synthetic area; --refresh would replace it with real Overpass data. Refusing: ${fix}.`;
+  }
+  const areasDir = path.join(import.meta.dirname, "areas");
+  for (const kind of ["raw-osm", "raw-buildings"]) {
+    try {
+      const envelope = JSON.parse(
+        await readFile(path.join(areasDir, `${config.areaId}.${kind}.json`), "utf8"),
+      ) as { bbox?: Record<string, number> };
+      const want = config.bbox as Record<string, number>;
+      const matches = (["south", "west", "north", "east"] as const).every(
+        (k) => envelope.bbox?.[k] === want[k],
+      );
+      if (!matches) {
+        return `"${config.areaId}" is a synthetic area and its ${kind} cache does not match the configured bbox; ${fix}.`;
+      }
+    } catch {
+      return `"${config.areaId}" is a synthetic area and its ${kind} cache is missing or unreadable; ${fix}.`;
+    }
+  }
+  return null;
+}
+
 async function main(argv: readonly string[]): Promise<void> {
   const areaId = parseAreaArg(argv);
 
@@ -391,6 +423,12 @@ async function main(argv: readonly string[]): Promise<void> {
   );
 
   const refresh = argv.includes("--refresh");
+  const syntheticProblem = await syntheticCacheProblem(config, refresh);
+  if (syntheticProblem !== null) {
+    console.error(`compile-map: ${syntheticProblem}`);
+    process.exit(1);
+    return;
+  }
   const [roadsResult, buildingsResult] = await Promise.all([
     loadOrFetchArea(config, "roads", { refresh }),
     loadOrFetchArea(config, "buildings", { refresh }),
@@ -468,10 +506,9 @@ async function main(argv: readonly string[]): Promise<void> {
     }
   }
 
-  await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
-  const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
-  await writeFile(outputPath, `${JSON.stringify(flatGraph, null, 2)}\n`, "utf8");
-  console.log(`compile-map: wrote ${outputPath}`);
+  // `<areaId>.map.json` is written LAST (after the heightmap, collision
+  // self-check and glb stages below): a later stage that throws must not
+  // leave a new graph beside an old collision/glb pair.
 
   // Off-road heightfield stage (phase 04.1 plan 04.1-04, D-02/D-02a/D-02b):
   // a small, capped, deterministic procedural relief grid covering the
@@ -531,8 +568,6 @@ async function main(argv: readonly string[]): Promise<void> {
   const collisionRaw = `${JSON.stringify(collision, null, 2)}\n`;
   parseMapCollision(collisionRaw, config.areaId, `buildMapCollision(${config.areaId})`);
   const collisionPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.collision.json`);
-  await writeFile(collisionPath, collisionRaw, "utf8");
-  printCollisionSummary(collisionPath, Buffer.byteLength(collisionRaw, "utf8"), collision);
 
   // Road-shoulder stage (plan 04-11 grounding fix): a ramp per edge from the
   // paved rail down to this SAME heightfield's own bilinearly-sampled height,
@@ -591,9 +626,18 @@ async function main(argv: readonly string[]): Promise<void> {
     isFlatTestArea(config.areaId) ? FLAT_TEST_GROUND_HEX : undefined,
   );
   const glbPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.glb`);
+
+  // Every artifact is now built and self-checked in memory; write them,
+  // `.map.json` last.
+  await mkdir(MAPS_OUTPUT_DIR, { recursive: true });
+  await writeFile(collisionPath, collisionRaw, "utf8");
+  printCollisionSummary(collisionPath, Buffer.byteLength(collisionRaw, "utf8"), collision);
   await writeGlb(gltfDocument, glbPath);
   const glbStat = await stat(glbPath);
   printGltfSummary(glbPath, glbStat.size, gltfStats, buildingReport);
+  const outputPath = path.join(MAPS_OUTPUT_DIR, `${config.areaId}.map.json`);
+  await writeFile(outputPath, `${JSON.stringify(flatGraph, null, 2)}\n`, "utf8");
+  console.log(`compile-map: wrote ${outputPath}`);
 
   // Stages 5-6 (persisting authored ribbon/junction geometry into a shipped
   // collision buffer + merged glTF render mesh) land in later plans — see

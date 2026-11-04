@@ -558,3 +558,46 @@ describe("vehicle-assists", () => {
     expect(Math.abs(inertia.z - expected.z) / expected.z).toBeLessThan(0.01);
   });
 });
+
+describe("createVehicle: live retune of geometry and damping (WR-01)", () => {
+  it("applyTuning moves the real wheels, radius, rest length, damping and chassis collider", () => {
+    const { vehicle, tuning } = buildScene();
+    const t = structuredClone(tuning);
+    t.wheels.halfWheelbase = 2.2;
+    t.wheels.halfTrack = 0.9;
+    t.wheels.connectionY = 0.1;
+    t.wheels.radius = 0.4;
+    t.wheels.suspensionRestLength = 0.55;
+    t.chassis.linearDamping = 0.33;
+    t.chassis.angularDamping = 0.44;
+    t.chassis.halfExtents.z = 2.4;
+    vehicle.applyTuning(t);
+    const vc = vehicle.controller;
+    expect(vc.wheelChassisConnectionPointCs(FL)?.z).toBeCloseTo(-2.2);
+    expect(vc.wheelChassisConnectionPointCs(RR)?.z).toBeCloseTo(2.2);
+    expect(vc.wheelChassisConnectionPointCs(RR)?.x).toBeCloseTo(0.9);
+    expect(vc.wheelChassisConnectionPointCs(FL)?.y).toBeCloseTo(0.1);
+    expect(vc.wheelRadius(RL)).toBeCloseTo(0.4);
+    expect(vc.wheelSuspensionRestLength(FR)).toBeCloseTo(0.55);
+    expect(vehicle.body.linearDamping()).toBeCloseTo(0.33);
+    expect(vehicle.body.angularDamping()).toBeCloseTo(0.44);
+    const half = vehicle.body.collider(0).halfExtents();
+    expect(half?.z).toBeCloseTo(2.4);
+  });
+});
+
+describe("createVehicle: resetPose clears stale state (WR-02)", () => {
+  it("a respawn after a roll starts with upright telemetry and no wheel-surface carry-over", () => {
+    const { world, vehicle } = buildScene();
+    settle(world, vehicle, defaultTuning(), 30);
+    // Roll the car onto its side, as a crash would.
+    vehicle.body.setRotation({ x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 }, true);
+    vehicle.tick(NEUTRAL, defaultTuning());
+    world.step();
+    expect(Math.abs(vehicle.telemetry.rollDeg)).toBeGreaterThan(60);
+    (vehicle.wheelSurfaces as string[])[0] = "gravel";
+    vehicle.resetPose({ x: 0, y: 1, z: 0, headingRad: 0 });
+    expect(Math.abs(vehicle.telemetry.rollDeg)).toBeLessThan(1);
+    expect(vehicle.wheelSurfaces[0]).toBe("tarmac");
+  });
+});

@@ -2,7 +2,7 @@
  * Proving-ground launch pads (`?map=feel-test`): number keys drop the car on a
  * fixed pad, facing the station's feature, already moving at a chosen speed,
  * so a manoeuvre always starts from exactly the same state. `[` / `]` change
- * the launch speed, G repeats the last launch.
+ * the launch speed, L repeats the last launch (G is the tuning panel).
  *
  * `parseStations`, `launchVelocity` and `cycleSpeed` are pure so they test
  * without a DOM; `createTestStations` is the browser layer.
@@ -143,7 +143,7 @@ export function createTestStations(
     const lines = stations
       .filter((s) => s.key !== "")
       .map((s) => `[${s.key}] ${s.name}${s === last ? "  <" : ""}`);
-    panel.textContent = [`${head}   [ ] speed   [G] repeat`, ...lines].join("\n");
+    panel.textContent = [`${head}   [ ] speed   [L] repeat`, ...lines].join("\n");
   }
 
   function go(station: TestStation): void {
@@ -172,7 +172,7 @@ export function createTestStations(
     } else if (e.code === "KeyH") {
       expanded = !expanded;
       paint();
-    } else if (e.code === "KeyG") {
+    } else if (e.code === "KeyL") {
       if (last !== undefined) go(last);
     } else if (e.code.startsWith("Digit") || Object.hasOwn(PUNCTUATION_KEYS, e.code)) {
       const key = PUNCTUATION_KEYS[e.code] ?? e.code.slice(5);

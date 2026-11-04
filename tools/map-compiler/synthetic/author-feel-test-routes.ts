@@ -12,6 +12,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCourseData } from "../../../src/core/course.ts";
 import { PLAYGROUND_DEPTH_M, PLAYGROUND_WIDTH_M } from "../../../src/core/crest-geometry.ts";
+import { yawFromTravelDirection } from "../../../src/core/heading.ts";
 import {
   buildNavigationGraph,
   DEFECT_CLEARANCE_M,
@@ -89,8 +90,17 @@ const AREA_ROUTES: Readonly<Record<string, RingRoutes>> = {
 };
 
 const AREA_FLAG = process.argv.indexOf("--area");
-const AREA = AREA_FLAG === -1 ? "feel-test" : (process.argv[AREA_FLAG + 1] ?? "feel-test");
-if (!Object.hasOwn(AREA_ROUTES, AREA)) throw new Error(`unknown area ${AREA}`);
+// A missing or unknown value is an error, never a fall-back to feel-test:
+// that would overwrite its hand-recorded routes and medals.
+const RAW_AREA = AREA_FLAG === -1 ? "feel-test" : process.argv[AREA_FLAG + 1];
+if (RAW_AREA === undefined || !Object.hasOwn(AREA_ROUTES, RAW_AREA)) {
+  console.error(
+    `author-feel-test-routes: unknown or missing --area value ${String(RAW_AREA)}. ` +
+      `Usage: --area <${Object.keys(AREA_ROUTES).join("|")}>`,
+  );
+  process.exit(1);
+}
+const AREA = RAW_AREA;
 const ROUTES = AREA_ROUTES[AREA] as RingRoutes;
 const P2P_START = ROUTES.p2pStart;
 const P2P_CHECKPOINTS = ROUTES.p2pCheckpoints;
@@ -180,7 +190,7 @@ async function run(): Promise<void> {
     const closure = mode === "circuit" ? pathLength(sequence[sequence.length - 1], sequence[0]) : 0;
     const firstPath = findRoadPath(navigation, sequence[0], sequence[1]);
     const next = graph.nodes[firstPath[1]];
-    const headingRad = Math.atan2(next.x - startNode.x, -(next.z - startNode.z));
+    const headingRad = yawFromTravelDirection(next.x - startNode.x, next.z - startNode.z);
     const checkpoints = cpNodes.map((node, i) =>
       checkpointFor(`${prefix}-${pad(i + 1)}`, node, routeNodes),
     );

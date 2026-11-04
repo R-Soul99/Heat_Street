@@ -273,7 +273,7 @@ export function createVehicle(
   // underside clipping a ramp lip or scraping on a bottomed-out landing acted as
   // a brake (5 mph in one tick off a 0.9 m lip at 90 mph; roughly half of the
   // 15-23 mph lost on big landings in the drive logs, 2026-10-28).
-  world.createCollider(
+  const chassisCollider = world.createCollider(
     RAPIER.ColliderDesc.cuboid(c.halfExtents.x, c.halfExtents.y, c.halfExtents.z)
       .setFriction(CHASSIS_FRICTION)
       // Rapier averages the two colliders' friction by default, so against 1.0
@@ -318,6 +318,9 @@ export function createVehicle(
     vc.addWheel(conn[i], DIRECTION, AXLE, w0.suspensionRestLength, w0.radius);
   }
 
+  /** Latest applied suspension rest length, the neutral seed for `lastSuspensionLength`. */
+  let restLength = w0.suspensionRestLength;
+
   /**
    * Live-retune every per-wheel property. Rapier's own `WheelTuning`
    * defaults are Bullet-era demo values and every one of these seven is
@@ -326,7 +329,20 @@ export function createVehicle(
    */
   function applyTuning(t: VehicleTuning): void {
     const w = t.wheels;
+    restLength = w.suspensionRestLength;
+    // Chassis damping and wheel geometry are live too, so the sliders for them
+    // do something and the assist maths (which reads `t.wheels`) agrees with
+    // the real wheel positions.
+    body.setLinearDamping(t.chassis.linearDamping);
+    body.setAngularDamping(t.chassis.angularDamping);
     for (let i = 0; i < 4; i++) {
+      vc.setWheelChassisConnectionPointCs(i, {
+        x: i % 2 === 0 ? -w.halfTrack : w.halfTrack,
+        y: w.connectionY,
+        z: i < 2 ? -w.halfWheelbase : w.halfWheelbase,
+      });
+      vc.setWheelSuspensionRestLength(i, w.suspensionRestLength);
+      vc.setWheelRadius(i, w.radius);
       vc.setWheelSuspensionStiffness(i, w.suspensionStiffness);
       vc.setWheelSuspensionCompression(i, w.suspensionCompression);
       vc.setWheelSuspensionRelaxation(i, w.suspensionRelaxation);
@@ -346,6 +362,7 @@ export function createVehicle(
     const comChanged = !vecEq(cc.comOffset, lastComOffset);
     if (shapeOrMassChanged || comChanged) {
       if (shapeOrMassChanged) {
+        chassisCollider.setHalfExtents(cc.halfExtents);
         const next = boxPrincipalInertia(cc.mass, cc.halfExtents);
         inertia.x = next.x;
         inertia.y = next.y;
@@ -390,6 +407,12 @@ export function createVehicle(
     throttleRef = 0;
     liftHold = 0;
     rearGripScale = 1;
+    // A rolled car's stale rollDeg would otherwise make the first tick after
+    // the respawn apply the roll guard's friction cut.
+    rollGuardWasOn = false;
+    lastSuspensionLength.fill(restLength);
+    wheelSurfaces.fill("tarmac");
+    telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
   }
 
   // Allocated ONCE, mutated in place every surfaced tick — never
@@ -410,7 +433,7 @@ export function createVehicle(
   let rearGripScale = 1;
   let rollGuardWasOn = false;
   /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
-  const lastSuspensionLength = [0.45, 0.45, 0.45, 0.45];
+  const lastSuspensionLength = new Array<number>(4).fill(restLength);
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   /** Scratch target for `wheelContactPoint` (paint-map surface lookup): no per-tick allocation. */
   const contactScratch = { x: 0, y: 0, z: 0 };

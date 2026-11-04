@@ -254,7 +254,10 @@ function movingAverage(s: Float64Array, values: Float64Array, windowM: number): 
     cw[i + 1] = cw[i] + w[i];
     cv[i + 1] = cv[i] + w[i] * values[i];
   }
-  const total = s[n - 1];
+  // WR-04: ends are measured from the array's own first/last coordinate (the bank
+  // padding sits at negative arclength), so both ends shrink symmetrically.
+  const first = s[0];
+  const last = s[n - 1];
   const lower = (target: number): number => {
     let lo = 0;
     let hi = n;
@@ -266,7 +269,7 @@ function movingAverage(s: Float64Array, values: Float64Array, windowM: number): 
     return lo;
   };
   for (let i = 0; i < n; i++) {
-    const hw = Math.min(windowM / 2, s[i], total - s[i]);
+    const hw = Math.min(windowM / 2, s[i] - first, last - s[i]);
     const a = lower(s[i] - hw);
     const b = lower(s[i] + hw + 1e-9); // exclusive end
     const wsum = cw[b] - cw[a];
