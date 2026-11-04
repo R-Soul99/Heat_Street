@@ -33,8 +33,8 @@ describe("grid-test shipped artifacts", () => {
       "grid-test",
       expectations,
     );
-    expect(reference.handlingContentVersion).toBe("261101-terrain");
+    expect(reference.handlingContentVersion).toBe("261104-liftwide");
     const totals = Object.fromEntries(reference.courses.map((c) => [c.courseId, c.totalTimeSec]));
-    expect(totals).toEqual({ "grid-test-stagger-run": 138.25, "grid-test-block-loop": 354.833 });
+    expect(totals).toEqual({ "grid-test-stagger-run": 120, "grid-test-block-loop": 281.467 });
   });
 });

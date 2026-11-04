@@ -3,62 +3,62 @@
   "version": 1,
   "areaId": "juliette-ga",
   "contractVersion": 1,
-  "handlingContentVersion": "261101-terrain",
+  "handlingContentVersion": "261104-liftwide",
   "courses": [
     {
       "courseId": "juliette-backroads-run",
       "mode": "p2p",
       "laps": 1,
-      "totalTimeSec": 170.65,
+      "totalTimeSec": 149.583,
       "splits": [
         {
           "checkpointId": "p2p-01",
           "lap": 1,
           "authoredIndex": 0,
           "hitOrder": 0,
-          "cumulativeTimeSec": 23.817
-        },
-        {
-          "checkpointId": "p2p-05",
-          "lap": 1,
-          "authoredIndex": 4,
-          "hitOrder": 1,
-          "cumulativeTimeSec": 73.633
-        },
-        {
-          "checkpointId": "p2p-06",
-          "lap": 1,
-          "authoredIndex": 5,
-          "hitOrder": 2,
-          "cumulativeTimeSec": 80.767
-        },
-        {
-          "checkpointId": "p2p-07",
-          "lap": 1,
-          "authoredIndex": 6,
-          "hitOrder": 3,
-          "cumulativeTimeSec": 98.283
-        },
-        {
-          "checkpointId": "p2p-04",
-          "lap": 1,
-          "authoredIndex": 3,
-          "hitOrder": 4,
-          "cumulativeTimeSec": 131.617
-        },
-        {
-          "checkpointId": "p2p-03",
-          "lap": 1,
-          "authoredIndex": 2,
-          "hitOrder": 5,
-          "cumulativeTimeSec": 152.5
+          "cumulativeTimeSec": 15.967
         },
         {
           "checkpointId": "p2p-02",
           "lap": 1,
           "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 56.433
+        },
+        {
+          "checkpointId": "p2p-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 77.917
+        },
+        {
+          "checkpointId": "p2p-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 99.1
+        },
+        {
+          "checkpointId": "p2p-07",
+          "lap": 1,
+          "authoredIndex": 6,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 142.05
+        },
+        {
+          "checkpointId": "p2p-06",
+          "lap": 1,
+          "authoredIndex": 5,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 145.767
+        },
+        {
+          "checkpointId": "p2p-05",
+          "lap": 1,
+          "authoredIndex": 4,
           "hitOrder": 6,
-          "cumulativeTimeSec": 170.65
+          "cumulativeTimeSec": 149.583
         }
       ]
     },
@@ -66,112 +66,112 @@
       "courseId": "juliette-three-lap-loop",
       "mode": "circuit",
       "laps": 3,
-      "totalTimeSec": 307.683,
+      "totalTimeSec": 213.05,
       "splits": [
         {
           "checkpointId": "circuit-01",
           "lap": 1,
           "authoredIndex": 0,
           "hitOrder": 0,
-          "cumulativeTimeSec": 11.05
+          "cumulativeTimeSec": 9.233
         },
         {
           "checkpointId": "circuit-02",
           "lap": 1,
           "authoredIndex": 1,
           "hitOrder": 1,
-          "cumulativeTimeSec": 13.967
+          "cumulativeTimeSec": 12.1
         },
         {
           "checkpointId": "circuit-03",
           "lap": 1,
           "authoredIndex": 2,
           "hitOrder": 2,
-          "cumulativeTimeSec": 18.05
+          "cumulativeTimeSec": 15.967
         },
         {
           "checkpointId": "circuit-04",
           "lap": 1,
           "authoredIndex": 3,
           "hitOrder": 3,
-          "cumulativeTimeSec": 60.317
+          "cumulativeTimeSec": 46.35
         },
         {
           "checkpointId": "circuit-05",
           "lap": 1,
           "authoredIndex": 4,
           "hitOrder": 4,
-          "cumulativeTimeSec": 92.9
+          "cumulativeTimeSec": 72.383
         },
         {
           "checkpointId": "circuit-01",
           "lap": 2,
           "authoredIndex": 0,
           "hitOrder": 5,
-          "cumulativeTimeSec": 104.117
+          "cumulativeTimeSec": 82.233
         },
         {
           "checkpointId": "circuit-02",
           "lap": 2,
           "authoredIndex": 1,
           "hitOrder": 6,
-          "cumulativeTimeSec": 106.567
+          "cumulativeTimeSec": 84.567
         },
         {
           "checkpointId": "circuit-03",
           "lap": 2,
           "authoredIndex": 2,
           "hitOrder": 7,
-          "cumulativeTimeSec": 109.3
+          "cumulativeTimeSec": 87.483
         },
         {
           "checkpointId": "circuit-04",
           "lap": 2,
           "authoredIndex": 3,
           "hitOrder": 8,
-          "cumulativeTimeSec": 157
+          "cumulativeTimeSec": 121.083
         },
         {
           "checkpointId": "circuit-05",
           "lap": 2,
           "authoredIndex": 4,
           "hitOrder": 9,
-          "cumulativeTimeSec": 189.3
+          "cumulativeTimeSec": 143.817
         },
         {
           "checkpointId": "circuit-01",
           "lap": 3,
           "authoredIndex": 0,
           "hitOrder": 10,
-          "cumulativeTimeSec": 198.917
+          "cumulativeTimeSec": 152.217
         },
         {
           "checkpointId": "circuit-02",
           "lap": 3,
           "authoredIndex": 1,
           "hitOrder": 11,
-          "cumulativeTimeSec": 200.95
+          "cumulativeTimeSec": 154.117
         },
         {
           "checkpointId": "circuit-03",
           "lap": 3,
           "authoredIndex": 2,
           "hitOrder": 12,
-          "cumulativeTimeSec": 203.283
+          "cumulativeTimeSec": 156.467
         },
         {
           "checkpointId": "circuit-04",
           "lap": 3,
           "authoredIndex": 3,
           "hitOrder": 13,
-          "cumulativeTimeSec": 279.167
+          "cumulativeTimeSec": 194.283
         },
         {
           "checkpointId": "circuit-05",
           "lap": 3,
           "authoredIndex": 4,
           "hitOrder": 14,
-          "cumulativeTimeSec": 307.683
+          "cumulativeTimeSec": 213.05
         }
       ]
     }

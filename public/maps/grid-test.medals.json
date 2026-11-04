@@ -3,62 +3,62 @@
   "version": 1,
   "areaId": "grid-test",
   "contractVersion": 1,
-  "handlingContentVersion": "261101-terrain",
+  "handlingContentVersion": "261104-liftwide",
   "courses": [
     {
       "courseId": "grid-test-stagger-run",
       "mode": "p2p",
       "laps": 1,
-      "totalTimeSec": 138.25,
+      "totalTimeSec": 120,
       "splits": [
         {
           "checkpointId": "p2p-04",
           "lap": 1,
           "authoredIndex": 3,
           "hitOrder": 0,
-          "cumulativeTimeSec": 11.067
+          "cumulativeTimeSec": 10.55
         },
         {
           "checkpointId": "p2p-05",
           "lap": 1,
           "authoredIndex": 4,
           "hitOrder": 1,
-          "cumulativeTimeSec": 28.4
-        },
-        {
-          "checkpointId": "p2p-07",
-          "lap": 1,
-          "authoredIndex": 6,
-          "hitOrder": 2,
-          "cumulativeTimeSec": 59.517
+          "cumulativeTimeSec": 18.95
         },
         {
           "checkpointId": "p2p-06",
           "lap": 1,
           "authoredIndex": 5,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 29.917
+        },
+        {
+          "checkpointId": "p2p-07",
+          "lap": 1,
+          "authoredIndex": 6,
           "hitOrder": 3,
-          "cumulativeTimeSec": 75.083
+          "cumulativeTimeSec": 49.617
         },
         {
           "checkpointId": "p2p-03",
           "lap": 1,
           "authoredIndex": 2,
           "hitOrder": 4,
-          "cumulativeTimeSec": 111.4
+          "cumulativeTimeSec": 101.383
         },
         {
           "checkpointId": "p2p-02",
           "lap": 1,
           "authoredIndex": 1,
           "hitOrder": 5,
-          "cumulativeTimeSec": 123.017
+          "cumulativeTimeSec": 112.1
         },
         {
           "checkpointId": "p2p-01",
           "lap": 1,
           "authoredIndex": 0,
           "hitOrder": 6,
-          "cumulativeTimeSec": 138.25
+          "cumulativeTimeSec": 120
         }
       ]
     },
@@ -66,112 +66,112 @@
       "courseId": "grid-test-block-loop",
       "mode": "circuit",
       "laps": 3,
-      "totalTimeSec": 354.833,
+      "totalTimeSec": 281.467,
       "splits": [
         {
           "checkpointId": "circuit-01",
           "lap": 1,
           "authoredIndex": 0,
           "hitOrder": 0,
-          "cumulativeTimeSec": 33.183
+          "cumulativeTimeSec": 19.85
         },
         {
           "checkpointId": "circuit-02",
           "lap": 1,
           "authoredIndex": 1,
           "hitOrder": 1,
-          "cumulativeTimeSec": 54.967
+          "cumulativeTimeSec": 42.317
         },
         {
           "checkpointId": "circuit-03",
           "lap": 1,
           "authoredIndex": 2,
           "hitOrder": 2,
-          "cumulativeTimeSec": 69.15
+          "cumulativeTimeSec": 56.483
         },
         {
           "checkpointId": "circuit-04",
           "lap": 1,
           "authoredIndex": 3,
           "hitOrder": 3,
-          "cumulativeTimeSec": 90.783
+          "cumulativeTimeSec": 70.433
         },
         {
           "checkpointId": "circuit-05",
           "lap": 1,
           "authoredIndex": 4,
           "hitOrder": 4,
-          "cumulativeTimeSec": 107.617
+          "cumulativeTimeSec": 82.5
         },
         {
           "checkpointId": "circuit-01",
           "lap": 2,
           "authoredIndex": 0,
           "hitOrder": 5,
-          "cumulativeTimeSec": 151.767
+          "cumulativeTimeSec": 121.583
         },
         {
           "checkpointId": "circuit-02",
           "lap": 2,
           "authoredIndex": 1,
           "hitOrder": 6,
-          "cumulativeTimeSec": 175.7
+          "cumulativeTimeSec": 145.667
         },
         {
           "checkpointId": "circuit-03",
           "lap": 2,
           "authoredIndex": 2,
           "hitOrder": 7,
-          "cumulativeTimeSec": 196.667
+          "cumulativeTimeSec": 159.6
         },
         {
           "checkpointId": "circuit-04",
           "lap": 2,
           "authoredIndex": 3,
           "hitOrder": 8,
-          "cumulativeTimeSec": 212.417
+          "cumulativeTimeSec": 168.15
         },
         {
           "checkpointId": "circuit-05",
           "lap": 2,
           "authoredIndex": 4,
           "hitOrder": 9,
-          "cumulativeTimeSec": 227.983
+          "cumulativeTimeSec": 180.233
         },
         {
           "checkpointId": "circuit-01",
           "lap": 3,
           "authoredIndex": 0,
           "hitOrder": 10,
-          "cumulativeTimeSec": 271.383
+          "cumulativeTimeSec": 212.683
         },
         {
           "checkpointId": "circuit-02",
           "lap": 3,
           "authoredIndex": 1,
           "hitOrder": 11,
-          "cumulativeTimeSec": 296.267
+          "cumulativeTimeSec": 240.883
         },
         {
           "checkpointId": "circuit-03",
           "lap": 3,
           "authoredIndex": 2,
           "hitOrder": 12,
-          "cumulativeTimeSec": 321.517
+          "cumulativeTimeSec": 254.95
         },
         {
           "checkpointId": "circuit-04",
           "lap": 3,
           "authoredIndex": 3,
           "hitOrder": 13,
-          "cumulativeTimeSec": 338.867
+          "cumulativeTimeSec": 267.767
         },
         {
           "checkpointId": "circuit-05",
           "lap": 3,
           "authoredIndex": 4,
           "hitOrder": 14,
-          "cumulativeTimeSec": 354.833
+          "cumulativeTimeSec": 281.467
         }
       ]
     }

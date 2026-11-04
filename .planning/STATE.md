@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 04.3 (terrain-and-feel-follow-ups) — EXECUTING
-Plan: 12 of 12 (plans 1-11 complete)
+Plan: 12 of 12 (all plans complete)
 Next: plan 12, re-record juliette-ga and grid-test medals from clean human runs (feel-test excluded)
-Last activity: 2026-11-04 -- plan 04.3-11 sign-off complete; draw-call target raised to 80
+Last activity: 2026-11-04 -- plan 04.3-12 medal references re-recorded (juliette-ga, grid-test)
 
 Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 Progress: [██████████] 99%

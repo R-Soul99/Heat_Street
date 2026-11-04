@@ -48,8 +48,8 @@ Date of the medal re-record: 2026-11-02.
 
 | Course | Old reference (s) | New reference (s) |
 |---|---:|---:|
-| `grid-test-stagger-run` (p2p) | 107 | 138.25 |
-| `grid-test-block-loop` (circuit, 3 laps) | 354 | 354.833 |
+| `grid-test-stagger-run` (p2p) | 107 | 120 |
+| `grid-test-block-loop` (circuit, 3 laps) | 354 | 281.467 |
 
 The old grid-test numbers were never a driven run: `tools/map-compiler/synthetic/author-grid-routes.ts`
 generated them from an average-speed formula. The new numbers are a designer reference run.
@@ -70,27 +70,32 @@ again**, so don't run it unless you mean to replace the reference.
 
 | Course | Old reference (s) | New reference (s) |
 |---|---:|---:|
-| `juliette-backroads-run` (p2p) | 180 | 170.65 |
-| `juliette-three-lap-loop` (circuit, 3 laps) | 420 | 307.683 |
+| `juliette-backroads-run` (p2p) | 180 | 149.583 |
+| `juliette-three-lap-loop` (circuit, 3 laps) | 420 | 213.05 |
 
-Note on the circuit reference: in lap 3 the circuit-03 to circuit-04 sector took about 76 s,
-against about 42 to 48 s on laps 1 and 2 (probably an incident on that run). The total is
-used as the user recorded it.
+Re-recorded 2026-11-04 (plan 04.3-12), see the section below. The grid-test totals above are
+the same re-recorded numbers.
 
-## Medal reference re-record (D-07)
+## Medal reference re-record (D-07, redone in plan 04.3-12)
 
-- Recorded 2026-11-02 by the user, one designer reference run per course, on the migrated
-  terrain maps. Each line was produced by the debug-only `[medal-reference]` console log
-  (`buildReferenceCourseRecord` in `src/core/medal-reference.ts`, printed from `src/main.ts`
-  `onCompleted` under `?debug`) and pasted unchanged into the medals files.
-- **Car used:** the shipped feel-preset car, not the base `defaultTuning()` car. Since commit
-  3363300 the user's own feel preset is `FEEL_DEFAULTS`, and with no saved tuning `src/main.ts`
-  builds the player car from it on every URL. The user cleared stale saved tuning before the
-  runs. `handlingContentVersion` is `"261101-terrain"` (the value plan 04.2-15 pins); it
-  stands for the terrain maps driven on this feel-preset car.
-- **The times are PROVISIONAL.** The user says the car still needs tuning, and these runs had
-  several spins. They are placeholders and will be re-recorded after the handling work. The
-  medals file format has no notes field, so this is recorded here and in the plan summary only.
+- Re-recorded 2026-11-04 by the user, one human run per course on the migrated terrain maps
+  (juliette-ga and grid-test, point-to-point and circuit; feel-test unchanged). Each line was
+  produced by the debug-only `[medal-reference]` console log (`buildReferenceCourseRecord` in
+  `src/core/medal-reference.ts`, printed from `src/main.ts` `onCompleted` under `?debug`) and
+  written unchanged into the medals files.
+- **Car used:** the shipped feel-preset car (`FEEL_DEFAULTS`), with no saved tuning, after the
+  lift-off and road-widening changes. `handlingContentVersion` is `"261104-liftwide"`.
+- **Runs:** driven as fast as the user could, following the roads. The user reports no corner
+  cutting. Point-to-point courses take checkpoints in any order, so those splits are recorded
+  in the order they were hit. The juliette circuit run had a couple of overshoot-and-spin
+  recoveries, and the grid-test circuit laps 2 and 3 were slower than lap 1 (82.5, 97.7 and
+  101.2 s); both were kept as honest human runs. A first juliette point-to-point run (120.8 s)
+  was discarded because it was mostly cross-country.
+- **Totals (s):** juliette-backroads-run 149.583, juliette-three-lap-loop 213.05,
+  grid-test-stagger-run 120, grid-test-block-loop 281.467.
+- The 2026-11-02 references were provisional (several spins, car still being tuned); these
+  replace them. The circuit totals are well below the old ones, so circuit medals are now much
+  tighter than before.
 - Thresholds use the unchanged medal bands (ace 0.9, gold 1.0, silver 1.15, bronze 1.35 of the
   reference total).
 - Headless telemetry and feel-dossier tools still use `defaultTuning()` (the old base car), not
@@ -122,11 +127,10 @@ used as the user recorded it.
 
 ## Known issues
 
-- **No boundary at the terrain edge (open).** During the reference runs the user drove off the
-  edge of the terrain area and fell off the world. The user found no gaps in the ground. The
-  heightfield edge has no wall or barrier, so the car can drive off the map. Follow-up: add an
-  edge wall, an invisible barrier, or a respawn when the car leaves the bounds.
-- Medal references are provisional (see above).
+- **Terrain edge (fixed).** During the 2026-11-02 reference runs the car could drive off the
+  edge of the terrain and fall off the world. Phase 04.3 plan 06 added a solid berm around every
+  terrain map (`src/core/terrain-edge-berm.ts`): the car bumps off it like a building, with no
+  teleport or respawn, and timed runs are not interrupted.
 
 ## Maps that were not migrated (D-08)
 
