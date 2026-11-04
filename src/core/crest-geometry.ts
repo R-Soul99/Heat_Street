@@ -212,9 +212,133 @@ export const FEEL_TEST_CRESTS: readonly AuthoredCrest[] = [
   },
 ];
 
+/**
+ * The playground test map (`?map=playground`): flat tarmac ground, so every
+ * feature below is open ground and the car can launch from anywhere. Layout
+ * coordinates are LOCAL (x east, z south, 0..1600 by 0..1300 m); world =
+ * local - (800, 650), the same recentring as the proving ground.
+ */
+export const PLAYGROUND_WIDTH_M = 1600;
+export const PLAYGROUND_DEPTH_M = 1300;
+
+/**
+ * "The tits of plenty": a 5 x 4 field of closely spaced domes, one per 96 m
+ * cell, in varied sizes. Each dome is jittered inside its cell (deterministic
+ * LCG, no Math.random) but keeps its rim 2 m inside the cell, so neighbours
+ * never overlap and always leave at least 4 m of flat between rims.
+ */
+const DOME_FIELD_ORIGIN = { x: 130, z: 130 };
+const DOME_CELL_M = 96;
+const DOME_RADII_M: readonly (readonly number[])[] = [
+  [28, 44, 20, 36, 24],
+  [40, 18, 32, 44, 26],
+  [22, 36, 42, 30, 38],
+  [34, 24, 44, 20, 32],
+];
+const DOME_HEIGHT_PER_RADIUS = 0.11;
+
+export const PLAYGROUND_DOME_FIELD = {
+  originX: DOME_FIELD_ORIGIN.x,
+  originZ: DOME_FIELD_ORIGIN.z,
+  cols: 5,
+  rows: 4,
+  cellM: DOME_CELL_M,
+} as const;
+
+function playgroundDomes(): AuthoredCrest[] {
+  let state = 20261104;
+  const next = (): number => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  const out: AuthoredCrest[] = [];
+  DOME_RADII_M.forEach((row, r) => {
+    row.forEach((radiusM, c) => {
+      const slack = DOME_CELL_M / 2 - radiusM - 2;
+      const lx = DOME_FIELD_ORIGIN.x + (c + 0.5) * DOME_CELL_M + (next() * 2 - 1) * slack;
+      const lz = DOME_FIELD_ORIGIN.z + (r + 0.5) * DOME_CELL_M + (next() * 2 - 1) * slack;
+      out.push({
+        id: `playground-dome-${r}-${c}`,
+        centerX: Math.round((lx - PLAYGROUND_WIDTH_M / 2) * 10) / 10,
+        centerZ: Math.round((lz - PLAYGROUND_DEPTH_M / 2) * 10) / 10,
+        radiusM,
+        heightM: Math.round(radiusM * DOME_HEIGHT_PER_RADIUS * 4) / 4,
+      });
+    });
+  });
+  return out;
+}
+
+/**
+ * Big-air gap jumps: an east-bound take-off ramp, a gap, then a west-bound
+ * ramp whose lip faces the take-off lip, so the car lands on its descending
+ * slope. Foot radius 250 m keeps v^2/R at ~8 m/s^2 at 100 mph; the lip height
+ * is reached on the arc (launch angle ~sqrt(2 h / R): 10 / 12 / 15 deg).
+ * Gaps from headless drives (throttle held, pad 55-95 mph = 82-102 mph at the
+ * lip): the car lands 17-23 m past the landing lip at 82 mph and 45-60 m past it
+ * at 100 mph (beyond the landing ramp, onto flat). Gaps 12 m longer put the car
+ * into the lip wall below ~86 mph, so these are the longest safe ones. Below
+ * ~80 mph at the lip a jump comes up short; the take-off needs a fast run-up.
+ * Landing ramps use a tighter foot (100 m) than take-offs: with the same 250 m
+ * foot the car glides parallel above the slope and never touches it.
+ */
+const PLAYGROUND_RAMP_FOOT_RADIUS_M = 250;
+/** Landing ramps curve in faster than take-offs, so a descending car meets the slope instead of gliding over it. */
+const PLAYGROUND_LANDING_FOOT_RADIUS_M = 100;
+const PLAYGROUND_RAMP_WIDTH_M = 16;
+export const PLAYGROUND_RAMP_FOOT_X = 220;
+export const PLAYGROUND_RAMP_PAD_X = 150;
+export const PLAYGROUND_RAMP_PAIRS = [
+  { id: "small", name: "Gap jump S (4 m lips, 46 m gap)", localZ: 640, heightM: 4, gapM: 46 },
+  { id: "medium", name: "Gap jump M (6 m lips, 55 m gap)", localZ: 740, heightM: 6, gapM: 55 },
+  { id: "big", name: "Gap jump L (8 m lips, 64 m gap)", localZ: 840, heightM: 8, gapM: 64 },
+] as const;
+
+function playgroundRamps(): AuthoredCrest[] {
+  const out: AuthoredCrest[] = [];
+  for (const pair of PLAYGROUND_RAMP_PAIRS) {
+    const spec = (headingRad: number, footRadiusM: number): RampSpec => ({
+      headingRad,
+      widthM: PLAYGROUND_RAMP_WIDTH_M,
+      angleDeg: 25,
+      footRadiusM,
+    });
+    const takeoffSpec = spec(0, PLAYGROUND_RAMP_FOOT_RADIUS_M);
+    const landingSpec = spec(Math.PI, PLAYGROUND_LANDING_FOOT_RADIUS_M);
+    const takeoffLength = rampLengthM(pair.heightM, takeoffSpec);
+    const landingLength = rampLengthM(pair.heightM, landingSpec);
+    const z = Math.round((pair.localZ - PLAYGROUND_DEPTH_M / 2) * 10) / 10;
+    const takeoffFoot = PLAYGROUND_RAMP_FOOT_X - PLAYGROUND_WIDTH_M / 2;
+    const landingFoot = takeoffFoot + takeoffLength + pair.gapM + landingLength;
+    out.push({
+      id: `playground-ramp-${pair.id}-takeoff`,
+      centerX: takeoffFoot,
+      centerZ: z,
+      radiusM: 0,
+      heightM: pair.heightM,
+      ramp: takeoffSpec,
+    });
+    out.push({
+      id: `playground-ramp-${pair.id}-landing`,
+      centerX: Math.round(landingFoot * 10) / 10,
+      centerZ: z,
+      radiusM: 0,
+      heightM: pair.heightM,
+      ramp: landingSpec,
+    });
+  }
+  return out;
+}
+
+export const PLAYGROUND_CRESTS: readonly AuthoredCrest[] = [
+  ...playgroundDomes(),
+  ...playgroundRamps(),
+];
+
 export const AUTHORED_CRESTS_BY_AREA: Readonly<Record<string, readonly AuthoredCrest[]>> = {
   "juliette-ga": JULIETTE_GA_CRESTS,
   "feel-test": FEEL_TEST_CRESTS,
+  playground: PLAYGROUND_CRESTS,
 };
 
 /**

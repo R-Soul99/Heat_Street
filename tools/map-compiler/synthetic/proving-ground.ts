@@ -50,7 +50,7 @@ export interface TrackWay {
 }
 
 /** Minimal turtle: heading `a` radians, 0 = east, +pi/2 = south (a right turn when facing east). */
-class Turtle {
+export class Turtle {
   private x: number;
   private z: number;
   private a: number;

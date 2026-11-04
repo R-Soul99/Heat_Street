@@ -12,6 +12,7 @@ export const KNOWN_MAP_IDS = [
   "skidders-and-popp",
   "my-map",
   "demo-hills",
+  "playground",
 ] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
@@ -32,6 +33,7 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
   "skidders-and-popp": "Skidders and Popp, Devon",
   "my-map": "My Map (hand-authored)",
   "demo-hills": "Demo hills (sculpted)",
+  playground: "Playground (domes, gap jumps, ovals)",
 };
 
 /**
@@ -47,6 +49,7 @@ export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
   "skidders-and-popp": "legacy",
   "my-map": "legacy",
   "demo-hills": "terrain",
+  playground: "terrain",
 };
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;

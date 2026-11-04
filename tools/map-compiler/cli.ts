@@ -70,6 +70,7 @@ import { gridTestConfig } from "./areas/grid-test.config.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
 import { myMapConfig } from "./areas/my-map.config.ts";
 import { newtonPopplefordConfig } from "./areas/newton-poppleford.config.ts";
+import { playgroundConfig } from "./areas/playground.config.ts";
 import { skiddersAndPoppConfig } from "./areas/skidders-and-popp.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
@@ -99,6 +100,7 @@ const KNOWN_AREAS: Record<string, AreaConfig> = {
   "juliette-ga": julietteGaConfig,
   "grid-test": gridTestConfig,
   "feel-test": feelTestConfig,
+  playground: playgroundConfig,
   "newton-poppleford": newtonPopplefordConfig,
   "my-map": myMapConfig,
   "skidders-and-popp": skiddersAndPoppConfig,

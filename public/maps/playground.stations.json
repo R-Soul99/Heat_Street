@@ -1,0 +1,82 @@
+{
+  "areaId": "playground",
+  "stations": [
+    {
+      "id": "dome-field",
+      "key": "1",
+      "name": "Dome field (5 x 4 domes, 18-44 m)",
+      "note": "Drive in from the west edge, any line. Domes of varied size, closely spaced.",
+      "featureAheadM": 60,
+      "widthM": 12,
+      "x": -730,
+      "z": -328,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "gap-jump-small",
+      "key": "2",
+      "name": "Gap jump S (4 m lips, 46 m gap)",
+      "note": "Take-off ramp, gap, landing ramp. Launch at 55 mph or more and hold throttle (82+ mph at the lip). Slower comes up short into the lip wall.",
+      "featureAheadM": 70,
+      "widthM": 16,
+      "x": -650,
+      "z": -10,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "gap-jump-medium",
+      "key": "3",
+      "name": "Gap jump M (6 m lips, 55 m gap)",
+      "note": "Take-off ramp, gap, landing ramp. Launch at 55 mph or more and hold throttle (82+ mph at the lip). Slower comes up short into the lip wall.",
+      "featureAheadM": 70,
+      "widthM": 16,
+      "x": -650,
+      "z": 90,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "gap-jump-big",
+      "key": "4",
+      "name": "Gap jump L (8 m lips, 64 m gap)",
+      "note": "Take-off ramp, gap, landing ramp. Launch at 55 mph or more and hold throttle (82+ mph at the lip). Slower comes up short into the lip wall.",
+      "featureAheadM": 70,
+      "widthM": 16,
+      "x": -650,
+      "z": 190,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "oval-large",
+      "key": "5",
+      "name": "Large oval (300 m straights, R120)",
+      "note": "Launched on the top straight, heading east into the first turn.",
+      "featureAheadM": 0,
+      "widthM": 24,
+      "x": 170,
+      "z": -490,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "oval-medium",
+      "key": "6",
+      "name": "Medium oval (200 m straights, R70)",
+      "note": "Launched on the top straight, heading east into the first turn.",
+      "featureAheadM": 0,
+      "widthM": 18,
+      "x": 120,
+      "z": -170,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "oval-small",
+      "key": "7",
+      "name": "Small oval (120 m straights, R40)",
+      "note": "Launched on the top straight, heading east into the first turn.",
+      "featureAheadM": 0,
+      "widthM": 14,
+      "x": 90,
+      "z": 50,
+      "headingRad": -1.5707963267948966
+    }
+  ]
+}

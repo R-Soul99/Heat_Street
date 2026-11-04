@@ -20,9 +20,11 @@
     "convert-terrain": "node tools/map-compiler/terrain/cli.ts",
     "generate-grid-test": "node tools/map-compiler/synthetic/generate-grid-test.ts",
     "generate-feel-test": "node tools/map-compiler/synthetic/generate-feel-test.ts",
+    "generate-playground": "node tools/map-compiler/synthetic/generate-playground.ts",
     "import-newton-poppleford": "node tools/map-compiler/import/geojson-to-raw-osm.ts --area newton-poppleford",
     "import-skidders-and-popp": "node tools/map-compiler/import/geojson-to-raw-osm.ts --area skidders-and-popp",
     "author-newton-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area newton-poppleford",
+    "author-playground-routes": "node tools/map-compiler/synthetic/author-feel-test-routes.ts --area playground",
     "author-my-map-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area my-map",
     "author-skidders-routes": "node tools/map-compiler/synthetic/author-newton-routes.ts --area skidders-and-popp"
   },

@@ -38,6 +38,7 @@ describe("resolveMapId", () => {
       "skidders-and-popp",
       "my-map",
       "demo-hills",
+      "playground",
     ]);
   });
 });
@@ -63,7 +64,7 @@ describe("demo-hills and formats", () => {
     expect(MAP_LABELS["demo-hills"]).toBe("Demo hills (sculpted)");
   });
   it("formats: migrated maps are terrain, the rest stay legacy (D-08)", () => {
-    const terrain = ["demo-hills", "feel-test", "grid-test", "juliette-ga"];
+    const terrain = ["demo-hills", "feel-test", "grid-test", "juliette-ga", "playground"];
     for (const id of KNOWN_MAP_IDS) {
       expect(MAP_FORMATS[id]).toBe(terrain.includes(id) ? "terrain" : "legacy");
     }

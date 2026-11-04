@@ -1,5 +1,5 @@
 /**
- * Flat test areas (the `feel-test` proving ground): the off-road ground is
+ * Flat test areas (the `feel-test` proving ground and the `playground`): the off-road ground is
  * dead-flat tarmac instead of grass-covered relief, so leaving a painted road
  * line never changes the grip a handling test is measuring. Read by BOTH
  * `tools/map-compiler/cli.ts` (flat heightfield, ground colour) and
@@ -10,7 +10,7 @@
  */
 import type { SurfaceType } from "./surface-types.ts";
 
-const FLAT_TEST_AREAS: readonly string[] = ["feel-test"];
+const FLAT_TEST_AREAS: readonly string[] = ["feel-test", "playground"];
 
 export function isFlatTestArea(areaId: string): boolean {
   return FLAT_TEST_AREAS.includes(areaId);

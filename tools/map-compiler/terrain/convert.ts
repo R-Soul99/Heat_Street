@@ -29,7 +29,7 @@ import {
 } from "../../../src/core/terrain-paint.ts";
 import { levelRoadBand, roadLevelRadiusM } from "../../../src/core/terrain-road.ts";
 
-export type ConvertibleAreaId = "feel-test" | "grid-test" | "juliette-ga";
+export type ConvertibleAreaId = "feel-test" | "grid-test" | "juliette-ga" | "playground";
 
 export interface ConvertConfig {
   readonly cellSizeM: number;
@@ -48,6 +48,7 @@ export interface ConvertConfig {
  */
 export const CONVERT_CONFIG: Readonly<Record<ConvertibleAreaId, ConvertConfig>> = {
   "feel-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false, roadWidenM: 0 },
+  playground: { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false, roadWidenM: 0 },
   "grid-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: true, roadWidenM: 2 },
   "juliette-ga": {
     cellSizeM: 8,

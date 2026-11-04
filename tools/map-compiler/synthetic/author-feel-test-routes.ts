@@ -1,15 +1,17 @@
 /**
- * Authors `public/maps/feel-test.routes.json` and `feel-test.medals.json` from
- * the compiled `feel-test.map.json`. The proving ground exists for free
- * handling tests (see `proving-ground.ts`); these two courses just satisfy the
- * game's course contract by running the perimeter ring road (one side of which
- * is gravel, as the route validator requires).
+ * Authors `public/maps/<area>.routes.json` and `<area>.medals.json` from the
+ * compiled `<area>.map.json`, for the synthetic test maps `feel-test` (default)
+ * and `playground`. Both exist for free handling tests (see `proving-ground.ts`,
+ * `playground-layout.ts`); these two courses just satisfy the game's course
+ * contract by running the perimeter ring road (one side of which is gravel, as
+ * the route validator requires).
  *
- * Run: `node tools/map-compiler/synthetic/author-feel-test-routes.ts`
+ * Run: `node tools/map-compiler/synthetic/author-feel-test-routes.ts [--area playground]`
  */
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCourseData } from "../../../src/core/course.ts";
+import { PLAYGROUND_DEPTH_M, PLAYGROUND_WIDTH_M } from "../../../src/core/crest-geometry.ts";
 import {
   buildNavigationGraph,
   DEFECT_CLEARANCE_M,
@@ -32,35 +34,79 @@ const HANDLING_CONTENT_VERSION = "260920-sm2";
 /** A target in local layout coordinates (x east, z south). */
 type Target = readonly [x: number, z: number];
 
-// Ring road joints (see proving-ground.ts): clockwise from the west side.
-const P2P_START: Target = [30, 870];
-const P2P_CHECKPOINTS: readonly Target[] = [
-  [30, 330],
-  [30, 130],
-  [575, 30],
-  [1370, 100],
-  [1300, 1070],
-  [575, 1070],
-];
-const CIRCUIT_START: Target = [575, 30];
-const CIRCUIT_CHECKPOINTS: readonly Target[] = [
-  [1370, 100],
-  [1300, 1070],
-  [575, 1070],
-  [30, 870],
-  [30, 330],
-];
+interface RingRoutes {
+  readonly widthM: number;
+  readonly depthM: number;
+  readonly p2pStart: Target;
+  readonly p2pCheckpoints: readonly Target[];
+  readonly circuitStart: Target;
+  readonly circuitCheckpoints: readonly Target[];
+}
+
+// Ring road joints (see proving-ground.ts / playground-layout.ts): clockwise from the west side.
+const AREA_ROUTES: Readonly<Record<string, RingRoutes>> = {
+  "feel-test": {
+    widthM: WIDTH_M,
+    depthM: DEPTH_M,
+    p2pStart: [30, 870],
+    p2pCheckpoints: [
+      [30, 330],
+      [30, 130],
+      [575, 30],
+      [1370, 100],
+      [1300, 1070],
+      [575, 1070],
+    ],
+    circuitStart: [575, 30],
+    circuitCheckpoints: [
+      [1370, 100],
+      [1300, 1070],
+      [575, 1070],
+      [30, 870],
+      [30, 330],
+    ],
+  },
+  playground: {
+    widthM: PLAYGROUND_WIDTH_M,
+    depthM: PLAYGROUND_DEPTH_M,
+    p2pStart: [30, 1200],
+    p2pCheckpoints: [
+      [100, 30],
+      [760, 30],
+      [1570, 100],
+      [1500, 1270],
+      [760, 1270],
+    ],
+    circuitStart: [760, 30],
+    circuitCheckpoints: [
+      [1570, 100],
+      [1500, 1270],
+      [760, 1270],
+      [30, 1200],
+      [100, 30],
+    ],
+  },
+};
+
+const AREA_FLAG = process.argv.indexOf("--area");
+const AREA = AREA_FLAG === -1 ? "feel-test" : (process.argv[AREA_FLAG + 1] ?? "feel-test");
+if (!Object.hasOwn(AREA_ROUTES, AREA)) throw new Error(`unknown area ${AREA}`);
+const ROUTES = AREA_ROUTES[AREA] as RingRoutes;
+const P2P_START = ROUTES.p2pStart;
+const P2P_CHECKPOINTS = ROUTES.p2pCheckpoints;
+const CIRCUIT_START = ROUTES.circuitStart;
+const CIRCUIT_CHECKPOINTS = ROUTES.circuitCheckpoints;
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
 async function run(): Promise<void> {
-  const mapPath = path.join(MAPS_DIR, "feel-test.map.json");
+  const mapPath = path.join(MAPS_DIR, `${AREA}.map.json`);
   const graph: RoadGraph = parseRoadGraph(await readFile(mapPath, "utf8"), mapPath);
   const navigation = buildNavigationGraph(graph);
-  const dx = WIDTH_M / 2;
-  const dz = DEPTH_M / 2;
+  const dx = ROUTES.widthM / 2;
+  const dz = ROUTES.depthM / 2;
 
   const pickNode = (target: Target): RoadGraphNode => {
     const wx = target[0] - dx;
@@ -146,10 +192,10 @@ async function run(): Promise<void> {
 
   const routes = {
     schemaVersion: 1,
-    areaId: "feel-test",
+    areaId: AREA,
     courses: [
       {
-        id: "feel-test-ring-run",
+        id: `${AREA}-ring-run`,
         name: "Ring Run",
         mode: "p2p",
         checkpoints: p2p.checkpoints,
@@ -158,7 +204,7 @@ async function run(): Promise<void> {
           "Runs the perimeter ring road of the proving ground, finishing along the gravel south side.",
       },
       {
-        id: "feel-test-ring-loop",
+        id: `${AREA}-ring-loop`,
         name: "Ring Loop",
         mode: "circuit",
         laps: 3,
@@ -169,7 +215,7 @@ async function run(): Promise<void> {
     ],
   };
   const routesText = `${JSON.stringify(routes, null, 2)}\n`;
-  const parsed = parseCourseData(routesText, "feel-test.routes.json", graph);
+  const parsed = parseCourseData(routesText, `${AREA}.routes.json`, graph);
   const failures = validateCourseRoutes(parsed, graph);
   if (failures.length > 0) throw new Error(`route validation failed:\n${failures.join("\n")}`);
 
@@ -212,19 +258,19 @@ async function run(): Promise<void> {
   const medals = {
     kind: "heat-street.medal-reference",
     version: 1,
-    areaId: "feel-test",
+    areaId: AREA,
     contractVersion: 1,
     handlingContentVersion: HANDLING_CONTENT_VERSION,
     courses: [
       {
-        courseId: "feel-test-ring-run",
+        courseId: `${AREA}-ring-run`,
         mode: "p2p",
         laps: 1,
         totalTimeSec: p2pSplits.total,
         splits: p2pSplits.splits,
       },
       {
-        courseId: "feel-test-ring-loop",
+        courseId: `${AREA}-ring-loop`,
         mode: "circuit",
         laps: 3,
         totalTimeSec: circuitSplits.total,
@@ -233,9 +279,9 @@ async function run(): Promise<void> {
     ],
   };
 
-  await writeFile(path.join(MAPS_DIR, "feel-test.routes.json"), routesText, "utf8");
+  await writeFile(path.join(MAPS_DIR, `${AREA}.routes.json`), routesText, "utf8");
   await writeFile(
-    path.join(MAPS_DIR, "feel-test.medals.json"),
+    path.join(MAPS_DIR, `${AREA}.medals.json`),
     `${JSON.stringify(medals, null, 2)}\n`,
     "utf8",
   );

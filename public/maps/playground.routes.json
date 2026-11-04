@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "areaId": "playground",
+  "courses": [
+    {
+      "id": "playground-ring-run",
+      "name": "Ring Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 0,
+          "edgeId": 0,
+          "position": [
+            -700.0000000006504,
+            0,
+            -619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 1,
+          "edgeId": 0,
+          "position": [
+            -39.99999999999922,
+            0,
+            -619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 2,
+          "edgeId": 1,
+          "position": [
+            769.9999999996529,
+            0,
+            -550.0000000000457
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 3,
+          "edgeId": 2,
+          "position": [
+            700.0000000006504,
+            0,
+            619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 4,
+          "edgeId": 3,
+          "position": [
+            -39.99999999999922,
+            0,
+            619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 5,
+        "headingRad": 0.059757826387555515
+      },
+      "authoring": "Runs the perimeter ring road of the proving ground, finishing along the gravel south side."
+    },
+    {
+      "id": "playground-ring-loop",
+      "name": "Ring Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 2,
+          "edgeId": 1,
+          "position": [
+            769.9999999996529,
+            0,
+            -550.0000000000457
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 3,
+          "edgeId": 2,
+          "position": [
+            700.0000000006504,
+            0,
+            619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 4,
+          "edgeId": 3,
+          "position": [
+            -39.99999999999922,
+            0,
+            619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 5,
+          "edgeId": 4,
+          "position": [
+            -769.9999999996529,
+            0,
+            550.0000000000457
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-05",
+          "nodeId": 0,
+          "edgeId": 5,
+          "position": [
+            -700.0000000006504,
+            0,
+            -619.999999999808
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 1,
+        "headingRad": 1.657001900470421
+      },
+      "authoring": "Three laps of the proving ground ring road, including its gravel south side."
+    }
+  ]
+}
