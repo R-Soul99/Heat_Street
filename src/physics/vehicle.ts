@@ -55,6 +55,21 @@ const DIRECTION = { x: 0, y: -1, z: 0 };
 const AXLE = { x: -1, y: 0, z: 0 };
 
 /** The neutral orientation quaternion, reused for every `setAdditionalMassProperties` call. */
+/**
+ * One tick of a wheel's surface-grip blend: first-order toward `target`, with
+ * `surfaceRegripSec` when grip is rising and `surfaceDegripSec` when it falls
+ * (0 = instant).
+ */
+function blendToward(
+  current: number,
+  target: number,
+  w: { surfaceRegripSec: number; surfaceDegripSec: number },
+): number {
+  const tau = target > current ? w.surfaceRegripSec : w.surfaceDegripSec;
+  if (tau <= 0) return target;
+  return current + (target - current) * (1 - Math.exp(-DT / tau));
+}
+
 /** Hermite smoothstep of `x` between `lo` and `hi`. */
 function smoothstep(lo: number, hi: number, x: number): number {
   const t = clamp((x - lo) / (hi - lo), 0, 1);
@@ -412,6 +427,7 @@ export function createVehicle(
     rollGuardWasOn = false;
     lastSuspensionLength.fill(restLength);
     wheelSurfaces.fill("tarmac");
+    blendSeeded = false;
     telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
   }
 
@@ -435,6 +451,10 @@ export function createVehicle(
   /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
   const lastSuspensionLength = new Array<number>(4).fill(restLength);
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
+  /** Per-wheel blended surface grip (lags the paint under the wheel); reseeded on the first tick after a reset. */
+  const blendLateral = [1, 1, 1, 1];
+  const blendForward = [1, 1, 1, 1];
+  let blendSeeded = false;
   /** Scratch target for `wheelContactPoint` (paint-map surface lookup): no per-tick allocation. */
   const contactScratch = { x: 0, y: 0, z: 0 };
   const rearGrip = {
@@ -536,15 +556,28 @@ export function createVehicle(
           }
           wheelSurfaces[i] = surface;
           const profile = surfaces.profiles[surface];
-          vc.setWheelFrictionSlip(i, t.wheels.frictionSlip * profile.forwardGrip);
-          if (i < 2) {
-            frontForwardGrip[i] = profile.forwardGrip;
-            vc.setWheelSideFrictionStiffness(i, t.wheels.frontSideFriction * profile.lateralGrip);
+          // Blend toward the painted surface's grip: slow to regrip (the tyre
+          // sheds mud/sand), fast to degrip. Seeded to the target after a reset
+          // so a spawn does not blend in from a stale surface.
+          if (!blendSeeded) {
+            blendLateral[i] = profile.lateralGrip;
+            blendForward[i] = profile.forwardGrip;
           } else {
-            rearLateralGrip[i - 2] = profile.lateralGrip;
-            rearForwardGrip[i - 2] = profile.forwardGrip;
+            blendLateral[i] = blendToward(blendLateral[i] as number, profile.lateralGrip, t.wheels);
+            blendForward[i] = blendToward(blendForward[i] as number, profile.forwardGrip, t.wheels);
+          }
+          const lateralGrip = blendLateral[i] as number;
+          const forwardGrip = blendForward[i] as number;
+          vc.setWheelFrictionSlip(i, t.wheels.frictionSlip * forwardGrip);
+          if (i < 2) {
+            frontForwardGrip[i] = forwardGrip;
+            vc.setWheelSideFrictionStiffness(i, t.wheels.frontSideFriction * lateralGrip);
+          } else {
+            rearLateralGrip[i - 2] = lateralGrip;
+            rearForwardGrip[i - 2] = forwardGrip;
           }
         }
+        blendSeeded = true;
       }
 
       // 1. Steering. InputFrame.steer is -1 = LEFT / +1 = RIGHT; with

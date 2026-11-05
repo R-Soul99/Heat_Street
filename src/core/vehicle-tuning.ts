@@ -145,6 +145,20 @@ export interface VehicleTuning {
      */
     frictionSlip: number;
     /**
+     * Surface regrip time constant, seconds: how slowly a wheel's surface grip
+     * climbs when it moves onto a grippier surface (mud/sand onto tarmac), as the
+     * tyre sheds the loose surface. Per wheel, first-order. Without it the
+     * front axle regripped ~0.15 s before the rear and yanked the nose round
+     * (yaw 0.2 -> 1.0 rad/s, sometimes a full spin). 0 = instant.
+     */
+    surfaceRegripSec: number;
+    /**
+     * Surface degrip time constant, seconds: how quickly grip falls when a wheel
+     * moves onto a slipperier surface. Short, so braking onto mud still bites the
+     * moment the tyre is on it. 0 = instant.
+     */
+    surfaceDegripSec: number;
+    /**
      * Front-axle lateral grip multiplier, applied before the friction-circle
      * clamp.
      *
@@ -658,6 +672,8 @@ export function defaultTuning(): VehicleTuning {
       suspensionRelaxation: 1.4,
       maxSuspensionForce: 40000,
       frictionSlip: 1.7,
+      surfaceRegripSec: 0.5,
+      surfaceDegripSec: 0.08,
       frontSideFriction: 1.35,
       rearSideFriction: 0.28,
     },
@@ -751,6 +767,8 @@ export const TUNING_RANGES: {
     suspensionRelaxation: TuningRange;
     maxSuspensionForce: TuningRange;
     frictionSlip: TuningRange;
+    surfaceRegripSec: TuningRange;
+    surfaceDegripSec: TuningRange;
     frontSideFriction: TuningRange;
     rearSideFriction: TuningRange;
   };
@@ -832,6 +850,8 @@ export const TUNING_RANGES: {
     suspensionRelaxation: { min: 0.2, max: 4, step: 0.05 },
     maxSuspensionForce: { min: 5000, max: 40000, step: 500 },
     frictionSlip: { min: 0.4, max: 3, step: 0.05 },
+    surfaceRegripSec: { min: 0, max: 1.5, step: 0.05 },
+    surfaceDegripSec: { min: 0, max: 0.5, step: 0.01 },
     frontSideFriction: { min: 0.2, max: 1.5, step: 0.01 },
     // Pitfall 14 (02-RESEARCH.md): the useful range for a rear-bias slider is
     // a narrow band near zero (measured 0.06-1.0 all meaningfully distinct),

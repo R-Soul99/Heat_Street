@@ -359,6 +359,19 @@ export function createTuningPanel(
   addNumber(gripFolder, tuning.wheels, "frictionSlip", TUNING_RANGES.wheels.frictionSlip).onChange(
     handlers.onApplyVehicle,
   );
+  // Surface blend: how fast a wheel adopts a new surface's grip (slow to regrip, fast to degrip).
+  addNumber(
+    gripFolder,
+    tuning.wheels,
+    "surfaceRegripSec",
+    TUNING_RANGES.wheels.surfaceRegripSec,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    gripFolder,
+    tuning.wheels,
+    "surfaceDegripSec",
+    TUNING_RANGES.wheels.surfaceDegripSec,
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     gripFolder,
     tuning.wheels,
