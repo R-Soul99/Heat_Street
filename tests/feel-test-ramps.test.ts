@@ -304,10 +304,12 @@ describe("feel-test game-scale ramps", () => {
   });
 
   it("the springs cushion the climb instead of sitting on the bump stop, at 95 mph", () => {
+    // With 0.55 m of travel (exp/landing-travel) even a bump stop of 1 no longer
+    // bottoms on this climb (it did, 60+ ticks, at 0.4 m), so only the soft side is asserted.
     const soft = bottomedTicks("ramp-l", 95, 4);
     const hard = bottomedTicks("ramp-l", 95, 1);
-    expect(hard).toBeGreaterThan(60);
     expect(soft).toBeLessThan(25);
+    expect(soft).toBeLessThanOrEqual(hard);
   });
 
   it("a bigger ramp flies further at the same pad speed", () => {

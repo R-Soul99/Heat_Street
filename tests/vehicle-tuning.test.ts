@@ -75,7 +75,8 @@ describe("defaultTuning()", () => {
     // Tuned live 1600 -> 1390 in the 260920-sm2 session (see the doc comment
     // on `mass` in src/core/vehicle-tuning.ts).
     expect(t.chassis.mass).toBe(1390);
-    expect(t.wheels.maxSuspensionForce).toBe(20000);
+    // 20000 -> 40000 with the longer-travel suspension (exp/landing-travel, 2026-11-05).
+    expect(t.wheels.maxSuspensionForce).toBe(40000);
   });
 
   it("sets maxSteerLock to exactly Math.PI / 4", () => {

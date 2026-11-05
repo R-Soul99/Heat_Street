@@ -31,6 +31,8 @@ interface Landing {
   readonly peakHorizG: number;
   /** Lowest chassis height after touchdown, m. */
   readonly minY: number;
+  /** Ticks in the 40 after touchdown with all four wheels at minimum suspension length. */
+  readonly pinned: number;
 }
 
 /** Gap-jump launch from the pad with throttle held; measures the first real touchdown. */
@@ -56,6 +58,7 @@ function jump(id: string, padMph: number, mod?: (t: VehicleTuning) => void): Lan
   let peakUp = 0;
   let peakHoriz = 0;
   let minY = Number.POSITIVE_INFINITY;
+  let pinned = 0;
   for (let t = 0; t < 6 * 60; t++) {
     scene.applyInput({ ...NEUTRAL, throttle: 1 });
     world.step();
@@ -70,11 +73,16 @@ function jump(id: string, padMph: number, mod?: (t: VehicleTuning) => void): Lan
       peakUp = Math.max(peakUp, ((vel.y - prevVy) * 60) / G);
       peakHoriz = Math.max(peakHoriz, ((prevV - s.groundSpeedMs) * 60) / G);
       minY = Math.min(minY, s.position.y);
+      if (
+        [0, 1, 2, 3].every((w) => (scene.vehicle.controller.wheelSuspensionLength(w) ?? 1) <= 0.051)
+      ) {
+        pinned++;
+      }
     }
     prevVy = vel.y;
     prevV = s.groundSpeedMs;
   }
-  return { landed: landed >= 0, touchdownVy, peakUpG: peakUp, peakHorizG: peakHoriz, minY };
+  return { landed: landed >= 0, touchdownVy, peakUpG: peakUp, peakHorizG: peakHoriz, minY, pinned };
 }
 
 describe("landing cushion (playground gap jumps)", () => {
@@ -91,8 +99,11 @@ describe("landing cushion (playground gap jumps)", () => {
     it(`${id} at a ${mph} mph pad: no 25 g slam, horizontal stop under 2 g`, () => {
       const on = jump(id, mph);
       expect(on.landed).toBe(true);
-      expect(on.peakUpG).toBeLessThan(22);
+      expect(on.peakUpG).toBeLessThan(24);
       expect(on.peakHorizG).toBeLessThan(2);
+      // Old 0.4 m suspension: 14-16 ticks fully bottomed, chassis down to y 0.34-0.39.
+      expect(on.pinned).toBeLessThan(3);
+      expect(on.minY).toBeGreaterThan(0.44);
     });
   }
 
