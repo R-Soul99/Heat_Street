@@ -5,7 +5,7 @@
  * not roads: they live in `src/core/crest-geometry.ts` (PLAYGROUND_CRESTS) and
  * stand on open ground. This module lays out only what the road graph needs:
  * a perimeter ring (south side gravel, for the required courses), a spine, the
- * ovals with a feeder each, and the launch pads.
+ * ovals with a feeder each, five equal surface strips, and the launch pads.
  *
  * Coordinates are local: x east in [0, PLAYGROUND_WIDTH_M], z south in
  * [0, PLAYGROUND_DEPTH_M]; world = local - (W/2, D/2).
@@ -48,6 +48,52 @@ export const OVALS: readonly OvalSpec[] = [
   { id: "medium", name: "Medium oval", straightM: 200, radiusM: 70, widthM: 18, x0: 830, top: 480 },
   { id: "small", name: "Small oval", straightM: 120, radiusM: 40, widthM: 14, x0: 830, top: 700 },
 ];
+
+export interface SurfaceBlock {
+  readonly id: string;
+  readonly name: string;
+  /** OSM `surface=*` value; the compiler maps it to the game surface. */
+  readonly osmSurface: string;
+  readonly key: string;
+}
+
+/**
+ * Five equal surface strips, stacked north to south in the south-east area
+ * (x 860..1460, 59 m wide, 15 m gaps). The compiler rejects an explicit road
+ * width over 30 m (it falls back to 3.5 m), so each strip is two 30 m ways of
+ * one surface whose centre lines are 29 m apart (1 m overlap, no seam). A
+ * feeder joins each way's west end to the spine; the pad sits on the strip's
+ * centre line 40 m in, facing east: a 560 m run, room to turn around in 59 m.
+ */
+export const SURFACE_BLOCKS: readonly SurfaceBlock[] = [
+  { id: "grass", name: "Grass", osmSurface: "grass", key: "8" },
+  { id: "sand", name: "Sand", osmSurface: "sand", key: "9" },
+  { id: "mud", name: "Mud", osmSurface: "mud", key: "0" },
+  { id: "gravel", name: "Gravel", osmSurface: "gravel", key: "-" },
+  { id: "dirt-road", name: "Dirt road", osmSurface: "dirt", key: "=" },
+];
+export const SURFACE_STRIP_X0 = 860;
+export const SURFACE_STRIP_X1 = 1460;
+/** Each of the two ways that make a strip (the compiler's explicit-width cap). */
+export const SURFACE_WAY_WIDTH_M = 30;
+/** Distance between the two centre lines of a strip. */
+export const SURFACE_WAY_OFFSET_M = 29;
+/** Width the two ways cover together. */
+export const SURFACE_STRIP_WIDTH_M = SURFACE_WAY_WIDTH_M + SURFACE_WAY_OFFSET_M;
+export const SURFACE_STRIP_PITCH_M = 74;
+const SURFACE_STRIP_FIRST_Z = 900;
+const SURFACE_PAD_INSET_M = 40;
+
+/** Centre line z of surface strip `i`. */
+export function surfaceStripZ(i: number): number {
+  return SURFACE_STRIP_FIRST_Z + i * SURFACE_STRIP_PITCH_M;
+}
+
+/** The two way centre-line z values of strip `i`. */
+export function surfaceWayZs(i: number): [number, number] {
+  const z = surfaceStripZ(i);
+  return [z - SURFACE_WAY_OFFSET_M / 2, z + SURFACE_WAY_OFFSET_M / 2];
+}
 
 export interface Playground {
   readonly ways: readonly TrackWay[];
@@ -162,7 +208,8 @@ export function buildPlayground(): Playground {
     }
     if (!placed) throw new Error(`playground: spine end ${end.x},${end.z} is not on the ring`);
   }
-  const spineZs = [spineEnds[0].z, ...ovalJoints.map((p) => p.z), spineEnds[1].z].sort(
+  const stripZs = SURFACE_BLOCKS.flatMap((_, i) => surfaceWayZs(i));
+  const spineZs = [spineEnds[0].z, ...ovalJoints.map((p) => p.z), ...stripZs, spineEnds[1].z].sort(
     (a, b) => a - b,
   );
   ways.push({
@@ -181,6 +228,31 @@ export function buildPlayground(): Playground {
       points: [{ x: SPINE_X, z: joint.z }, joint],
     });
   }
+
+  SURFACE_BLOCKS.forEach((b, i) => {
+    surfaceWayZs(i).forEach((z, k) => {
+      ways.push({
+        name: `${b.id} strip ${k + 1}`,
+        highway: "service",
+        widthM: SURFACE_WAY_WIDTH_M,
+        surface: b.osmSurface,
+        points: [
+          { x: SURFACE_STRIP_X0, z },
+          { x: SURFACE_STRIP_X1, z },
+        ],
+      });
+      ways.push({
+        name: `feeder ${b.id} strip ${k + 1}`,
+        highway: "residential",
+        widthM: ROAD_WIDTH_M,
+        surface: "asphalt",
+        points: [
+          { x: SPINE_X, z },
+          { x: SURFACE_STRIP_X0, z },
+        ],
+      });
+    });
+  });
 
   const stations: Station[] = [];
   const field = PLAYGROUND_DOME_FIELD;
@@ -213,6 +285,17 @@ export function buildPlayground(): Playground {
       pad: { x: o.x0 + o.radiusM + 20, z: o.top },
       featureAheadM: 0,
       widthM: o.widthM,
+    });
+  });
+  SURFACE_BLOCKS.forEach((b, i) => {
+    stations.push({
+      id: `surface-${b.id}`,
+      key: b.key,
+      name: `${b.name} strip (${SURFACE_STRIP_X1 - SURFACE_STRIP_X0} x ${SURFACE_STRIP_WIDTH_M} m)`,
+      note: "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      pad: { x: SURFACE_STRIP_X0 + SURFACE_PAD_INSET_M, z: surfaceStripZ(i) },
+      featureAheadM: 0,
+      widthM: SURFACE_STRIP_WIDTH_M,
     });
   });
   return { ways, stations };

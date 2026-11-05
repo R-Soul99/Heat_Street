@@ -77,6 +77,61 @@
       "x": 90,
       "z": 50,
       "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "surface-grass",
+      "key": "8",
+      "name": "Grass strip (600 x 59 m)",
+      "note": "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      "featureAheadM": 0,
+      "widthM": 59,
+      "x": 100,
+      "z": 250,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "surface-sand",
+      "key": "9",
+      "name": "Sand strip (600 x 59 m)",
+      "note": "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      "featureAheadM": 0,
+      "widthM": 59,
+      "x": 100,
+      "z": 324,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "surface-mud",
+      "key": "0",
+      "name": "Mud strip (600 x 59 m)",
+      "note": "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      "featureAheadM": 0,
+      "widthM": 59,
+      "x": 100,
+      "z": 398,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "surface-gravel",
+      "key": "-",
+      "name": "Gravel strip (600 x 59 m)",
+      "note": "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      "featureAheadM": 0,
+      "widthM": 59,
+      "x": 100,
+      "z": 472,
+      "headingRad": -1.5707963267948966
+    },
+    {
+      "id": "surface-dirt-road",
+      "key": "=",
+      "name": "Dirt road strip (600 x 59 m)",
+      "note": "Check: slide and pivot here, then compare with the other strips. Launched facing east.",
+      "featureAheadM": 0,
+      "widthM": 59,
+      "x": 100,
+      "z": 546,
+      "headingRad": -1.5707963267948966
     }
   ]
 }

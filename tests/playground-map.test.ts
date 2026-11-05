@@ -14,6 +14,16 @@ import { isFlatTestArea } from "../src/core/ground-surface";
 import { validateCourseRoutes } from "../src/core/navigation";
 import { parseRoadGraph } from "../src/core/road-graph";
 import { parseStations } from "../src/debug/test-stations";
+import {
+  OVALS,
+  SURFACE_BLOCKS,
+  SURFACE_STRIP_PITCH_M,
+  SURFACE_STRIP_WIDTH_M,
+  SURFACE_STRIP_X0,
+  SURFACE_STRIP_X1,
+  SURFACE_WAY_WIDTH_M,
+  surfaceStripZ,
+} from "../tools/map-compiler/synthetic/playground-layout";
 
 const crests = crestsForArea("playground");
 const domes = crests.filter((c) => c.ramp === undefined);
@@ -68,6 +78,58 @@ describe("playground crests", () => {
   });
 });
 
+describe("playground surface strips", () => {
+  it("are five equal strips with one surface each, in the expected order", () => {
+    expect(SURFACE_BLOCKS.map((b) => b.id)).toEqual([
+      "grass",
+      "sand",
+      "mud",
+      "gravel",
+      "dirt-road",
+    ]);
+    expect(new Set(SURFACE_BLOCKS.map((b) => b.key)).size).toBe(SURFACE_BLOCKS.length);
+  });
+
+  it("sit inside the layout, clear of the ovals and of each other", () => {
+    const half = SURFACE_STRIP_WIDTH_M / 2;
+    const firstTop = surfaceStripZ(0) - half;
+    const lastBottom = surfaceStripZ(SURFACE_BLOCKS.length - 1) + half;
+    expect(SURFACE_STRIP_X1).toBeLessThan(PLAYGROUND_WIDTH_M - 40);
+    expect(lastBottom).toBeLessThan(PLAYGROUND_DEPTH_M - 30 - 6 - 10);
+    for (const o of OVALS) {
+      expect(firstTop).toBeGreaterThan(o.top + 2 * o.radiusM + 10);
+    }
+    for (let i = 1; i < SURFACE_BLOCKS.length; i++) {
+      const gap = surfaceStripZ(i) - half - (surfaceStripZ(i - 1) + half);
+      expect(gap).toBeGreaterThanOrEqual(10);
+      expect(surfaceStripZ(i) - surfaceStripZ(i - 1)).toBe(SURFACE_STRIP_PITCH_M);
+    }
+  });
+
+  it("compile to two full-width road edges per surface in the shipped graph", () => {
+    const graph = parseRoadGraph(mapRaw, "playground.map.json");
+    // A width over 30 m silently becomes 3.5 m, so each strip is two 30 m ways.
+    const wide = graph.edges.filter((e) => e.widthM === SURFACE_WAY_WIDTH_M);
+    expect(wide.map((e) => e.surface).sort()).toEqual([
+      "dirt_road",
+      "dirt_road",
+      "grass",
+      "grass",
+      "gravel",
+      "gravel",
+      "mud",
+      "mud",
+      "sand",
+      "sand",
+    ]);
+    for (const e of wide) {
+      const xs = e.points.map((p) => p[0] + PLAYGROUND_WIDTH_M / 2);
+      expect(Math.min(...xs)).toBeCloseTo(SURFACE_STRIP_X0, 0);
+      expect(Math.max(...xs)).toBeCloseTo(SURFACE_STRIP_X1, 0);
+    }
+  });
+});
+
 describe("playground shipped artifacts", () => {
   const graph = parseRoadGraph(mapRaw, "playground.map.json");
   it("has one connected, validated pair of courses", () => {
@@ -75,7 +137,7 @@ describe("playground shipped artifacts", () => {
     expect(validateCourseRoutes(courses, graph)).toEqual([]);
     expect(courses.courses.map((c) => c.mode).sort()).toEqual(["circuit", "p2p"]);
   });
-  it("has a launch pad for the dome field, each gap jump and each oval", () => {
+  it("has a launch pad for the dome field, each gap jump, each oval and each surface strip", () => {
     const stations = parseStations(stationsRaw, "playground");
     expect(stations.map((s) => s.id)).toEqual([
       "dome-field",
@@ -85,6 +147,11 @@ describe("playground shipped artifacts", () => {
       "oval-large",
       "oval-medium",
       "oval-small",
+      "surface-grass",
+      "surface-sand",
+      "surface-mud",
+      "surface-gravel",
+      "surface-dirt-road",
     ]);
   });
 });
