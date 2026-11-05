@@ -21,7 +21,7 @@ import type { SurfaceType } from "../core/surface-types";
 import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
 import type { VehicleTuning } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
-import { applyAssists, boxPrincipalInertia } from "./vehicle-assists";
+import { applyAssists, applyLandingCushion, boxPrincipalInertia } from "./vehicle-assists";
 import type { WheelRayPatch } from "./wheel-ray-patch";
 
 /**
@@ -1071,6 +1071,7 @@ export function createVehicle(
       // consumes next. The caller (src/loop.ts via applyInput) then calls
       // world.step().
       applyAssists(body, vc, contacts, t.assists, inertia);
+      applyLandingCushion(body, vc, t.assists);
     },
 
     applyTuning,

@@ -234,3 +234,50 @@ export function applyAssists(
     body.applyImpulse({ x: 0, y: -f * DT, z: 0 }, true);
   }
 }
+
+/** Gain of the cushion's sink-speed term, 1/s: full cap is reached 1/gain s-worth of excess sink in. */
+const LANDING_CUSHION_GAIN = 30;
+const _normalScratch = { x: 0, y: 0, z: 0 };
+
+/**
+ * Landing cushion. The raycast suspension has 0.4 m of travel and a 20 kN force
+ * cap per wheel, so it can absorb about 6 g; a gap-jump touchdown at 13 m/s
+ * needs ~25 g, so the wheels pin at minimum length and the chassis slab hits
+ * the ground (43-58 g, plus a horizontal stop through its friction). This adds
+ * the missing stroke as a capped upward force along the mean ground normal,
+ * proportional to how far the normal sink speed exceeds `landingCushionSinkMs`.
+ * Using the NORMAL speed (not world vy) leaves driving down a slope alone.
+ */
+export function applyLandingCushion(
+  body: RAPIER.RigidBody,
+  vc: RAPIER.DynamicRayCastVehicleController,
+  a: VehicleTuning["assists"],
+): void {
+  if (a.landingCushionG <= 0) return;
+  let nx = 0;
+  let ny = 0;
+  let nz = 0;
+  let n = 0;
+  for (let i = 0; i < 4; i++) {
+    if (!vc.wheelIsInContact(i)) continue;
+    const c = vc.wheelContactNormal(i, _normalScratch);
+    if (c === null) continue;
+    nx += c.x;
+    ny += c.y;
+    nz += c.z;
+    n++;
+  }
+  if (n === 0) return;
+  const len = Math.hypot(nx, ny, nz);
+  if (len < 1e-6) return;
+  nx /= len;
+  ny /= len;
+  nz /= len;
+  const v = body.linvel();
+  const sink = -(v.x * nx + v.y * ny + v.z * nz);
+  const excess = sink - a.landingCushionSinkMs;
+  if (excess <= 0) return;
+  const accel = Math.min(a.landingCushionG * GRAVITY, LANDING_CUSHION_GAIN * excess);
+  const impulse = body.mass() * accel * DT;
+  body.applyImpulse({ x: nx * impulse, y: ny * impulse, z: nz * impulse }, true);
+}

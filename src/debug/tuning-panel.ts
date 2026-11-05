@@ -577,6 +577,19 @@ export function createTuningPanel(
     "airPitchDamping",
     TUNING_RANGES.assists.airPitchDamping,
   ).onChange(handlers.onApplyVehicle);
+  // `landingCushionG`: virtual extra suspension stroke on a hard touchdown (0 = off).
+  addNumber(
+    assistsFolder,
+    tuning.assists,
+    "landingCushionG",
+    TUNING_RANGES.assists.landingCushionG,
+  ).onChange(handlers.onApplyVehicle);
+  addNumber(
+    assistsFolder,
+    tuning.assists,
+    "landingCushionSinkMs",
+    TUNING_RANGES.assists.landingCushionSinkMs,
+  ).onChange(handlers.onApplyVehicle);
   // `bodyRollGain`: [MEASURED] POSITIVE FEEDBACK — gain 0.10 -> ~5.5deg,
   // gain 0.20 -> the car flips onto its roof. `bodyRollMaxDeg` below is the
   // cutoff that keeps this assist from running away, not a decoration.

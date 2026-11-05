@@ -513,6 +513,17 @@ export interface VehicleTuning {
     /** Air pitch damping ratio (1 = critically damped, no overshoot). */
     airPitchDamping: number;
     /**
+     * Landing cushion: the most extra upward deceleration (in g, along the
+     * ground normal) applied to the chassis while it is sinking into the ground
+     * faster than `landingCushionSinkMs`. The suspension (0.4 m travel, 20 kN
+     * per wheel) can only absorb ~6 g, so a 13 m/s gap-jump landing otherwise
+     * bottoms out and the chassis slab hits the ground (43-58 g). This is
+     * virtual extra stroke. 0 = off.
+     */
+    landingCushionG: number;
+    /** Landing cushion: normal sink speed (m/s) below which it does nothing, so ordinary driving is untouched. */
+    landingCushionSinkMs: number;
+    /**
      * Body-roll assist torque gain, applied only while >=3 wheels are
      * grounded and current roll is under `bodyRollMaxDeg`. `[MEASURED]`
      * (02-RESEARCH.md, D-06): Rapier hardcodes `roll_influence = 0.1`
@@ -690,6 +701,8 @@ export function defaultTuning(): VehicleTuning {
       autoLevelDamping: 0.6,
       airPitchGain: 25,
       airPitchDamping: 1,
+      landingCushionG: 12,
+      landingCushionSinkMs: 3,
       bodyRollGain: 0.075,
       bodyRollDamping: 1.2,
       bodyRollMaxDeg: 15,
@@ -781,6 +794,8 @@ export const TUNING_RANGES: {
     autoLevelDamping: TuningRange;
     airPitchGain: TuningRange;
     airPitchDamping: TuningRange;
+    landingCushionG: TuningRange;
+    landingCushionSinkMs: TuningRange;
     bodyRollGain: TuningRange;
     bodyRollDamping: TuningRange;
     bodyRollMaxDeg: TuningRange;
@@ -871,6 +886,8 @@ export const TUNING_RANGES: {
     autoLevelDamping: { min: 0, max: 2, step: 0.05 },
     airPitchGain: { min: 0, max: 80, step: 1 },
     airPitchDamping: { min: 0, max: 2, step: 0.05 },
+    landingCushionG: { min: 0, max: 20, step: 0.5 },
+    landingCushionSinkMs: { min: 0.5, max: 10, step: 0.5 },
     bodyRollGain: { min: 0, max: 0.15, step: 0.005 },
     bodyRollDamping: { min: 0, max: 3, step: 0.05 },
     bodyRollMaxDeg: { min: 0, max: 25, step: 1 },
