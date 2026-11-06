@@ -124,6 +124,7 @@ describe("throttle drift floor (low and medium speed)", () => {
     // trade-off of frontFalloff (2026-11-06), not a goal in itself.
     const world = createWorld();
     const tuning = shippedTuning();
+    tuning.drive.frontFalloff = 0.5; // opt-in; ships off (felt like auto-correcting mid-turn)
     const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
     scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
     scene.vehicle.body.setLinvel({ x: 24 * MPH, y: 0, z: 0 }, true);

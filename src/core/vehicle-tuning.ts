@@ -731,7 +731,7 @@ export function defaultTuning(): VehicleTuning {
       slideSurge: 0.3,
       liftOffOversteer: 5,
       tyreFalloff: 0.12,
-      frontFalloff: 0.5,
+      frontFalloff: 0,
       frontFalloffOnsetDeg: 25,
       frontFalloffFullDeg: 70,
       rollGuard: 0.85,

@@ -104,7 +104,10 @@ describe("replay of the 2026-11-06 hand drives (flat plane, shipped car)", () =>
   });
 
   it("the larger loop (100 mph entries) holds at 25-40 deg and keeps most of its speed with the front falloff", () => {
-    const slides = replay(bigLoopRaw);
+    // Opt-in only: hand-driven 2026-11-06 it felt like auto-correcting mid-turn, so it ships off.
+    const slides = replay(bigLoopRaw, (t) => {
+      t.drive.frontFalloff = 0.5;
+    });
     expect(slides.length).toBeGreaterThanOrEqual(2);
     for (const s of slides) {
       expect(s.peakDeg).toBeLessThan(45);
