@@ -310,6 +310,17 @@ export interface VehicleTuning {
      */
     powerOversteerRearSideFriction: number;
     /**
+     * Rear side-friction floor the THROTTLE terms (power oversteer and wheelspin)
+     * head toward at low and medium speed; it fades back to
+     * `powerOversteerRearSideFriction` between `powerFadeStartMs` and
+     * `powerFadeEndMs`, so high-speed slides keep the old floor. Measured
+     * 2026-11-06 (exp/wheelspin), full lock + throttle held from 24 mph: floor
+     * 0.024 -> a steady 19-25 deg of slip (a "not drifty enough" slide), 0.016 ->
+     * a held 31-34 deg drift, 0.013 -> 53 deg then bogs down, <=0.010 -> spins.
+     * Flick, pivot and lift terms still use `powerOversteerRearSideFriction`.
+     */
+    powerOversteerLowSpeedRearSideFriction: number;
+    /**
      * Pivot-turn strength, 0..1. 0 = off: the whole mechanic is skipped and
      * the physics is bit-for-bit what it is without it.
      *
@@ -699,6 +710,7 @@ export function defaultTuning(): VehicleTuning {
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
       powerOversteerRearSideFriction: 0.024,
+      powerOversteerLowSpeedRearSideFriction: 0.016,
       pivotTurn: 0,
       pivotYawRate: 4,
       pivotFrontSpeedCap: 3,
@@ -796,6 +808,7 @@ export const TUNING_RANGES: {
     handbrakeRearSideFriction: TuningRange;
     powerOversteerGain: TuningRange;
     powerOversteerRearSideFriction: TuningRange;
+    powerOversteerLowSpeedRearSideFriction: TuningRange;
     pivotTurn: TuningRange;
     pivotYawRate: TuningRange;
     pivotFrontSpeedCap: TuningRange;
@@ -890,6 +903,7 @@ export const TUNING_RANGES: {
     handbrakeRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     powerOversteerGain: { min: 0, max: 2, step: 0.05 },
     powerOversteerRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
+    powerOversteerLowSpeedRearSideFriction: { min: 0, max: 0.05, step: 0.001 },
     pivotTurn: { min: 0, max: 1, step: 0.05 },
     pivotYawRate: { min: 0.5, max: 8, step: 0.1 },
     pivotFrontSpeedCap: { min: 0.5, max: 10, step: 0.1 },

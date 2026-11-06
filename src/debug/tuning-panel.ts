@@ -440,6 +440,13 @@ export function createTuningPanel(
     "powerOversteerRearSideFriction",
     TUNING_RANGES.drive.powerOversteerRearSideFriction,
   ).onChange(handlers.onApplyVehicle);
+  // Throttle-slide floor at low/medium speed (fades to the one above by the power fade speeds).
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "powerOversteerLowSpeedRearSideFriction",
+    TUNING_RANGES.drive.powerOversteerLowSpeedRearSideFriction,
+  ).onChange(handlers.onApplyVehicle);
   addNumber(driveFolder, tuning.drive, "pivotTurn", TUNING_RANGES.drive.pivotTurn).onChange(
     handlers.onApplyVehicle,
   );

@@ -149,11 +149,14 @@ describe("pivot turn: engaged", () => {
 });
 
 describe("powerOversteerRearSideFriction", () => {
-  it("the throttle blend heads to its own value (0.024) and the handbrake keeps 0.005", () => {
+  it("the throttle blend heads to its own low-speed value (0.016) and the handbrake keeps 0.005", () => {
     const tuning = defaultTuning();
     // One-tick reading: needs instant regrip (the slide-exit smoothing is on by default).
     tuning.drive.rearGripRecoverySec = 0;
+    // The flick/pivot/lift floor is unchanged at 0.024; the throttle terms use the
+    // lower low-speed floor at this speed (exp/wheelspin).
     expect(tuning.drive.powerOversteerRearSideFriction).toBe(0.024);
+    expect(tuning.drive.powerOversteerLowSpeedRearSideFriction).toBe(0.016);
     expect(tuning.drive.handbrakeRearSideFriction).toBe(0.005);
 
     const rearAt = (frame: InputFrame): number => {
@@ -170,8 +173,8 @@ describe("powerOversteerRearSideFriction", () => {
       world.free();
       return sfs;
     };
-    // Full throttle + steer at 15 m/s: blend saturates at 1 -> the power-slide value.
-    expect(rearAt({ steer: 1, throttle: 1, brake: 0, handbrake: false })).toBeCloseTo(0.024, 6);
+    // Full throttle + steer at 15 m/s: blend saturates at 1 -> the low-speed power-slide value.
+    expect(rearAt({ steer: 1, throttle: 1, brake: 0, handbrake: false })).toBeCloseTo(0.016, 6);
     expect(rearAt({ steer: 0, throttle: 0, brake: 0, handbrake: true })).toBeCloseTo(0.005, 6);
   });
 });
@@ -303,6 +306,11 @@ describe("pivot turn: speed gate (full below 5 m/s, zero at 12 m/s)", () => {
 
 describe("pivot turn: hairpin regression", () => {
   it("a hairpin entered at 10 m/s with full lock and throttle is identical with pivotTurn on and off", () => {
+    // This test isolates the pivot: the throttle drift floor (exp/wheelspin) is put
+    // back to the old value so the hairpin's speed stays in the inert band.
+    const isolate = (t: VehicleTuning) => {
+      t.drive.powerOversteerLowSpeedRearSideFriction = t.drive.powerOversteerRearSideFriction;
+    };
     for (const ramp of [false, true]) {
       // Keyboard-style steer ramp (5/s) and an instant full lock, both.
       const hairpin: Script = (k) => ({
@@ -311,8 +319,8 @@ describe("pivot turn: hairpin regression", () => {
         brake: 0,
         handbrake: false,
       });
-      const off = trace(withPivot(0), hairpin, 360, 16);
-      const on = trace(withPivot(1), hairpin, 360, 16);
+      const off = trace(withPivot(0, isolate), hairpin, 360, 16);
+      const on = trace(withPivot(1, isolate), hairpin, 360, 16);
       // Guard: the car really does stay in the inert band the whole way round
       // (full throttle drives it up from 16 m/s, it never drops under 12).
       let minSpeed = Number.POSITIVE_INFINITY;

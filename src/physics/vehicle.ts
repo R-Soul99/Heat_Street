@@ -856,22 +856,28 @@ export function createVehicle(
             )
           : 0;
       rearGrip.wheelspin = wheelspinRatio;
+      // The throttle terms (power oversteer, wheelspin) head to a floor that is
+      // lower at low/medium speed (a held drift) and fades to the old floor over
+      // the same speed range as the power gate; flick, pivot and lift keep the
+      // old floor. The looser of the two wins.
+      const throttleFloor = lerp(
+        t.drive.powerOversteerLowSpeedRearSideFriction,
+        t.drive.powerOversteerRearSideFriction,
+        1 - powerSpeedFade,
+      );
       const rearSfsTarget = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
-        : lerp(
-            t.wheels.rearSideFriction,
-            // The throttle / flick blend has its OWN target (a controllable
-            // power slide); the handbrake keeps the much looser value above.
-            t.drive.powerOversteerRearSideFriction,
-            Math.max(
-              flickBlend,
+        : Math.min(
+            lerp(
+              t.wheels.rearSideFriction,
+              // The flick / pivot / lift blend has its own target (a controllable
+              // slide); the handbrake keeps the much looser value above.
+              t.drive.powerOversteerRearSideFriction,
               // The pivot loosens the tail to the power-slide value (fast in,
               // 0.05 s out) so the car actually rotates about the nose.
-              pivotBlend,
-              powerBlend,
-              spinBlend,
-              liftBlend,
+              Math.max(flickBlend, pivotBlend, liftBlend),
             ),
+            lerp(t.wheels.rearSideFriction, throttleFloor, Math.max(powerBlend, spinBlend)),
           );
       // Regrip smoothing (opt-in): the tail loosens fast but regrips over
       // `rearGripRecoverySec`, so the lateral-velocity cancel that follows a

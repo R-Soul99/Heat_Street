@@ -81,3 +81,43 @@ describe("wheelspin oversteer", () => {
     expect(run(60, 1, 1, 0).spinTicks).toBe(0);
   });
 });
+
+describe("throttle drift floor (low and medium speed)", () => {
+  /** Full lock held with throttle from `mph`, as in the 2026-11-06 drive log. */
+  function held(mph: number, floor?: number): { slip5s: number; peak: number; spun: boolean } {
+    const world = createWorld();
+    const tuning = shippedTuning();
+    if (floor !== undefined) tuning.drive.powerOversteerLowSpeedRearSideFriction = floor;
+    const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
+    scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
+    scene.vehicle.body.setLinvel({ x: mph * MPH, y: 0, z: 0 }, true);
+    let slip5 = 0;
+    let peak = 0;
+    let spun = false;
+    for (let t = 0; t < 6 * 60; t++) {
+      const sec = t / 60;
+      const steer = sec < 0.35 ? 0 : Math.min(1, (sec - 0.35) / 0.15);
+      scene.applyInput({ ...NEUTRAL, throttle: Math.min(1, sec / 0.7), steer });
+      world.step();
+      const slip = Math.abs(sampleVehicle(scene.vehicle).slipAngleRad) * 57.3;
+      peak = Math.max(peak, slip);
+      if (slip > 80) spun = true;
+      if (t === 300) slip5 = slip;
+    }
+    return { slip5s: slip5, peak, spun };
+  }
+
+  it("holds a real drift (28 deg or more after 5 s, no spin) where the old floor gave ~20 deg", () => {
+    const old = held(24, 0.024);
+    const now = held(24);
+    expect(old.slip5s).toBeLessThan(24);
+    expect(now.slip5s).toBeGreaterThan(28);
+    expect(now.spun).toBe(false);
+    expect(now.peak).toBeLessThan(55);
+  });
+
+  it("does not spin from a faster entry either", () => {
+    const now = held(45);
+    expect(now.spun).toBe(false);
+  });
+});
