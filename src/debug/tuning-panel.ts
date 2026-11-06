@@ -514,7 +514,13 @@ export function createTuningPanel(
     TUNING_RANGES.drive.liftOffOversteer,
   ).onChange(handlers.onApplyVehicle);
   // Front tyre falloff: the steered axle lets go past a front slip angle, so all four tyres can slide.
-  for (const key of ["frontFalloff", "frontFalloffOnsetDeg", "frontFalloffFullDeg"] as const) {
+  for (const key of [
+    "frontFalloff",
+    "frontFalloffOnsetDeg",
+    "frontFalloffFullDeg",
+    "driftHold",
+    "driftHoldSlipDeg",
+  ] as const) {
     addNumber(driveFolder, tuning.drive, key, TUNING_RANGES.drive[key]).onChange(
       handlers.onApplyVehicle,
     );

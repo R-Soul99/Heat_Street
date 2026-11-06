@@ -469,6 +469,10 @@ export interface VehicleTuning {
     frontFalloff: number;
     frontFalloffOnsetDeg: number;
     frontFalloffFullDeg: number;
+    /** Drift hold (rad/s^2 of yaw push at 10+ deg short of the target slip); 0 = off. One-sided: only adds yaw into an existing, steered, throttle-on slide. */
+    driftHold: number;
+    /** Slip angle (deg) the drift hold tries to keep a steered, powered slide at. */
+    driftHoldSlipDeg: number;
     /**
      * Roll guard, 0..1: how much of the tyres' grip is withdrawn as the body
      * rolls from ~12 to ~25 deg on firm ground, so a sideways slide ends in a
@@ -734,6 +738,8 @@ export function defaultTuning(): VehicleTuning {
       frontFalloff: 0,
       frontFalloffOnsetDeg: 25,
       frontFalloffFullDeg: 70,
+      driftHold: 0,
+      driftHoldSlipDeg: 30,
       rollGuard: 0.85,
       powerFadeStartMs: 25,
       powerFadeEndMs: 40,
@@ -835,6 +841,8 @@ export const TUNING_RANGES: {
     frontFalloff: TuningRange;
     frontFalloffOnsetDeg: TuningRange;
     frontFalloffFullDeg: TuningRange;
+    driftHold: TuningRange;
+    driftHoldSlipDeg: TuningRange;
     rollGuard: TuningRange;
     powerFadeStartMs: TuningRange;
     powerFadeEndMs: TuningRange;
@@ -935,6 +943,8 @@ export const TUNING_RANGES: {
     frontFalloff: { min: 0, max: 0.9, step: 0.01 },
     frontFalloffOnsetDeg: { min: 5, max: 60, step: 1 },
     frontFalloffFullDeg: { min: 20, max: 90, step: 1 },
+    driftHold: { min: 0, max: 6, step: 0.1 },
+    driftHoldSlipDeg: { min: 15, max: 60, step: 1 },
     rollGuard: { min: 0, max: 1, step: 0.01 },
     powerFadeStartMs: { min: 5, max: 60, step: 1 },
     powerFadeEndMs: { min: 10, max: 80, step: 1 },

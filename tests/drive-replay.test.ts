@@ -123,6 +123,16 @@ describe("replay of the 2026-11-06 hand drives (flat plane, shipped car)", () =>
     expect(Math.min(...slides.map((s) => s.exitMph / s.entryMph))).toBeLessThan(0.7);
   });
 
+  it("the drift hold (opt-in) keeps the larger loop's slides sideways at 25-45 deg and never spins", () => {
+    const slides = replay(bigLoopRaw, (t) => {
+      t.drive.driftHold = 1;
+    });
+    const base = replay(bigLoopRaw);
+    expect(Math.max(...slides.map((s) => s.peakDeg))).toBeLessThan(50);
+    // Slides last longer than without it (more of them reach the 0.5 s bar).
+    expect(slides.length).toBeGreaterThan(base.length);
+  });
+
   it("the low-speed hold drive never spins out past 90 deg", () => {
     const slides = replay(holdsRaw);
     expect(slides.length).toBeGreaterThanOrEqual(4);

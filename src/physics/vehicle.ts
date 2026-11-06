@@ -1155,6 +1155,33 @@ export function createVehicle(
         );
       }
 
+      // 5c'. Drift hold (opt-in): a held, powered, steered slide keeps rotating
+      // so the car stays sideways instead of the front axle dragging it back
+      // to the nose (measured 2026-11-06: yaw rate falls 1.7 -> 0 in ~0.9 s while
+      // the front side force stays pinned). One-sided: yaw is only ever added in
+      // the slide's own direction, and only while slip is under the target, so it
+      // can hold an angle but never spin the car past it. Needs throttle, steer
+      // into the slide, speed and a rear wheel on the ground; easing the throttle
+      // or steering out switches it off, handing back to normal handling.
+      if (t.drive.driftHold > 0 && engineForce < 0 && !frame.handbrake) {
+        const speedH = Math.hypot(lv.x, lv.z);
+        const slipDeg = Math.abs(slipRad) * 57.2958;
+        const dir = Math.sign(slipRad); // yaw direction of the slide (slip < 0 yaws negative, measured)
+        const into = -frame.steer * dir; // positive steer yaws negative, so this is steering into the slide
+        const rearGround = (vc.wheelIsInContact(RL) ? 1 : 0) + (vc.wheelIsInContact(RR) ? 1 : 0);
+        if (rearGround > 0 && dir !== 0 && into > 0.05 && speedH > 8 && forwardSpeedMs > 0) {
+          const gate =
+            smoothstep(8, 14, slipDeg) * smoothstep(0.05, 0.2, into) * smoothstep(8, 14, speedH);
+          const room = clamp((t.drive.driftHoldSlipDeg - slipDeg) / 10, 0, 1);
+          if (gate * room > 0) {
+            body.applyTorqueImpulse(
+              { x: 0, y: dir * inertia.y * t.drive.driftHold * gate * room * DT, z: 0 },
+              true,
+            );
+          }
+        }
+      }
+
       // 5e. High-speed yaw damping assist (plan 04.3-05): opposes the yaw rate
       // the steering did not ask for. Impulse form like the other assists, in
       // the fixed tick only, a pure function of this tick's state (medal times
