@@ -88,6 +88,17 @@ const BUMP_STOP_GATE_M = 0.06;
 const PIVOT_FULL_SPEED_MS = 5;
 /** ...fading smoothly to zero at this speed, and never engaged at or above it. */
 const PIVOT_ZERO_SPEED_MS = 12;
+/**
+ * The full window above only applies once the pivot is ARMED: the car has been
+ * through this speed (m/s) with steer and throttle held, i.e. a doughnut from
+ * (near) rest. Armed until the throttle is lifted or the car passes 12 m/s. A car
+ * that merely slows into a corner (2026-11-06 recordings: full lock, full throttle
+ * at 10-25 mph) is never armed, so it only meets the narrow window below and is
+ * not captured into a ~8 mph doughnut.
+ */
+const PIVOT_ARM_SPEED_MS = 2.5;
+const PIVOT_UNARMED_FULL_SPEED_MS = 1.5;
+const PIVOT_UNARMED_ZERO_SPEED_MS = 3;
 /** Pivot turn: steer / throttle fade in continuously between these levels (no threshold, no dwell). */
 const PIVOT_INPUT_START = 0.5;
 const PIVOT_INPUT_FULL = 0.9;
@@ -420,6 +431,7 @@ export function createVehicle(
     pivotE = 0;
     pivotRear = 0;
     pivotDir = 0;
+    pivotArmed = false;
     rearSfsSmoothed = -1;
     throttleRef = 0;
     liftHold = 0;
@@ -443,6 +455,7 @@ export function createVehicle(
   let pivotE = 0;
   let pivotRear = 0;
   let pivotDir = 0;
+  let pivotArmed = false;
   // Slew-limited rear side friction (-1 = not yet seeded); see step 4.
   let rearSfsSmoothed = -1;
   /** Low-passed throttle: what the driver was recently asking for. */
@@ -722,13 +735,14 @@ export function createVehicle(
       let pivotGate = 0;
       if (t.drive.pivotTurn > 0) {
         const groundSpeed = Math.hypot(lv.x, lv.z);
-        const speedFade = smoothstep01(
-          clamp(
-            (PIVOT_ZERO_SPEED_MS - groundSpeed) / (PIVOT_ZERO_SPEED_MS - PIVOT_FULL_SPEED_MS),
-            0,
-            1,
-          ),
-        );
+        if (groundSpeed < PIVOT_ARM_SPEED_MS && frame.throttle >= PIVOT_INPUT_START) {
+          pivotArmed = true;
+        } else if (groundSpeed >= PIVOT_ZERO_SPEED_MS || frame.throttle < PIVOT_INPUT_START) {
+          pivotArmed = false;
+        }
+        const zeroMs = pivotArmed ? PIVOT_ZERO_SPEED_MS : PIVOT_UNARMED_ZERO_SPEED_MS;
+        const fullMs = pivotArmed ? PIVOT_FULL_SPEED_MS : PIVOT_UNARMED_FULL_SPEED_MS;
+        const speedFade = smoothstep01(clamp((zeroMs - groundSpeed) / (zeroMs - fullMs), 0, 1));
         const inputRamp = (x: number) =>
           smoothstep01(
             clamp((x - PIVOT_INPUT_START) / (PIVOT_INPUT_FULL - PIVOT_INPUT_START), 0, 1),

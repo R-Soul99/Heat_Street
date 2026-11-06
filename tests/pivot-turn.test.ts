@@ -262,7 +262,7 @@ describe("pivot turn: the handbrake is not part of it", () => {
 
 describe("pivot turn: speed gate (full below 5 m/s, zero at 12 m/s)", () => {
   /** Max |yaw-rate difference| between pivot on and off with forward speed held constant. */
-  function pivotEffect(speed: number): number {
+  function pivotEffect(speed: number, armed = true): number {
     const run = (pivot: number): number[] => {
       const tuning = withPivot(pivot);
       const world = createWorld();
@@ -273,6 +273,15 @@ describe("pivot turn: speed gate (full below 5 m/s, zero at 12 m/s)", () => {
         world.step();
       }
       const yaw: number[] = [];
+      // Arm the pivot first: it only takes the full speed window once the car has
+      // been through ~2.5 m/s with throttle held (a doughnut from rest).
+      if (armed) {
+        for (let k = 0; k < 10; k++) {
+          vehicle.body.setLinvel({ x: 0, y: vehicle.body.linvel().y, z: -1 }, true);
+          vehicle.tick({ steer: 0, throttle: 1, brake: 0, handbrake: false }, tuning);
+          world.step();
+        }
+      }
       for (let k = 0; k < 90; k++) {
         // Hold the speed so the gate sees exactly `speed`.
         vehicle.body.setLinvel({ x: 0, y: vehicle.body.linvel().y, z: -speed }, true);
@@ -287,6 +296,16 @@ describe("pivot turn: speed gate (full below 5 m/s, zero at 12 m/s)", () => {
     const on = run(1);
     return Math.max(...on.map((y, i) => Math.abs(y - off[i])));
   }
+
+  it("an unarmed car (never near rest) is captured only below 3 m/s: a 10-25 mph corner is left alone", () => {
+    // 2026-11-06 hand drives: full lock + full throttle at 10-25 mph was pulled into
+    // a ~8 mph doughnut. Without having been near rest the pivot is inert from 3 m/s.
+    expect(pivotEffect(1.5, false)).toBeGreaterThan(0.3);
+    expect(pivotEffect(3, false)).toBe(0);
+    expect(pivotEffect(4.5, false)).toBe(0);
+    expect(pivotEffect(7, false)).toBe(0);
+    expect(pivotEffect(10, false)).toBe(0);
+  });
 
   it("is fully active below 5 m/s, fades between 5 and 12, and is exactly inert at 12 m/s and above", () => {
     const e2 = pivotEffect(2);
