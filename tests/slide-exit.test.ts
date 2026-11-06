@@ -6,6 +6,7 @@ import { runRoutine } from "../src/physics/telemetry/run";
 
 function slideExit(mutate?: (t: VehicleTuning) => void, steerIntoSlide = false) {
   const tuning = defaultTuning();
+  tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
   mutate?.(tuning);
   const run = makeSlideExitRoutine({ steerIntoSlide });
   runRoutine(run.routine, tuning);

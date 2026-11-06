@@ -44,6 +44,7 @@ function replay(raw: string, mod: (t: VehicleTuning) => void = () => {}): Slide[
   const world = createWorld();
   try {
     const tuning = shippedTuning();
+    tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
     mod(tuning);
     const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1, 0));
     world.createCollider(RAPIER.ColliderDesc.cuboid(20000, 1, 20000), ground);

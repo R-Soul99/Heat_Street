@@ -26,6 +26,7 @@ const EDGE_X = 660;
 function crossingYawPeak(offDeg: number, mph: number, throttle: number, regripSec: number): number {
   const world = createWorld();
   const tuning = defaultTuning();
+  tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
   tuning.wheels.surfaceRegripSec = regripSec;
   tuning.wheels.surfaceDegripSec = 0;
   const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
@@ -66,6 +67,7 @@ describe("surface regrip blend (mud onto tarmac)", () => {
   it("changes nothing for a slide that never crosses a surface edge", () => {
     const run = (regrip: number) => {
       const tuning = defaultTuning();
+      tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
       tuning.wheels.surfaceRegripSec = regrip;
       tuning.wheels.surfaceDegripSec = 0;
       const w = createWorld();

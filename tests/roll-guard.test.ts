@@ -27,6 +27,7 @@ const stations = parseStations(stationsRaw, graph.areaId);
  */
 function peakRollDeg(guard: number, yawOffDeg: number, yawRate: number): number {
   const tuning = defaultTuning();
+  tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
   tuning.drive.rollGuard = guard;
   const world = createWorld();
   const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());

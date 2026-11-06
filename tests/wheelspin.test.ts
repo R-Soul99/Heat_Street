@@ -29,6 +29,7 @@ interface Run {
 function run(mph: number, steer: number, throttle: number, wheelspinGain: number): Run {
   const world = createWorld();
   const tuning = shippedTuning();
+  tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
   tuning.drive.wheelspinGain = wheelspinGain;
   tuning.drive.frontFalloff = 0; // isolates the rear wheelspin term
   tuning.drive.powerOversteerLowSpeedRearSideFriction = 0.016; // opt-in drift floor; ships at 0.024
@@ -89,6 +90,7 @@ describe("throttle drift floor (low and medium speed)", () => {
   function held(mph: number, floor?: number): { slip5s: number; peak: number; spun: boolean } {
     const world = createWorld();
     const tuning = shippedTuning();
+    tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
     tuning.drive.frontFalloff = 0; // isolates the rear drift floor
     // The drift floor ships off (0.024); these tests exercise the opt-in 0.016.
     tuning.drive.powerOversteerLowSpeedRearSideFriction = floor ?? 0.016;
@@ -126,6 +128,7 @@ describe("throttle drift floor (low and medium speed)", () => {
     // trade-off of frontFalloff (2026-11-06), not a goal in itself.
     const world = createWorld();
     const tuning = shippedTuning();
+    tuning.drive.driftHold = 0; // isolates the mechanism under test from the drift assist
     tuning.drive.frontFalloff = 0.5; // opt-in; ships off (felt like auto-correcting mid-turn)
     const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
     scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });

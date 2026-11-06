@@ -738,7 +738,7 @@ export function defaultTuning(): VehicleTuning {
       frontFalloff: 0,
       frontFalloffOnsetDeg: 25,
       frontFalloffFullDeg: 70,
-      driftHold: 0,
+      driftHold: 3,
       driftHoldSlipDeg: 30,
       rollGuard: 0.85,
       powerFadeStartMs: 25,
