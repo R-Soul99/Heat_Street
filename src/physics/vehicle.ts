@@ -1183,13 +1183,23 @@ export function createVehicle(
         const dir = Math.sign(slipRad); // yaw direction of the slide (slip < 0 yaws negative, measured)
         const into = -frame.steer * dir; // positive steer yaws negative, so this is steering into the slide
         const rearGround = (vc.wheelIsInContact(RL) ? 1 : 0) + (vc.wheelIsInContact(RR) ? 1 : 0);
-        if (rearGround > 0 && dir !== 0 && into > 0.05 && speedH > 8 && forwardSpeedMs > 0) {
-          const gate =
-            smoothstep(8, 14, slipDeg) * smoothstep(0.05, 0.2, into) * smoothstep(8, 14, speedH);
-          const room = clamp((t.drive.driftHoldSlipDeg - slipDeg) / 10, 0, 1);
-          if (gate * room > 0) {
+        if (rearGround > 0 && dir !== 0 && speedH > 8 && forwardSpeedMs > 0) {
+          // Keyboard-friendly: steering is on/off, so the keys pick a mode rather
+          // than an angle. Steering into the slide deepens it to the full target;
+          // the opposite key (counter-steer) holds ~75% of it so the car keeps
+          // travelling the same way, sideways, instead of flipping; no steer eases
+          // the slide out toward straight. Over the target is always pulled back.
+          const target =
+            into > 0.5
+              ? t.drive.driftHoldSlipDeg
+              : into < -0.5
+                ? t.drive.driftHoldSlipDeg * 0.75
+                : 0;
+          const gate = smoothstep(8, 14, slipDeg) * smoothstep(8, 14, speedH);
+          const drive = clamp((target - slipDeg) / 10, -1, 1);
+          if (gate * drive !== 0) {
             body.applyTorqueImpulse(
-              { x: 0, y: dir * inertia.y * t.drive.driftHold * gate * room * DT, z: 0 },
+              { x: 0, y: dir * inertia.y * t.drive.driftHold * gate * drive * DT, z: 0 },
               true,
             );
           }
