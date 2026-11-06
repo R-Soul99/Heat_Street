@@ -149,14 +149,14 @@ describe("pivot turn: engaged", () => {
 });
 
 describe("powerOversteerRearSideFriction", () => {
-  it("the throttle blend heads to its own low-speed value (0.016) and the handbrake keeps 0.005", () => {
+  it("the throttle blend uses the low-speed floor (shipped = 0.024, i.e. off) and the handbrake keeps 0.005", () => {
     const tuning = defaultTuning();
     // One-tick reading: needs instant regrip (the slide-exit smoothing is on by default).
     tuning.drive.rearGripRecoverySec = 0;
     // The flick/pivot/lift floor is unchanged at 0.024; the throttle terms use the
     // lower low-speed floor at this speed (exp/wheelspin).
     expect(tuning.drive.powerOversteerRearSideFriction).toBe(0.024);
-    expect(tuning.drive.powerOversteerLowSpeedRearSideFriction).toBe(0.016);
+    expect(tuning.drive.powerOversteerLowSpeedRearSideFriction).toBe(0.024);
     expect(tuning.drive.handbrakeRearSideFriction).toBe(0.005);
 
     const rearAt = (frame: InputFrame): number => {
@@ -173,8 +173,8 @@ describe("powerOversteerRearSideFriction", () => {
       world.free();
       return sfs;
     };
-    // Full throttle + steer at 15 m/s: blend saturates at 1 -> the low-speed power-slide value.
-    expect(rearAt({ steer: 1, throttle: 1, brake: 0, handbrake: false })).toBeCloseTo(0.016, 6);
+    // Full throttle + steer at 15 m/s: blend saturates at 1 -> the low-speed power-slide value (shipped = 0.024).
+    expect(rearAt({ steer: 1, throttle: 1, brake: 0, handbrake: false })).toBeCloseTo(0.024, 6);
     expect(rearAt({ steer: 0, throttle: 0, brake: 0, handbrake: true })).toBeCloseTo(0.005, 6);
   });
 });

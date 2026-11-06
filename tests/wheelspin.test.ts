@@ -31,6 +31,7 @@ function run(mph: number, steer: number, throttle: number, wheelspinGain: number
   const tuning = shippedTuning();
   tuning.drive.wheelspinGain = wheelspinGain;
   tuning.drive.frontFalloff = 0; // isolates the rear wheelspin term
+  tuning.drive.powerOversteerLowSpeedRearSideFriction = 0.016; // opt-in drift floor; ships at 0.024
   const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
   scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
   scene.vehicle.body.setLinvel({ x: mph * MPH, y: 0, z: 0 }, true);
@@ -89,7 +90,8 @@ describe("throttle drift floor (low and medium speed)", () => {
     const world = createWorld();
     const tuning = shippedTuning();
     tuning.drive.frontFalloff = 0; // isolates the rear drift floor
-    if (floor !== undefined) tuning.drive.powerOversteerLowSpeedRearSideFriction = floor;
+    // The drift floor ships off (0.024); these tests exercise the opt-in 0.016.
+    tuning.drive.powerOversteerLowSpeedRearSideFriction = floor ?? 0.016;
     const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
     scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
     scene.vehicle.body.setLinvel({ x: mph * MPH, y: 0, z: 0 }, true);

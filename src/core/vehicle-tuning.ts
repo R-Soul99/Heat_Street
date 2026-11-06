@@ -718,7 +718,7 @@ export function defaultTuning(): VehicleTuning {
       handbrakeRearSideFriction: 0.005,
       powerOversteerGain: 1.1,
       powerOversteerRearSideFriction: 0.024,
-      powerOversteerLowSpeedRearSideFriction: 0.016,
+      powerOversteerLowSpeedRearSideFriction: 0.024, // = powerOversteerRearSideFriction: off. 0.016 (2026-11-06) swung full-lock low-speed corners to 50-65 deg
       pivotTurn: 0,
       pivotYawRate: 4,
       pivotFrontSpeedCap: 3,
