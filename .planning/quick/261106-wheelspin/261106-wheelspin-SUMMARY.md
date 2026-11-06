@@ -21,3 +21,11 @@ User drove the wheelspin build (recordings/heat-street-drive-2026-11-06T00-31-17
 The dial is the rear side-friction floor under throttle: 0.024 -> steady 19-25 deg, 0.016 -> held 31-34 deg drift (max 43, no spin, also from 45 mph), 0.013 -> 53 deg then bogs down, <=0.010 -> spin. A flat 0.016 pushed `hold-slide-70` to 67 deg (guard < 60) and the flick/pivot/lift terms share the same constant, so the change is a NEW knob `drive.powerOversteerLowSpeedRearSideFriction` (0.016) used by the throttle terms only, fading to the old 0.024 over the power-fade speeds (25-40 m/s). Feel dossier: power-slide-30 slip 25 -> 42, power-slide-40 23 -> 36, 100 mph taps identical.
 
 Tests: tests/wheelspin.test.ts (held drift, no spin from 24 and 45 mph); the old 0.024 literal test updated; the pivot hairpin test isolates the pivot by restoring the old floor.
+
+## Follow-up 2: replay of the user's hand drives; tyre falloff cliff
+
+User drove the drift-floor build (recordings/heat-street-drive-2026-11-06T00-45-03.csv, a 60 s loop): four slides of 57-77 deg slip each losing 40-60 mph (forward speed down to 8-18 mph), i.e. spin-outs, not held drifts. The CSV records steer, throttle, brake and handbrake per tick, so it can be replayed headless: tests/drive-replay.test.ts replays compact fixtures of both drives (tests/fixtures/drive-*-2026-11-06-*.csv) through the shipped car on a 40 km flat plane and reproduces the recorded slides within 1-2 deg and 0.0 mph mean speed difference.
+
+Finding: `drive.tyreFalloff` (rear cap fade at large slip) has a cliff. 0.10 -> peaks 28-31 deg keeping ~80% speed; 0.12-0.13 -> 29-32 deg; 0.15 -> 46 deg; 0.20 -> one slide spins to 91 deg; 0.25-0.30 -> 57-179 deg. Shipped 0.30 was well past it. Default lowered 0.3 -> 0.12. Replay result on the loop: peaks 29/32/28 deg, speed 78->58, 73->60, 55->50 (was 78->16, 60->27, 69->30, 67->28).
+
+Dossier vs previous commit: 16 of 22 identical; hold-slide-70 slip 70 -> 41 deg and end speed 15 -> 23 m/s; handbrake-180 still turns 201 deg (was 220), peak slip reading 175 -> 62. surface-blend test thresholds relaxed (smaller baselines).

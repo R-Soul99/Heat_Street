@@ -726,7 +726,7 @@ export function defaultTuning(): VehicleTuning {
       rearGripRecoverySec: 0.15,
       slideSurge: 0.3,
       liftOffOversteer: 5,
-      tyreFalloff: 0.3,
+      tyreFalloff: 0.12,
       rollGuard: 0.85,
       powerFadeStartMs: 25,
       powerFadeEndMs: 40,
