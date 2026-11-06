@@ -424,6 +424,7 @@ export function createVehicle(
     throttleRef = 0;
     liftHold = 0;
     rearGripScale = 1;
+    frontGripScale = 1;
     // A rolled car's stale rollDeg would otherwise make the first tick after
     // the respawn apply the roll guard's friction cut.
     rollGuardWasOn = false;
@@ -449,6 +450,8 @@ export function createVehicle(
   let liftHold = 0;
   /** Last rear grip scale written by the tyre falloff (1 = untouched). */
   let rearGripScale = 1;
+  /** Last front grip scale written by the front tyre falloff (1 = untouched). */
+  let frontGripScale = 1;
   let rollGuardWasOn = false;
   /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
   const lastSuspensionLength = new Array<number>(4).fill(restLength);
@@ -941,6 +944,48 @@ export function createVehicle(
       }
       rearGrip.gripScale = rearGripScale;
 
+      // Front tyre falloff: the same idea for the steered axle. Rapier's side
+      // force is a flat maximum, so a front tyre 60-90 deg off its heading
+      // (measured in a 100 mph slide, 2026-11-06) still pulled the car at full
+      // strength and the nose kept dragging the car round. Past the onset the
+      // front's maximum grip fades, so all four tyres can slide together. Slip
+      // is the angle between the front axle's velocity and the wheel direction.
+      if (t.drive.frontFalloff > 0 || frontGripScale !== 1) {
+        const fSpeed = Math.hypot(lv.x, lv.z);
+        let frontTarget = 1;
+        if (t.drive.frontFalloff > 0 && fSpeed > 3) {
+          const fLen = Math.hypot(forward.x, forward.z);
+          if (fLen > 1e-6) {
+            const ux = forward.x / fLen;
+            const uz = forward.z / fLen;
+            const w = body.angvel().y;
+            const half = t.wheels.halfWheelbase;
+            const vx = lv.x + w * uz * half;
+            const vz = lv.z - w * ux * half;
+            const diff = Math.atan2(-vx, -vz) - (Math.atan2(-ux, -uz) + steerAngle);
+            const slipF = Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
+            const onset = (t.drive.frontFalloffOnsetDeg * Math.PI) / 180;
+            const full = Math.max((t.drive.frontFalloffFullDeg * Math.PI) / 180, onset + 0.01);
+            const ff = clamp((slipF - onset) / (full - onset), 0, 1);
+            frontTarget = 1 - t.drive.frontFalloff * ff * ff * (3 - 2 * ff);
+          }
+        }
+        frontGripScale =
+          frontTarget > frontGripScale
+            ? frontGripScale +
+              (frontTarget - frontGripScale) * (1 - Math.exp(-DT / FALLOFF_RECOVER_TAU))
+            : frontTarget;
+        if (t.drive.frontFalloff <= 0 && Math.abs(frontGripScale - 1) < 1e-3) frontGripScale = 1;
+        vc.setWheelFrictionSlip(
+          FL,
+          t.wheels.frictionSlip * (frontForwardGrip[0] ?? 1) * frontGripScale,
+        );
+        vc.setWheelFrictionSlip(
+          FR,
+          t.wheels.frictionSlip * (frontForwardGrip[1] ?? 1) * frontGripScale,
+        );
+      }
+
       // Roll guard: withdraw tyre grip as the body rolls past the onset angle
       // (previous tick's roll), per wheel, on firm ground only. Grip is the
       // cap, so this removes the sideways force that tips a sliding car.
@@ -960,7 +1005,7 @@ export function createVehicle(
             : 1 - t.drive.rollGuard * rollFade;
           const base =
             i < 2
-              ? t.wheels.frictionSlip * (frontForwardGrip[i] ?? 1)
+              ? t.wheels.frictionSlip * (frontForwardGrip[i] ?? 1) * frontGripScale
               : t.wheels.frictionSlip * (rearForwardGrip[i - 2] ?? 1) * rearGripScale;
           vc.setWheelFrictionSlip(i, base * g);
         }

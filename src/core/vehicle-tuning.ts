@@ -465,6 +465,10 @@ export interface VehicleTuning {
      * Added 2026-10-28 (exp/tyre-falloff).
      */
     tyreFalloff: number;
+    /** Fraction of front grip lost as front tyre slip goes from frontFalloffOnsetDeg to frontFalloffFullDeg; 0 = off. */
+    frontFalloff: number;
+    frontFalloffOnsetDeg: number;
+    frontFalloffFullDeg: number;
     /**
      * Roll guard, 0..1: how much of the tyres' grip is withdrawn as the body
      * rolls from ~12 to ~25 deg on firm ground, so a sideways slide ends in a
@@ -727,6 +731,9 @@ export function defaultTuning(): VehicleTuning {
       slideSurge: 0.3,
       liftOffOversteer: 5,
       tyreFalloff: 0.12,
+      frontFalloff: 0.5,
+      frontFalloffOnsetDeg: 25,
+      frontFalloffFullDeg: 70,
       rollGuard: 0.85,
       powerFadeStartMs: 25,
       powerFadeEndMs: 40,
@@ -825,6 +832,9 @@ export const TUNING_RANGES: {
     slideSurge: TuningRange;
     liftOffOversteer: TuningRange;
     tyreFalloff: TuningRange;
+    frontFalloff: TuningRange;
+    frontFalloffOnsetDeg: TuningRange;
+    frontFalloffFullDeg: TuningRange;
     rollGuard: TuningRange;
     powerFadeStartMs: TuningRange;
     powerFadeEndMs: TuningRange;
@@ -922,6 +932,9 @@ export const TUNING_RANGES: {
     slideSurge: { min: 0, max: 1, step: 0.05 },
     liftOffOversteer: { min: 0, max: 12, step: 0.1 },
     tyreFalloff: { min: 0, max: 0.9, step: 0.01 },
+    frontFalloff: { min: 0, max: 0.9, step: 0.01 },
+    frontFalloffOnsetDeg: { min: 5, max: 60, step: 1 },
+    frontFalloffFullDeg: { min: 20, max: 90, step: 1 },
     rollGuard: { min: 0, max: 1, step: 0.01 },
     powerFadeStartMs: { min: 5, max: 60, step: 1 },
     powerFadeEndMs: { min: 10, max: 80, step: 1 },

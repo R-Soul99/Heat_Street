@@ -4,6 +4,7 @@ import { shippedTuning } from "../src/core/feel";
 import type { VehicleTuning } from "../src/core/vehicle-tuning";
 import { createVehicle, sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
+import bigLoopRaw from "./fixtures/drive-bigloop-2026-11-06-c.csv?raw";
 import holdsRaw from "./fixtures/drive-holds-2026-11-06-b.csv?raw";
 import loopRaw from "./fixtures/drive-loop-2026-11-06-a.csv?raw";
 
@@ -86,6 +87,7 @@ describe("replay of the 2026-11-06 hand drives (flat plane, shipped car)", () =>
   it("the old tyre falloff (0.3) reproduces the deep, speed-killing slides from the drive", () => {
     const slides = replay(loopRaw, (t) => {
       t.drive.tyreFalloff = 0.3;
+      t.drive.frontFalloff = 0; // isolates the rear falloff
     });
     expect(slides.length).toBeGreaterThanOrEqual(4);
     expect(Math.max(...slides.map((s) => s.peakDeg))).toBeGreaterThan(70);
@@ -99,6 +101,23 @@ describe("replay of the 2026-11-06 hand drives (flat plane, shipped car)", () =>
       expect(s.peakDeg).toBeLessThan(45);
       expect(s.exitMph / s.entryMph).toBeGreaterThan(0.6);
     }
+  });
+
+  it("the larger loop (100 mph entries) holds at 25-40 deg and keeps most of its speed with the front falloff", () => {
+    const slides = replay(bigLoopRaw);
+    expect(slides.length).toBeGreaterThanOrEqual(2);
+    for (const s of slides) {
+      expect(s.peakDeg).toBeLessThan(45);
+      expect(s.exitMph / s.entryMph).toBeGreaterThan(0.75);
+    }
+  });
+
+  it("without the front falloff the larger loop scrubs 25+ mph in 50 deg slides", () => {
+    const slides = replay(bigLoopRaw, (t) => {
+      t.drive.frontFalloff = 0;
+    });
+    expect(Math.max(...slides.map((s) => s.peakDeg))).toBeGreaterThan(48);
+    expect(Math.min(...slides.map((s) => s.exitMph / s.entryMph))).toBeLessThan(0.7);
   });
 
   it("the low-speed hold drive never spins out past 90 deg", () => {

@@ -30,6 +30,7 @@ function run(mph: number, steer: number, throttle: number, wheelspinGain: number
   const world = createWorld();
   const tuning = shippedTuning();
   tuning.drive.wheelspinGain = wheelspinGain;
+  tuning.drive.frontFalloff = 0; // isolates the rear wheelspin term
   const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
   scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
   scene.vehicle.body.setLinvel({ x: mph * MPH, y: 0, z: 0 }, true);
@@ -87,6 +88,7 @@ describe("throttle drift floor (low and medium speed)", () => {
   function held(mph: number, floor?: number): { slip5s: number; peak: number; spun: boolean } {
     const world = createWorld();
     const tuning = shippedTuning();
+    tuning.drive.frontFalloff = 0; // isolates the rear drift floor
     if (floor !== undefined) tuning.drive.powerOversteerLowSpeedRearSideFriction = floor;
     const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
     scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
@@ -114,6 +116,26 @@ describe("throttle drift floor (low and medium speed)", () => {
     expect(now.slip5s).toBeGreaterThan(28);
     expect(now.spun).toBe(false);
     expect(now.peak).toBeLessThan(55);
+  });
+
+  it("with the front falloff a full-lock hold ploughs out to a lower angle instead of circling at 30 deg, and never spins", () => {
+    // Steering INTO a slide at full lock now makes the front let go (the car
+    // runs wide); a driver who counter-steers keeps front grip. Documented
+    // trade-off of frontFalloff (2026-11-06), not a goal in itself.
+    const world = createWorld();
+    const tuning = shippedTuning();
+    const scene = createMapScene(world, graph, collision, tuning, defaultSurfaceProfiles());
+    scene.resetVehicle({ x: 170, y: scene.defaultSpawnPose.y, z: -490, headingRad: EAST });
+    scene.vehicle.body.setLinvel({ x: 24 * MPH, y: 0, z: 0 }, true);
+    let peak = 0;
+    for (let t = 0; t < 6 * 60; t++) {
+      const sec = t / 60;
+      const steer = sec < 0.35 ? 0 : Math.min(1, (sec - 0.35) / 0.15);
+      scene.applyInput({ ...NEUTRAL, throttle: Math.min(1, sec / 0.7), steer });
+      world.step();
+      peak = Math.max(peak, Math.abs(sampleVehicle(scene.vehicle).slipAngleRad) * 57.3);
+    }
+    expect(peak).toBeLessThan(55);
   });
 
   it("does not spin from a faster entry either", () => {

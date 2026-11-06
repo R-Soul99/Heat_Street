@@ -36,12 +36,14 @@ describe("slide-exit diagnostic routine", () => {
       t.drive.slideSurge = 0;
       t.drive.liftOffOversteer = 0;
       t.drive.tyreFalloff = 0;
+      t.drive.frontFalloff = 0;
     }, true);
     const smooth = slideExit((t) => {
       t.drive.rearGripRecoverySec = 0.15;
       t.drive.slideSurge = 0;
       t.drive.liftOffOversteer = 0;
       t.drive.tyreFalloff = 0;
+      t.drive.frontFalloff = 0;
     }, true);
     expect(smooth.speedDropMs).toBeLessThan(instant.speedDropMs - 1);
   });
