@@ -482,6 +482,19 @@ export interface VehicleTuning {
      */
     powerSlipOpenDeg: number;
     /**
+     * Wheelspin oversteer: how much of the way to the power-slide rear grip the
+     * tail is pulled when the rear drive force exceeds what the rear tyres can
+     * hold. 0 = off. The demand ratio is per-wheel engine force over
+     * (frictionSlip x surface grip x tyre falloff x the wheel's real suspension
+     * load), so more engine force, a slipperier surface or a lighter rear all
+     * loosen the tail, and it fades by itself with speed as the gears fall off.
+     * Added 2026-11-06 (exp/wheelspin): the old steer-and-throttle term never
+     * looked at engine force, so more power could not start a slide.
+     */
+    wheelspinGain: number;
+    /** Demand ratio at which wheelspin oversteer starts (fully open 0.6 later). */
+    wheelspinOnset: number;
+    /**
      * High-speed yaw damping assist, 1/s: removes this fraction of the yaw
      * rate the steering did not ask for, per second, at full gate (the
      * arcade-assist layer CLAUDE.md recommends). Applied as a chassis torque
@@ -706,6 +719,8 @@ export function defaultTuning(): VehicleTuning {
       powerFadeStartMs: 25,
       powerFadeEndMs: 40,
       powerSlipOpenDeg: 6,
+      wheelspinGain: 1,
+      wheelspinOnset: 0.9,
       yawDampingGain: 5,
       yawDampingStartMs: 14,
       yawDampingFullMs: 30,
@@ -801,6 +816,8 @@ export const TUNING_RANGES: {
     powerFadeStartMs: TuningRange;
     powerFadeEndMs: TuningRange;
     powerSlipOpenDeg: TuningRange;
+    wheelspinGain: TuningRange;
+    wheelspinOnset: TuningRange;
     yawDampingGain: TuningRange;
     yawDampingStartMs: TuningRange;
     yawDampingFullMs: TuningRange;
@@ -895,6 +912,8 @@ export const TUNING_RANGES: {
     powerFadeStartMs: { min: 5, max: 60, step: 1 },
     powerFadeEndMs: { min: 10, max: 80, step: 1 },
     powerSlipOpenDeg: { min: 0, max: 30, step: 0.5 },
+    wheelspinGain: { min: 0, max: 2, step: 0.05 },
+    wheelspinOnset: { min: 0.3, max: 3, step: 0.05 },
     yawDampingGain: { min: 0, max: 20, step: 0.25 },
     yawDampingStartMs: { min: 0, max: 60, step: 1 },
     yawDampingFullMs: { min: 5, max: 80, step: 1 },

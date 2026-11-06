@@ -361,6 +361,9 @@ describe("createVehicle: handbrake and the authored throttle-oversteer term", ()
 
     const zeroGainTuning = defaultTuning();
     zeroGainTuning.drive.powerOversteerGain = 0;
+    // Isolate the authored throttle term: wheelspin oversteer (exp/wheelspin)
+    // also loosens the tail at this speed and throttle, so it is off here.
+    zeroGainTuning.drive.wheelspinGain = 0;
     const zeroScene = buildScene(zeroGainTuning);
     settle(zeroScene.world, zeroScene.vehicle, zeroScene.tuning, 60);
     // Moving (forward is -Z): the blend is deliberately off at crawl speed.
@@ -373,6 +376,7 @@ describe("createVehicle: handbrake and the authored throttle-oversteer term", ()
 
     const halfGainTuning = defaultTuning();
     halfGainTuning.drive.powerOversteerGain = 0.5;
+    halfGainTuning.drive.wheelspinGain = 0;
     const halfScene = buildScene(halfGainTuning);
     settle(halfScene.world, halfScene.vehicle, halfScene.tuning, 60);
     // Moving (forward is -Z): the blend is deliberately off at crawl speed.

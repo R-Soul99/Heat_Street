@@ -191,7 +191,7 @@ export interface VehicleSample {
 }
 
 /** Which rear-grip term is largest this tick (read-only diagnostics, see `Vehicle.rearGrip`). */
-export type RearGripTerm = "none" | "handbrake" | "power" | "flick" | "pivot" | "lift";
+export type RearGripTerm = "none" | "handbrake" | "power" | "spin" | "flick" | "pivot" | "lift";
 
 /**
  * Read-only per-tick view of the rear side-friction decision, for the
@@ -206,6 +206,8 @@ export interface RearGripDebug {
   readonly pivotGate: number;
   /** Tyre-falloff multiplier on the rear's maximum grip this tick (1 = full grip). */
   readonly gripScale: number;
+  /** Rear drive demand over rear traction limit (>= 1 means the rears are spinning), 0 airborne. */
+  readonly wheelspin: number;
 }
 
 /**
@@ -462,6 +464,7 @@ export function createVehicle(
     dominant: "none" as RearGripTerm,
     pivotGate: 0,
     gripScale: 1,
+    wheelspin: 0,
   };
   let telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
   let wheelRayPatch: WheelRayPatch | undefined;
@@ -812,6 +815,47 @@ export function createVehicle(
         0,
         1,
       );
+      // Wheelspin oversteer: the rear drive force against what the rear tyres can
+      // hold (frictionSlip x surface forward grip x tyre falloff x the wheels'
+      // real load from last tick's suspension). Past the onset the tail loosens
+      // toward the power-slide grip. Steer-weighted (a little with none, so a
+      // straight launch is not twitchy). NOT scaled by the speed steering lock (this
+      // is traction demand, not steering input) and not speed-gated: demand falls
+      // through the gears by itself.
+      const rearLoad =
+        ((vc.wheelSuspensionForce(RL) ?? 0) + (vc.wheelSuspensionForce(RR) ?? 0)) / 2;
+      const rearLimit =
+        t.wheels.frictionSlip *
+        ((rearForwardGrip[0] ?? 1) + (rearForwardGrip[1] ?? 1)) *
+        0.5 *
+        rearGripScale *
+        rearLoad;
+      // Traction circle: the rears are also spending grip on cornering. Lateral
+      // force per rear wheel ~ mass x lateral acceleration x rear share (half) over
+      // two wheels, with lateral acceleration taken as yaw rate x ground speed
+      // (capped), so a hard corner leaves less grip for driving.
+      const spinYaw = body.angvel().y;
+      const spinSpeed = Math.hypot(lv.x, lv.z);
+      const spinLatAccel = Math.min(Math.abs(spinYaw) * spinSpeed, 1.3 * 9.81);
+      const spinLatForce = t.chassis.mass * spinLatAccel * 0.25;
+      const spinDrive = Math.abs(forces[2] ?? 0);
+      const wheelspinRatio = rearLimit > 1 ? Math.hypot(spinDrive, spinLatForce) / rearLimit : 0;
+      // Needs real drive demand: coasting or lifting in a corner never counts.
+      const spinDriveGate = rearLimit > 1 ? smoothstep(0.15, 0.4, spinDrive / rearLimit) : 0;
+      const spinBlend =
+        t.drive.wheelspinGain > 0
+          ? clamp(
+              t.drive.wheelspinGain *
+                smoothstep(t.drive.wheelspinOnset, t.drive.wheelspinOnset + 0.6, wheelspinRatio) *
+                spinDriveGate *
+                (0.3 + 0.7 * Math.abs(frame.steer)) *
+                crawlFade *
+                counterSteerFade,
+              0,
+              1,
+            )
+          : 0;
+      rearGrip.wheelspin = wheelspinRatio;
       const rearSfsTarget = frame.handbrake
         ? t.drive.handbrakeRearSideFriction
         : lerp(
@@ -825,6 +869,7 @@ export function createVehicle(
               // 0.05 s out) so the car actually rotates about the nose.
               pivotBlend,
               powerBlend,
+              spinBlend,
               liftBlend,
             ),
           );
@@ -847,7 +892,7 @@ export function createVehicle(
       // Diagnostics only (rearGrip): nothing above or below reads these.
       rearGrip.sideFriction = rearSfs;
       rearGrip.pivotGate = pivotGate;
-      const strongest = Math.max(powerBlend, flickBlend, pivotBlend, liftBlend);
+      const strongest = Math.max(powerBlend, spinBlend, flickBlend, pivotBlend, liftBlend);
       rearGrip.dominant = frame.handbrake
         ? "handbrake"
         : strongest <= 0
@@ -858,7 +903,9 @@ export function createVehicle(
               ? "flick"
               : strongest === liftBlend
                 ? "lift"
-                : "power";
+                : strongest === spinBlend && spinBlend > powerBlend
+                  ? "spin"
+                  : "power";
       vc.setWheelSideFrictionStiffness(RL, rearSfs * rearLateralGrip[0]);
       vc.setWheelSideFrictionStiffness(RR, rearSfs * rearLateralGrip[1]);
 

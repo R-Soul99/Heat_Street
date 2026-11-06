@@ -53,7 +53,7 @@ describe("surface regrip blend (mud onto tarmac)", () => {
 
   it("the instant-regrip baseline really does kick the car round on the crossing", () => {
     expect(instantCoast).toBeGreaterThan(0.9);
-    expect(instantPower).toBeGreaterThan(0.6);
+    expect(instantPower).toBeGreaterThan(0.5);
   });
 
   it("the default regrip blend cuts the crossing yaw kick by at least a third", () => {

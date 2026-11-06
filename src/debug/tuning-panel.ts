@@ -530,6 +530,16 @@ export function createTuningPanel(
     "powerSlipOpenDeg",
     TUNING_RANGES.drive.powerSlipOpenDeg,
   ).onChange(handlers.onApplyVehicle);
+  // Wheelspin oversteer: rear drive demand vs rear traction (0 gain = off).
+  addNumber(driveFolder, tuning.drive, "wheelspinGain", TUNING_RANGES.drive.wheelspinGain).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(
+    driveFolder,
+    tuning.drive,
+    "wheelspinOnset",
+    TUNING_RANGES.drive.wheelspinOnset,
+  ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
