@@ -83,29 +83,33 @@ describe("bust meter", () => {
     expect(s.level).toBeLessThan(0.05);
   });
 
-  it("two pursuers on opposite sides box a moving player in", () => {
-    const moving = { x: 0, z: 0, speedMs: 25 };
-    const boxed = run(
-      () => ({
-        player: moving,
-        pursuers: [
-          { x: 5, z: 0 },
-          { x: -5, z: 0 },
-        ],
-      }),
-      12,
-    );
-    expect(boxed.boxed).toBe(true);
-    expect(boxed.busted).toBe(true);
+  it("boxed in but still moving is never busted; boxed in and stuck is", () => {
+    const box = (speedMs: number) => () => ({
+      player: { x: 0, z: 0, speedMs },
+      pursuers: [
+        { x: 4, z: 0 },
+        { x: -4, z: 0 },
+      ],
+    });
+    for (const speed of [25, 8, 5, 3]) {
+      const s = run(box(speed), 30);
+      expect(s.boxed).toBe(true);
+      expect(s.busted).toBe(false);
+    }
+    expect(run(box(0.5), 12).busted).toBe(true);
+    expect(run(box(0), 12).busted).toBe(true);
+  });
+
+  it("two pursuers on the same side never box in, even on a stopped player", () => {
     const sameSide = run(
       () => ({
-        player: moving,
+        player: still,
         pursuers: [
           { x: 5, z: 0 },
           { x: 7, z: 1 },
         ],
       }),
-      12,
+      30,
     );
     expect(sameSide.busted).toBe(false);
   });

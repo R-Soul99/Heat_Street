@@ -4,8 +4,10 @@
  * A pure, deterministic step function. Only pursuers that can SEE the player
  * (line of sight, supplied by the caller) count. A lone pursuer, however close,
  * can raise the meter only to `softCap` (pressure you can feel but cannot be
- * busted by): getting BUSTED needs boxing in, i.e. two visible pursuers close on
- * opposite sides. Slower players fill faster. The meter drains when you get
+ * busted by): getting BUSTED needs boxing in (two visible pursuers close on
+ * opposite sides) AND a car that cannot get away: the fill rate scales with how
+ * stopped the player is and is zero above `freeSpeedMs`, so a player who is
+ * still moving, however surrounded, is never busted. The meter drains when you get
  * away, and latches BUSTED at 1. If every pursuer stays far away long enough it
  * latches ESCAPED instead. Even boxed in and stationary it takes seconds.
  *
@@ -24,8 +26,6 @@ export interface BustParams {
   readonly drainPerSec: number;
   /** Two close pursuers on opposite sides (bearing gap above this, rad) count as boxing in. */
   readonly boxedAngleRad: number;
-  /** Slowness factor floor while boxed in, even at speed. */
-  readonly boxedFloor: number;
   /** Highest level a lone (not boxing in) pursuer can push the meter to. */
   readonly softCap: number;
   /** All pursuers beyond this for `escapeSec` = ESCAPED, metres. */
@@ -34,12 +34,11 @@ export interface BustParams {
 }
 
 export const DEFAULT_BUST_PARAMS: BustParams = Object.freeze({
-  radiusM: 14,
-  freeSpeedMs: 18,
+  radiusM: 10,
+  freeSpeedMs: 4.5,
   fillPerSec: 0.3,
   drainPerSec: 0.2,
   boxedAngleRad: (100 * Math.PI) / 180,
-  boxedFloor: 0.6,
   softCap: 0.4,
   escapeRadiusM: 90,
   escapeSec: 6,
@@ -122,7 +121,7 @@ export function stepBustMeter(
   }
 
   const slow = 1 - clamp(input.player.speedMs / params.freeSpeedMs, 0, 1);
-  const slowness = boxed ? Math.max(slow, params.boxedFloor) : slow;
+  const slowness = slow;
   const fillRate = params.fillPerSec * pressure * slowness;
   const relief = 1 - clamp(fillRate / params.fillPerSec, 0, 1);
   const ceiling = boxed ? 1 : params.softCap;
