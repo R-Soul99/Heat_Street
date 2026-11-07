@@ -520,6 +520,7 @@ export function createTuningPanel(
     "frontFalloffFullDeg",
     "driftHold",
     "driftHoldSlipDeg",
+    "looseTraction",
   ] as const) {
     addNumber(driveFolder, tuning.drive, key, TUNING_RANGES.drive[key]).onChange(
       handlers.onApplyVehicle,

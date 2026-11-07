@@ -1241,6 +1241,38 @@ export function createVehicle(
         }
       }
 
+      // 5d''. Loose-ground traction assist: on mud/sand/gravel/grass/dirt the
+      // tyres give ~0.5 g whatever the speed, so above ~35 mph a full-lock car
+      // points into the turn but sleds almost straight (turning radius ~100 m at
+      // 45 mph, drive log 2026-11-07). While steering on loose ground, pull the
+      // direction of travel round toward the nose (speed kept, impulse at the
+      // centre of mass so no added yaw). Fades out on tarmac, below walking
+      // pace, past ~90 deg of slip (a spin) and with the handbrake.
+      if (t.drive.looseTraction > 0 && !frame.handbrake && forwardSpeedMs > 0) {
+        const grip = ((rearLateralGrip[0] as number) + (rearLateralGrip[1] as number)) * 0.5;
+        const loose = 1 - smoothstep(0.55, 0.75, grip);
+        const ground = (vc.wheelIsInContact(FL) ? 1 : 0) + (vc.wheelIsInContact(FR) ? 1 : 0);
+        const sp = Math.hypot(lv.x, lv.z);
+        if (loose > 0 && ground > 0 && sp > 3) {
+          const hv = Math.atan2(lv.x, lv.z);
+          let beta = Math.atan2(forward.x, forward.z) - hv;
+          beta = Math.atan2(Math.sin(beta), Math.cos(beta));
+          const gate =
+            loose *
+            (ground / 2) *
+            smoothstep(3, 8, sp) *
+            clamp(Math.abs(frame.steer) / 0.5, 0, 1) *
+            (1 - smoothstep(1.2, 1.7, Math.abs(beta)));
+          const dTheta = beta * (1 - Math.exp(-t.drive.looseTraction * DT)) * gate;
+          if (dTheta !== 0) {
+            const m = body.mass();
+            const nx = sp * Math.sin(hv + dTheta);
+            const nz = sp * Math.cos(hv + dTheta);
+            body.applyImpulse({ x: (nx - lv.x) * m, y: 0, z: (nz - lv.z) * m }, true);
+          }
+        }
+      }
+
       // 5e. High-speed yaw damping assist (plan 04.3-05): opposes the yaw rate
       // the steering did not ask for. Impulse form like the other assists, in
       // the fixed tick only, a pure function of this tick's state (medal times

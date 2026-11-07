@@ -473,6 +473,8 @@ export interface VehicleTuning {
     driftHold: number;
     /** Slip angle (deg) the drift hold tries to keep a steered, powered slide at. */
     driftHoldSlipDeg: number;
+    /** Loose-ground traction assist (1/s): while steering on mud/sand/gravel/grass/dirt the direction of travel is pulled round toward the nose at this rate, so a fast slide still goes round the corner; 0 = off, tarmac unaffected. */
+    looseTraction: number;
     /**
      * Roll guard, 0..1: how much of the tyres' grip is withdrawn as the body
      * rolls from ~12 to ~25 deg on firm ground, so a sideways slide ends in a
@@ -740,6 +742,7 @@ export function defaultTuning(): VehicleTuning {
       frontFalloffFullDeg: 70,
       driftHold: 3,
       driftHoldSlipDeg: 30,
+      looseTraction: 0.3,
       rollGuard: 0.85,
       powerFadeStartMs: 25,
       powerFadeEndMs: 40,
@@ -843,6 +846,7 @@ export const TUNING_RANGES: {
     frontFalloffFullDeg: TuningRange;
     driftHold: TuningRange;
     driftHoldSlipDeg: TuningRange;
+    looseTraction: TuningRange;
     rollGuard: TuningRange;
     powerFadeStartMs: TuningRange;
     powerFadeEndMs: TuningRange;
@@ -945,6 +949,7 @@ export const TUNING_RANGES: {
     frontFalloffFullDeg: { min: 20, max: 90, step: 1 },
     driftHold: { min: 0, max: 6, step: 0.1 },
     driftHoldSlipDeg: { min: 15, max: 60, step: 1 },
+    looseTraction: { min: 0, max: 5, step: 0.1 },
     rollGuard: { min: 0, max: 1, step: 0.01 },
     powerFadeStartMs: { min: 5, max: 60, step: 1 },
     powerFadeEndMs: { min: 10, max: 80, step: 1 },
