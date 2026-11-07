@@ -22,6 +22,9 @@ export interface PursuitTarget {
   readonly z: number;
   readonly vx: number;
   readonly vz: number;
+  /** Unit direction the player's car is facing; used for flank stations while it is nearly stopped. */
+  readonly fx?: number;
+  readonly fz?: number;
 }
 
 export interface PursuerParams {
@@ -64,6 +67,34 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
   };
 }
 
+/** Where on the player this pursuer wants to be: metres to the player's right and ahead of it (negative = left / behind). */
+export interface FlankSlot {
+  readonly lateralM: number;
+  readonly alongM: number;
+}
+
+/**
+ * Station for pursuer `i`: slot 0 tails the player, then left flank, right
+ * flank, left-ahead, right-ahead; later pursuers repeat the five stations on
+ * wider, further-back rings so a big swarm spreads across the road instead of
+ * queueing in one file. Pure and index-only.
+ */
+export function flankSlot(i: number): FlankSlot {
+  const stations: readonly FlankSlot[] = [
+    { lateralM: 0, alongM: 0 },
+    { lateralM: -7, alongM: 0 },
+    { lateralM: 7, alongM: 0 },
+    { lateralM: -6, alongM: 14 },
+    { lateralM: 6, alongM: 14 },
+  ];
+  const ring = Math.floor(i / 5);
+  const base = stations[i % 5] as FlankSlot;
+  return {
+    lateralM: base.lateralM * (1 + 0.6 * ring),
+    alongM: base.alongM * (1 + 0.3 * ring) - 7 * ring,
+  };
+}
+
 export interface PursuerDriver extends AiDriver {
   /** Tell the driver where its target is this tick. */
   setTarget(target: PursuitTarget): void;
@@ -76,7 +107,10 @@ function clamp(v: number, lo: number, hi: number): number {
 const INITIAL_OBS: AiObservation = Object.freeze({ x: 0, z: 0, headingRad: 0, forwardSpeedMs: 0 });
 const INITIAL_TARGET: PursuitTarget = Object.freeze({ x: 0, z: 0, vx: 0, vz: 0 });
 
-export function createPursuerDriver(params: PursuerParams): PursuerDriver {
+export function createPursuerDriver(
+  params: PursuerParams,
+  slot: FlankSlot = { lateralM: 0, alongM: 0 },
+): PursuerDriver {
   let obs: AiObservation = INITIAL_OBS;
   let target: PursuitTarget = INITIAL_TARGET;
   let cachedTick: number | null = null;
@@ -92,6 +126,9 @@ export function createPursuerDriver(params: PursuerParams): PursuerDriver {
   });
   let stuckFor = 0;
   let reversingFor = 0;
+  // Player's direction of travel, kept from the last tick it was moving.
+  let fwdX = 0;
+  let fwdZ = -1;
   let reverseSteer = 0;
 
   function compute(tick: number): void {
@@ -100,11 +137,29 @@ export function createPursuerDriver(params: PursuerParams): PursuerDriver {
     const dz0 = target.z - obs.z;
     const dist = Math.hypot(dx0, dz0);
 
-    // Aim where the target will be: lead by travel time, never more than leadMaxSec.
+    // Aim at this pursuer's station on the target, where the target will be a
+    // moment from now: lead by travel time, never more than leadMaxSec, then
+    // offset to the player's right/ahead (a flank slot) along its direction of travel.
+    const tSpeed = Math.hypot(target.vx, target.vz);
+    if (tSpeed > 3) {
+      fwdX = target.vx / tSpeed;
+      fwdZ = target.vz / tSpeed;
+    } else if (target.fx !== undefined && target.fz !== undefined) {
+      fwdX = target.fx;
+      fwdZ = target.fz;
+    }
+    const rightX = -fwdZ;
+    const rightZ = fwdX;
+    const onStation = slot.lateralM !== 0 || slot.alongM !== 0;
     const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
-    const aimX = target.x + target.vx * leadSec;
-    const aimZ = target.z + target.vz * leadSec;
+    const aimX = target.x + target.vx * leadSec + rightX * slot.lateralM + fwdX * slot.alongM;
+    const aimZ = target.z + target.vz * leadSec + rightZ * slot.lateralM + fwdZ * slot.alongM;
     const aimDist = Math.hypot(aimX - obs.x, aimZ - obs.z);
+    // Signed along-track gap to the station (positive = the car is behind its
+    // station and must speed up; negative = it is ahead and must ease off).
+    const stationAlong =
+      (target.x + rightX * slot.lateralM + fwdX * slot.alongM - obs.x) * fwdX +
+      (target.z + rightZ * slot.lateralM + fwdZ * slot.alongM - obs.z) * fwdZ;
 
     const bearing = Math.atan2(aimZ - obs.z, aimX - obs.x);
     const alpha = Math.atan2(
@@ -127,10 +182,13 @@ export function createPursuerDriver(params: PursuerParams): PursuerDriver {
     // Speed: the target's own speed plus a closing bonus beyond the standoff,
     // eased down when the nose is pointing well away from the aim point.
     const targetSpeed = Math.hypot(target.vx, target.vz);
-    const closing = Math.max(0, dist - params.standoffM) * params.closeGain;
+    // Tail cars hold a standoff behind the player; cars on a flank station run right up to it.
+    const closing = onStation
+      ? stationAlong * params.closeGain
+      : Math.max(0, dist - params.standoffM) * params.closeGain;
     const turnScale =
       1 - (1 - params.turnSpeedFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
-    const desired = Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale);
+    const desired = Math.max(0, Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale));
 
     const err = desired - speed;
     let throttle = 0;

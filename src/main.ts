@@ -49,7 +49,7 @@ import {
 import { type Course, parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag, shippedTuning } from "./core/feel";
 import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
-import { forwardFromYaw } from "./core/heading";
+import { forwardFromYaw, headingFromRotation } from "./core/heading";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { MAP_FORMATS, resolveMapId } from "./core/map-select";
@@ -68,6 +68,7 @@ import {
 import {
   createPursuerDriver,
   defaultPursuerParams,
+  flankSlot,
   type PursuerDriver,
 } from "./core/pursuer-driver";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
@@ -510,7 +511,7 @@ try {
   if (pursuerCount > 0) {
     const pParams = defaultPursuerParams(aiTuning);
     const drivers: PursuerDriver[] = [];
-    for (let i = 0; i < pursuerCount; i++) drivers.push(createPursuerDriver(pParams));
+    for (let i = 0; i < pursuerCount; i++) drivers.push(createPursuerDriver(pParams, flankSlot(i)));
     const pFleet = createAiFleet(
       world,
       aiTuning,
@@ -1263,7 +1264,11 @@ try {
               scene.preTick(tick);
               const p = scene.vehicle.body.translation();
               const v = scene.vehicle.body.linvel();
-              for (const d of pursuit.drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+              const bearing = headingFromRotation(scene.vehicle.body.rotation());
+              const fx = Math.cos(bearing);
+              const fz = Math.sin(bearing);
+              for (const d of pursuit.drivers)
+                d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
                 player: { x: p.x, z: p.z, speedMs: Math.hypot(v.x, v.z) },
