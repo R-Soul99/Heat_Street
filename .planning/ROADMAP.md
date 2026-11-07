@@ -422,4 +422,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 - Helicopter camera is prototyped early (Phase 3) with a go/no-go gate, not treated as late polish
 - One mode fully shippable — including medals, HUD and audio — before mode #2 gains AI (the Phase 5/6 gate)
 
-**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay, structural building destruction (WORLD-02 — needs its own research pass; destroyed state must reset per-run to protect medal-time integrity).
+**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay, VR challenge-mission mode (MODE-01, neon-wireframe training-suite look), structural building destruction (WORLD-02 — needs its own research pass; destroyed state must reset per-run to protect medal-time integrity).
