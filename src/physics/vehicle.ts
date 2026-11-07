@@ -96,6 +96,8 @@ const PIVOT_ZERO_SPEED_MS = 12;
  * at 10-25 mph) is never armed, so it only meets the narrow window below and is
  * not captured into a ~8 mph doughnut.
  */
+/** Slip growth (deg/s) at which the drift assist's pull-back reaches ~76%. */
+const HOLD_RATE_DEG_S = 12;
 const PIVOT_ARM_SPEED_MS = 2.5;
 const PIVOT_UNARMED_FULL_SPEED_MS = 1.5;
 const PIVOT_UNARMED_ZERO_SPEED_MS = 3;
@@ -465,6 +467,7 @@ export function createVehicle(
   let pivotRear = 0;
   let pivotDir = 0;
   let pivotArmed = false;
+  let prevHoldSlipDeg = 0;
   // Slew-limited rear side friction (-1 = not yet seeded); see step 4.
   let rearSfsSmoothed = -1;
   /** Low-passed throttle: what the driver was recently asking for. */
@@ -1211,7 +1214,24 @@ export function createVehicle(
           const gate = smoothstep(8, 14, slipDeg) * smoothstep(8, 14, speedH);
           // Soft ramp (20 deg to full torque, was 10): the hard push overshot the target
           // on mud and swung the car through zero to the other side (read as "catching").
-          const drive = clamp((target - slipDeg) / 20, -1, 1);
+          // Steering into the slide: push toward the target, no hard stop. Past the target
+          // the pull-back acts on how fast the slip is still growing, so a slide that has
+          // settled (even a bit over) is left alone and only one that is running away is
+          // damped; a weak, squared position term backs it up for the extreme cases.
+          // Opposite key / no key: the plain linear ease toward their (lower) target.
+          const err = target - slipDeg;
+          const slipRate = (slipDeg - prevHoldSlipDeg) / DT; // deg/s, + = slide deepening
+          let drive: number;
+          if (into > 0.5) {
+            if (err >= 0) drive = clamp(err / 20, -1, 1);
+            else {
+              const over = smoothstep(0, 10, -err);
+              const damp = Math.tanh(Math.max(0, slipRate) / HOLD_RATE_DEG_S) * over;
+              const far = Math.tanh((err / 30) * (err / 30));
+              drive = -Math.min(1, damp + far);
+            }
+          } else drive = clamp(err / 20, -1, 1);
+          prevHoldSlipDeg = slipDeg;
           if (gate * drive !== 0) {
             body.applyTorqueImpulse(
               { x: 0, y: dir * inertia.y * t.drive.driftHold * gate * drive * DT, z: 0 },

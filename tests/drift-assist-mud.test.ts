@@ -6,7 +6,7 @@ import { sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
 
 const MPH = 0.44704;
-const Z = { sand: -120, mud: -200, gravel: 120 } as const;
+const Z = { sand: -120, mud: -200, gravel: 120, tarmac: 200 } as const;
 
 /** Held full lock + throttle from 30 mph; returns the slip angles (deg) sampled every 0.25 s. */
 function slips(surface: keyof typeof Z): number[] {
@@ -27,8 +27,8 @@ function slips(surface: keyof typeof Z): number[] {
   }
 }
 
-describe("drift assist on loose ground", () => {
-  it.each(["mud", "sand", "gravel"] as const)(
+describe("drift assist on loose ground and tarmac", () => {
+  it.each(["mud", "sand", "gravel", "tarmac"] as const)(
     "%s: a held-lock slide stays bounded (under 70 deg) and never spins",
     (s) => {
       const v = slips(s).slice(8);
