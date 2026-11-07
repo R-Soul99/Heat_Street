@@ -546,6 +546,10 @@ try {
           ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
         ],
   );
+  const playerUpY = (): number => {
+    const r = scene.vehicle.body.rotation();
+    return 1 - 2 * (r.x * r.x + r.z * r.z);
+  };
   const resetPursuit = (): void => {
     bustState = INITIAL_BUST_STATE;
     if (pursuit !== undefined) {
@@ -1271,7 +1275,13 @@ try {
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
-                player: { x: p.x, z: p.z, speedMs: Math.hypot(v.x, v.z) },
+                player: {
+                  x: p.x,
+                  z: p.z,
+                  speedMs: Math.hypot(v.x, v.z),
+                  // Flipped or on its side (chassis up-vector tilted past ~70 deg): cannot drive.
+                  disabled: playerUpY() < 0.35,
+                },
                 pursuers: pursuit.fleet.cars.map((c) => {
                   const q = c.vehicle.body.translation();
                   return {

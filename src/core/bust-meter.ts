@@ -7,7 +7,9 @@
  * busted by): getting BUSTED needs boxing in (two visible pursuers close on
  * opposite sides) AND a car that cannot get away: the fill rate scales with how
  * stopped the player is and is zero above `freeSpeedMs`, so a player who is
- * still moving, however surrounded, is never busted. The meter drains when you get
+ * still moving, however surrounded, is never busted. A DISABLED player (flipped,
+ * so it cannot drive even while being shoved along) counts as stopped and needs
+ * just one close visible pursuer. The meter drains when you get
  * away, and latches BUSTED at 1. If every pursuer stays far away long enough it
  * latches ESCAPED instead. Even boxed in and stationary it takes seconds.
  *
@@ -66,7 +68,13 @@ export const INITIAL_BUST_STATE: BustState = Object.freeze({
 
 export interface BustInput {
   readonly dtSec: number;
-  readonly player: { readonly x: number; readonly z: number; readonly speedMs: number };
+  readonly player: {
+    readonly x: number;
+    readonly z: number;
+    readonly speedMs: number;
+    /** The player's car cannot drive (flipped / on its roof), even if it is being shoved along. Counts as stopped, and one close pursuer is enough. */
+    readonly disabled?: boolean;
+  };
   /** `visible: false` = a building is in the way; hidden pursuers neither press nor box in nor count as near. Default visible. */
   readonly pursuers: readonly {
     readonly x: number;
@@ -121,10 +129,11 @@ export function stepBustMeter(
   }
 
   const slow = 1 - clamp(input.player.speedMs / params.freeSpeedMs, 0, 1);
-  const slowness = slow;
+  const disabled = input.player.disabled === true;
+  const slowness = disabled ? 1 : slow;
   const fillRate = params.fillPerSec * pressure * slowness;
   const relief = 1 - clamp(fillRate / params.fillPerSec, 0, 1);
-  const ceiling = boxed ? 1 : params.softCap;
+  const ceiling = boxed || (disabled && close.length > 0) ? 1 : params.softCap;
   let net = fillRate - params.drainPerSec * relief;
   if (state.level >= ceiling && net > 0) net = state.level > ceiling ? -params.drainPerSec : 0;
   let level = clamp(state.level + net * input.dtSec, 0, 1);

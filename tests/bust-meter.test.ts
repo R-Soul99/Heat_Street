@@ -145,4 +145,19 @@ describe("bust meter", () => {
     expect(s.level).toBe(0);
     expect(s.nearestM).toBe(Number.POSITIVE_INFINITY);
   });
+
+  it("a flipped player being shoved along at speed is busted by one close pursuer", () => {
+    const shoved = { x: 0, z: 0, speedMs: 13, disabled: true };
+    const s = run(() => ({ player: shoved, pursuers: [{ x: 3, z: 0 }] }), 10);
+    expect(s.busted).toBe(true);
+    // Same speed, same pursuer, car upright: nothing like a bust.
+    const upright = run(
+      () => ({ player: { ...shoved, disabled: false }, pursuers: [{ x: 3, z: 0 }] }),
+      10,
+    );
+    expect(upright.busted).toBe(false);
+    // Flipped with nobody near is not a bust.
+    const alone = run(() => ({ player: shoved, pursuers: [{ x: 80, z: 0 }] }), 10);
+    expect(alone.level).toBe(0);
+  });
 });
