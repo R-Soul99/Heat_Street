@@ -1,11 +1,13 @@
 /**
  * Bust meter (first pursuit-pressure prototype, 2026-11-07).
  *
- * A pure, deterministic step function: the meter fills while pursuers are close
- * AND the player is slow or boxed in, drains when the player is getting away,
- * and latches BUSTED at 1. If every pursuer stays far away long enough it
- * latches ESCAPED instead. A single touch never busts you: even slow and
- * surrounded it takes several seconds to fill.
+ * A pure, deterministic step function. Only pursuers that can SEE the player
+ * (line of sight, supplied by the caller) count. A lone pursuer, however close,
+ * can raise the meter only to `softCap` (pressure you can feel but cannot be
+ * busted by): getting BUSTED needs boxing in, i.e. two visible pursuers close on
+ * opposite sides. Slower players fill faster. The meter drains when you get
+ * away, and latches BUSTED at 1. If every pursuer stays far away long enough it
+ * latches ESCAPED instead. Even boxed in and stationary it takes seconds.
  *
  * No physics, no DOM, no clock, no randomness: a function of (state, one tick of
  * input), so it is vitest-testable and replays identically.
@@ -24,6 +26,8 @@ export interface BustParams {
   readonly boxedAngleRad: number;
   /** Slowness factor floor while boxed in, even at speed. */
   readonly boxedFloor: number;
+  /** Highest level a lone (not boxing in) pursuer can push the meter to. */
+  readonly softCap: number;
   /** All pursuers beyond this for `escapeSec` = ESCAPED, metres. */
   readonly escapeRadiusM: number;
   readonly escapeSec: number;
@@ -36,6 +40,7 @@ export const DEFAULT_BUST_PARAMS: BustParams = Object.freeze({
   drainPerSec: 0.2,
   boxedAngleRad: (100 * Math.PI) / 180,
   boxedFloor: 0.6,
+  softCap: 0.4,
   escapeRadiusM: 90,
   escapeSec: 6,
 });
@@ -45,7 +50,7 @@ export interface BustState {
   readonly level: number;
   readonly busted: boolean;
   readonly escaped: boolean;
-  /** Distance to the nearest pursuer, metres (Infinity with none). */
+  /** Distance to the nearest pursuer, seen or not, metres (Infinity with none). Escape needs ALL pursuers far, so hidden ones still count. */
   readonly nearestM: number;
   readonly boxed: boolean;
   readonly farSec: number;
@@ -63,7 +68,12 @@ export const INITIAL_BUST_STATE: BustState = Object.freeze({
 export interface BustInput {
   readonly dtSec: number;
   readonly player: { readonly x: number; readonly z: number; readonly speedMs: number };
-  readonly pursuers: readonly { readonly x: number; readonly z: number }[];
+  /** `visible: false` = a building is in the way; hidden pursuers neither press nor box in nor count as near. Default visible. */
+  readonly pursuers: readonly {
+    readonly x: number;
+    readonly z: number;
+    readonly visible?: boolean;
+  }[];
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -83,8 +93,9 @@ export function stepBustMeter(
     const dx = p.x - input.player.x;
     const dz = p.z - input.player.z;
     const d = Math.hypot(dx, dz);
+    const visible = p.visible !== false;
     if (d < nearest) nearest = d;
-    if (d < params.radiusM) {
+    if (visible && d < params.radiusM) {
       close.push({ prox: 1 - d / params.radiusM, bearing: Math.atan2(dz, dx) });
     }
   }
@@ -114,7 +125,11 @@ export function stepBustMeter(
   const slowness = boxed ? Math.max(slow, params.boxedFloor) : slow;
   const fillRate = params.fillPerSec * pressure * slowness;
   const relief = 1 - clamp(fillRate / params.fillPerSec, 0, 1);
-  const level = clamp(state.level + (fillRate - params.drainPerSec * relief) * input.dtSec, 0, 1);
+  const ceiling = boxed ? 1 : params.softCap;
+  let net = fillRate - params.drainPerSec * relief;
+  if (state.level >= ceiling && net > 0) net = state.level > ceiling ? -params.drainPerSec : 0;
+  let level = clamp(state.level + net * input.dtSec, 0, 1);
+  if (net > 0 && level > ceiling) level = Math.max(state.level, ceiling);
 
   const farSec = nearest > params.escapeRadiusM ? state.farSec + input.dtSec : 0;
   return {

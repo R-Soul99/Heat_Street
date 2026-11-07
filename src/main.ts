@@ -126,6 +126,7 @@ import { createResultsView } from "./hud/results-view";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
+import { lineOfSightClear } from "./physics/ai-avoidance";
 import { createAiFleet } from "./physics/ai-fleet";
 import { createGroundProbe } from "./physics/ground-probe";
 import { createMapScene, type MapScene, SPAWN_CLEARANCE_M } from "./physics/map-scene";
@@ -533,6 +534,15 @@ try {
     brake: 0,
     handbrake: true,
   });
+  // Cars never block line of sight; only buildings and terrain do.
+  const pursuitCarColliders = new Set<number>(
+    pursuit === undefined
+      ? []
+      : [
+          scene.vehicle.body.collider(0).handle,
+          ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
+        ],
+  );
   const resetPursuit = (): void => {
     bustState = INITIAL_BUST_STATE;
     if (pursuit !== undefined) {
@@ -1257,7 +1267,11 @@ try {
                 player: { x: p.x, z: p.z, speedMs: Math.hypot(v.x, v.z) },
                 pursuers: pursuit.fleet.cars.map((c) => {
                   const q = c.vehicle.body.translation();
-                  return { x: q.x, z: q.z };
+                  return {
+                    x: q.x,
+                    z: q.z,
+                    visible: lineOfSightClear(world, p, q, pursuitCarColliders),
+                  };
                 }),
               });
               pursuit.fleet.tick(tick, bustState.busted ? () => BUSTED_HOLD : undefined);

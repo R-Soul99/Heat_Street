@@ -61,3 +61,39 @@ export function probeForwardGapM(
   if (hit === null) return null;
   return hit.timeOfImpact;
 }
+
+/**
+ * Whether `to` can see `from`: a ray between the two chassis centres (raised to
+ * roof height) that is blocked only by colliders NOT in `carColliderHandles`,
+ * i.e. buildings and terrain, never other cars. Used by the bust meter so
+ * pursuers behind a building cannot press or box in the player.
+ */
+export function lineOfSightClear(
+  world: RAPIER.World,
+  from: { readonly x: number; readonly y: number; readonly z: number },
+  to: { readonly x: number; readonly y: number; readonly z: number },
+  carColliderHandles: ReadonlySet<number>,
+  heightOffsetM = 0.8,
+  marginM = 0.5,
+): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dz = to.z - from.z;
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist < marginM + 1e-6) return true;
+  const ray = new RAPIER.Ray(
+    { x: from.x, y: from.y + heightOffsetM, z: from.z },
+    { x: dx / dist, y: dy / dist, z: dz / dist },
+  );
+  const hit = world.castRay(
+    ray,
+    dist,
+    true,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    (collider) => !carColliderHandles.has(collider.handle),
+  );
+  return hit === null || hit.timeOfImpact >= dist - marginM;
+}
