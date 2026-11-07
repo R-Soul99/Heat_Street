@@ -1215,9 +1215,11 @@ export function createVehicle(
           // Soft ramp (20 deg to full torque, was 10): the hard push overshot the target
           // on mud and swung the car through zero to the other side (read as "catching").
           // Steering into the slide: push toward the target, no hard stop. Past the target
-          // the pull-back acts on how fast the slip is still growing, so a slide that has
-          // settled (even a bit over) is left alone and only one that is running away is
-          // damped; a weak, squared position term backs it up for the extreme cases.
+          // the assist only brakes the rotation while the slide is still deepening, and
+          // stops as soon as it settles, so it can never swing the car back against the
+          // held key (a full-strength position pull-back did: 83 -> 0 deg in a second on
+          // mud, drive log 2026-11-07). A slide that settles deep stays deep until the
+          // throttle eases or the driver counter-steers.
           // Opposite key / no key: the plain linear ease toward their (lower) target.
           const err = target - slipDeg;
           const slipRate = (slipDeg - prevHoldSlipDeg) / DT; // deg/s, + = slide deepening
@@ -1226,9 +1228,7 @@ export function createVehicle(
             if (err >= 0) drive = clamp(err / 20, -1, 1);
             else {
               const over = smoothstep(0, 10, -err);
-              const damp = Math.tanh(Math.max(0, slipRate) / HOLD_RATE_DEG_S) * over;
-              const far = Math.tanh((err / 30) * (err / 30));
-              drive = -Math.min(1, damp + far);
+              drive = -Math.tanh(Math.max(0, slipRate) / HOLD_RATE_DEG_S) * over;
             }
           } else drive = clamp(err / 20, -1, 1);
           prevHoldSlipDeg = slipDeg;
