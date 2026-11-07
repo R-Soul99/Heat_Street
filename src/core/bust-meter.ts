@@ -73,8 +73,6 @@ export interface BustInput {
     readonly x: number;
     readonly z: number;
     readonly speedMs: number;
-    /** The player's car cannot drive (flipped / on its roof), even if it is being shoved along. Counts as stopped (boxing in is still required). */
-    readonly disabled?: boolean;
   };
   /** `visible: false` = a building is in the way; hidden pursuers neither press nor box in nor count as near. Default visible. */
   readonly pursuers: readonly {
@@ -130,8 +128,7 @@ export function stepBustMeter(
   }
 
   const slow = 1 - clamp(input.player.speedMs / params.freeSpeedMs, 0, 1);
-  const disabled = input.player.disabled === true;
-  const slowness = disabled ? 1 : slow;
+  const slowness = slow;
   const fillRate = params.fillPerSec * pressure * slowness;
   const relief = 1 - clamp(fillRate / params.fillPerSec, 0, 1);
   const ceiling = boxed ? 1 : params.softCap;

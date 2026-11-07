@@ -145,23 +145,4 @@ describe("bust meter", () => {
     expect(s.level).toBe(0);
     expect(s.nearestM).toBe(Number.POSITIVE_INFINITY);
   });
-
-  it("a flipped player shoved along at speed counts as stopped when boxed in, but one pursuer is not enough", () => {
-    const shoved = { x: 0, z: 0, speedMs: 13, disabled: true };
-    const boxedPursuers = [
-      { x: 3, z: 0 },
-      { x: -3, z: 0 },
-    ];
-    expect(run(() => ({ player: shoved, pursuers: boxedPursuers }), 10).busted).toBe(true);
-    // Same boxing, car upright and moving at that speed: not busted.
-    expect(
-      run(() => ({ player: { ...shoved, disabled: false }, pursuers: boxedPursuers }), 10).busted,
-    ).toBe(false);
-    // Flipped but only one pursuer near: raises the meter to the soft cap at most.
-    const lone = run(() => ({ player: shoved, pursuers: [{ x: 3, z: 0 }] }), 30);
-    expect(lone.busted).toBe(false);
-    expect(lone.level).toBeLessThanOrEqual(0.4 + 1e-9);
-    // Flipped with nobody near is nothing.
-    expect(run(() => ({ player: shoved, pursuers: [{ x: 80, z: 0 }] }), 10).level).toBe(0);
-  });
 });

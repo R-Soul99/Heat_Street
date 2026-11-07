@@ -49,7 +49,7 @@ import {
 import { type Course, parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag, shippedTuning } from "./core/feel";
 import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
-import { forwardFromYaw, headingFromRotation } from "./core/heading";
+import { forwardFromYaw, headingFromRotation, yawFromTravelDirection } from "./core/heading";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { MAP_FORMATS, resolveMapId } from "./core/map-select";
@@ -546,15 +546,8 @@ try {
           ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
         ],
   );
-  let flippedSec = 0;
-  const FLIPPED_DISABLE_SEC = 20;
-  const playerUpY = (): number => {
-    const r = scene.vehicle.body.rotation();
-    return 1 - 2 * (r.x * r.x + r.z * r.z);
-  };
   const resetPursuit = (): void => {
     bustState = INITIAL_BUST_STATE;
-    flippedSec = 0;
     if (pursuit !== undefined) {
       for (let i = 0; i < pursuit.drivers.length; i++) {
         pursuit.fleet.resetCar(i, pursuerPose(i));
@@ -1276,16 +1269,12 @@ try {
               const fz = Math.sin(bearing);
               for (const d of pursuit.drivers)
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
-              flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
                 player: {
                   x: p.x,
                   z: p.z,
                   speedMs: Math.hypot(v.x, v.z),
-                  // On its roof/side (up-vector tilted past ~70 deg) for 20 s straight:
-                  // cannot drive. A bump or a nudge that rights it in time resets the clock.
-                  disabled: flippedSec >= FLIPPED_DISABLE_SEC,
                 },
                 pursuers: pursuit.fleet.cars.map((c) => {
                   const q = c.vehicle.body.translation();
@@ -1304,7 +1293,27 @@ try {
           },
     raceCommands: input.raceCommands,
     onRaceCommands: (commands) => {
-      activeCoordinator.onCommands(commands);
+      // With pursuers active, P rights the car where it stands (no checkpoint
+      // teleport, no time penalty): a flipped car can still be nudged upright by a
+      // pursuer, and this is the player's own way out when it is really stuck.
+      if (pursuit !== undefined && commands.respawn) {
+        const body = scene.vehicle.body;
+        const p = body.translation();
+        const bearing = headingFromRotation(body.rotation());
+        scene.resetVehicle({
+          x: p.x,
+          y:
+            terrainPhysicsGrid === undefined
+              ? p.y + SPAWN_CLEARANCE_M
+              : sampleTerrainHeight(terrainPhysicsGrid, p.x, p.z) + SPAWN_CLEARANCE_M,
+          z: p.z,
+          headingRad: yawFromTravelDirection(Math.cos(bearing), Math.sin(bearing)),
+        });
+        transforms.snapBody(0);
+        activeCoordinator.onCommands({ ...commands, respawn: false });
+      } else {
+        activeCoordinator.onCommands(commands);
+      }
       if (commands.restart && pursuit !== undefined) resetPursuit();
     },
     onTickEnd: () => activeCoordinator.onTickEnd(),
