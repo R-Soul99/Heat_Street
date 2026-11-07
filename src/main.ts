@@ -547,7 +547,7 @@ try {
         ],
   );
   let flippedSec = 0;
-  const FLIPPED_DISABLE_SEC = 2;
+  const FLIPPED_DISABLE_SEC = 20;
   const playerUpY = (): number => {
     const r = scene.vehicle.body.rotation();
     return 1 - 2 * (r.x * r.x + r.z * r.z);
@@ -1283,7 +1283,7 @@ try {
                   x: p.x,
                   z: p.z,
                   speedMs: Math.hypot(v.x, v.z),
-                  // On its roof/side (up-vector tilted past ~70 deg) for a couple of seconds:
+                  // On its roof/side (up-vector tilted past ~70 deg) for 20 s straight:
                   // cannot drive. A bump or a nudge that rights it in time resets the clock.
                   disabled: flippedSec >= FLIPPED_DISABLE_SEC,
                 },
