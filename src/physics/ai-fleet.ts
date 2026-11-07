@@ -77,10 +77,12 @@ export function createAiFleet(
   world: RAPIER.World,
   tuning: VehicleTuning,
   surfaces: SurfaceContext,
-  line: RacingLine,
+  line: RacingLine | undefined,
   gridPoses: readonly VehiclePose[],
   driverParams: AiDriverParams,
   options?: {
+    /** Supplies car `i`'s driver instead of the racing-line pursuit driver (pursuit cars). When given, `line` may be undefined. */
+    readonly driverFactory?: (carIndex: number) => AiDriver;
     readonly obstacleBodies?: readonly RAPIER.RigidBody[];
     /** Terrain scenes: gives each AI car its own wheel-ray patch (heightfield ray-miss workaround). */
     readonly wheelRayPatch?: () => WheelRayPatch;
@@ -88,13 +90,20 @@ export function createAiFleet(
 ): AiFleet {
   let currentTuning = tuning;
 
-  const cars: AiFleetCar[] = gridPoses.map((pose) => {
+  const driverFactory = options?.driverFactory;
+  if (driverFactory === undefined && line === undefined) {
+    throw new Error("createAiFleet: needs a racing line or a driverFactory");
+  }
+  const cars: AiFleetCar[] = gridPoses.map((pose, carIndex) => {
     const vehicle = createVehicle(world, currentTuning, pose);
     if (options?.wheelRayPatch !== undefined) {
       vehicle.attachWheelRayPatch(options.wheelRayPatch());
     }
     vehicle.resetPose(pose);
-    const driver = createAiDriver(line, driverParams);
+    const driver =
+      driverFactory !== undefined
+        ? driverFactory(carIndex)
+        : createAiDriver(line as RacingLine, driverParams);
     return { vehicle, driver };
   });
 

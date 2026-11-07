@@ -1,0 +1,194 @@
+/**
+ * Chase driver for pursuit cars (first prototype, 2026-11-07).
+ *
+ * Same control channel as the racing-line driver (`AiDriver` / `InputFrame`):
+ * it never touches physics, drives the SAME car and tune as the player, and is
+ * a pure function of (own observation, the target it was last told about, the
+ * tick). Instead of a racing line it steers straight at where the target will
+ * be a moment from now, closes the gap hard, then shadows the target's speed at
+ * a standoff distance. If it stops moving while the target is still far it
+ * backs out and tries again.
+ *
+ * Pure by construction: imports only `./ai-driver`, `./input-tape`,
+ * `./vehicle-tuning` (types). No renderer, no physics engine, no DOM, no clock.
+ */
+import { type AiDriver, type AiDriverDebug, type AiObservation, pursuitSteer } from "./ai-driver";
+import { type InputFrame, NEUTRAL } from "./input-tape";
+import type { VehicleTuning } from "./vehicle-tuning";
+
+/** What the pursuer is chasing (world metres, metres/second). */
+export interface PursuitTarget {
+  readonly x: number;
+  readonly z: number;
+  readonly vx: number;
+  readonly vz: number;
+}
+
+export interface PursuerParams {
+  readonly wheelbaseM: number;
+  readonly maxSteerLockRad: number;
+  /** Seconds of target travel the aim point leads by (capped by distance/own speed). */
+  readonly leadMaxSec: number;
+  /** Distance at which the pursuer stops closing and shadows the target. */
+  readonly standoffM: number;
+  /** Extra speed over the target's, m/s per metre of gap beyond the standoff. */
+  readonly closeGain: number;
+  /** Hard cap on the speed the pursuer asks for, m/s. */
+  readonly maxSpeedMs: number;
+  /** Speed multiplier at 90 deg of heading error (cornering / turn-around). */
+  readonly turnSpeedFloor: number;
+  readonly throttleGain: number;
+  readonly brakeGain: number;
+  /** Below this forward speed with the target still far, the car counts as stuck. */
+  readonly stuckSpeedMs: number;
+  readonly stuckTicks: number;
+  readonly reverseTicks: number;
+  readonly tickRateHz: number;
+}
+
+export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
+  return {
+    wheelbaseM: 2 * tuning.wheels.halfWheelbase,
+    maxSteerLockRad: tuning.drive.maxSteerLock,
+    leadMaxSec: 1.2,
+    standoffM: 7,
+    closeGain: 0.9,
+    maxSpeedMs: 38,
+    turnSpeedFloor: 0.3,
+    throttleGain: 0.35,
+    brakeGain: 0.2,
+    stuckSpeedMs: 1.0,
+    stuckTicks: 90,
+    reverseTicks: 75,
+    tickRateHz: 60,
+  };
+}
+
+export interface PursuerDriver extends AiDriver {
+  /** Tell the driver where its target is this tick. */
+  setTarget(target: PursuitTarget): void;
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+const INITIAL_OBS: AiObservation = Object.freeze({ x: 0, z: 0, headingRad: 0, forwardSpeedMs: 0 });
+const INITIAL_TARGET: PursuitTarget = Object.freeze({ x: 0, z: 0, vx: 0, vz: 0 });
+
+export function createPursuerDriver(params: PursuerParams): PursuerDriver {
+  let obs: AiObservation = INITIAL_OBS;
+  let target: PursuitTarget = INITIAL_TARGET;
+  let cachedTick: number | null = null;
+  let frame: InputFrame = NEUTRAL;
+  let debug: AiDriverDebug = Object.freeze({
+    lineIndex: 0,
+    targetIndex: 0,
+    targetX: 0,
+    targetZ: 0,
+    targetSpeedMs: 0,
+    lookAheadM: 0,
+    frame: NEUTRAL,
+  });
+  let stuckFor = 0;
+  let reversingFor = 0;
+  let reverseSteer = 0;
+
+  function compute(tick: number): void {
+    const speed = Math.max(0, obs.forwardSpeedMs);
+    const dx0 = target.x - obs.x;
+    const dz0 = target.z - obs.z;
+    const dist = Math.hypot(dx0, dz0);
+
+    // Aim where the target will be: lead by travel time, never more than leadMaxSec.
+    const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
+    const aimX = target.x + target.vx * leadSec;
+    const aimZ = target.z + target.vz * leadSec;
+    const aimDist = Math.hypot(aimX - obs.x, aimZ - obs.z);
+
+    const bearing = Math.atan2(aimZ - obs.z, aimX - obs.x);
+    const alpha = Math.atan2(
+      Math.sin(bearing - obs.headingRad),
+      Math.cos(bearing - obs.headingRad),
+    );
+
+    const lookAheadM = clamp(Math.min(aimDist, Math.max(6, 0.9 * speed)), 3, 40);
+    let steer = pursuitSteer(
+      obs.x,
+      obs.z,
+      obs.headingRad,
+      aimX,
+      aimZ,
+      lookAheadM,
+      params.wheelbaseM,
+      params.maxSteerLockRad,
+    );
+
+    // Speed: the target's own speed plus a closing bonus beyond the standoff,
+    // eased down when the nose is pointing well away from the aim point.
+    const targetSpeed = Math.hypot(target.vx, target.vz);
+    const closing = Math.max(0, dist - params.standoffM) * params.closeGain;
+    const turnScale =
+      1 - (1 - params.turnSpeedFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
+    const desired = Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale);
+
+    const err = desired - speed;
+    let throttle = 0;
+    let brake = 0;
+    if (err >= -1) {
+      throttle = clamp(0.25 + err * params.throttleGain, 0, 1);
+    } else if (speed > 1.5) {
+      brake = clamp(-err * params.brakeGain, 0, 1);
+    }
+
+    // Stuck recovery: crawling while the target is still far -> back out with
+    // opposite lock for a moment, then try again.
+    if (reversingFor > 0) {
+      reversingFor--;
+      throttle = 0;
+      brake = 1;
+      steer = reverseSteer;
+    } else if (speed < params.stuckSpeedMs && dist > params.standoffM * 2) {
+      stuckFor++;
+      if (stuckFor >= params.stuckTicks) {
+        stuckFor = 0;
+        reversingFor = params.reverseTicks;
+        reverseSteer = steer >= 0 ? -1 : 1;
+      }
+    } else {
+      stuckFor = 0;
+    }
+
+    cachedTick = tick;
+    frame = Object.freeze({ steer, throttle, brake, handbrake: false });
+    debug = Object.freeze({
+      lineIndex: 0,
+      targetIndex: 0,
+      targetX: aimX,
+      targetZ: aimZ,
+      targetSpeedMs: desired,
+      lookAheadM,
+      frame,
+    });
+  }
+
+  return {
+    observe(o: AiObservation): void {
+      obs = o;
+    },
+    setTarget(t: PursuitTarget): void {
+      target = t;
+    },
+    reseed(): void {
+      stuckFor = 0;
+      reversingFor = 0;
+    },
+    sampleForTick(tick: number): InputFrame {
+      if (cachedTick !== tick) compute(tick);
+      return frame;
+    },
+    debug(): AiDriverDebug {
+      return debug;
+    },
+  };
+}

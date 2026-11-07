@@ -48,6 +48,7 @@ import {
 import { type Course, parseCourseData } from "./core/course";
 import { applyFeel, parseFeelFlag, shippedTuning } from "./core/feel";
 import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
+import { forwardFromYaw } from "./core/heading";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { MAP_FORMATS, resolveMapId } from "./core/map-select";
@@ -63,6 +64,11 @@ import {
   type NavigationGraph,
   validateCourseRoutes,
 } from "./core/navigation";
+import {
+  createPursuerDriver,
+  defaultPursuerParams,
+  type PursuerDriver,
+} from "./core/pursuer-driver";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
 import { createRaceState } from "./core/race-state";
 import { buildGridPoses, buildRacingLine } from "./core/racing-line";
@@ -466,9 +472,60 @@ try {
     );
   }
 
-  const transforms = new TransformCache(
-    fleet === undefined ? scene.bodies : [...scene.bodies, ...fleet.bodies],
-  );
+  // Pursuit prototype (`?pursuers=N`, 1-6; free-drive style modes only): N cars
+  // built through the same `createVehicle()` as the player and the racers, each
+  // steered by a `PursuerDriver` that chases the player's live position. They
+  // start behind the player's spawn and are re-placed whenever the player
+  // restarts. Avoids each other (fleet obstacle set) but NOT the player, so
+  // contact is allowed -- PIT/ram behaviours are a later step.
+  const pursuerCount = isCircuitRace
+    ? 0
+    : Math.max(
+        0,
+        Math.min(
+          6,
+          Number.parseInt(new URLSearchParams(location.search).get("pursuers") ?? "0", 10) || 0,
+        ),
+      );
+  const PURSUER_PAINTS = [0x1b1f2a, 0xeceff4, 0x1b1f2a, 0xeceff4, 0x1b1f2a, 0xeceff4];
+  const pursuerPose = (i: number) => {
+    const sp = scene.defaultSpawnPose;
+    const f = forwardFromYaw(sp.headingRad);
+    const back = 40 + 14 * i;
+    const side = (i % 2 === 0 ? -1 : 1) * 4;
+    const x = sp.x - f.x * back + -f.z * side;
+    const z = sp.z - f.z * back + f.x * side;
+    const y =
+      terrainPhysicsGrid === undefined
+        ? sp.y
+        : sampleTerrainHeight(terrainPhysicsGrid, x, z) + SPAWN_CLEARANCE_M;
+    return { x, y, z, headingRad: sp.headingRad };
+  };
+  let pursuit: { fleet: ReturnType<typeof createAiFleet>; drivers: PursuerDriver[] } | undefined;
+  if (pursuerCount > 0) {
+    const pParams = defaultPursuerParams(aiTuning);
+    const drivers: PursuerDriver[] = [];
+    for (let i = 0; i < pursuerCount; i++) drivers.push(createPursuerDriver(pParams));
+    const pFleet = createAiFleet(
+      world,
+      aiTuning,
+      scene.surfaces,
+      undefined,
+      drivers.map((_, i) => pursuerPose(i)),
+      defaultAiDriverParams(aiTuning),
+      {
+        driverFactory: (i) => drivers[i] as PursuerDriver,
+        wheelRayPatch: scene.createWheelRayPatch?.bind(scene),
+      },
+    );
+    pursuit = { fleet: pFleet, drivers };
+  }
+
+  const transforms = new TransformCache([
+    ...scene.bodies,
+    ...(fleet === undefined ? [] : fleet.bodies),
+    ...(pursuit === undefined ? [] : pursuit.fleet.bodies),
+  ]);
 
   // `src/physics/vehicle-scene.ts` and `src/physics/debug-scene.ts` (and their
   // render-side counterparts, including `src/render/vehicle-view.ts`'s Phase 2
@@ -544,8 +601,21 @@ try {
           tuning.chassis.halfExtents,
           AI_PAINTS.map((paint) => paint.hex),
         );
-  const interpolated: readonly THREE.Object3D[] =
-    aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes];
+  const pursuitViews =
+    pursuit === undefined
+      ? undefined
+      : createAiVehicleViews(
+          view.scene,
+          tuning.wheels.radius,
+          tuning.wheels.halfTrack,
+          tuning.wheels.halfWheelbase,
+          tuning.chassis.halfExtents,
+          pursuit.drivers.map((_, i) => PURSUER_PAINTS[i] ?? 0x1b1f2a),
+        );
+  const interpolated: readonly THREE.Object3D[] = [
+    ...(aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes]),
+    ...(pursuitViews === undefined ? [] : pursuitViews.chassisMeshes),
+  ];
 
   // SURF-02's visual half (plan 03-10): always constructed, NOT gated on
   // `DEBUG_ENABLED` -- surface FX is player-facing, exactly like the
@@ -799,7 +869,15 @@ try {
           scene,
           spawnPose: scene.defaultSpawnPose,
           heightAt: (x, z) => sampleTerrainHeight(freeDriveGrid, x, z),
-          onCarReset: () => transforms.snapBody(0),
+          onCarReset: () => {
+            transforms.snapBody(0);
+            if (pursuit !== undefined) {
+              for (let i = 0; i < pursuit.drivers.length; i++) {
+                pursuit.fleet.resetCar(i, pursuerPose(i));
+                transforms.snapBody(1 + i);
+              }
+            }
+          },
         })
       : undefined;
   const activeCoordinator = circuitRace ?? raceCoordinator ?? freeDriveCoordinator;
@@ -878,6 +956,7 @@ try {
           onApplyVehicle: () => {
             scene.setTuning(tuning);
             fleet?.setTuning(aiTuning);
+            pursuit?.fleet.setTuning(aiTuning);
           },
           onApplySurfaces: () => scene.setSurfaceProfiles(surfaceProfiles),
           onApplyCamera: () => {
@@ -901,6 +980,7 @@ try {
       applyFeel(tuning, feelBase, feelSettings);
       scene.setTuning(tuning);
       fleet?.setTuning(aiTuning);
+      pursuit?.fleet.setTuning(aiTuning);
     });
   }
 
@@ -1142,7 +1222,15 @@ try {
     // itself needs zero changes.
     onTickBegin:
       circuitRace === undefined
-        ? scene.preTick
+        ? pursuit === undefined
+          ? scene.preTick
+          : (tick) => {
+              scene.preTick(tick);
+              const p = scene.vehicle.body.translation();
+              const v = scene.vehicle.body.linvel();
+              for (const d of pursuit.drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+              pursuit.fleet.tick(tick);
+            }
         : (tick) => {
             scene.preTick(tick);
             circuitRace.onTickBegin(tick);
@@ -1178,6 +1266,11 @@ try {
       if (fleet !== undefined && aiViews !== undefined) {
         for (let i = 0; i < fleet.cars.length; i++) {
           aiViews.updateWheels(i, fleet.cars[i].vehicle.controller);
+        }
+      }
+      if (pursuit !== undefined && pursuitViews !== undefined) {
+        for (let i = 0; i < pursuit.fleet.cars.length; i++) {
+          pursuitViews.updateWheels(i, pursuit.fleet.cars[i].vehicle.controller);
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
