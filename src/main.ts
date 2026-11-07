@@ -546,12 +546,15 @@ try {
           ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
         ],
   );
+  let flippedSec = 0;
+  const FLIPPED_DISABLE_SEC = 2;
   const playerUpY = (): number => {
     const r = scene.vehicle.body.rotation();
     return 1 - 2 * (r.x * r.x + r.z * r.z);
   };
   const resetPursuit = (): void => {
     bustState = INITIAL_BUST_STATE;
+    flippedSec = 0;
     if (pursuit !== undefined) {
       for (let i = 0; i < pursuit.drivers.length; i++) {
         pursuit.fleet.resetCar(i, pursuerPose(i));
@@ -1273,14 +1276,16 @@ try {
               const fz = Math.sin(bearing);
               for (const d of pursuit.drivers)
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
+              flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
                 player: {
                   x: p.x,
                   z: p.z,
                   speedMs: Math.hypot(v.x, v.z),
-                  // Flipped or on its side (chassis up-vector tilted past ~70 deg): cannot drive.
-                  disabled: playerUpY() < 0.35,
+                  // On its roof/side (up-vector tilted past ~70 deg) for a couple of seconds:
+                  // cannot drive. A bump or a nudge that rights it in time resets the clock.
+                  disabled: flippedSec >= FLIPPED_DISABLE_SEC,
                 },
                 pursuers: pursuit.fleet.cars.map((c) => {
                   const q = c.vehicle.body.translation();

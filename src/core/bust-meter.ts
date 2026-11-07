@@ -7,9 +7,10 @@
  * busted by): getting BUSTED needs boxing in (two visible pursuers close on
  * opposite sides) AND a car that cannot get away: the fill rate scales with how
  * stopped the player is and is zero above `freeSpeedMs`, so a player who is
- * still moving, however surrounded, is never busted. A DISABLED player (flipped,
- * so it cannot drive even while being shoved along) counts as stopped and needs
- * just one close visible pursuer. The meter drains when you get
+ * still moving, however surrounded, is never busted. A DISABLED player (flipped for a
+ * while, so it cannot drive even while being shoved along) counts as stopped, but
+ * still has to be boxed in: a flipped car with one pursuer nearby is not a bust,
+ * it might right itself. The meter drains when you get
  * away, and latches BUSTED at 1. If every pursuer stays far away long enough it
  * latches ESCAPED instead. Even boxed in and stationary it takes seconds.
  *
@@ -72,7 +73,7 @@ export interface BustInput {
     readonly x: number;
     readonly z: number;
     readonly speedMs: number;
-    /** The player's car cannot drive (flipped / on its roof), even if it is being shoved along. Counts as stopped, and one close pursuer is enough. */
+    /** The player's car cannot drive (flipped / on its roof), even if it is being shoved along. Counts as stopped (boxing in is still required). */
     readonly disabled?: boolean;
   };
   /** `visible: false` = a building is in the way; hidden pursuers neither press nor box in nor count as near. Default visible. */
@@ -133,7 +134,7 @@ export function stepBustMeter(
   const slowness = disabled ? 1 : slow;
   const fillRate = params.fillPerSec * pressure * slowness;
   const relief = 1 - clamp(fillRate / params.fillPerSec, 0, 1);
-  const ceiling = boxed || (disabled && close.length > 0) ? 1 : params.softCap;
+  const ceiling = boxed ? 1 : params.softCap;
   let net = fillRate - params.drainPerSec * relief;
   if (state.level >= ceiling && net > 0) net = state.level > ceiling ? -params.drainPerSec : 0;
   let level = clamp(state.level + net * input.dtSec, 0, 1);

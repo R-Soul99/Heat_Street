@@ -13,7 +13,14 @@ function run(
   pursuerPoses: { x: number; z: number; headingRad: number }[],
   seconds: number,
   opts: { flank?: boolean; straight?: boolean } = {},
-): { dists: number[]; upY: number[]; maxSpeedMs: number; lateral: number[]; along: number[] } {
+): {
+  dists: number[];
+  upY: number[];
+  maxSpeedMs: number;
+  lateral: number[];
+  along: number[];
+  blockTicks: number[];
+} {
   const world = createWorld();
   try {
     const t = shippedTuning();
@@ -41,6 +48,7 @@ function run(
       world.step();
     }
     let maxSpeedMs = 0;
+    const blockTicks = pursuerPoses.map(() => 0);
     const ticks = Math.round(seconds * 60);
     for (let k = 0; k < ticks; k++) {
       const steer = opts.straight ? 0 : 0.35 * Math.sin(k / 70);
@@ -54,6 +62,19 @@ function run(
       for (const d of drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
       fleet.tick(60 + k);
       world.step();
+      {
+        const ps = Math.hypot(v.x, v.z) || 1;
+        const fx = v.x / ps;
+        const fz = v.z / ps;
+        fleet.cars.forEach((c, ci) => {
+          const q = c.vehicle.body.translation();
+          const dx = q.x - p.x;
+          const dz = q.z - p.z;
+          if (dx * fx + dz * fz > 2 && Math.abs(dx * -fz + dz * fx) < 5) {
+            blockTicks[ci] = (blockTicks[ci] as number) + 1;
+          }
+        });
+      }
       for (const c of fleet.cars)
         maxSpeedMs = Math.max(maxSpeedMs, sampleVehicle(c.vehicle).groundSpeedMs);
     }
@@ -77,6 +98,7 @@ function run(
       return { lateral: dx * -fz + dz * fx, along: dx * fx + dz * fz };
     });
     return {
+      blockTicks,
       lateral: rel.map((r) => r.lateral),
       along: rel.map((r) => r.along),
       dists: fleet.cars.map((c) => {
@@ -158,5 +180,19 @@ describe("pursuer driver", () => {
     expect(flankSlot(3)).toEqual(flankSlot(3));
     expect(Math.abs(flankSlot(6).lateralM)).toBeGreaterThan(Math.abs(flankSlot(1).lateralM));
     expect(flankSlot(5).alongM).toBeLessThan(flankSlot(0).alongM);
+  });
+
+  it("blocker slots get in front of the player and into its lane, again and again", () => {
+    const poses = Array.from({ length: 5 }, (_, i) => ({
+      x: ((i % 4) - 1.5) * 6,
+      z: 40 + 9 * Math.floor(i / 4),
+      headingRad: 0,
+    }));
+    const r = run(poses, 30, { flank: true, straight: true });
+    // Slots 3 and 4 are the blockers: each spends a good chunk of the run ahead of the player in its lane.
+    for (const i of [3, 4]) expect(r.blockTicks[i] as number).toBeGreaterThan(180);
+    // The tail and flank cars never do.
+    for (const i of [0, 1, 2]) expect(r.blockTicks[i] as number).toBeLessThan(60);
+    for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 });

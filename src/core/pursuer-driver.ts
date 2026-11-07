@@ -47,6 +47,8 @@ export interface PursuerParams {
   readonly stuckTicks: number;
   readonly reverseTicks: number;
   readonly tickRateHz: number;
+  /** Blockers slow to this fraction of the player's speed once they are in its lane ahead of it. */
+  readonly blockSpeedFraction: number;
 }
 
 export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
@@ -64,6 +66,7 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     stuckTicks: 90,
     reverseTicks: 75,
     tickRateHz: 60,
+    blockSpeedFraction: 0.55,
   };
 }
 
@@ -102,6 +105,11 @@ export interface PursuerDriver extends AiDriver {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+function smoothstep(lo: number, hi: number, x: number): number {
+  const t = clamp((x - lo) / (hi - lo), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 const INITIAL_OBS: AiObservation = Object.freeze({ x: 0, z: 0, headingRad: 0, forwardSpeedMs: 0 });
@@ -151,15 +159,26 @@ export function createPursuerDriver(
     const rightX = -fwdZ;
     const rightZ = fwdX;
     const onStation = slot.lateralM !== 0 || slot.alongM !== 0;
+
+    // Blockers (stations ahead of the player) reach further ahead the faster the
+    // player goes, run up the side, then swing across into the player's lane
+    // once they are clear of its nose, and finally slow down in front of it.
+    const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
+    const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
+    const blocker = slot.alongM > 0;
+    const alongEff = blocker ? slot.alongM + 0.8 * tSpeed : slot.alongM;
+    const cut = blocker ? smoothstep(4, 18, carAlong) : 0;
+    const lateralEff = slot.lateralM * (1 - cut);
+
     const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
-    const aimX = target.x + target.vx * leadSec + rightX * slot.lateralM + fwdX * slot.alongM;
-    const aimZ = target.z + target.vz * leadSec + rightZ * slot.lateralM + fwdZ * slot.alongM;
+    const aimX = target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
+    const aimZ = target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
     const aimDist = Math.hypot(aimX - obs.x, aimZ - obs.z);
     // Signed along-track gap to the station (positive = the car is behind its
     // station and must speed up; negative = it is ahead and must ease off).
     const stationAlong =
-      (target.x + rightX * slot.lateralM + fwdX * slot.alongM - obs.x) * fwdX +
-      (target.z + rightZ * slot.lateralM + fwdZ * slot.alongM - obs.z) * fwdZ;
+      (target.x + rightX * lateralEff + fwdX * alongEff - obs.x) * fwdX +
+      (target.z + rightZ * lateralEff + fwdZ * alongEff - obs.z) * fwdZ;
 
     const bearing = Math.atan2(aimZ - obs.z, aimX - obs.x);
     const alpha = Math.atan2(
@@ -188,7 +207,11 @@ export function createPursuerDriver(
       : Math.max(0, dist - params.standoffM) * params.closeGain;
     const turnScale =
       1 - (1 - params.turnSpeedFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
-    const desired = Math.max(0, Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale));
+    let desired = Math.max(0, Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale));
+    // In the player's way: ease off to a fraction of its speed so it has to brake or swerve.
+    if (blocker && carAlong > 2 && carAlong < 40 && Math.abs(carLat) < 5) {
+      desired = Math.min(desired, targetSpeed * params.blockSpeedFraction);
+    }
 
     const err = desired - speed;
     let throttle = 0;
