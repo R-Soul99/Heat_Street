@@ -481,21 +481,23 @@ try {
   // start behind the player's spawn and are re-placed whenever the player
   // restarts. Avoids each other (fleet obstacle set) but NOT the player, so
   // contact is allowed -- PIT/ram behaviours are a later step.
+  const MAX_PURSUERS = 60;
   const pursuerCount = isCircuitRace
     ? 0
     : Math.max(
         0,
         Math.min(
-          6,
+          MAX_PURSUERS,
           Number.parseInt(new URLSearchParams(location.search).get("pursuers") ?? "0", 10) || 0,
         ),
       );
-  const PURSUER_PAINTS = [0x1b1f2a, 0xeceff4, 0x1b1f2a, 0xeceff4, 0x1b1f2a, 0xeceff4];
+  const PURSUER_PAINTS = [0x1b1f2a, 0xeceff4];
   const pursuerPose = (i: number) => {
     const sp = scene.defaultSpawnPose;
     const f = forwardFromYaw(sp.headingRad);
-    const back = 40 + 14 * i;
-    const side = (i % 2 === 0 ? -1 : 1) * 4;
+    // 4 cars per row, rows 9 m apart, the first row 40 m behind the spawn.
+    const back = 40 + 9 * Math.floor(i / 4);
+    const side = ((i % 4) - 1.5) * 6;
     const x = sp.x - f.x * back + -f.z * side;
     const z = sp.z - f.z * back + f.x * side;
     const y =
@@ -642,7 +644,7 @@ try {
           tuning.wheels.halfTrack,
           tuning.wheels.halfWheelbase,
           tuning.chassis.halfExtents,
-          pursuit.drivers.map((_, i) => PURSUER_PAINTS[i] ?? 0x1b1f2a),
+          pursuit.drivers.map((_, i) => PURSUER_PAINTS[i % 2] as number),
         );
   const interpolated: readonly THREE.Object3D[] = [
     ...(aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes]),
