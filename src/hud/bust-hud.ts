@@ -17,8 +17,19 @@ export function bustColour(level: number): string {
   return "#ff3b30";
 }
 
+/** Seconds on its roof before the car can be righted with P. */
+export const RIGHT_CAR_DELAY_SEC = 10;
+
+/** Hint for the upright button: nothing while the car is on its wheels, a countdown while flipped, then the prompt. */
+export function rightCarHint(flippedSec: number): string {
+  if (flippedSec <= 0) return "";
+  if (flippedSec < RIGHT_CAR_DELAY_SEC)
+    return `RIGHT CAR IN ${Math.ceil(RIGHT_CAR_DELAY_SEC - flippedSec)}`;
+  return "PRESS P TO RIGHT THE CAR";
+}
+
 export interface BustHud {
-  update(state: BustState): void;
+  update(state: BustState, hint?: string): void;
   dispose(): void;
 }
 
@@ -38,9 +49,11 @@ export function createBustHud(): BustHud {
   const fill = document.createElement("div");
   fill.style.cssText = "height:100%;width:0%;background:#ffd447";
   track.appendChild(fill);
+  const hintEl = document.createElement("div");
+  hintEl.style.cssText = "margin-bottom:6px;font-size:12px;min-height:15px;color:#ffd447";
   const caption = document.createElement("div");
   caption.style.cssText = "margin-top:4px;font-size:12px;min-height:15px";
-  wrap.append(label, track, caption);
+  wrap.append(hintEl, label, track, caption);
   const banner = document.createElement("div");
   banner.style.cssText =
     "position:fixed;top:42%;left:50%;transform:translate(-50%,-50%);font-size:54px;letter-spacing:.2em;text-shadow:0 3px 8px #000;visibility:hidden;text-align:center";
@@ -54,7 +67,8 @@ export function createBustHud(): BustHud {
   document.body.appendChild(root);
 
   return {
-    update(state: BustState): void {
+    update(state: BustState, hint = ""): void {
+      hintEl.textContent = hint;
       fill.style.width = `${Math.round(state.level * 100)}%`;
       fill.style.background = bustColour(state.level);
       caption.textContent = bustCaption(state);

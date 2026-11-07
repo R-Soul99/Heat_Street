@@ -118,7 +118,7 @@ import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createFreeDriveCoordinator } from "./gameplay/free-drive-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
-import { createBustHud } from "./hud/bust-hud";
+import { createBustHud, RIGHT_CAR_DELAY_SEC, rightCarHint } from "./hud/bust-hud";
 import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
 import { createNavigationArrow } from "./hud/navigation-arrow";
@@ -546,8 +546,16 @@ try {
           ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
         ],
   );
+  // How long the player's car has been continuously on its roof/side (up-vector
+  // tilted past ~70 deg). P only rights it once this reaches RIGHT_CAR_DELAY_SEC.
+  let flippedSec = 0;
+  const playerUpY = (): number => {
+    const r = scene.vehicle.body.rotation();
+    return 1 - 2 * (r.x * r.x + r.z * r.z);
+  };
   const resetPursuit = (): void => {
     bustState = INITIAL_BUST_STATE;
+    flippedSec = 0;
     if (pursuit !== undefined) {
       for (let i = 0; i < pursuit.drivers.length; i++) {
         pursuit.fleet.resetCar(i, pursuerPose(i));
@@ -1269,6 +1277,7 @@ try {
               const fz = Math.sin(bearing);
               for (const d of pursuit.drivers)
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
+              flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
                 player: {
@@ -1294,22 +1303,26 @@ try {
     raceCommands: input.raceCommands,
     onRaceCommands: (commands) => {
       // With pursuers active, P rights the car where it stands (no checkpoint
-      // teleport, no time penalty): a flipped car can still be nudged upright by a
-      // pursuer, and this is the player's own way out when it is really stuck.
+      // teleport, no penalty, nobody else moves, so a car in the middle of the
+      // pack stays surrounded) -- but only once it has been on its roof for
+      // RIGHT_CAR_DELAY_SEC: a pursuer might still nudge it back over.
       if (pursuit !== undefined && commands.respawn) {
-        const body = scene.vehicle.body;
-        const p = body.translation();
-        const bearing = headingFromRotation(body.rotation());
-        scene.resetVehicle({
-          x: p.x,
-          y:
-            terrainPhysicsGrid === undefined
-              ? p.y + SPAWN_CLEARANCE_M
-              : sampleTerrainHeight(terrainPhysicsGrid, p.x, p.z) + SPAWN_CLEARANCE_M,
-          z: p.z,
-          headingRad: yawFromTravelDirection(Math.cos(bearing), Math.sin(bearing)),
-        });
-        transforms.snapBody(0);
+        if (flippedSec >= RIGHT_CAR_DELAY_SEC) {
+          const body = scene.vehicle.body;
+          const p = body.translation();
+          const bearing = headingFromRotation(body.rotation());
+          scene.resetVehicle({
+            x: p.x,
+            y:
+              terrainPhysicsGrid === undefined
+                ? p.y + SPAWN_CLEARANCE_M
+                : sampleTerrainHeight(terrainPhysicsGrid, p.x, p.z) + SPAWN_CLEARANCE_M,
+            z: p.z,
+            headingRad: yawFromTravelDirection(Math.cos(bearing), Math.sin(bearing)),
+          });
+          transforms.snapBody(0);
+          flippedSec = 0;
+        }
         activeCoordinator.onCommands({ ...commands, respawn: false });
       } else {
         activeCoordinator.onCommands(commands);
@@ -1337,7 +1350,7 @@ try {
         navPointer.update(carPos.x, carPos.z, navForwardScratch.x, navForwardScratch.z);
       }
 
-      bustHud?.update(bustState);
+      bustHud?.update(bustState, rightCarHint(flippedSec));
       view.updateWheels(scene.vehicle.controller);
       // Circuit Race only: each AI car's own wheel rig, read from that car's
       // own controller and written to that car's own meshes (never shared
