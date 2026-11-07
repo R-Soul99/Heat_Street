@@ -40,6 +40,7 @@ import { createCheckpointChime } from "./audio/checkpoint-chime";
 import { createSurfaceAudio } from "./audio/surface-audio";
 import { createSynthesizedSurfaceLoops } from "./audio/surface-loops";
 import { defaultAiDriverParams } from "./core/ai-driver";
+import { INITIAL_BUST_STATE, stepBustMeter } from "./core/bust-meter";
 import {
   CAMERA_TUNING_STORAGE_KEY,
   defaultCameraTuning,
@@ -116,6 +117,7 @@ import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createFreeDriveCoordinator } from "./gameplay/free-drive-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
+import { createBustHud } from "./hud/bust-hud";
 import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
 import { createNavigationArrow } from "./hud/navigation-arrow";
@@ -520,6 +522,26 @@ try {
     );
     pursuit = { fleet: pFleet, drivers };
   }
+
+  // Bust meter (pursuit modes): fills while pursuers are close and the player is
+  // slow or boxed in; BUSTED holds the player and the pursuers still until R.
+  let bustState = INITIAL_BUST_STATE;
+  const bustHud = pursuit === undefined ? undefined : createBustHud();
+  const BUSTED_HOLD: InputFrame = Object.freeze({
+    steer: 0,
+    throttle: 0,
+    brake: 0,
+    handbrake: true,
+  });
+  const resetPursuit = (): void => {
+    bustState = INITIAL_BUST_STATE;
+    if (pursuit !== undefined) {
+      for (let i = 0; i < pursuit.drivers.length; i++) {
+        pursuit.fleet.resetCar(i, pursuerPose(i));
+        transforms.snapBody(1 + i);
+      }
+    }
+  };
 
   const transforms = new TransformCache([
     ...scene.bodies,
@@ -1131,7 +1153,8 @@ try {
   // Drive logger (L record / M mark, saves a CSV): `?feel` or `?debug` only.
   const driveLogger =
     FEEL_ENABLED || DEBUG_ENABLED ? createDriveLogger(() => scene.vehicle) : undefined;
-  const applyPlayerInput = (frame: InputFrame): void => {
+  const applyPlayerInput = (rawFrame: InputFrame): void => {
+    const frame = bustState.busted ? BUSTED_HOLD : rawFrame;
     scene.applyInput(frame);
     driveLogger?.record(frame);
   };
@@ -1229,14 +1252,25 @@ try {
               const p = scene.vehicle.body.translation();
               const v = scene.vehicle.body.linvel();
               for (const d of pursuit.drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
-              pursuit.fleet.tick(tick);
+              bustState = stepBustMeter(bustState, {
+                dtSec: DT,
+                player: { x: p.x, z: p.z, speedMs: Math.hypot(v.x, v.z) },
+                pursuers: pursuit.fleet.cars.map((c) => {
+                  const q = c.vehicle.body.translation();
+                  return { x: q.x, z: q.z };
+                }),
+              });
+              pursuit.fleet.tick(tick, bustState.busted ? () => BUSTED_HOLD : undefined);
             }
         : (tick) => {
             scene.preTick(tick);
             circuitRace.onTickBegin(tick);
           },
     raceCommands: input.raceCommands,
-    onRaceCommands: (commands) => activeCoordinator.onCommands(commands),
+    onRaceCommands: (commands) => {
+      activeCoordinator.onCommands(commands);
+      if (commands.restart && pursuit !== undefined) resetPursuit();
+    },
     onTickEnd: () => activeCoordinator.onTickEnd(),
     render(alpha: number, dtMs: number): void {
       // Ground speed computed here from linvel's XZ components, never from the
@@ -1258,6 +1292,7 @@ try {
         navPointer.update(carPos.x, carPos.z, navForwardScratch.x, navForwardScratch.z);
       }
 
+      bustHud?.update(bustState);
       view.updateWheels(scene.vehicle.controller);
       // Circuit Race only: each AI car's own wheel rig, read from that car's
       // own controller and written to that car's own meshes (never shared
