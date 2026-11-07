@@ -99,6 +99,15 @@ const PIVOT_ZERO_SPEED_MS = 12;
 const PIVOT_ARM_SPEED_MS = 2.5;
 const PIVOT_UNARMED_FULL_SPEED_MS = 1.5;
 const PIVOT_UNARMED_ZERO_SPEED_MS = 3;
+/**
+ * On loose ground (rear lateral grip at or under this, so gravel, dirt, grass,
+ * sand and mud, not tarmac) gunning it at full lock arms the pivot from a rolling
+ * start below PIVOT_SLIPPERY_ARM_SPEED_MS: the tail steps out round a pinned nose
+ * instead of the car driving away in a wide arc (mud recording 2026-11-06, 20 mph).
+ * Tarmac keeps the near-rest arming, so the 10-25 mph cornering bog stays fixed.
+ */
+const PIVOT_SLIPPERY_LATERAL_GRIP = 0.65;
+const PIVOT_SLIPPERY_ARM_SPEED_MS = 11.5;
 /** Pivot turn: steer / throttle fade in continuously between these levels (no threshold, no dwell). */
 const PIVOT_INPUT_START = 0.5;
 const PIVOT_INPUT_FULL = 0.9;
@@ -735,7 +744,11 @@ export function createVehicle(
       let pivotGate = 0;
       if (t.drive.pivotTurn > 0) {
         const groundSpeed = Math.hypot(lv.x, lv.z);
-        if (groundSpeed < PIVOT_ARM_SPEED_MS && frame.throttle >= PIVOT_INPUT_START) {
+        const looseGround =
+          ((rearLateralGrip[0] as number) + (rearLateralGrip[1] as number)) * 0.5 <=
+          PIVOT_SLIPPERY_LATERAL_GRIP;
+        const armSpeed = looseGround ? PIVOT_SLIPPERY_ARM_SPEED_MS : PIVOT_ARM_SPEED_MS;
+        if (groundSpeed < armSpeed && frame.throttle >= PIVOT_INPUT_START) {
           pivotArmed = true;
         } else if (groundSpeed >= PIVOT_ZERO_SPEED_MS || frame.throttle < PIVOT_INPUT_START) {
           pivotArmed = false;
