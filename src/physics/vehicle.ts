@@ -1209,7 +1209,9 @@ export function createVehicle(
                 ? t.drive.driftHoldSlipDeg * 0.75
                 : 0;
           const gate = smoothstep(8, 14, slipDeg) * smoothstep(8, 14, speedH);
-          const drive = clamp((target - slipDeg) / 10, -1, 1);
+          // Soft ramp (20 deg to full torque, was 10): the hard push overshot the target
+          // on mud and swung the car through zero to the other side (read as "catching").
+          const drive = clamp((target - slipDeg) / 20, -1, 1);
           if (gate * drive !== 0) {
             body.applyTorqueImpulse(
               { x: 0, y: dir * inertia.y * t.drive.driftHold * gate * drive * DT, z: 0 },
