@@ -492,7 +492,11 @@ try {
           Number.parseInt(new URLSearchParams(location.search).get("pursuers") ?? "0", 10) || 0,
         ),
       );
-  const PURSUER_PAINTS = [0x1b1f2a, 0xeceff4];
+  // White = blocker (station ahead of the player); dark = tail and flankers.
+  const PURSUER_DARK = 0x1b1f2a;
+  const PURSUER_BLOCKER_WHITE = 0xeceff4;
+  const pursuerPaint = (i: number): number =>
+    flankSlot(i).alongM > 0 ? PURSUER_BLOCKER_WHITE : PURSUER_DARK;
   const pursuerPose = (i: number) => {
     const sp = scene.defaultSpawnPose;
     const f = forwardFromYaw(sp.headingRad);
@@ -653,7 +657,7 @@ try {
           tuning.wheels.halfTrack,
           tuning.wheels.halfWheelbase,
           tuning.chassis.halfExtents,
-          pursuit.drivers.map((_, i) => PURSUER_PAINTS[i % 2] as number),
+          pursuit.drivers.map((_, i) => pursuerPaint(i)),
         );
   const interpolated: readonly THREE.Object3D[] = [
     ...(aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes]),
