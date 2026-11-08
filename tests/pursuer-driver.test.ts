@@ -90,7 +90,14 @@ function run(
       );
       const p = player.body.translation();
       const v = player.body.linvel();
-      for (const d of drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+      const allies = fleet.cars.map((c) => {
+        const q = c.vehicle.body.translation();
+        return { x: q.x, z: q.z };
+      });
+      for (const d of drivers) {
+        d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+        d.setAllies(allies);
+      }
       fleet.tick(60 + k);
       world.step();
       {

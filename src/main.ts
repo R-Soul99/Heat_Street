@@ -1282,8 +1282,14 @@ try {
               const bearing = headingFromRotation(scene.vehicle.body.rotation());
               const fx = Math.cos(bearing);
               const fz = Math.sin(bearing);
-              for (const d of pursuit.drivers)
+              const allies = pursuit.fleet.cars.map((c) => {
+                const q = c.vehicle.body.translation();
+                return { x: q.x, z: q.z };
+              });
+              for (const d of pursuit.drivers) {
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
+                d.setAllies(allies);
+              }
               flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
