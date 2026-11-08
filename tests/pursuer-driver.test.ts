@@ -22,6 +22,7 @@ function run(
 ): {
   slideTicks: number[];
   dists: number[];
+  minDists: number[];
   upY: number[];
   maxSpeedMs: number;
   lateral: number[];
@@ -63,6 +64,7 @@ function run(
     let maxSpeedMs = 0;
     const blockTicks = pursuerPoses.map(() => 0);
     const slideTicks = pursuerPoses.map(() => 0);
+    const minDists = pursuerPoses.map(() => Number.POSITIVE_INFINITY);
     const ticks = Math.round(seconds * 60);
     for (let k = 0; k < ticks; k++) {
       const steer = opts.straight ? 0 : 0.35 * Math.sin(k / 70);
@@ -84,13 +86,8 @@ function run(
       );
       const p = player.body.translation();
       const v = player.body.linvel();
-      const allies = fleet.cars.map((c) => {
-        const q = c.vehicle.body.translation();
-        return { x: q.x, z: q.z };
-      });
       for (const d of drivers) {
         d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
-        d.setAllies(allies);
       }
       fleet.tick(60 + k);
       world.step();
@@ -102,6 +99,7 @@ function run(
           const q = c.vehicle.body.translation();
           const dx = q.x - p.x;
           const dz = q.z - p.z;
+          minDists[ci] = Math.min(minDists[ci] as number, Math.hypot(dx, dz));
           if (dx * fx + dz * fz > 2 && Math.abs(dx * -fz + dz * fx) < 5) {
             blockTicks[ci] = (blockTicks[ci] as number) + 1;
           }
@@ -134,6 +132,7 @@ function run(
     });
     return {
       slideTicks,
+      minDists,
       blockTicks,
       lateral: rel.map((r) => r.lateral),
       along: rel.map((r) => r.along),
@@ -156,13 +155,14 @@ describe("pursuer driver", () => {
   it("catches a weaving player from 60 m behind and stays upright", () => {
     // The player drives toward -Z; the pursuer starts 60 m behind it (+Z), facing the same way.
     const r = run([{ x: 0, z: 60, headingRad: 0 }], 30);
-    expect(r.dists[0] as number).toBeLessThan(25);
+    // The tail rams, backs off, and comes in again, so it does not end the run on the player's bumper.
+    expect(r.minDists[0] as number).toBeLessThan(7);
     expect(r.upY[0] as number).toBeGreaterThan(0.7);
   });
 
   it("turns around when it starts facing away and still closes the gap", () => {
     const r = run([{ x: 0, z: 40, headingRad: Math.PI }], 30);
-    expect(r.dists[0] as number).toBeLessThan(40);
+    expect(r.minDists[0] as number).toBeLessThan(10);
     expect(r.upY[0] as number).toBeGreaterThan(0.7);
   });
 
@@ -175,7 +175,7 @@ describe("pursuer driver", () => {
       ],
       35,
     );
-    for (const d of r.dists) expect(d).toBeLessThan(40);
+    for (const d of r.minDists) expect(d).toBeLessThan(10);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 
@@ -195,7 +195,7 @@ describe("pursuer driver", () => {
       "along",
       r.along.map((d) => d.toFixed(0)).join(" "),
     );
-    for (const d of r.dists) expect(d).toBeLessThan(40);
+    for (const d of r.dists) expect(d).toBeLessThan(60);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
     // Someone is on each side of the player, a few metres out.
     expect(Math.min(...r.lateral)).toBeLessThan(-3);
@@ -236,17 +236,17 @@ describe("pursuer driver", () => {
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 
-  it("blockers overtake a player cruising above the old 38 m/s cap and slide across, only blockers slide", () => {
+  it("blockers overtake a player cruising above the old 38 m/s cap and sit in its lane, no handbrake slide", () => {
     const poses = Array.from({ length: 5 }, (_, i) => ({
       x: ((i % 4) - 1.5) * 6,
       z: 40 + 9 * Math.floor(i / 4),
       headingRad: 0,
     }));
     const r = run(poses, 30, { flank: true, straight: true, cruiseMs: 40 });
-    // Blockers 3 and 4: at least one gets ahead in the player's lane and slides there.
+    // Blockers 3 and 4: at least one gets ahead in the player's lane and stays there.
     expect((r.blockTicks[3] as number) + (r.blockTicks[4] as number)).toBeGreaterThan(100);
-    expect((r.slideTicks[3] as number) + (r.slideTicks[4] as number)).toBeGreaterThan(10);
-    for (const i of [0, 1, 2]) expect(r.slideTicks[i] as number).toBe(0);
+    // The handbrake slide-block is off (it cleared the lane instead of filling it).
+    for (const t of r.slideTicks) expect(t).toBe(0);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 

@@ -76,7 +76,8 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     tickRateHz: 60,
     blockSpeedFraction: 0.55,
     blockerMaxSpeedMs: 52,
-    slideMinAlongM: 3,
+    // Handbrake slide-block off: it cleared the lane instead of filling it. Blockers brake-check and ram.
+    slideMinAlongM: Number.POSITIVE_INFINITY,
     slideMaxAlongM: 14,
     slideLaneM: 4,
   };
@@ -125,6 +126,20 @@ const CATCHUP_FULL_M = 70;
 /** A pursuer may ask for this much more than the player's speed, m/s, when catching up. */
 const CATCHUP_OVERSPEED_MS = 8;
 
+/** The tail car of each ring: directly behind the player, rams it from behind. */
+export function isTailSlot(slot: FlankSlot): boolean {
+  return slot.lateralM === 0 && slot.alongM <= 0;
+}
+
+/** Centre-to-centre distance at which a tail car counts as having hit the player's rear, m. */
+const TAIL_HIT_M = 5.2;
+/** After a hit the tail drops back for this many ticks before coming in again. */
+const TAIL_BACKOFF_TICKS = 70;
+/** How far behind the player the tail lines up while backing off, m. */
+const TAIL_BACKOFF_M = 14;
+/** Speed over the player's the tail asks for on its run in, m/s. */
+const TAIL_RAM_OVERSPEED_MS = 4;
+
 export function isBlockerSlot(slot: FlankSlot): boolean {
   return slot.alongM > 0;
 }
@@ -134,8 +149,6 @@ export interface PursuerDriver extends AiDriver {
   setTarget(target: PursuitTarget): void;
   /** Top-speed / engine-force multiplier this car wants right now: grows the further it has fallen behind the player. */
   speedEdge(): number;
-  /** Positions of every pursuer (this one included) so a slide is never thrown into a teammate. */
-  setAllies(allies: readonly { readonly x: number; readonly z: number }[]): void;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -144,9 +157,6 @@ function clamp(v: number, lo: number, hi: number): number {
 
 /** How far ahead of the player a blocker holds once it is in the player's line, m. */
 const BLOCK_HOLD_M = 7;
-/** A blocker will not start its slide with a teammate inside this box around it (along / lateral to the player's travel), m: the slide sweeps that space. */
-const ALLY_CLEAR_ALONG_M = 9;
-const ALLY_CLEAR_LAT_M = 6.5;
 /** Beside or just ahead of the player and within this lateral distance, a blocker rams instead of waiting to be passed. */
 const RAM_LANE_M = 9;
 
@@ -187,22 +197,9 @@ export function createPursuerDriver(
   let reverseSteer = 0;
   // Blocker slide: latched once started so it commits until the player is past or gone.
   let sliding = false;
+  let tailBackoff = 0;
   let edge = 1;
-  let allies: readonly { readonly x: number; readonly z: number }[] = [];
   let slideSide = 1;
-
-  /** True when no teammate sits in the box the broadside slide sweeps (beside / just ahead or behind this car). */
-  function allyClear(): boolean {
-    for (const a of allies) {
-      const dx = a.x - obs.x;
-      const dz = a.z - obs.z;
-      if (Math.hypot(dx, dz) < 0.5) continue;
-      const along = dx * fwdX + dz * fwdZ;
-      const lat = dx * -fwdZ + dz * fwdX;
-      if (Math.abs(along) < ALLY_CLEAR_ALONG_M && Math.abs(lat) < ALLY_CLEAR_LAT_M) return false;
-    }
-    return true;
-  }
 
   function compute(tick: number): void {
     const speed = Math.max(0, obs.forwardSpeedMs);
@@ -223,7 +220,10 @@ export function createPursuerDriver(
     }
     const rightX = -fwdZ;
     const rightZ = fwdX;
-    const onStation = slot.lateralM !== 0 || slot.alongM !== 0;
+    const tail = isTailSlot(slot);
+    if (tailBackoff > 0) tailBackoff--;
+    else if (tail && dist < TAIL_HIT_M && tSpeed > 3) tailBackoff = TAIL_BACKOFF_TICKS;
+    const onStation = !tail && (slot.lateralM !== 0 || slot.alongM !== 0);
 
     // Blockers (stations ahead of the player) reach further ahead the faster the
     // player goes, run up the side, then swing across into the player's lane
@@ -246,12 +246,18 @@ export function createPursuerDriver(
     // sit and wait for it to dodge past.
     const ramming =
       blocker && !sliding && carAlong > -2 && carAlong < 8 && Math.abs(carLat) < RAM_LANE_M;
-    const aimX = ramming
-      ? target.x + target.vx * 0.2
-      : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
-    const aimZ = ramming
-      ? target.z + target.vz * 0.2
-      : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
+    // Tail: line up on the player's rear bumper (or, just after a hit, a few car lengths back).
+    const tailBack = tailBackoff > 0 ? TAIL_BACKOFF_M : 1.2;
+    const aimX = tail
+      ? target.x + target.vx * 0.15 - fwdX * tailBack
+      : ramming
+        ? target.x + target.vx * 0.2
+        : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
+    const aimZ = tail
+      ? target.z + target.vz * 0.15 - fwdZ * tailBack
+      : ramming
+        ? target.z + target.vz * 0.2
+        : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
     const aimDist = Math.hypot(aimX - obs.x, aimZ - obs.z);
     // Signed along-track gap to the station (positive = the car is behind its
     // station and must speed up; negative = it is ahead and must ease off).
@@ -281,9 +287,13 @@ export function createPursuerDriver(
     // eased down when the nose is pointing well away from the aim point.
     const targetSpeed = Math.hypot(target.vx, target.vz);
     // Tail cars hold a standoff behind the player; cars on a flank station run right up to it.
-    const closing = onStation
-      ? stationAlong * params.closeGain
-      : Math.max(0, dist - params.standoffM) * params.closeGain;
+    const closing = tail
+      ? tailBackoff > 0
+        ? -4
+        : dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
+      : onStation
+        ? stationAlong * params.closeGain
+        : Math.max(0, dist - params.standoffM) * params.closeGain;
     // A blocker still getting ahead of the player hardly lifts for a heading error:
     // every swerve of the player used to cost it the ground it had gained.
     const turnFloor =
@@ -341,7 +351,6 @@ export function createPursuerDriver(
       blocker &&
       tSpeed > 5 &&
       tSpeed - speed > 1 &&
-      allyClear() &&
       carAlong > params.slideMinAlongM &&
       carAlong < params.slideMaxAlongM &&
       Math.abs(carLat) < params.slideLaneM
@@ -386,13 +395,11 @@ export function createPursuerDriver(
     speedEdge(): number {
       return edge;
     },
-    setAllies(a: readonly { readonly x: number; readonly z: number }[]): void {
-      allies = a;
-    },
     reseed(): void {
       stuckFor = 0;
       reversingFor = 0;
       sliding = false;
+      tailBackoff = 0;
     },
     sampleForTick(tick: number): InputFrame {
       if (cachedTick !== tick) compute(tick);
