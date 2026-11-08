@@ -12,8 +12,15 @@ import { createWorld } from "../src/physics/world";
 function run(
   pursuerPoses: { x: number; z: number; headingRad: number }[],
   seconds: number,
-  opts: { flank?: boolean; straight?: boolean } = {},
+  opts: {
+    flank?: boolean;
+    straight?: boolean;
+    throttle?: number;
+    cruiseMs?: number;
+    noSlide?: boolean;
+  } = {},
 ): {
+  slideTicks: number[];
   dists: number[];
   upY: number[];
   maxSpeedMs: number;
@@ -28,7 +35,10 @@ function run(
     world.createCollider(RAPIER.ColliderDesc.cuboid(5000, 1, 5000), ground);
     const surfaces = { map: createSurfaceMap("tarmac"), profiles: defaultSurfaceProfiles() };
     const player = createVehicle(world, t, { x: 0, y: 1, z: 0 });
-    const params = defaultPursuerParams(t);
+    const baseParams = defaultPursuerParams(t);
+    const params = opts.noSlide
+      ? { ...baseParams, slideMinAlongM: Number.POSITIVE_INFINITY }
+      : baseParams;
     const drivers = pursuerPoses.map((_, i) =>
       createPursuerDriver(params, opts.flank ? flankSlot(i) : undefined),
     );
@@ -49,11 +59,23 @@ function run(
     }
     let maxSpeedMs = 0;
     const blockTicks = pursuerPoses.map(() => 0);
+    const slideTicks = pursuerPoses.map(() => 0);
     const ticks = Math.round(seconds * 60);
     for (let k = 0; k < ticks; k++) {
       const steer = opts.straight ? 0 : 0.35 * Math.sin(k / 70);
+      const spd = Math.hypot(player.body.linvel().x, player.body.linvel().z);
+      const cruise = opts.cruiseMs;
+      const throttle =
+        cruise === undefined
+          ? (opts.throttle ?? (opts.straight ? 0.3 : 0.55))
+          : Math.max(0, Math.min(1, 0.4 + (cruise - spd) * 0.3));
       player.tick(
-        { steer, throttle: opts.straight ? 0.3 : 0.55, brake: 0, handbrake: false },
+        {
+          steer,
+          throttle,
+          brake: cruise !== undefined && spd > cruise + 3 ? 0.5 : 0,
+          handbrake: false,
+        },
         t,
         surfaces,
       );
@@ -75,6 +97,9 @@ function run(
           }
         });
       }
+      drivers.forEach((d, di) => {
+        if (d.debug().frame.handbrake) slideTicks[di] = (slideTicks[di] as number) + 1;
+      });
       for (const c of fleet.cars)
         maxSpeedMs = Math.max(maxSpeedMs, sampleVehicle(c.vehicle).groundSpeedMs);
     }
@@ -98,6 +123,7 @@ function run(
       return { lateral: dx * -fz + dz * fx, along: dx * fx + dz * fz };
     });
     return {
+      slideTicks,
       blockTicks,
       lateral: rel.map((r) => r.lateral),
       along: rel.map((r) => r.along),
@@ -149,7 +175,8 @@ describe("pursuer driver", () => {
       z: 40 + 9 * Math.floor(i / 4),
       headingRad: 0,
     }));
-    const r = run(poses, 30, { flank: true, straight: true });
+    // Slide off: this test is about station spread; blockers rejoining after a slide scatter the swarm.
+    const r = run(poses, 30, { flank: true, straight: true, noSlide: true });
     console.log(
       "PDBG dists",
       r.dists.map((d) => d.toFixed(0)).join(" "),
@@ -193,6 +220,20 @@ describe("pursuer driver", () => {
     for (const i of [3, 4]) expect(r.blockTicks[i] as number).toBeGreaterThan(180);
     // The tail and flank cars never do.
     for (const i of [0, 1, 2]) expect(r.blockTicks[i] as number).toBeLessThan(60);
+    for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
+  });
+
+  it("blockers overtake a player cruising above the old 38 m/s cap and slide across, only blockers slide", () => {
+    const poses = Array.from({ length: 5 }, (_, i) => ({
+      x: ((i % 4) - 1.5) * 6,
+      z: 40 + 9 * Math.floor(i / 4),
+      headingRad: 0,
+    }));
+    const r = run(poses, 30, { flank: true, straight: true, cruiseMs: 40 });
+    // Blockers 3 and 4: at least one gets ahead in the player's lane and slides there.
+    expect((r.blockTicks[3] as number) + (r.blockTicks[4] as number)).toBeGreaterThan(100);
+    expect((r.slideTicks[3] as number) + (r.slideTicks[4] as number)).toBeGreaterThan(10);
+    for (const i of [0, 1, 2]) expect(r.slideTicks[i] as number).toBe(0);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 });

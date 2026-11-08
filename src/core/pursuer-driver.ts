@@ -49,6 +49,14 @@ export interface PursuerParams {
   readonly tickRateHz: number;
   /** Blockers slow to this fraction of the player's speed once they are in its lane ahead of it. */
   readonly blockSpeedFraction: number;
+  /** Blockers may go faster than other pursuers so they can overtake a player at speed, m/s. */
+  readonly blockerMaxSpeedMs: number;
+  /** A blocker only starts its sideways slide once it is at least this far ahead of the player, m. */
+  readonly slideMinAlongM: number;
+  /** ...and no further ahead than this, m. */
+  readonly slideMaxAlongM: number;
+  /** ...and within this many metres of the player's line, m. */
+  readonly slideLaneM: number;
 }
 
 export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
@@ -67,6 +75,10 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     reverseTicks: 75,
     tickRateHz: 60,
     blockSpeedFraction: 0.55,
+    blockerMaxSpeedMs: 52,
+    slideMinAlongM: 6,
+    slideMaxAlongM: 25,
+    slideLaneM: 4,
   };
 }
 
@@ -107,6 +119,13 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+/** How far ahead of the player a blocker holds once it is in the player's line, m. */
+const BLOCK_HOLD_M = 12;
+
+function wrapAngle(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
 function smoothstep(lo: number, hi: number, x: number): number {
   const t = clamp((x - lo) / (hi - lo), 0, 1);
   return t * t * (3 - 2 * t);
@@ -138,6 +157,9 @@ export function createPursuerDriver(
   let fwdX = 0;
   let fwdZ = -1;
   let reverseSteer = 0;
+  // Blocker slide: latched once started so it commits until the player is past or gone.
+  let sliding = false;
+  let slideSide = 1;
 
   function compute(tick: number): void {
     const speed = Math.max(0, obs.forwardSpeedMs);
@@ -166,8 +188,13 @@ export function createPursuerDriver(
     const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
     const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
     const blocker = slot.alongM > 0;
-    const alongEff = blocker ? slot.alongM + 0.8 * tSpeed : slot.alongM;
-    const cut = blocker ? smoothstep(4, 18, carAlong) : 0;
+    // Swing across into the player's line as soon as the blocker is level with it.
+    const cut = blocker ? smoothstep(0, 10, carAlong) : 0;
+    // Run well ahead to overtake, then tighten right up to the player once in its
+    // line: a blocker cruising 50 m ahead at speed never gets near enough to block.
+    const alongEff = blocker
+      ? (slot.alongM + 0.8 * tSpeed) * (1 - cut) + BLOCK_HOLD_M * cut
+      : slot.alongM;
     const lateralEff = slot.lateralM * (1 - cut);
 
     const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
@@ -205,9 +232,13 @@ export function createPursuerDriver(
     const closing = onStation
       ? stationAlong * params.closeGain
       : Math.max(0, dist - params.standoffM) * params.closeGain;
-    const turnScale =
-      1 - (1 - params.turnSpeedFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
-    let desired = Math.max(0, Math.min(params.maxSpeedMs, (targetSpeed + closing) * turnScale));
+    // A blocker still getting ahead of the player hardly lifts for a heading error:
+    // every swerve of the player used to cost it the ground it had gained.
+    const turnFloor =
+      blocker && carAlong < 18 ? Math.max(params.turnSpeedFloor, 0.75) : params.turnSpeedFloor;
+    const turnScale = 1 - (1 - turnFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
+    const speedCap = blocker ? params.blockerMaxSpeedMs : params.maxSpeedMs;
+    let desired = Math.max(0, Math.min(speedCap, (targetSpeed + closing) * turnScale));
     // In the player's way: ease off to a fraction of its speed so it has to brake or swerve.
     if (blocker && carAlong > 2 && carAlong < 40 && Math.abs(carLat) < 5) {
       desired = Math.min(desired, targetSpeed * params.blockSpeedFraction);
@@ -240,8 +271,42 @@ export function createPursuerDriver(
       stuckFor = 0;
     }
 
+    // Sideways block: a blocker that has pulled ahead into the player's line while
+    // the player is closing on it lifts, pulls the handbrake and swings its nose
+    // across the road, then sits broadside on the brakes. Committed until the
+    // player is past it, has stopped, or has dropped well back.
+    const ownRel = wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX));
+    if (sliding) {
+      if (!blocker || carAlong < 0 || tSpeed < 3 || carAlong > params.slideMaxAlongM + 15) {
+        sliding = false;
+      }
+    } else if (
+      blocker &&
+      tSpeed > 5 &&
+      tSpeed - speed > 1 &&
+      carAlong > params.slideMinAlongM &&
+      carAlong < params.slideMaxAlongM &&
+      Math.abs(carLat) < params.slideLaneM
+    ) {
+      sliding = true;
+      slideSide = Math.abs(ownRel) > 0.05 ? Math.sign(ownRel) : carLat >= 0 ? 1 : -1;
+    }
+    let handbrake = false;
+    if (sliding) {
+      const relErr = slideSide * (Math.PI / 2) - ownRel;
+      throttle = 0;
+      if (Math.abs(relErr) > 0.3) {
+        steer = clamp(relErr * 2, -1, 1);
+        brake = 0;
+        handbrake = true;
+      } else {
+        steer = 0;
+        brake = 1;
+      }
+    }
+
     cachedTick = tick;
-    frame = Object.freeze({ steer, throttle, brake, handbrake: false });
+    frame = Object.freeze({ steer, throttle, brake, handbrake });
     debug = Object.freeze({
       lineIndex: 0,
       targetIndex: 0,
@@ -263,6 +328,7 @@ export function createPursuerDriver(
     reseed(): void {
       stuckFor = 0;
       reversingFor = 0;
+      sliding = false;
     },
     sampleForTick(tick: number): InputFrame {
       if (cachedTick !== tick) compute(tick);
