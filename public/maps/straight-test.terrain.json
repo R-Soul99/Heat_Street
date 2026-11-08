@@ -1,0 +1,274 @@
+{
+  "kind": "heat-street.terrain-area",
+  "formatVersion": 1,
+  "areaId": "straight-test",
+  "name": "Straight Test (synthetic)",
+  "groundSurface": "tarmac",
+  "legacyGlbBuildings": false,
+  "nextEdgeId": 6,
+  "graph": {
+    "schemaVersion": 1,
+    "areaId": "straight-test",
+    "name": "Straight Test (synthetic)",
+    "source": {
+      "osmExtract": "synthetic://heat-street/straight-test",
+      "osmSnapshot": "2026-11-08T00:00:00.000Z",
+      "demSource": "none-flat-authored",
+      "compilerVersion": "0.6.0"
+    },
+    "attribution": {
+      "osm": "© OpenStreetMap contributors",
+      "osmLicense": "ODbL-1.0",
+      "osmLicenseUrl": "https://www.openstreetmap.org/copyright",
+      "dem": "Terrain elevation is flat and hand-authored — no DEM data is used (see docs/adr/0001-map-data-source.md)"
+    },
+    "origin": {
+      "lat": 33,
+      "lon": -84,
+      "projection": "local-enu-metres"
+    },
+    "bounds": {
+      "minX": -1999.999999999961,
+      "minZ": -250.00000000016405,
+      "maxX": 1999.999999999961,
+      "maxZ": 250.00000000016405
+    },
+    "nodes": [
+      {
+        "id": 0,
+        "x": -1849.9999999996319,
+        "y": 0,
+        "z": 0,
+        "junction": false,
+        "osmNodeId": 8000000
+      },
+      {
+        "id": 1,
+        "x": 1999.999999999961,
+        "y": 0,
+        "z": 0,
+        "junction": true,
+        "osmNodeId": 8000001
+      },
+      {
+        "id": 2,
+        "x": -1999.999999999961,
+        "y": 0,
+        "z": 0,
+        "junction": true,
+        "osmNodeId": 8000002
+      },
+      {
+        "id": 3,
+        "x": -1999.999999999961,
+        "y": 0,
+        "z": -250.00000000016405,
+        "junction": false,
+        "osmNodeId": 8000003
+      },
+      {
+        "id": 4,
+        "x": -1999.999999999961,
+        "y": 0,
+        "z": 250.00000000016405,
+        "junction": false,
+        "osmNodeId": 8000004
+      },
+      {
+        "id": 5,
+        "x": 1999.999999999961,
+        "y": 0,
+        "z": -250.00000000016405,
+        "junction": false,
+        "osmNodeId": 8000005
+      },
+      {
+        "id": 6,
+        "x": 1999.999999999961,
+        "y": 0,
+        "z": 250.00000000016405,
+        "junction": false,
+        "osmNodeId": 8000006
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "from": 0,
+        "to": 1,
+        "points": [
+          [
+            -1849.9999999996319,
+            0,
+            0
+          ],
+          [
+            1999.999999999961,
+            0,
+            0
+          ]
+        ],
+        "lengthM": 3849.9999999995925,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000000
+      },
+      {
+        "id": 1,
+        "from": 2,
+        "to": 0,
+        "points": [
+          [
+            -1999.999999999961,
+            0,
+            0
+          ],
+          [
+            -1849.9999999996319,
+            0,
+            0
+          ]
+        ],
+        "lengthM": 150.000000000329,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000001
+      },
+      {
+        "id": 2,
+        "from": 3,
+        "to": 2,
+        "points": [
+          [
+            -1999.999999999961,
+            0,
+            -250.00000000016405
+          ],
+          [
+            -1999.999999999961,
+            0,
+            0
+          ]
+        ],
+        "lengthM": 250.00000000016405,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000002
+      },
+      {
+        "id": 3,
+        "from": 2,
+        "to": 4,
+        "points": [
+          [
+            -1999.999999999961,
+            0,
+            0
+          ],
+          [
+            -1999.999999999961,
+            0,
+            250.00000000016405
+          ]
+        ],
+        "lengthM": 250.00000000016405,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000003
+      },
+      {
+        "id": 4,
+        "from": 5,
+        "to": 1,
+        "points": [
+          [
+            1999.999999999961,
+            0,
+            -250.00000000016405
+          ],
+          [
+            1999.999999999961,
+            0,
+            0
+          ]
+        ],
+        "lengthM": 250.00000000016405,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000004
+      },
+      {
+        "id": 5,
+        "from": 1,
+        "to": 6,
+        "points": [
+          [
+            1999.999999999961,
+            0,
+            0
+          ],
+          [
+            1999.999999999961,
+            0,
+            250.00000000016405
+          ]
+        ],
+        "lengthM": 250.00000000016405,
+        "surface": "tarmac",
+        "roadClass": "motorway",
+        "lanes": 2,
+        "widthM": 24,
+        "oneway": false,
+        "speedLimitKph": 100,
+        "bridge": false,
+        "tunnel": false,
+        "layer": 0,
+        "osmWayId": 9000005
+      }
+    ],
+    "spawns": [
+      {
+        "id": "default",
+        "nodeId": 0,
+        "headingRad": 1.5707963267948966
+      }
+    ]
+  },
+  "objects": [],
+  "buildings": []
+}

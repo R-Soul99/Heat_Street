@@ -1,5 +1,5 @@
 /**
- * `npm run convert-terrain -- --area <feel-test|grid-test|juliette-ga|playground|all>`
+ * `npm run convert-terrain -- --area <feel-test|grid-test|juliette-ga|playground|straight-test|all>`
  *
  * Converts compiled legacy map artifacts (`public/maps/<id>.map.json` +
  * `.collision.json`) into the terrain format (`<id>.terrain.bin` + `.json`).

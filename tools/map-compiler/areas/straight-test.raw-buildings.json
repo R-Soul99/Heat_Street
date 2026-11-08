@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-08T00:00:00.000Z",
+  "endpoint": "synthetic://heat-street/straight-test",
+  "bbox": {
+    "south": 32.9972,
+    "west": -84.0236,
+    "north": 33.0028,
+    "east": -83.9764
+  },
+  "query": "synthetic straight-test buildings (none)",
+  "response": {
+    "elements": []
+  }
+}
