@@ -135,12 +135,35 @@ export function isTailSlot(slot: FlankSlot): boolean {
 
 /** Centre-to-centre distance at which a tail car counts as having hit the player's rear, m. */
 const TAIL_HIT_M = 5.2;
-/** After a hit the tail drops back for this many ticks before coming in again. */
+/** After a hit a pitter drops back for this many ticks before coming in again. */
 const TAIL_BACKOFF_TICKS = 70;
-/** How far behind the player the tail lines up while backing off, m. */
-const TAIL_BACKOFF_M = 14;
+/** After a hit the rammer lifts off for this many ticks (still steering at the bumper) and asks for this much less than the player's speed. */
+const TAIL_LIFT_TICKS = 40;
+const TAIL_LIFT_SLOWDOWN_MS = 12;
+/** After a hit the rammer stays in its fall-back (lined up straight behind, braking) until it is at least this far back, m. */
+const TAIL_REGAIN_M = 10;
+/** While falling back the rammer lines up this far straight behind the player, m. */
+const TAIL_FALLBACK_AIM_M = 14;
+/** Rammer more than this far off the player's heading and close in is side-on (a T-bone): it must back out, not push, rad. */
+const TAIL_SIDEON_RAD = 0.8;
+/** The rammer aims this far behind the player's centre, m (just inside its rear bumper). Never backs off on purpose: the collision does that. */
+const TAIL_AIM_BACK_M = 1.2;
 /** Speed over the player's the tail asks for on its run in, m/s. */
-const TAIL_RAM_OVERSPEED_MS = 4;
+const TAIL_RAM_OVERSPEED_MS = 6;
+/** PIT geometry, metres behind / out from the player's centre: the rear-quarter contact point and the waiting point. */
+const PIT_QUARTER_BACK_M = 1.9;
+const PIT_QUARTER_OUT_M = 0.95;
+const PIT_APPROACH_BACK_M = 7;
+const PIT_APPROACH_OUT_M = 3;
+/** Speed over the player's a pitter closes on the quarter with, m/s. */
+const PIT_OVERSPEED_MS = 3;
+
+/** What a pursuer is doing right now. Blockers are fixed by slot; rammer / pitter are handed out each tick by `createRoleAssigner`. */
+export type PursuerRole = "blocker" | "rammer" | "pitter";
+
+export function initialRole(slot: FlankSlot): PursuerRole {
+  return isBlockerSlot(slot) ? "blocker" : isTailSlot(slot) ? "rammer" : "pitter";
+}
 
 export function isBlockerSlot(slot: FlankSlot): boolean {
   return slot.alongM > 0;
@@ -149,6 +172,8 @@ export function isBlockerSlot(slot: FlankSlot): boolean {
 export interface PursuerDriver extends AiDriver {
   /** Tell the driver where its target is this tick. */
   setTarget(target: PursuitTarget): void;
+  /** Hand this car a role (ignored for blocker slots). Defaults to the role its slot implies. */
+  setRole(role: PursuerRole): void;
   /** Top-speed / engine-force multiplier this car wants right now: grows the further it has fallen behind the player. */
   speedEdge(): number;
 }
@@ -200,6 +225,8 @@ export function createPursuerDriver(
   // Blocker slide: latched once started so it commits until the player is past or gone.
   let sliding = false;
   let tailBackoff = 0;
+  let tailFalling = false;
+  let role: PursuerRole = initialRole(slot);
   let edge = 1;
   let slideSide = 1;
 
@@ -222,28 +249,45 @@ export function createPursuerDriver(
     }
     const rightX = -fwdZ;
     const rightZ = fwdX;
-    const tail = isTailSlot(slot);
-    // Flankers (beside the player, not ahead of it) shove its side; same hit / back-off cycle as the tail.
-    const flanker = !tail && !isBlockerSlot(slot) && slot.lateralM !== 0;
-    const attacker = tail || flanker;
+    const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
+    const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
+    const blocker = isBlockerSlot(slot);
+    // Rammer: lines up on the rear bumper and hits it. Pitter: drops back to a rear quarter
+    // and hits that at an angle, to spin the player (PIT). Both back off after a hit.
+    const tail = !blocker && role === "rammer";
+    const flanker = !blocker && role === "pitter";
+    const sideOn =
+      tail &&
+      dist < 8 &&
+      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) > TAIL_SIDEON_RAD &&
+      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) < Math.PI - TAIL_SIDEON_RAD;
     if (tailBackoff > 0) tailBackoff--;
-    else if (attacker && dist < TAIL_HIT_M && tSpeed > 3) tailBackoff = TAIL_BACKOFF_TICKS;
-    const onStation = !tail && (slot.lateralM !== 0 || slot.alongM !== 0);
+    else if ((flanker || tail) && dist < TAIL_HIT_M && tSpeed > 3) {
+      tailBackoff = tail ? TAIL_LIFT_TICKS : TAIL_BACKOFF_TICKS;
+    }
+    if (tail && sideOn) tailBackoff = Math.max(tailBackoff, TAIL_LIFT_TICKS);
+    // The rammer falls back until it has real room to run in again, not just for a fixed moment.
+    if (tail && tailBackoff > 0) tailFalling = true;
+    else if (!tail || dist >= TAIL_REGAIN_M) tailFalling = false;
+    const tailFallback = tail && tailFalling;
+    // Where this car waits between attacks. A car promoted from rammer to pitter has no
+    // flank slot of its own, so it takes the side it is already on.
+    const stLat = slot.lateralM !== 0 ? slot.lateralM : carLat >= 0 ? 7 : -7;
+    const stAlong = Math.min(slot.alongM, blocker ? slot.alongM : 0);
+    const pitSide = carLat >= 0 ? 1 : -1;
+    const onStation = !tail && (stLat !== 0 || stAlong !== 0);
 
     // Blockers (stations ahead of the player) reach further ahead the faster the
     // player goes, run up the side, then swing across into the player's lane
     // once they are clear of its nose, and finally slow down in front of it.
-    const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
-    const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
-    const blocker = isBlockerSlot(slot);
     // Swing across into the player's line as soon as the blocker is level with it.
     const cut = blocker ? smoothstep(5, 15, carAlong) : 0;
     // Run well ahead to overtake, then tighten right up to the player once in its
     // line: a blocker cruising 50 m ahead at speed never gets near enough to block.
     const alongEff = blocker
       ? (slot.alongM + 0.8 * tSpeed) * (1 - cut) + BLOCK_HOLD_M * cut
-      : slot.alongM;
-    const lateralEff = slot.lateralM * (1 - cut);
+      : stAlong;
+    const lateralEff = (blocker ? slot.lateralM : stLat) * (1 - cut);
 
     const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
     // Ramming: level with or just ahead of the player and close to its line, a blocker
@@ -252,19 +296,24 @@ export function createPursuerDriver(
     const ramming =
       blocker && !sliding && carAlong > -2 && carAlong < 8 && Math.abs(carLat) < RAM_LANE_M;
     // Tail: line up on the player's rear bumper (or, just after a hit, a few car lengths back).
-    const tailBack = tailBackoff > 0 ? TAIL_BACKOFF_M : 1.2;
-    const attackSide = flanker && tailBackoff === 0 ? Math.sign(slot.lateralM) * 1.0 : 0;
+    const tailBack = tailFallback ? TAIL_FALLBACK_AIM_M : TAIL_AIM_BACK_M;
+    // PIT: stay out to the side and behind the rear quarter until level with it, then come
+    // in at an angle onto the quarter itself.
+    const pitting = flanker && tailBackoff === 0;
+    const quarterT = smoothstep(-9, -4, carAlong);
+    const pitBackM = PIT_QUARTER_BACK_M + (PIT_APPROACH_BACK_M - PIT_QUARTER_BACK_M) * quarterT;
+    const pitOutM = PIT_QUARTER_OUT_M + (PIT_APPROACH_OUT_M - PIT_QUARTER_OUT_M) * quarterT;
     const aimX = tail
       ? target.x + target.vx * 0.15 - fwdX * tailBack
-      : flanker && tailBackoff === 0
-        ? target.x + target.vx * 0.15 + rightX * attackSide
+      : pitting
+        ? target.x + target.vx * 0.12 - fwdX * pitBackM + rightX * pitSide * pitOutM
         : ramming
           ? target.x + target.vx * 0.2
           : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
     const aimZ = tail
       ? target.z + target.vz * 0.15 - fwdZ * tailBack
-      : flanker && tailBackoff === 0
-        ? target.z + target.vz * 0.15 + rightZ * attackSide
+      : pitting
+        ? target.z + target.vz * 0.12 - fwdZ * pitBackM + rightZ * pitSide * pitOutM
         : ramming
           ? target.z + target.vz * 0.2
           : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
@@ -297,12 +346,16 @@ export function createPursuerDriver(
     // eased down when the nose is pointing well away from the aim point.
     const targetSpeed = Math.hypot(target.vx, target.vz);
     // Tail cars hold a standoff behind the player; cars on a flank station run right up to it.
+    // The rammer never swerves away: after a hit it just lifts off for a moment, so the
+    // collision plus the lift opens a gap, and then it runs in at the bumper again.
     const closing = tail
-      ? tailBackoff > 0
-        ? -4
+      ? tailFallback
+        ? -TAIL_LIFT_SLOWDOWN_MS
         : dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
-      : flanker && tailBackoff === 0
-        ? dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
+      : pitting
+        ? carAlong > -4
+          ? -6
+          : dist * params.closeGain + PIT_OVERSPEED_MS
         : onStation
           ? stationAlong * params.closeGain
           : Math.max(0, dist - params.standoffM) * params.closeGain;
@@ -412,6 +465,9 @@ export function createPursuerDriver(
     setTarget(t: PursuitTarget): void {
       target = t;
     },
+    setRole(r: PursuerRole): void {
+      if (!isBlockerSlot(slot)) role = r;
+    },
     speedEdge(): number {
       return edge;
     },
@@ -420,6 +476,7 @@ export function createPursuerDriver(
       reversingFor = 0;
       sliding = false;
       tailBackoff = 0;
+      tailFalling = false;
     },
     sampleForTick(tick: number): InputFrame {
       if (cachedTick !== tick) compute(tick);
