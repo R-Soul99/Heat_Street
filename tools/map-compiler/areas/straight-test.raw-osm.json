@@ -1,0 +1,159 @@
+{
+  "fetchedAt": "2026-11-08T00:00:00.000Z",
+  "endpoint": "synthetic://heat-street/straight-test",
+  "bbox": {
+    "south": 32.9972,
+    "west": -84.0236,
+    "north": 33.0028,
+    "east": -83.9764
+  },
+  "query": "synthetic straight-test (code-generated, not OSM)",
+  "response": {
+    "elements": [
+      {
+        "type": "way",
+        "id": 9000000,
+        "nodes": [
+          8000000,
+          8000001
+        ],
+        "geometry": [
+          {
+            "lat": 33,
+            "lon": -84.01979600856438
+          },
+          {
+            "lat": 33,
+            "lon": -83.97859890966012
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "straight"
+        }
+      },
+      {
+        "type": "way",
+        "id": 9000001,
+        "nodes": [
+          8000002,
+          8000000
+        ],
+        "geometry": [
+          {
+            "lat": 33,
+            "lon": -84.02140109033988
+          },
+          {
+            "lat": 33,
+            "lon": -84.01979600856438
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "straight west end"
+        }
+      },
+      {
+        "type": "way",
+        "id": 9000002,
+        "nodes": [
+          8000003,
+          8000002
+        ],
+        "geometry": [
+          {
+            "lat": 33.002254192957004,
+            "lon": -84.02140109033988
+          },
+          {
+            "lat": 33,
+            "lon": -84.02140109033988
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "west cross road north"
+        }
+      },
+      {
+        "type": "way",
+        "id": 9000003,
+        "nodes": [
+          8000002,
+          8000004
+        ],
+        "geometry": [
+          {
+            "lat": 33,
+            "lon": -84.02140109033988
+          },
+          {
+            "lat": 32.997745807042996,
+            "lon": -84.02140109033988
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "west cross road south"
+        }
+      },
+      {
+        "type": "way",
+        "id": 9000004,
+        "nodes": [
+          8000005,
+          8000001
+        ],
+        "geometry": [
+          {
+            "lat": 33.002254192957004,
+            "lon": -83.97859890966012
+          },
+          {
+            "lat": 33,
+            "lon": -83.97859890966012
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "east cross road north"
+        }
+      },
+      {
+        "type": "way",
+        "id": 9000005,
+        "nodes": [
+          8000001,
+          8000006
+        ],
+        "geometry": [
+          {
+            "lat": 33,
+            "lon": -83.97859890966012
+          },
+          {
+            "lat": 32.997745807042996,
+            "lon": -83.97859890966012
+          }
+        ],
+        "tags": {
+          "highway": "motorway",
+          "width": "24",
+          "surface": "asphalt",
+          "name": "east cross road south"
+        }
+      }
+    ]
+  }
+}

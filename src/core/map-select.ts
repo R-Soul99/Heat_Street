@@ -13,6 +13,7 @@ export const KNOWN_MAP_IDS = [
   "my-map",
   "demo-hills",
   "playground",
+  "straight-test",
 ] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
@@ -34,6 +35,7 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
   "my-map": "My Map (hand-authored)",
   "demo-hills": "Demo hills (sculpted)",
   playground: "Playground (domes, gap jumps, ovals)",
+  "straight-test": "Straight test (one 4 km road)",
 };
 
 /**
@@ -50,6 +52,7 @@ export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
   "my-map": "legacy",
   "demo-hills": "terrain",
   playground: "terrain",
+  "straight-test": "terrain",
 };
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
