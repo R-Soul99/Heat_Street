@@ -40,7 +40,7 @@ import { createCheckpointChime } from "./audio/checkpoint-chime";
 import { createSurfaceAudio } from "./audio/surface-audio";
 import { createSynthesizedSurfaceLoops } from "./audio/surface-loops";
 import { defaultAiDriverParams } from "./core/ai-driver";
-import { INITIAL_BUST_STATE, stepBustMeter } from "./core/bust-meter";
+import { DEFAULT_BUST_PARAMS, INITIAL_BUST_STATE, stepBustMeter } from "./core/bust-meter";
 import {
   CAMERA_TUNING_STORAGE_KEY,
   defaultCameraTuning,
@@ -110,6 +110,7 @@ import { createFreeLookCamera } from "./debug/free-look-camera";
 import { createMapMenu } from "./debug/map-menu";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
+import { createPursuitPanel } from "./debug/pursuit-panel";
 import { createTelemetryHud } from "./debug/telemetry-hud";
 import { createTerrainTexTimer } from "./debug/terrain-tex-timer";
 import {
@@ -522,8 +523,11 @@ try {
     return { x, y, z, headingRad: sp.headingRad };
   };
   let pursuit: { fleet: ReturnType<typeof createAiFleet>; drivers: PursuerDriver[] } | undefined;
+  // One shared, mutable params object: the ?debug pursuit panel edits it live and every driver reads it each tick.
+  const pursuerParams = { ...defaultPursuerParams(aiTuning) };
+  const bustParams = { ...DEFAULT_BUST_PARAMS };
   if (pursuerCount > 0) {
-    const pParams = defaultPursuerParams(aiTuning);
+    const pParams = pursuerParams;
     const drivers: PursuerDriver[] = [];
     for (let i = 0; i < pursuerCount; i++) drivers.push(createPursuerDriver(pParams, flankSlot(i)));
     const pFleet = createAiFleet(
@@ -1042,6 +1046,14 @@ try {
     });
   }
 
+  // Pursuit + bust meter sliders (issue #9): only with ?debug and only when pursuers are on.
+  if (DEBUG_ENABLED && pursuit !== undefined) {
+    createPursuitPanel(pursuerParams, bustParams, {
+      chase: defaultPursuerParams(aiTuning),
+      bust: DEFAULT_BUST_PARAMS,
+    });
+  }
+
   // `() => tuning` / `() => surfaceProfiles` — callbacks, not captured values,
   // so a telemetry run triggered after the panel above has mutated either
   // object reads the LIVE values rather than a stale copy taken at
@@ -1307,22 +1319,26 @@ try {
                 }
               });
               flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
-              bustState = stepBustMeter(bustState, {
-                dtSec: DT,
-                player: {
-                  x: p.x,
-                  z: p.z,
-                  speedMs: Math.hypot(v.x, v.z),
+              bustState = stepBustMeter(
+                bustState,
+                {
+                  dtSec: DT,
+                  player: {
+                    x: p.x,
+                    z: p.z,
+                    speedMs: Math.hypot(v.x, v.z),
+                  },
+                  pursuers: pursuit.fleet.cars.map((c) => {
+                    const q = c.vehicle.body.translation();
+                    return {
+                      x: q.x,
+                      z: q.z,
+                      visible: lineOfSightClear(world, p, q, pursuitCarColliders),
+                    };
+                  }),
                 },
-                pursuers: pursuit.fleet.cars.map((c) => {
-                  const q = c.vehicle.body.translation();
-                  return {
-                    x: q.x,
-                    z: q.z,
-                    visible: lineOfSightClear(world, p, q, pursuitCarColliders),
-                  };
-                }),
-              });
+                bustParams,
+              );
               pursuit.fleet.tick(tick, bustState.busted ? () => BUSTED_HOLD : undefined);
             }
         : (tick) => {

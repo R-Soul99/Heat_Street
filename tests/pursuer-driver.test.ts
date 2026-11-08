@@ -317,4 +317,16 @@ describe("pursuer driver", () => {
     expect(r.upY[0] as number).toBeGreaterThan(0.7);
     expect(r.maxYawDeg).toBeLessThan(10);
   });
+
+  it("params are read live: changing the shared params object changes the next tick (debug sliders)", () => {
+    const params = { ...defaultPursuerParams(shippedTuning()) };
+    const d = createPursuerDriver(params, flankSlot(3));
+    d.setTarget({ x: 0, z: 0, vx: 0, vz: -30 });
+    d.observe({ x: 0, z: 20, headingRad: 0, forwardSpeedMs: 20 });
+    d.sampleForTick(0);
+    expect(d.speedEdge()).toBeCloseTo(params.speedEdge, 5);
+    params.speedEdge = 1.3;
+    d.sampleForTick(1);
+    expect(d.speedEdge()).toBeCloseTo(1.3, 5);
+  });
 });
