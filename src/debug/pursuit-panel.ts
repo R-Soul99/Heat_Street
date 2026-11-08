@@ -77,6 +77,12 @@ const PITTER_ROWS: readonly Row[] = [
 const BLOKE_ROWS: readonly Row[] = [
   ["blokeSpeedEdge", "Extra speed (x)", 1, 1.4, 0.01],
   ["blokeLeadSec", "Aim lead (s)", 0, 2, 0.05],
+  ["blokeAimThroughM", "Aim through (m past you)", 0, 30, 0.5],
+  ["blokeLookAheadScale", "Steering snap (small = sharp)", 0.2, 2.5, 0.05],
+  ["blokeCornerEase", "Corner caution (0 = flat out)", 0, 1, 0.01],
+  ["blokeTurnRoundDeg", "Turn round beyond (deg)", 60, 180, 1],
+  ["blokeTurnRoundSpeedMs", "Turn round speed (m/s)", 4, 50, 1],
+  ["blokeCatchupEdge", "Extra catch-up (+x)", 0, 0.6, 0.01],
 ];
 
 export interface PursuitPanel {
