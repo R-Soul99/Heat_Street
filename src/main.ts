@@ -66,9 +66,11 @@ import {
   validateCourseRoutes,
 } from "./core/navigation";
 import {
+  BLOCKER_SPEED_EDGE,
   createPursuerDriver,
   defaultPursuerParams,
   flankSlot,
+  isBlockerSlot,
   type PursuerDriver,
 } from "./core/pursuer-driver";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
@@ -525,6 +527,7 @@ try {
       defaultAiDriverParams(aiTuning),
       {
         driverFactory: (i) => drivers[i] as PursuerDriver,
+        speedEdge: (i) => (isBlockerSlot(flankSlot(i)) ? BLOCKER_SPEED_EDGE : 1),
         wheelRayPatch: scene.createWheelRayPatch?.bind(scene),
       },
     );
@@ -1279,8 +1282,14 @@ try {
               const bearing = headingFromRotation(scene.vehicle.body.rotation());
               const fx = Math.cos(bearing);
               const fz = Math.sin(bearing);
-              for (const d of pursuit.drivers)
+              const allies = pursuit.fleet.cars.map((c) => {
+                const q = c.vehicle.body.translation();
+                return { x: q.x, z: q.z };
+              });
+              for (const d of pursuit.drivers) {
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
+                d.setAllies(allies);
+              }
               flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,

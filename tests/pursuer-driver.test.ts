@@ -1,7 +1,13 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import { shippedTuning } from "../src/core/feel";
-import { createPursuerDriver, defaultPursuerParams, flankSlot } from "../src/core/pursuer-driver";
+import {
+  BLOCKER_SPEED_EDGE,
+  createPursuerDriver,
+  defaultPursuerParams,
+  flankSlot,
+  isBlockerSlot,
+} from "../src/core/pursuer-driver";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { createAiFleet } from "../src/physics/ai-fleet";
 import { createSurfaceMap } from "../src/physics/surface";
@@ -49,7 +55,10 @@ function run(
       undefined,
       pursuerPoses.map((p) => ({ x: p.x, y: 1, z: p.z, headingRad: p.headingRad })),
       {} as never,
-      { driverFactory: (i) => drivers[i] as never },
+      {
+        driverFactory: (i) => drivers[i] as never,
+        speedEdge: (i) => (opts.flank && isBlockerSlot(flankSlot(i)) ? BLOCKER_SPEED_EDGE : 1),
+      },
     );
     const idle = { steer: 0, throttle: 0, brake: 0, handbrake: false };
     for (let k = 0; k < 60; k++) {
@@ -81,7 +90,14 @@ function run(
       );
       const p = player.body.translation();
       const v = player.body.linvel();
-      for (const d of drivers) d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+      const allies = fleet.cars.map((c) => {
+        const q = c.vehicle.body.translation();
+        return { x: q.x, z: q.z };
+      });
+      for (const d of drivers) {
+        d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z });
+        d.setAllies(allies);
+      }
       fleet.tick(60 + k);
       world.step();
       {
@@ -217,7 +233,10 @@ describe("pursuer driver", () => {
     }));
     const r = run(poses, 30, { flank: true, straight: true });
     // Slots 3 and 4 are the blockers: each spends a good chunk of the run ahead of the player in its lane.
-    for (const i of [3, 4]) expect(r.blockTicks[i] as number).toBeGreaterThan(180);
+    // (Was 180 before blockers got a speed edge: they now get ahead sooner, slide, and are passed
+    // sooner, so lane time per blocker is lower. Issue #18 follow-up: rolling block instead of a stop.)
+    expect((r.blockTicks[3] as number) + (r.blockTicks[4] as number)).toBeGreaterThan(200);
+    for (const i of [3, 4]) expect(r.blockTicks[i] as number).toBeGreaterThan(60);
     // The tail and flank cars never do.
     for (const i of [0, 1, 2]) expect(r.blockTicks[i] as number).toBeLessThan(60);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
