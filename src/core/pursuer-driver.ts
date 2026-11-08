@@ -57,6 +57,48 @@ export interface PursuerParams {
   readonly slideMaxAlongM: number;
   /** ...and within this many metres of the player's line, m. */
   readonly slideLaneM: number;
+  /** How far ahead of the player a blocker holds once in its line, m. */
+  readonly blockHoldM: number;
+  /** Beside or just ahead of the player and within this lateral distance, a blocker rams, m. */
+  readonly ramLaneM: number;
+  /** Top speed and engine force multiplier every pursuer always has. */
+  readonly speedEdge: number;
+  /** Speed over the player the rammer runs in at, m/s. */
+  readonly tailRamOverspeedMs: number;
+  /** Rammer falls back to line up this far behind, m. */
+  readonly tailFallbackAimM: number;
+  /** Rammer stays in fall-back until this far behind, m. */
+  readonly tailRegainM: number;
+  /** Minimum ticks the rammer falls back after a hit. */
+  readonly tailLiftTicks: number;
+  /** Speed below the player the rammer asks for while falling back, m/s. */
+  readonly tailLiftSlowdownMs: number;
+  /** Rammer this far off the player heading and close in is side-on and backs out, rad. */
+  readonly tailSideOnRad: number;
+  /** Centre-to-centre distance that counts as a hit, m. */
+  readonly hitDistM: number;
+  /** Speed over the player a pitter closes on the quarter with, m/s. */
+  readonly pitOverspeedMs: number;
+  /** PIT contact point: metres behind the player centre. */
+  readonly pitQuarterBackM: number;
+  /** PIT contact point: metres out to the side. */
+  readonly pitQuarterOutM: number;
+  /** PIT waiting point: metres behind. */
+  readonly pitApproachBackM: number;
+  /** PIT waiting point: metres out. */
+  readonly pitApproachOutM: number;
+  /** Ticks a pitter backs off to its station after a hit. */
+  readonly pitBackoffTicks: number;
+  /** Extra top speed fraction at full catch-up. */
+  readonly catchupEdge: number;
+  /** Catch-up starts to bite beyond this distance, m. */
+  readonly catchupStartM: number;
+  /** Catch-up is full at this distance, m. */
+  readonly catchupFullM: number;
+  /** Extra speed over the player a far-behind car may ask for, m/s. */
+  readonly catchupOverspeedMs: number;
+  /** Speed a car slows to while its nose points well away from where it wants to go, m/s. */
+  readonly turnSpeedMs: number;
 }
 
 export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
@@ -80,6 +122,27 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     slideMinAlongM: Number.POSITIVE_INFINITY,
     slideMaxAlongM: 14,
     slideLaneM: 4,
+    blockHoldM: BLOCK_HOLD_M,
+    ramLaneM: RAM_LANE_M,
+    speedEdge: BLOCKER_SPEED_EDGE,
+    tailRamOverspeedMs: TAIL_RAM_OVERSPEED_MS,
+    tailFallbackAimM: TAIL_FALLBACK_AIM_M,
+    tailRegainM: TAIL_REGAIN_M,
+    tailLiftTicks: TAIL_LIFT_TICKS,
+    tailLiftSlowdownMs: TAIL_LIFT_SLOWDOWN_MS,
+    tailSideOnRad: TAIL_SIDEON_RAD,
+    hitDistM: TAIL_HIT_M,
+    pitOverspeedMs: PIT_OVERSPEED_MS,
+    pitQuarterBackM: PIT_QUARTER_BACK_M,
+    pitQuarterOutM: PIT_QUARTER_OUT_M,
+    pitApproachBackM: PIT_APPROACH_BACK_M,
+    pitApproachOutM: PIT_APPROACH_OUT_M,
+    pitBackoffTicks: TAIL_BACKOFF_TICKS,
+    catchupEdge: CATCHUP_EDGE,
+    catchupStartM: CATCHUP_START_M,
+    catchupFullM: CATCHUP_FULL_M,
+    catchupOverspeedMs: CATCHUP_OVERSPEED_MS,
+    turnSpeedMs: TURN_SPEED_MS,
   };
 }
 
@@ -259,16 +322,16 @@ export function createPursuerDriver(
     const sideOn =
       tail &&
       dist < 8 &&
-      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) > TAIL_SIDEON_RAD &&
-      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) < Math.PI - TAIL_SIDEON_RAD;
+      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) > params.tailSideOnRad &&
+      Math.abs(wrapAngle(obs.headingRad - Math.atan2(fwdZ, fwdX))) < Math.PI - params.tailSideOnRad;
     if (tailBackoff > 0) tailBackoff--;
-    else if ((flanker || tail) && dist < TAIL_HIT_M && tSpeed > 3) {
-      tailBackoff = tail ? TAIL_LIFT_TICKS : TAIL_BACKOFF_TICKS;
+    else if ((flanker || tail) && dist < params.hitDistM && tSpeed > 3) {
+      tailBackoff = tail ? params.tailLiftTicks : params.pitBackoffTicks;
     }
-    if (tail && sideOn) tailBackoff = Math.max(tailBackoff, TAIL_LIFT_TICKS);
+    if (tail && sideOn) tailBackoff = Math.max(tailBackoff, params.tailLiftTicks);
     // The rammer falls back until it has real room to run in again, not just for a fixed moment.
     if (tail && tailBackoff > 0) tailFalling = true;
-    else if (!tail || dist >= TAIL_REGAIN_M) tailFalling = false;
+    else if (!tail || dist >= params.tailRegainM) tailFalling = false;
     const tailFallback = tail && tailFalling;
     // Where this car waits between attacks. A car promoted from rammer to pitter has no
     // flank slot of its own, so it takes the side it is already on.
@@ -285,7 +348,7 @@ export function createPursuerDriver(
     // Run well ahead to overtake, then tighten right up to the player once in its
     // line: a blocker cruising 50 m ahead at speed never gets near enough to block.
     const alongEff = blocker
-      ? (slot.alongM + 0.8 * tSpeed) * (1 - cut) + BLOCK_HOLD_M * cut
+      ? (slot.alongM + 0.8 * tSpeed) * (1 - cut) + params.blockHoldM * cut
       : stAlong;
     const lateralEff = (blocker ? slot.lateralM : stLat) * (1 - cut);
 
@@ -294,15 +357,17 @@ export function createPursuerDriver(
     // that has not (or cannot) slide drives at the player's nose to shove it, not to
     // sit and wait for it to dodge past.
     const ramming =
-      blocker && !sliding && carAlong > -2 && carAlong < 8 && Math.abs(carLat) < RAM_LANE_M;
+      blocker && !sliding && carAlong > -2 && carAlong < 8 && Math.abs(carLat) < params.ramLaneM;
     // Tail: line up on the player's rear bumper (or, just after a hit, a few car lengths back).
-    const tailBack = tailFallback ? TAIL_FALLBACK_AIM_M : TAIL_AIM_BACK_M;
+    const tailBack = tailFallback ? params.tailFallbackAimM : TAIL_AIM_BACK_M;
     // PIT: stay out to the side and behind the rear quarter until level with it, then come
     // in at an angle onto the quarter itself.
     const pitting = flanker && tailBackoff === 0;
     const quarterT = smoothstep(-9, -4, carAlong);
-    const pitBackM = PIT_QUARTER_BACK_M + (PIT_APPROACH_BACK_M - PIT_QUARTER_BACK_M) * quarterT;
-    const pitOutM = PIT_QUARTER_OUT_M + (PIT_APPROACH_OUT_M - PIT_QUARTER_OUT_M) * quarterT;
+    const pitBackM =
+      params.pitQuarterBackM + (params.pitApproachBackM - params.pitQuarterBackM) * quarterT;
+    const pitOutM =
+      params.pitQuarterOutM + (params.pitApproachOutM - params.pitQuarterOutM) * quarterT;
     const aimX = tail
       ? target.x + target.vx * 0.15 - fwdX * tailBack
       : pitting
@@ -350,12 +415,12 @@ export function createPursuerDriver(
     // collision plus the lift opens a gap, and then it runs in at the bumper again.
     const closing = tail
       ? tailFallback
-        ? -TAIL_LIFT_SLOWDOWN_MS
-        : dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
+        ? -params.tailLiftSlowdownMs
+        : dist * params.closeGain + params.tailRamOverspeedMs
       : pitting
         ? carAlong > -4
           ? -6
-          : dist * params.closeGain + PIT_OVERSPEED_MS
+          : dist * params.closeGain + params.pitOverspeedMs
         : onStation
           ? stationAlong * params.closeGain
           : Math.max(0, dist - params.standoffM) * params.closeGain;
@@ -366,17 +431,17 @@ export function createPursuerDriver(
     const turnScale = 1 - (1 - turnFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
     // Catch-up: the further behind the player, the more top speed it borrows, so a
     // flat-out player cannot simply outrun the pack. Blockers always keep their base edge.
-    const catchUp = smoothstep(CATCHUP_START_M, CATCHUP_FULL_M, dist);
-    edge = Math.max(BLOCKER_SPEED_EDGE, 1 + CATCHUP_EDGE * catchUp);
+    const catchUp = smoothstep(params.catchupStartM, params.catchupFullM, dist);
+    edge = Math.max(params.speedEdge, 1 + params.catchupEdge * catchUp);
     const baseCap = params.blockerMaxSpeedMs;
-    const speedCap = Math.max(baseCap, targetSpeed + CATCHUP_OVERSPEED_MS * catchUp);
+    const speedCap = Math.max(baseCap, targetSpeed + params.catchupOverspeedMs * catchUp);
     let desired = Math.max(0, Math.min(speedCap, (targetSpeed + closing) * turnScale));
     // Turning round (large heading error) is limited by turning radius, whatever the
     // gap: a car at 50 m/s with its nose pointing away orbits the player at 100 m radius forever.
     if (!(blocker && carAlong < 18)) {
       desired = Math.min(
         desired,
-        speedCap + (TURN_SPEED_MS - speedCap) * smoothstep(0.35, 1.4, Math.abs(alpha)),
+        speedCap + (params.turnSpeedMs - speedCap) * smoothstep(0.35, 1.4, Math.abs(alpha)),
       );
     }
     // In the player's way: ease off to a fraction of its speed so it has to brake or swerve.
