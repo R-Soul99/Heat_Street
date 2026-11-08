@@ -80,6 +80,8 @@ Deferred to future release. Tracked but not in current roadmap.
 - **GET-06**: Pursuit breakers (destructible roadside props) and hiding spots/cooldown zones
 - **WORLD-02**: Structural building destruction (marketplaces, outdoor cafes, shopping malls sustain damage or partial collapse) — stretch goal, needs its own research pass (fracture/destruction system, damaged-mesh LOD swapping, rebuild-safe collision). Destroyed state must reset per-run rather than persisting, or a level's route — and therefore its medal times — would change permanently after the first successful smash-through
 - **MODE-01**: VR challenge-mission mode (Metal Gear Solid VR-missions style) — short self-contained challenges (reach A before being caught, escape, survive N seconds) with bronze/silver/gold scoring, presented as a neon-wireframe training suite. Builds on the existing medal system, pursuit/bust rules and plain-shape test maps; needs the art pass first or alongside. Keep mission rules separate from rendering so the reskin is a layer, not a rewrite (added 2026-11-07)
+- **MODE-02**: Launch-pad arena — a large flat tarmac arena with ramps round the edges; the aim is to lure the attackers up the ramps so they fly off the map, with a count of attackers remaining and a fell-off-the-map check. Reuses the pursuit AI and the plain-shape test-map approach (GitHub issue #22, added 2026-11-08)
+- **MODE-03**: Demolition derby — a field of cars that damage each other, last car running wins. Needs a vehicle damage model first (degrade engine force / steering / suspension, damaged states, disabled end-state); AI would need to pick targets other than the player (GitHub issue #23, added 2026-11-08)
 
 ### Replay & Content
 
