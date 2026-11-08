@@ -84,11 +84,30 @@ export function createAiFleet(
     /** Supplies car `i`'s driver instead of the racing-line pursuit driver (pursuit cars). When given, `line` may be undefined. */
     readonly driverFactory?: (carIndex: number) => AiDriver;
     readonly obstacleBodies?: readonly RAPIER.RigidBody[];
+    /**
+     * Per-car multiplier on top speed and rear engine force (default 1 = the player's own car).
+     * Lets chase blockers physically outrun a flat-out player so they can get ahead of it.
+     */
+    readonly speedEdge?: (carIndex: number) => number;
     /** Terrain scenes: gives each AI car its own wheel-ray patch (heightfield ray-miss workaround). */
     readonly wheelRayPatch?: () => WheelRayPatch;
   },
 ): AiFleet {
   let currentTuning = tuning;
+  const speedEdge = options?.speedEdge;
+  const edgeTuning = (t: VehicleTuning, carIndex: number): VehicleTuning => {
+    const k = speedEdge?.(carIndex) ?? 1;
+    if (k === 1) return t;
+    return {
+      ...t,
+      drive: {
+        ...t.drive,
+        topSpeedMs: t.drive.topSpeedMs * k,
+        engineForcePerRearWheel: t.drive.engineForcePerRearWheel * k,
+      },
+    };
+  };
+  const tickTunings: VehicleTuning[] = [];
 
   const driverFactory = options?.driverFactory;
   if (driverFactory === undefined && line === undefined) {
@@ -106,6 +125,12 @@ export function createAiFleet(
         : createAiDriver(line as RacingLine, driverParams);
     return { vehicle, driver };
   });
+
+  const refreshTickTunings = (): void => {
+    tickTunings.length = 0;
+    for (let i = 0; i < cars.length; i++) tickTunings.push(edgeTuning(currentTuning, i));
+  };
+  refreshTickTunings();
 
   const lastFrames: InputFrame[] = cars.map(() => NEUTRAL);
   const avoidanceScales: number[] = cars.map(() => 1);
@@ -173,7 +198,7 @@ export function createAiFleet(
         const pursuitFrame = car.driver.sampleForTick(tickIndex);
         const base = composeAiFrame(pursuitFrame, scale);
         const frame = shape ? shape(i, base) : base;
-        car.vehicle.tick(frame, currentTuning, surfaces);
+        car.vehicle.tick(frame, tickTunings[i] ?? currentTuning, surfaces);
         lastFrames[i] = frame;
       }
     },
@@ -196,6 +221,7 @@ export function createAiFleet(
 
     setTuning(t: VehicleTuning): void {
       currentTuning = t;
+      refreshTickTunings();
       for (const car of cars) {
         car.vehicle.applyTuning(t);
       }

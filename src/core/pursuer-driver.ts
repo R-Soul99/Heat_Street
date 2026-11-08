@@ -110,6 +110,17 @@ export function flankSlot(i: number): FlankSlot {
   };
 }
 
+/**
+ * Top speed and engine force multiplier for blocker cars. Same top speed as the
+ * player means a flat-out player is never overtaken, so a blocker never gets in
+ * front of it; ~10% lets it creep ahead. Stays under `blockerMaxSpeedMs`.
+ */
+export const BLOCKER_SPEED_EDGE = 1.1;
+
+export function isBlockerSlot(slot: FlankSlot): boolean {
+  return slot.alongM > 0;
+}
+
 export interface PursuerDriver extends AiDriver {
   /** Tell the driver where its target is this tick. */
   setTarget(target: PursuitTarget): void;
@@ -187,9 +198,9 @@ export function createPursuerDriver(
     // once they are clear of its nose, and finally slow down in front of it.
     const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
     const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
-    const blocker = slot.alongM > 0;
+    const blocker = isBlockerSlot(slot);
     // Swing across into the player's line as soon as the blocker is level with it.
-    const cut = blocker ? smoothstep(0, 10, carAlong) : 0;
+    const cut = blocker ? smoothstep(5, 15, carAlong) : 0;
     // Run well ahead to overtake, then tighten right up to the player once in its
     // line: a blocker cruising 50 m ahead at speed never gets near enough to block.
     const alongEff = blocker
