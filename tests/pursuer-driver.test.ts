@@ -1,13 +1,7 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import { shippedTuning } from "../src/core/feel";
-import {
-  BLOCKER_SPEED_EDGE,
-  createPursuerDriver,
-  defaultPursuerParams,
-  flankSlot,
-  isBlockerSlot,
-} from "../src/core/pursuer-driver";
+import { createPursuerDriver, defaultPursuerParams, flankSlot } from "../src/core/pursuer-driver";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { createAiFleet } from "../src/physics/ai-fleet";
 import { createSurfaceMap } from "../src/physics/surface";
@@ -57,7 +51,7 @@ function run(
       {} as never,
       {
         driverFactory: (i) => drivers[i] as never,
-        speedEdge: (i) => (opts.flank && isBlockerSlot(flankSlot(i)) ? BLOCKER_SPEED_EDGE : 1),
+        speedEdge: (i) => (drivers[i] as { speedEdge(): number }).speedEdge(),
       },
     );
     const idle = { steer: 0, throttle: 0, brake: 0, handbrake: false };
@@ -253,6 +247,18 @@ describe("pursuer driver", () => {
     expect((r.blockTicks[3] as number) + (r.blockTicks[4] as number)).toBeGreaterThan(100);
     expect((r.slideTicks[3] as number) + (r.slideTicks[4] as number)).toBeGreaterThan(10);
     for (const i of [0, 1, 2]) expect(r.slideTicks[i] as number).toBe(0);
+    for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
+  });
+
+  it("pursuers that fall behind a flat-out player borrow speed and rejoin it", () => {
+    const poses = Array.from({ length: 5 }, (_, i) => ({
+      x: ((i % 4) - 1.5) * 6,
+      z: 40 + 9 * Math.floor(i / 4),
+      headingRad: 0,
+    }));
+    const r = run(poses, 40, { flank: true, straight: true, throttle: 1, noSlide: true });
+    // Before catch-up the 38 m/s tail and flankers sat 200+ m back by now.
+    for (const i of [0, 1, 2]) expect(r.dists[i] as number).toBeLessThan(60);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 });

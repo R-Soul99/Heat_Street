@@ -85,7 +85,7 @@ export function createAiFleet(
     readonly driverFactory?: (carIndex: number) => AiDriver;
     readonly obstacleBodies?: readonly RAPIER.RigidBody[];
     /**
-     * Per-car multiplier on top speed and rear engine force (default 1 = the player's own car).
+     * Per-car multiplier on top speed and rear engine force (default 1 = the player's own car), read every tick.
      * Lets chase blockers physically outrun a flat-out player so they can get ahead of it.
      */
     readonly speedEdge?: (carIndex: number) => number;
@@ -95,8 +95,9 @@ export function createAiFleet(
 ): AiFleet {
   let currentTuning = tuning;
   const speedEdge = options?.speedEdge;
+  const quantEdge = (k: number): number => Math.round(k * 100) / 100;
   const edgeTuning = (t: VehicleTuning, carIndex: number): VehicleTuning => {
-    const k = speedEdge?.(carIndex) ?? 1;
+    const k = quantEdge(speedEdge?.(carIndex) ?? 1);
     if (k === 1) return t;
     return {
       ...t,
@@ -107,7 +108,9 @@ export function createAiFleet(
       },
     };
   };
+  // Per-car tuning for the current edge, rebuilt only when the (quantised) edge or the live tune changes.
   const tickTunings: VehicleTuning[] = [];
+  const tickEdges: number[] = [];
 
   const driverFactory = options?.driverFactory;
   if (driverFactory === undefined && line === undefined) {
@@ -128,7 +131,11 @@ export function createAiFleet(
 
   const refreshTickTunings = (): void => {
     tickTunings.length = 0;
-    for (let i = 0; i < cars.length; i++) tickTunings.push(edgeTuning(currentTuning, i));
+    tickEdges.length = 0;
+    for (let i = 0; i < cars.length; i++) {
+      tickEdges.push(quantEdge(speedEdge?.(i) ?? 1));
+      tickTunings.push(edgeTuning(currentTuning, i));
+    }
   };
   refreshTickTunings();
 
@@ -198,6 +205,10 @@ export function createAiFleet(
         const pursuitFrame = car.driver.sampleForTick(tickIndex);
         const base = composeAiFrame(pursuitFrame, scale);
         const frame = shape ? shape(i, base) : base;
+        if (speedEdge !== undefined && quantEdge(speedEdge(i)) !== tickEdges[i]) {
+          tickEdges[i] = quantEdge(speedEdge(i));
+          tickTunings[i] = edgeTuning(currentTuning, i);
+        }
         car.vehicle.tick(frame, tickTunings[i] ?? currentTuning, surfaces);
         lastFrames[i] = frame;
       }

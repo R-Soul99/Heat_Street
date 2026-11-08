@@ -117,6 +117,14 @@ export function flankSlot(i: number): FlankSlot {
  */
 export const BLOCKER_SPEED_EDGE = 1.1;
 
+/** Extra top speed a pursuer that has fallen far behind may borrow to rejoin (1 + this at full catch-up). */
+const CATCHUP_EDGE = 0.25;
+/** Catch-up starts to bite beyond this distance from the player, m, and is full at CATCHUP_FULL_M. */
+const CATCHUP_START_M = 10;
+const CATCHUP_FULL_M = 70;
+/** A pursuer may ask for this much more than the player's speed, m/s, when catching up. */
+const CATCHUP_OVERSPEED_MS = 8;
+
 export function isBlockerSlot(slot: FlankSlot): boolean {
   return slot.alongM > 0;
 }
@@ -124,6 +132,8 @@ export function isBlockerSlot(slot: FlankSlot): boolean {
 export interface PursuerDriver extends AiDriver {
   /** Tell the driver where its target is this tick. */
   setTarget(target: PursuitTarget): void;
+  /** Top-speed / engine-force multiplier this car wants right now: grows the further it has fallen behind the player. */
+  speedEdge(): number;
   /** Positions of every pursuer (this one included) so a slide is never thrown into a teammate. */
   setAllies(allies: readonly { readonly x: number; readonly z: number }[]): void;
 }
@@ -134,8 +144,9 @@ function clamp(v: number, lo: number, hi: number): number {
 
 /** How far ahead of the player a blocker holds once it is in the player's line, m. */
 const BLOCK_HOLD_M = 7;
-/** A blocker will not start its slide with another pursuer within this many metres: the slide sweeps that space. */
-const ALLY_CLEAR_M = 11;
+/** A blocker will not start its slide with a teammate inside this box around it (along / lateral to the player's travel), m: the slide sweeps that space. */
+const ALLY_CLEAR_ALONG_M = 9;
+const ALLY_CLEAR_LAT_M = 6.5;
 /** Beside or just ahead of the player and within this lateral distance, a blocker rams instead of waiting to be passed. */
 const RAM_LANE_M = 9;
 
@@ -176,13 +187,19 @@ export function createPursuerDriver(
   let reverseSteer = 0;
   // Blocker slide: latched once started so it commits until the player is past or gone.
   let sliding = false;
+  let edge = 1;
   let allies: readonly { readonly x: number; readonly z: number }[] = [];
   let slideSide = 1;
 
+  /** True when no teammate sits in the box the broadside slide sweeps (beside / just ahead or behind this car). */
   function allyClear(): boolean {
     for (const a of allies) {
-      const d = Math.hypot(a.x - obs.x, a.z - obs.z);
-      if (d > 0.5 && d < ALLY_CLEAR_M) return false;
+      const dx = a.x - obs.x;
+      const dz = a.z - obs.z;
+      if (Math.hypot(dx, dz) < 0.5) continue;
+      const along = dx * fwdX + dz * fwdZ;
+      const lat = dx * -fwdZ + dz * fwdX;
+      if (Math.abs(along) < ALLY_CLEAR_ALONG_M && Math.abs(lat) < ALLY_CLEAR_LAT_M) return false;
     }
     return true;
   }
@@ -272,7 +289,12 @@ export function createPursuerDriver(
     const turnFloor =
       blocker && carAlong < 18 ? Math.max(params.turnSpeedFloor, 0.75) : params.turnSpeedFloor;
     const turnScale = 1 - (1 - turnFloor) * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1);
-    const speedCap = blocker ? params.blockerMaxSpeedMs : params.maxSpeedMs;
+    // Catch-up: the further behind the player, the more top speed it borrows, so a
+    // flat-out player cannot simply outrun the pack. Blockers always keep their base edge.
+    const catchUp = smoothstep(CATCHUP_START_M, CATCHUP_FULL_M, dist);
+    edge = Math.max(blocker ? BLOCKER_SPEED_EDGE : 1, 1 + CATCHUP_EDGE * catchUp);
+    const baseCap = blocker ? params.blockerMaxSpeedMs : params.maxSpeedMs;
+    const speedCap = Math.max(baseCap, targetSpeed + CATCHUP_OVERSPEED_MS * catchUp);
     let desired = Math.max(0, Math.min(speedCap, (targetSpeed + closing) * turnScale));
     // In the player's way: ease off to a fraction of its speed so it has to brake or swerve.
     if (blocker && carAlong > 2 && carAlong < 40 && Math.abs(carLat) < 5) {
@@ -360,6 +382,9 @@ export function createPursuerDriver(
     },
     setTarget(t: PursuitTarget): void {
       target = t;
+    },
+    speedEdge(): number {
+      return edge;
     },
     setAllies(a: readonly { readonly x: number; readonly z: number }[]): void {
       allies = a;
