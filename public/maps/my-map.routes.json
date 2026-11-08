@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "areaId": "my-map",
+  "courses": [
+    {
+      "id": "my-map-valley-run",
+      "name": "Valley Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 2,
+          "edgeId": 1,
+          "position": [
+            -238.50000000057636,
+            0,
+            -299.99999999988165
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 4,
+          "edgeId": 3,
+          "position": [
+            -58.49999999991586,
+            0,
+            -299.99999999988165
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 10,
+          "edgeId": 9,
+          "position": [
+            -359.99999999999295,
+            0,
+            -230.0000000001194
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 8,
+          "edgeId": 7,
+          "position": [
+            301.50000000007714,
+            0,
+            -299.99999999988165
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 9,
+          "edgeId": 8,
+          "position": [
+            359.99999999999295,
+            0,
+            -299.99999999988165
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 0,
+        "headingRad": 1.5707963267948966
+      },
+      "authoring": "West-to-east run along the main road through the village."
+    },
+    {
+      "id": "my-map-village-loop",
+      "name": "Village Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 90,
+          "edgeId": 83,
+          "position": [
+            75.00000000016455,
+            0,
+            140.00000000031253
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 83,
+          "edgeId": 77,
+          "position": [
+            -359.99999999999295,
+            0,
+            140.00000000031253
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 27,
+          "edgeId": 24,
+          "position": [
+            -148.4999999995821,
+            0,
+            -140.00000000031253
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 17,
+          "edgeId": 122,
+          "position": [
+            67.50000000041369,
+            0,
+            -230.0000000001194
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 65,
+        "headingRad": -1.5707963267948966
+      },
+      "authoring": "Loop through five points around the village."
+    }
+  ]
+}

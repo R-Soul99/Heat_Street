@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "areaId": "newton-poppleford",
+  "courses": [
+    {
+      "id": "newton-poppleford-valley-run",
+      "name": "Valley Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 9,
+          "edgeId": 91,
+          "position": [
+            -1359.868576738106,
+            0,
+            188.93423078708952
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 83,
+          "edgeId": 199,
+          "position": [
+            -465.0668578602523,
+            0,
+            170.93519726048558
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 287,
+          "edgeId": 223,
+          "position": [
+            316.5679093229573,
+            0,
+            -364.73072449595765
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 272,
+          "edgeId": 94,
+          "position": [
+            1037.917147800282,
+            0,
+            -191.40381388030366
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 300,
+          "edgeId": 305,
+          "position": [
+            1858.0984806250399,
+            0,
+            101.9648586547826
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 8,
+        "headingRad": 1.7530793697223024
+      },
+      "authoring": "West-to-east run along the main road through the village."
+    },
+    {
+      "id": "newton-poppleford-village-loop",
+      "name": "Village Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 6,
+          "edgeId": 99,
+          "position": [
+            221.79818213902723,
+            0,
+            987.9778520336675
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 91,
+          "edgeId": 263,
+          "position": [
+            -610.5490572170037,
+            0,
+            454.2920464495317
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 150,
+          "edgeId": 277,
+          "position": [
+            -604.713378474364,
+            0,
+            -321.27941117468094
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 163,
+          "edgeId": 306,
+          "position": [
+            -103.8270397118894,
+            0,
+            -554.9998650630988
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 232,
+        "headingRad": -1.718401323089413
+      },
+      "authoring": "Loop through five points around the village."
+    }
+  ]
+}

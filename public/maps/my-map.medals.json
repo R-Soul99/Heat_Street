@@ -1,0 +1,144 @@
+{
+  "kind": "heat-street.medal-reference",
+  "version": 1,
+  "areaId": "my-map",
+  "contractVersion": 1,
+  "handlingContentVersion": "260920-sm2",
+  "courses": [
+    {
+      "courseId": "my-map-valley-run",
+      "mode": "p2p",
+      "laps": 1,
+      "totalTimeSec": 105,
+      "splits": [
+        {
+          "checkpointId": "p2p-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 9
+        },
+        {
+          "checkpointId": "p2p-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 22
+        },
+        {
+          "checkpointId": "p2p-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 49
+        },
+        {
+          "checkpointId": "p2p-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 101
+        },
+        {
+          "checkpointId": "p2p-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 105
+        }
+      ]
+    },
+    {
+      "courseId": "my-map-village-loop",
+      "mode": "circuit",
+      "laps": 3,
+      "totalTimeSec": 377,
+      "splits": [
+        {
+          "checkpointId": "circuit-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 21
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 52
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 87
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 109
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 2,
+          "authoredIndex": 0,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 155
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 2,
+          "authoredIndex": 1,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 186
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 2,
+          "authoredIndex": 2,
+          "hitOrder": 6,
+          "cumulativeTimeSec": 221
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 2,
+          "authoredIndex": 3,
+          "hitOrder": 7,
+          "cumulativeTimeSec": 243
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 3,
+          "authoredIndex": 0,
+          "hitOrder": 8,
+          "cumulativeTimeSec": 289
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 3,
+          "authoredIndex": 1,
+          "hitOrder": 9,
+          "cumulativeTimeSec": 320
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 3,
+          "authoredIndex": 2,
+          "hitOrder": 10,
+          "cumulativeTimeSec": 356
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 3,
+          "authoredIndex": 3,
+          "hitOrder": 11,
+          "cumulativeTimeSec": 377
+        }
+      ]
+    }
+  ]
+}

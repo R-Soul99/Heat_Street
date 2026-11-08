@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "areaId": "skidders-and-popp",
+  "courses": [
+    {
+      "id": "skidders-and-popp-valley-run",
+      "name": "Valley Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 822,
+          "edgeId": 129,
+          "position": [
+            -3013.76532573823,
+            0,
+            -2162.5875996862833
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 630,
+          "edgeId": 1545,
+          "position": [
+            -1495.8367986332241,
+            0,
+            -1558.017977405984
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 775,
+          "edgeId": 44,
+          "position": [
+            -287.3690909233391,
+            0,
+            -319.2326062266857
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 1950,
+          "edgeId": 1723,
+          "position": [
+            1492.1560213598984,
+            0,
+            -32.59405290666952
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 2313,
+          "edgeId": 1756,
+          "position": [
+            3391.910438130692,
+            0,
+            81.27377151196647
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-06",
+          "nodeId": 2289,
+          "edgeId": 318,
+          "position": [
+            4381.135226216577,
+            0,
+            149.47654911172415
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 821,
+        "headingRad": 1.9556688154551616
+      },
+      "authoring": "West-to-east run along the main road through the village."
+    },
+    {
+      "id": "skidders-and-popp-village-loop",
+      "name": "Village Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 413,
+          "edgeId": 1739,
+          "position": [
+            566.606560653622,
+            0,
+            1224.234851997971
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 320,
+          "edgeId": 1104,
+          "position": [
+            -80.20703336739025,
+            0,
+            1345.7895332620694
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 706,
+          "edgeId": 1634,
+          "position": [
+            -49.70109043773249,
+            0,
+            172.75960465111157
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 763,
+          "edgeId": 2515,
+          "position": [
+            667.6901714543847,
+            0,
+            -24.451101804938812
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 1753,
+        "headingRad": -2.1943566659337197
+      },
+      "authoring": "Loop through five points around the village."
+    }
+  ]
+}
