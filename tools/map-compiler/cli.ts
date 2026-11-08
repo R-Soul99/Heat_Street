@@ -72,6 +72,7 @@ import { myMapConfig } from "./areas/my-map.config.ts";
 import { newtonPopplefordConfig } from "./areas/newton-poppleford.config.ts";
 import { playgroundConfig } from "./areas/playground.config.ts";
 import { skiddersAndPoppConfig } from "./areas/skidders-and-popp.config.ts";
+import { straightTestConfig } from "./areas/straight-test.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
 import { buildOffRoadRelief, type HeightfieldGrid } from "./author/heightfield.ts";
@@ -101,6 +102,7 @@ const KNOWN_AREAS: Record<string, AreaConfig> = {
   "grid-test": gridTestConfig,
   "feel-test": feelTestConfig,
   playground: playgroundConfig,
+  "straight-test": straightTestConfig,
   "newton-poppleford": newtonPopplefordConfig,
   "my-map": myMapConfig,
   "skidders-and-popp": skiddersAndPoppConfig,
