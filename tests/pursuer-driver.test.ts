@@ -350,4 +350,18 @@ describe("pursuer driver", () => {
     expect(r.minDists[5] as number).toBeLessThan(5.5);
     expect(r.upY[5] as number).toBeGreaterThan(0.2);
   });
+
+  it("bloke sliders act live: the turn-round speed decides whether he brakes or keeps his foot down once past the player", () => {
+    const params = { ...defaultPursuerParams(shippedTuning()), blokeTurnRoundSpeedMs: 4 };
+    const d = createPursuerDriver(params, flankSlot(5));
+    // Heading 0 points the bloke at +X at 30 m/s; the player is behind him (-X) and moving away.
+    d.setTarget({ x: -20, z: 0, vx: -20, vz: 0 });
+    d.observe({ x: 0, z: 0, headingRad: 0, forwardSpeedMs: 30 });
+    d.sampleForTick(0);
+    expect(d.debug().frame.brake).toBeGreaterThan(0);
+    params.blokeTurnRoundSpeedMs = 45;
+    d.sampleForTick(1);
+    expect(d.debug().frame.throttle).toBeGreaterThan(0);
+    expect(d.debug().frame.brake).toBe(0);
+  });
 });

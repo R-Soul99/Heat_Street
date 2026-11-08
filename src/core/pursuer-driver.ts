@@ -65,6 +65,18 @@ export interface PursuerParams {
   readonly blokeSpeedEdge: number;
   /** "That bloke" aims this many seconds ahead of the player. */
   readonly blokeLeadSec: number;
+  /** ...and this many metres beyond that point along the player's travel, so he drives THROUGH it, m. */
+  readonly blokeAimThroughM: number;
+  /** Scales his steering look-ahead: small = sharp snap onto the aim point, large = wide lazy arcs. */
+  readonly blokeLookAheadScale: number;
+  /** How much he lifts for a heading error: 0 = never (flat out), 1 = like everyone else. */
+  readonly blokeCornerEase: number;
+  /** Heading error beyond which he slows to turn round, degrees. */
+  readonly blokeTurnRoundDeg: number;
+  /** ...and the speed he slows to, m/s. */
+  readonly blokeTurnRoundSpeedMs: number;
+  /** Extra catch-up speed fraction when far behind, on top of everyone's. */
+  readonly blokeCatchupEdge: number;
   /** Top speed and engine force multiplier every pursuer always has. */
   readonly speedEdge: number;
   /** Speed over the player the rammer runs in at, m/s. */
@@ -130,6 +142,12 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     ramLaneM: RAM_LANE_M,
     blokeSpeedEdge: 1.1,
     blokeLeadSec: 0.6,
+    blokeAimThroughM: 0,
+    blokeLookAheadScale: 1,
+    blokeCornerEase: 0,
+    blokeTurnRoundDeg: 100,
+    blokeTurnRoundSpeedMs: 16,
+    blokeCatchupEdge: 0,
     speedEdge: BLOCKER_SPEED_EDGE,
     tailRamOverspeedMs: TAIL_RAM_OVERSPEED_MS,
     tailFallbackAimM: TAIL_FALLBACK_AIM_M,
@@ -393,7 +411,7 @@ export function createPursuerDriver(
       params.pitQuarterOutM + (params.pitApproachOutM - params.pitQuarterOutM) * quarterT;
     // That bloke: straight at where the player will be, no station, no tact.
     const aimX = bloke
-      ? target.x + target.vx * params.blokeLeadSec
+      ? target.x + target.vx * params.blokeLeadSec + fwdX * params.blokeAimThroughM
       : tail
         ? target.x + target.vx * 0.15 - fwdX * tailBack
         : pitting
@@ -402,7 +420,7 @@ export function createPursuerDriver(
             ? target.x + target.vx * 0.2
             : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
     const aimZ = bloke
-      ? target.z + target.vz * params.blokeLeadSec
+      ? target.z + target.vz * params.blokeLeadSec + fwdZ * params.blokeAimThroughM
       : tail
         ? target.z + target.vz * 0.15 - fwdZ * tailBack
         : pitting
@@ -423,7 +441,8 @@ export function createPursuerDriver(
       Math.cos(bearing - obs.headingRad),
     );
 
-    const lookAheadM = clamp(Math.min(aimDist, Math.max(6, 0.9 * speed)), 3, 40);
+    const lookAheadScale = bloke ? params.blokeLookAheadScale : 1;
+    const lookAheadM = clamp(Math.min(aimDist, Math.max(6, 0.9 * speed)) * lookAheadScale, 3, 40);
     let steer = pursuitSteer(
       obs.x,
       obs.z,
@@ -461,7 +480,13 @@ export function createPursuerDriver(
     // flat-out player cannot simply outrun the pack. Blockers always keep their base edge.
     const catchUp = smoothstep(params.catchupStartM, params.catchupFullM, dist);
     edge = Math.max(params.speedEdge, 1 + params.catchupEdge * catchUp);
-    if (bloke) edge = Math.max(edge, params.speedEdge * params.blokeSpeedEdge);
+    if (bloke) {
+      edge = Math.max(
+        edge,
+        params.speedEdge * params.blokeSpeedEdge,
+        1 + (params.catchupEdge + params.blokeCatchupEdge) * catchUp,
+      );
+    }
     const baseCap = params.blockerMaxSpeedMs;
     const speedCap = Math.max(baseCap, targetSpeed + params.catchupOverspeedMs * catchUp);
     let desired = Math.max(0, Math.min(speedCap, (targetSpeed + closing) * turnScale));
@@ -469,7 +494,12 @@ export function createPursuerDriver(
     // The only brake is turning round once he has gone past (otherwise he orbits forever).
     if (bloke) {
       const blokeCap = speedCap * params.blokeSpeedEdge;
-      desired = Math.abs(alpha) > 1.75 ? params.turnSpeedMs : blokeCap;
+      const turnRound = (params.blokeTurnRoundDeg * Math.PI) / 180;
+      desired =
+        Math.abs(alpha) > turnRound
+          ? params.blokeTurnRoundSpeedMs
+          : blokeCap *
+            (1 - params.blokeCornerEase * clamp(Math.abs(alpha) / (Math.PI / 2), 0, 1) * 0.7);
     }
     // Turning round (large heading error) is limited by turning radius, whatever the
     // gap: a car at 50 m/s with its nose pointing away orbits the player at 100 m radius forever.
