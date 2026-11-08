@@ -61,6 +61,10 @@ export interface PursuerParams {
   readonly blockHoldM: number;
   /** Beside or just ahead of the player and within this lateral distance, a blocker rams, m. */
   readonly ramLaneM: number;
+  /** "That bloke": extra top speed multiplier on top of the usual edge. */
+  readonly blokeSpeedEdge: number;
+  /** "That bloke" aims this many seconds ahead of the player. */
+  readonly blokeLeadSec: number;
   /** Top speed and engine force multiplier every pursuer always has. */
   readonly speedEdge: number;
   /** Speed over the player the rammer runs in at, m/s. */
@@ -124,6 +128,8 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
     slideLaneM: 4,
     blockHoldM: BLOCK_HOLD_M,
     ramLaneM: RAM_LANE_M,
+    blokeSpeedEdge: 1.1,
+    blokeLeadSec: 0.6,
     speedEdge: BLOCKER_SPEED_EDGE,
     tailRamOverspeedMs: TAIL_RAM_OVERSPEED_MS,
     tailFallbackAimM: TAIL_FALLBACK_AIM_M,
@@ -150,6 +156,8 @@ export function defaultPursuerParams(tuning: VehicleTuning): PursuerParams {
 export interface FlankSlot {
   readonly lateralM: number;
   readonly alongM: number;
+  /** "That bloke": the one full-speed rammer per swarm (index 5). Has no station. */
+  readonly bloke?: true;
 }
 
 /**
@@ -168,10 +176,11 @@ export function flankSlot(i: number): FlankSlot {
   ];
   const ring = Math.floor(i / 5);
   const base = stations[i % 5] as FlankSlot;
-  return {
+  const slot = {
     lateralM: base.lateralM * (1 + 0.6 * ring),
     alongM: base.alongM * (1 + 0.3 * ring) - 7 * ring,
   };
+  return i === BLOKE_INDEX ? { ...slot, bloke: true } : slot;
 }
 
 /**
@@ -222,10 +231,23 @@ const PIT_APPROACH_OUT_M = 3;
 const PIT_OVERSPEED_MS = 3;
 
 /** What a pursuer is doing right now. Blockers are fixed by slot; rammer / pitter are handed out each tick by `createRoleAssigner`. */
-export type PursuerRole = "blocker" | "rammer" | "pitter";
+export type PursuerRole = "blocker" | "rammer" | "pitter" | "bloke";
+
+/** Which pursuer index is "that bloke" (the 6th car, so `?pursuers=6` gets one). */
+export const BLOKE_INDEX = 5;
+
+export function isBlokeSlot(slot: FlankSlot): boolean {
+  return slot.bloke === true;
+}
 
 export function initialRole(slot: FlankSlot): PursuerRole {
-  return isBlockerSlot(slot) ? "blocker" : isTailSlot(slot) ? "rammer" : "pitter";
+  return isBlokeSlot(slot)
+    ? "bloke"
+    : isBlockerSlot(slot)
+      ? "blocker"
+      : isTailSlot(slot)
+        ? "rammer"
+        : "pitter";
 }
 
 export function isBlockerSlot(slot: FlankSlot): boolean {
@@ -317,8 +339,9 @@ export function createPursuerDriver(
     const blocker = isBlockerSlot(slot);
     // Rammer: lines up on the rear bumper and hits it. Pitter: drops back to a rear quarter
     // and hits that at an angle, to spin the player (PIT). Both back off after a hit.
-    const tail = !blocker && role === "rammer";
-    const flanker = !blocker && role === "pitter";
+    const bloke = isBlokeSlot(slot);
+    const tail = !blocker && !bloke && role === "rammer";
+    const flanker = !blocker && !bloke && role === "pitter";
     const sideOn =
       tail &&
       dist < 8 &&
@@ -368,20 +391,25 @@ export function createPursuerDriver(
       params.pitQuarterBackM + (params.pitApproachBackM - params.pitQuarterBackM) * quarterT;
     const pitOutM =
       params.pitQuarterOutM + (params.pitApproachOutM - params.pitQuarterOutM) * quarterT;
-    const aimX = tail
-      ? target.x + target.vx * 0.15 - fwdX * tailBack
-      : pitting
-        ? target.x + target.vx * 0.12 - fwdX * pitBackM + rightX * pitSide * pitOutM
-        : ramming
-          ? target.x + target.vx * 0.2
-          : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
-    const aimZ = tail
-      ? target.z + target.vz * 0.15 - fwdZ * tailBack
-      : pitting
-        ? target.z + target.vz * 0.12 - fwdZ * pitBackM + rightZ * pitSide * pitOutM
-        : ramming
-          ? target.z + target.vz * 0.2
-          : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
+    // That bloke: straight at where the player will be, no station, no tact.
+    const aimX = bloke
+      ? target.x + target.vx * params.blokeLeadSec
+      : tail
+        ? target.x + target.vx * 0.15 - fwdX * tailBack
+        : pitting
+          ? target.x + target.vx * 0.12 - fwdX * pitBackM + rightX * pitSide * pitOutM
+          : ramming
+            ? target.x + target.vx * 0.2
+            : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
+    const aimZ = bloke
+      ? target.z + target.vz * params.blokeLeadSec
+      : tail
+        ? target.z + target.vz * 0.15 - fwdZ * tailBack
+        : pitting
+          ? target.z + target.vz * 0.12 - fwdZ * pitBackM + rightZ * pitSide * pitOutM
+          : ramming
+            ? target.z + target.vz * 0.2
+            : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
     const aimDist = Math.hypot(aimX - obs.x, aimZ - obs.z);
     // Signed along-track gap to the station (positive = the car is behind its
     // station and must speed up; negative = it is ahead and must ease off).
@@ -433,12 +461,19 @@ export function createPursuerDriver(
     // flat-out player cannot simply outrun the pack. Blockers always keep their base edge.
     const catchUp = smoothstep(params.catchupStartM, params.catchupFullM, dist);
     edge = Math.max(params.speedEdge, 1 + params.catchupEdge * catchUp);
+    if (bloke) edge = Math.max(edge, params.speedEdge * params.blokeSpeedEdge);
     const baseCap = params.blockerMaxSpeedMs;
     const speedCap = Math.max(baseCap, targetSpeed + params.catchupOverspeedMs * catchUp);
     let desired = Math.max(0, Math.min(speedCap, (targetSpeed + closing) * turnScale));
+    // That bloke never eases off for corners, gaps or the player: flat out at all times.
+    // The only brake is turning round once he has gone past (otherwise he orbits forever).
+    if (bloke) {
+      const blokeCap = speedCap * params.blokeSpeedEdge;
+      desired = Math.abs(alpha) > 1.75 ? params.turnSpeedMs : blokeCap;
+    }
     // Turning round (large heading error) is limited by turning radius, whatever the
     // gap: a car at 50 m/s with its nose pointing away orbits the player at 100 m radius forever.
-    if (!(blocker && carAlong < 18)) {
+    if (!bloke && !(blocker && carAlong < 18)) {
       desired = Math.min(
         desired,
         speedCap + (params.turnSpeedMs - speedCap) * smoothstep(0.35, 1.4, Math.abs(alpha)),
@@ -531,7 +566,7 @@ export function createPursuerDriver(
       target = t;
     },
     setRole(r: PursuerRole): void {
-      if (!isBlockerSlot(slot)) role = r;
+      if (!isBlockerSlot(slot) && !isBlokeSlot(slot)) role = r;
     },
     speedEdge(): number {
       return edge;
