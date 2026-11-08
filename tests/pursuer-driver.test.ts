@@ -18,11 +18,14 @@ function run(
     throttle?: number;
     cruiseMs?: number;
     noSlide?: boolean;
+    roles?: ReadonlyArray<"blocker" | "rammer" | "pitter">;
   } = {},
 ): {
   slideTicks: number[];
   dists: number[];
   minDists: number[];
+  /** Biggest angle the player's heading swung away from straight ahead, degrees. */
+  maxYawDeg: number;
   /** Mean distance to the player over the second half of the run. */
   avgDists: number[];
   upY: number[];
@@ -43,8 +46,12 @@ function run(
       ? { ...baseParams, slideMinAlongM: Number.POSITIVE_INFINITY }
       : baseParams;
     const drivers = pursuerPoses.map((_, i) =>
-      createPursuerDriver(params, opts.flank ? flankSlot(i) : undefined),
+      createPursuerDriver(params, opts.flank ? flankSlot(opts.roles ? 2 : i) : undefined),
     );
+    drivers.forEach((d, i) => {
+      const r = opts.roles?.[i];
+      if (r) d.setRole(r);
+    });
     const fleet = createAiFleet(
       world,
       t,
@@ -67,10 +74,19 @@ function run(
     const blockTicks = pursuerPoses.map(() => 0);
     const slideTicks = pursuerPoses.map(() => 0);
     const minDists = pursuerPoses.map(() => Number.POSITIVE_INFINITY);
+    let maxYawDeg = 0;
     const sumDists = pursuerPoses.map(() => 0);
     const ticks = Math.round(seconds * 60);
     for (let k = 0; k < ticks; k++) {
       const steer = opts.straight ? 0 : 0.35 * Math.sin(k / 70);
+      {
+        const rr = player.body.rotation();
+        const yaw = Math.atan2(
+          2 * (rr.w * rr.y + rr.x * rr.z),
+          1 - 2 * (rr.y * rr.y + rr.x * rr.x),
+        );
+        if (k > 120) maxYawDeg = Math.max(maxYawDeg, Math.abs(yaw * 57.3));
+      }
       const spd = Math.hypot(player.body.linvel().x, player.body.linvel().z);
       const cruise = opts.cruiseMs;
       const throttle =
@@ -137,6 +153,7 @@ function run(
     return {
       slideTicks,
       minDists,
+      maxYawDeg,
       avgDists: sumDists.map((d) => d / (ticks - Math.floor(ticks / 2))),
       blockTicks,
       lateral: rel.map((r) => r.lateral),
@@ -275,5 +292,18 @@ describe("pursuer driver", () => {
       ((r.avgDists[0] as number) + (r.avgDists[1] as number) + (r.avgDists[2] as number)) / 3;
     expect(mean3).toBeLessThan(60);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
+  });
+
+  it("a pitter drops behind the rear quarter and hits it, swinging a straight-driving player's tail", () => {
+    // Flank slot 2 (right of the player). The player cruises straight at 30 m/s with no steering input.
+    const r = run([{ x: 7, z: 25, headingRad: 0 }], 25, {
+      flank: true,
+      straight: true,
+      cruiseMs: 30,
+      roles: ["pitter"],
+    });
+    expect(r.minDists[0] as number).toBeLessThan(5.5);
+    // Nothing but the pitter touches the player, so any real yaw is a PIT.
+    expect(r.maxYawDeg).toBeGreaterThan(8);
   });
 });

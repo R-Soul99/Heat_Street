@@ -28,6 +28,8 @@ export interface AiVehicleViews {
   readonly chassisMeshes: readonly THREE.Object3D[];
   /** Per-frame wheel rig for car `carIndex`. Reads that car's own controller, writes only that car's meshes. */
   updateWheels(carIndex: number, vc: RAPIER.DynamicRayCastVehicleController): void;
+  /** Repaint car `carIndex`'s body (role changes). */
+  setColor(carIndex: number, hex: number): void;
   /** Dispose every car's own geometry and materials. */
   dispose(): void;
 }
@@ -57,6 +59,12 @@ export function createAiVehicleViews(
 
     updateWheels(carIndex: number, vc: RAPIER.DynamicRayCastVehicleController): void {
       cars[carIndex]?.updateWheels(vc);
+    },
+
+    setColor(carIndex: number, hex: number): void {
+      const mesh = cars[carIndex]?.chassis as THREE.Mesh | undefined;
+      const mat = mesh?.material as THREE.MeshStandardMaterial | undefined;
+      mat?.color.setHex(hex);
     },
 
     dispose(): void {

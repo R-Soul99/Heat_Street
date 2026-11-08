@@ -141,6 +141,20 @@ const TAIL_BACKOFF_TICKS = 70;
 const TAIL_BACKOFF_M = 14;
 /** Speed over the player's the tail asks for on its run in, m/s. */
 const TAIL_RAM_OVERSPEED_MS = 4;
+/** PIT geometry, metres behind / out from the player's centre: the rear-quarter contact point and the waiting point. */
+const PIT_QUARTER_BACK_M = 1.9;
+const PIT_QUARTER_OUT_M = 0.95;
+const PIT_APPROACH_BACK_M = 7;
+const PIT_APPROACH_OUT_M = 3;
+/** Speed over the player's a pitter closes on the quarter with, m/s. */
+const PIT_OVERSPEED_MS = 3;
+
+/** What a pursuer is doing right now. Blockers are fixed by slot; rammer / pitter are handed out each tick by `createRoleAssigner`. */
+export type PursuerRole = "blocker" | "rammer" | "pitter";
+
+export function initialRole(slot: FlankSlot): PursuerRole {
+  return isBlockerSlot(slot) ? "blocker" : isTailSlot(slot) ? "rammer" : "pitter";
+}
 
 export function isBlockerSlot(slot: FlankSlot): boolean {
   return slot.alongM > 0;
@@ -149,6 +163,8 @@ export function isBlockerSlot(slot: FlankSlot): boolean {
 export interface PursuerDriver extends AiDriver {
   /** Tell the driver where its target is this tick. */
   setTarget(target: PursuitTarget): void;
+  /** Hand this car a role (ignored for blocker slots). Defaults to the role its slot implies. */
+  setRole(role: PursuerRole): void;
   /** Top-speed / engine-force multiplier this car wants right now: grows the further it has fallen behind the player. */
   speedEdge(): number;
 }
@@ -200,6 +216,7 @@ export function createPursuerDriver(
   // Blocker slide: latched once started so it commits until the player is past or gone.
   let sliding = false;
   let tailBackoff = 0;
+  let role: PursuerRole = initialRole(slot);
   let edge = 1;
   let slideSide = 1;
 
@@ -222,28 +239,34 @@ export function createPursuerDriver(
     }
     const rightX = -fwdZ;
     const rightZ = fwdX;
-    const tail = isTailSlot(slot);
-    // Flankers (beside the player, not ahead of it) shove its side; same hit / back-off cycle as the tail.
-    const flanker = !tail && !isBlockerSlot(slot) && slot.lateralM !== 0;
+    const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
+    const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
+    const blocker = isBlockerSlot(slot);
+    // Rammer: lines up on the rear bumper and hits it. Pitter: drops back to a rear quarter
+    // and hits that at an angle, to spin the player (PIT). Both back off after a hit.
+    const tail = !blocker && role === "rammer";
+    const flanker = !blocker && role === "pitter";
     const attacker = tail || flanker;
     if (tailBackoff > 0) tailBackoff--;
     else if (attacker && dist < TAIL_HIT_M && tSpeed > 3) tailBackoff = TAIL_BACKOFF_TICKS;
-    const onStation = !tail && (slot.lateralM !== 0 || slot.alongM !== 0);
+    // Where this car waits between attacks. A car promoted from rammer to pitter has no
+    // flank slot of its own, so it takes the side it is already on.
+    const stLat = slot.lateralM !== 0 ? slot.lateralM : carLat >= 0 ? 7 : -7;
+    const stAlong = Math.min(slot.alongM, blocker ? slot.alongM : 0);
+    const pitSide = carLat >= 0 ? 1 : -1;
+    const onStation = !tail && (stLat !== 0 || stAlong !== 0);
 
     // Blockers (stations ahead of the player) reach further ahead the faster the
     // player goes, run up the side, then swing across into the player's lane
     // once they are clear of its nose, and finally slow down in front of it.
-    const carAlong = (obs.x - target.x) * fwdX + (obs.z - target.z) * fwdZ;
-    const carLat = (obs.x - target.x) * rightX + (obs.z - target.z) * rightZ;
-    const blocker = isBlockerSlot(slot);
     // Swing across into the player's line as soon as the blocker is level with it.
     const cut = blocker ? smoothstep(5, 15, carAlong) : 0;
     // Run well ahead to overtake, then tighten right up to the player once in its
     // line: a blocker cruising 50 m ahead at speed never gets near enough to block.
     const alongEff = blocker
       ? (slot.alongM + 0.8 * tSpeed) * (1 - cut) + BLOCK_HOLD_M * cut
-      : slot.alongM;
-    const lateralEff = slot.lateralM * (1 - cut);
+      : stAlong;
+    const lateralEff = (blocker ? slot.lateralM : stLat) * (1 - cut);
 
     const leadSec = clamp(dist / Math.max(speed, 6), 0, params.leadMaxSec);
     // Ramming: level with or just ahead of the player and close to its line, a blocker
@@ -253,18 +276,23 @@ export function createPursuerDriver(
       blocker && !sliding && carAlong > -2 && carAlong < 8 && Math.abs(carLat) < RAM_LANE_M;
     // Tail: line up on the player's rear bumper (or, just after a hit, a few car lengths back).
     const tailBack = tailBackoff > 0 ? TAIL_BACKOFF_M : 1.2;
-    const attackSide = flanker && tailBackoff === 0 ? Math.sign(slot.lateralM) * 1.0 : 0;
+    // PIT: stay out to the side and behind the rear quarter until level with it, then come
+    // in at an angle onto the quarter itself.
+    const pitting = flanker && tailBackoff === 0;
+    const quarterT = smoothstep(-9, -4, carAlong);
+    const pitBackM = PIT_QUARTER_BACK_M + (PIT_APPROACH_BACK_M - PIT_QUARTER_BACK_M) * quarterT;
+    const pitOutM = PIT_QUARTER_OUT_M + (PIT_APPROACH_OUT_M - PIT_QUARTER_OUT_M) * quarterT;
     const aimX = tail
       ? target.x + target.vx * 0.15 - fwdX * tailBack
-      : flanker && tailBackoff === 0
-        ? target.x + target.vx * 0.15 + rightX * attackSide
+      : pitting
+        ? target.x + target.vx * 0.12 - fwdX * pitBackM + rightX * pitSide * pitOutM
         : ramming
           ? target.x + target.vx * 0.2
           : target.x + target.vx * leadSec + rightX * lateralEff + fwdX * alongEff;
     const aimZ = tail
       ? target.z + target.vz * 0.15 - fwdZ * tailBack
-      : flanker && tailBackoff === 0
-        ? target.z + target.vz * 0.15 + rightZ * attackSide
+      : pitting
+        ? target.z + target.vz * 0.12 - fwdZ * pitBackM + rightZ * pitSide * pitOutM
         : ramming
           ? target.z + target.vz * 0.2
           : target.z + target.vz * leadSec + rightZ * lateralEff + fwdZ * alongEff;
@@ -301,8 +329,10 @@ export function createPursuerDriver(
       ? tailBackoff > 0
         ? -4
         : dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
-      : flanker && tailBackoff === 0
-        ? dist * params.closeGain + TAIL_RAM_OVERSPEED_MS
+      : pitting
+        ? carAlong > -4
+          ? -6
+          : dist * params.closeGain + PIT_OVERSPEED_MS
         : onStation
           ? stationAlong * params.closeGain
           : Math.max(0, dist - params.standoffM) * params.closeGain;
@@ -411,6 +441,9 @@ export function createPursuerDriver(
     },
     setTarget(t: PursuitTarget): void {
       target = t;
+    },
+    setRole(r: PursuerRole): void {
+      if (!isBlockerSlot(slot)) role = r;
     },
     speedEdge(): number {
       return edge;

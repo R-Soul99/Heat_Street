@@ -69,8 +69,12 @@ import {
   createPursuerDriver,
   defaultPursuerParams,
   flankSlot,
+  initialRole,
+  isBlockerSlot,
   type PursuerDriver,
+  type PursuerRole,
 } from "./core/pursuer-driver";
+import { createRoleAssigner } from "./core/pursuit-roles";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
 import { createRaceState } from "./core/race-state";
 import { buildGridPoses, buildRacingLine } from "./core/racing-line";
@@ -493,10 +497,16 @@ try {
         ),
       );
   // White = blocker (station ahead of the player); dark = tail and flankers.
-  const PURSUER_DARK = 0x1b1f2a;
-  const PURSUER_BLOCKER_WHITE = 0xeceff4;
-  const pursuerPaint = (i: number): number =>
-    flankSlot(i).alongM > 0 ? PURSUER_BLOCKER_WHITE : PURSUER_DARK;
+  // White = blocker (fixed); dark red = rammer (the car best placed to hit the rear);
+  // navy = pitter (works the rear quarters). Rammer / pitter swap live as cars move.
+  const PURSUER_PAINT: Record<PursuerRole, number> = {
+    blocker: 0xeceff4,
+    rammer: 0x9b1c1c,
+    pitter: 0x1d3a6e,
+  };
+  const pursuerPaint = (i: number): number => PURSUER_PAINT[initialRole(flankSlot(i))];
+  const roleAssigner = createRoleAssigner();
+  const pursuerRoles: PursuerRole[] = [];
   const pursuerPose = (i: number) => {
     const sp = scene.defaultSpawnPose;
     const f = forwardFromYaw(sp.headingRad);
@@ -1280,9 +1290,22 @@ try {
               const bearing = headingFromRotation(scene.vehicle.body.rotation());
               const fx = Math.cos(bearing);
               const fz = Math.sin(bearing);
-              for (const d of pursuit.drivers) {
+              const roles = roleAssigner.assign(
+                { x: p.x, z: p.z, fx, fz },
+                pursuit.fleet.cars.map((c, i) => {
+                  const q = c.vehicle.body.translation();
+                  return { x: q.x, z: q.z, blocker: isBlockerSlot(flankSlot(i)) };
+                }),
+              );
+              pursuit.drivers.forEach((d, i) => {
                 d.setTarget({ x: p.x, z: p.z, vx: v.x, vz: v.z, fx, fz });
-              }
+                const role = roles[i] as PursuerRole;
+                d.setRole(role);
+                if (pursuerRoles[i] !== role) {
+                  pursuerRoles[i] = role;
+                  pursuitViews?.setColor(i, PURSUER_PAINT[role]);
+                }
+              });
               flippedSec = playerUpY() < 0.35 ? flippedSec + DT : 0;
               bustState = stepBustMeter(bustState, {
                 dtSec: DT,
