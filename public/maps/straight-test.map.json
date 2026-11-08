@@ -257,7 +257,7 @@
     {
       "id": "default",
       "nodeId": 0,
-      "headingRad": 1.5707963267948966
+      "headingRad": -1.5707963267948966
     }
   ]
 }
