@@ -71,6 +71,7 @@ import {
   flankSlot,
   initialRole,
   isBlockerSlot,
+  isBlokeSlot,
   type PursuerDriver,
   type PursuerRole,
 } from "./core/pursuer-driver";
@@ -498,12 +499,13 @@ try {
         ),
       );
   // White = blocker (station ahead of the player); dark = tail and flankers.
-  // White = blocker (fixed); dark red = rammer (the car best placed to hit the rear);
+  // White = blocker (fixed); green = that bloke (fixed, index 5); dark red = rammer (the car best placed to hit the rear);
   // navy = pitter (works the rear quarters). Rammer / pitter swap live as cars move.
   const PURSUER_PAINT: Record<PursuerRole, number> = {
     blocker: 0xeceff4,
     rammer: 0x9b1c1c,
     pitter: 0x1d3a6e,
+    bloke: 0x2f9a3c,
   };
   const pursuerPaint = (i: number): number => PURSUER_PAINT[initialRole(flankSlot(i))];
   const roleAssigner = createRoleAssigner();
@@ -1306,7 +1308,12 @@ try {
                 { x: p.x, z: p.z, fx, fz },
                 pursuit.fleet.cars.map((c, i) => {
                   const q = c.vehicle.body.translation();
-                  return { x: q.x, z: q.z, blocker: isBlockerSlot(flankSlot(i)) };
+                  return {
+                    x: q.x,
+                    z: q.z,
+                    blocker: isBlockerSlot(flankSlot(i)),
+                    bloke: isBlokeSlot(flankSlot(i)),
+                  };
                 }),
               );
               pursuit.drivers.forEach((d, i) => {

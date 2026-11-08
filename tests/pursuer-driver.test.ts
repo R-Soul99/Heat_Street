@@ -1,7 +1,12 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import { describe, expect, it } from "vitest";
 import { shippedTuning } from "../src/core/feel";
-import { createPursuerDriver, defaultPursuerParams, flankSlot } from "../src/core/pursuer-driver";
+import {
+  createPursuerDriver,
+  defaultPursuerParams,
+  flankSlot,
+  initialRole,
+} from "../src/core/pursuer-driver";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { createAiFleet } from "../src/physics/ai-fleet";
 import { createSurfaceMap } from "../src/physics/surface";
@@ -328,5 +333,21 @@ describe("pursuer driver", () => {
     params.speedEdge = 1.3;
     d.sampleForTick(1);
     expect(d.speedEdge()).toBeCloseTo(1.3, 5);
+  });
+
+  it("the 6th car is that bloke: fixed role, ignores setRole, and keeps hitting a cruising player at full speed", () => {
+    expect(initialRole(flankSlot(5))).toBe("bloke");
+    expect(initialRole(flankSlot(4))).toBe("blocker");
+    const d = createPursuerDriver(defaultPursuerParams(shippedTuning()), flankSlot(5));
+    d.setRole("pitter");
+    // (role is private; behaviour check below proves it stayed the bloke)
+    const poses = Array.from({ length: 6 }, (_, i) => ({
+      x: ((i % 4) - 1.5) * 6,
+      z: 40 + 9 * Math.floor(i / 4),
+      headingRad: 0,
+    }));
+    const r = run(poses, 30, { flank: true, straight: true, cruiseMs: 30 });
+    expect(r.minDists[5] as number).toBeLessThan(5.5);
+    expect(r.upY[5] as number).toBeGreaterThan(0.2);
   });
 });

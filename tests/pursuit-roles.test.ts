@@ -52,4 +52,13 @@ describe("pursuit role assigner", () => {
     ]);
     expect(roles).toEqual(["pitter", "rammer"]);
   });
+
+  it("that bloke keeps his role and is never picked as the rammer", () => {
+    const a = createRoleAssigner();
+    const roles = a.assign(player, [
+      { x: 0, z: 3, blocker: false, bloke: true },
+      { x: 0, z: 25, blocker: false },
+    ]);
+    expect(roles).toEqual(["bloke", "rammer"]);
+  });
 });

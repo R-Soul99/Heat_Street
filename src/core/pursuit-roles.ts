@@ -15,6 +15,8 @@ export interface RoleCar {
   readonly x: number;
   readonly z: number;
   readonly blocker: boolean;
+  /** "That bloke": fixed role, never rammer or pitter. */
+  readonly bloke?: boolean;
 }
 
 export interface RolePlayer {
@@ -45,7 +47,7 @@ export function createRoleAssigner(): RoleAssigner {
       const rearX = player.x - player.fx * REAR_POINT_M;
       const rearZ = player.z - player.fz * REAR_POINT_M;
       const cost = cars.map((c) => {
-        if (c.blocker) return Number.POSITIVE_INFINITY;
+        if (c.blocker || c.bloke) return Number.POSITIVE_INFINITY;
         const along = (c.x - player.x) * player.fx + (c.z - player.z) * player.fz;
         if (along > MAX_AHEAD_M) return Number.POSITIVE_INFINITY;
         return Math.hypot(c.x - rearX, c.z - rearZ);
@@ -61,17 +63,20 @@ export function createRoleAssigner(): RoleAssigner {
       }
       if (best < 0) {
         // Nobody is behind the player: first non-blocker rammer so someone still tails it.
-        best = cars.findIndex((c) => !c.blocker);
+        best = cars.findIndex((c) => !c.blocker && !c.bloke);
       }
       const keep =
         rammer >= 0 &&
         rammer < cars.length &&
         !(cars[rammer] as RoleCar).blocker &&
+        !(cars[rammer] as RoleCar).bloke &&
         cost[rammer] !== Number.POSITIVE_INFINITY &&
         best >= 0 &&
         (cost[rammer] as number) <= (cost[best] as number) * KEEP_FACTOR + KEEP_SLACK_M;
       if (!keep) rammer = best;
-      return cars.map((c, i) => (c.blocker ? "blocker" : i === rammer ? "rammer" : "pitter"));
+      return cars.map((c, i) =>
+        c.bloke ? "bloke" : c.blocker ? "blocker" : i === rammer ? "rammer" : "pitter",
+      );
     },
   };
 }

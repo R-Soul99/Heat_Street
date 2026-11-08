@@ -74,6 +74,11 @@ const PITTER_ROWS: readonly Row[] = [
   ["pitBackoffTicks", "Back-off (ticks)", 0, 240, 5],
 ];
 
+const BLOKE_ROWS: readonly Row[] = [
+  ["blokeSpeedEdge", "Extra speed (x)", 1, 1.4, 0.01],
+  ["blokeLeadSec", "Aim lead (s)", 0, 2, 0.05],
+];
+
 export interface PursuitPanel {
   destroy(): void;
 }
@@ -118,6 +123,7 @@ export function createPursuitPanel(
   folder("Blockers (white)", chaseRec, BLOCKER_ROWS);
   folder("Rammer (red)", chaseRec, RAMMER_ROWS);
   folder("Pitters (navy)", chaseRec, PITTER_ROWS);
+  folder("That bloke (green)", chaseRec, BLOKE_ROWS);
 
   const actions = {
     reset: () => {
