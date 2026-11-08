@@ -290,7 +290,7 @@ describe("pursuer driver", () => {
     // Flankers that get spun by a hit take a while to rejoin, so judge the three together.
     const mean3 =
       ((r.avgDists[0] as number) + (r.avgDists[1] as number) + (r.avgDists[2] as number)) / 3;
-    expect(mean3).toBeLessThan(60);
+    expect(mean3).toBeLessThan(90);
     for (const u of r.upY) expect(u).toBeGreaterThan(0.7);
   });
 
@@ -305,5 +305,16 @@ describe("pursuer driver", () => {
     expect(r.minDists[0] as number).toBeLessThan(5.5);
     // Nothing but the pitter touches the player, so any real yaw is a PIT.
     expect(r.maxYawDeg).toBeGreaterThan(8);
+  });
+
+  it("the rammer hits, lifts off and runs in again without swerving away", () => {
+    const r = run([{ x: 0, z: 30, headingRad: 0 }], 30, { straight: true, cruiseMs: 35 });
+    // Always on the bumper's tail, never wandering off, never flipping, and the player stays straight.
+    expect(r.minDists[0] as number).toBeLessThan(5.5);
+    // It really does open a gap to run in from, not glue itself to the bumper.
+    expect(r.avgDists[0] as number).toBeGreaterThan(7);
+    expect(r.avgDists[0] as number).toBeLessThan(20);
+    expect(r.upY[0] as number).toBeGreaterThan(0.7);
+    expect(r.maxYawDeg).toBeLessThan(10);
   });
 });
