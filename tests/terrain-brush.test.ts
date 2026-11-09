@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BLOCK_CELLS_MAX,
   type BrushParams,
   blockWindowAt,
   createStrokeRecorder,
@@ -381,10 +382,10 @@ describe("raiseBlock", () => {
     expect(raiseBlock(g, p({ blockCells: Number.POSITIVE_INFINITY }), 1).window).toBeUndefined();
     expect(raiseBlock(g, p({ x: Number.NaN }), 1).window).toBeUndefined();
     expect(g.heights.every((h) => h === 0)).toBe(true);
-    raiseBlock(g, p({ blockCells: 99, stepM: 0.001 }), 1); // -> 8 cells, 0.25 m
+    raiseBlock(g, p({ blockCells: 999, stepM: 0.001 }), 1); // -> BLOCK_CELLS_MAX cells, 0.25 m
     expect(at(g, 1, 1)).toBeCloseTo(0.25, 5);
-    const w8 = blockWindowAt(g, 1, 1, 99) as NonNullable<ReturnType<typeof blockWindowAt>>;
-    expect(w8.maxRow - w8.minRow).toBe(8);
+    expect(blockWindowAt(g, 1, 1, 999)).toEqual(blockWindowAt(g, 1, 1, BLOCK_CELLS_MAX));
+    expect(blockWindowAt(g, 1, 1, BLOCK_CELLS_MAX)).not.toEqual(blockWindowAt(g, 1, 1, 8));
   });
 });
 

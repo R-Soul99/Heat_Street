@@ -65,6 +65,7 @@ import {
   type ClearanceBuilding,
   resolvePointShoulderWidth,
 } from "../../src/core/shoulder-clearance.ts";
+import { arenaTestConfig } from "./areas/arena-test.config.ts";
 import { feelTestConfig } from "./areas/feel-test.config.ts";
 import { gridTestConfig } from "./areas/grid-test.config.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
@@ -103,6 +104,7 @@ const KNOWN_AREAS: Record<string, AreaConfig> = {
   "feel-test": feelTestConfig,
   playground: playgroundConfig,
   "straight-test": straightTestConfig,
+  "arena-test": arenaTestConfig,
   "newton-poppleford": newtonPopplefordConfig,
   "my-map": myMapConfig,
   "skidders-and-popp": skiddersAndPoppConfig,

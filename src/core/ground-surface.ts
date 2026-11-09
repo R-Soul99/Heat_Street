@@ -10,7 +10,12 @@
  */
 import type { SurfaceType } from "./surface-types.ts";
 
-const FLAT_TEST_AREAS: readonly string[] = ["feel-test", "playground", "straight-test"];
+const FLAT_TEST_AREAS: readonly string[] = [
+  "feel-test",
+  "playground",
+  "straight-test",
+  "arena-test",
+];
 
 export function isFlatTestArea(areaId: string): boolean {
   return FLAT_TEST_AREAS.includes(areaId);

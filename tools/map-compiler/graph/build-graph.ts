@@ -33,6 +33,8 @@
  * `tests/layering.test.ts` does not scan `tools/**`; this file's own
  * discipline is the only guard.
  */
+
+import { yawFromTravelDirection } from "../../../src/core/heading.ts";
 import type {
   RoadGraph,
   RoadGraphAttribution,
@@ -674,7 +676,7 @@ function buildDefaultSpawn(
     firstIncident.from === best.id
       ? firstIncident.points[1]
       : firstIncident.points[firstIncident.points.length - 2];
-  const headingRad = Math.atan2(awayFromBest[0] - best.x, -(awayFromBest[2] - best.z));
+  const headingRad = yawFromTravelDirection(awayFromBest[0] - best.x, awayFromBest[2] - best.z);
 
   return [{ id: "default", nodeId: best.id, headingRad }];
 }

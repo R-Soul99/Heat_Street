@@ -358,7 +358,7 @@ export function smoothBrush(
 }
 
 export const BLOCK_CELLS_MIN = 1;
-export const BLOCK_CELLS_MAX = 8;
+export const BLOCK_CELLS_MAX = 64;
 export const BLOCK_STEP_MIN_M = 0.25;
 export const BLOCK_STEP_MAX_M = 5;
 export const SMOOTH_PASSES_MAX = 10;

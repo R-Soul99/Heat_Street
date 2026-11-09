@@ -40,6 +40,7 @@ describe("resolveMapId", () => {
       "demo-hills",
       "playground",
       "straight-test",
+      "arena-test",
     ]);
   });
 });
@@ -72,6 +73,7 @@ describe("demo-hills and formats", () => {
       "juliette-ga",
       "playground",
       "straight-test",
+      "arena-test",
     ];
     for (const id of KNOWN_MAP_IDS) {
       expect(MAP_FORMATS[id]).toBe(terrain.includes(id) ? "terrain" : "legacy");

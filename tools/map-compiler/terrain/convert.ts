@@ -34,7 +34,8 @@ export type ConvertibleAreaId =
   | "grid-test"
   | "juliette-ga"
   | "playground"
-  | "straight-test";
+  | "straight-test"
+  | "arena-test";
 
 export interface ConvertConfig {
   readonly cellSizeM: number;
@@ -55,6 +56,12 @@ export const CONVERT_CONFIG: Readonly<Record<ConvertibleAreaId, ConvertConfig>> 
   "feel-test": { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false, roadWidenM: 0 },
   playground: { cellSizeM: 3, paintMetresPerPixel: 0.5, legacyGlbBuildings: false, roadWidenM: 0 },
   "straight-test": {
+    cellSizeM: 3,
+    paintMetresPerPixel: 0.5,
+    legacyGlbBuildings: false,
+    roadWidenM: 0,
+  },
+  "arena-test": {
     cellSizeM: 3,
     paintMetresPerPixel: 0.5,
     legacyGlbBuildings: false,

@@ -25,6 +25,8 @@ const POST_COMPILE: Record<string, string[]> = {
   "newton-poppleford": [ROUTE_SCRIPT, "--area", "newton-poppleford"],
   "skidders-and-popp": [ROUTE_SCRIPT, "--area", "skidders-and-popp"],
   "my-map": [ROUTE_SCRIPT, "--area", "my-map"],
+  // Terrain-format flat maps: rebuild the terrain from the freshly compiled graph.
+  "arena-test": ["tools/map-compiler/terrain/cli.ts", "--area", "arena-test"],
 };
 
 function rawPath(area: string, kind: string): string | undefined {
