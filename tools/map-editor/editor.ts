@@ -12,7 +12,6 @@ import {
   addRoad,
   effectiveSurface,
   HIGHWAY_CLASSES,
-  makeProjector,
   moveNode,
   type Projector,
   pickBuilding,
@@ -27,6 +26,19 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
+import {
+  DEFAULT_TILE_M,
+  fitView,
+  gridStep,
+  scaleBar,
+  TILE_SIZES_M,
+  tileLines,
+  type View,
+  visibleRect,
+  type World,
+  worldFromBbox,
+  zoomAt,
+} from "./world.ts";
 
 const SURFACE_COLOUR: Record<Surface, string> = {
   tarmac: "#8d939c",
@@ -46,6 +58,10 @@ let area = "";
 let roads: RawEnvelope;
 let buildings: RawEnvelope;
 let proj: Projector;
+let world: World;
+let tileM: number = DEFAULT_TILE_M;
+let showGrid = true;
+let showTiles = true;
 let dirty = false;
 let selected: { kind: "road" | "building"; way: RawWay } | undefined;
 const undoStack: string[] = [];
@@ -61,16 +77,70 @@ let drawSurface = "";
 let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
-  select: "Click a road or building to edit it. Drag to pan.",
+  select: "Click a road or building to edit it. Drag to pan. F fits the world, arrows pan.",
   road: "Click to add points; double-click or Enter to finish, Esc to cancel. Clicking on an existing road or node connects to it.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building.",
 };
 
-// view: world metres -> screen px
+// view: world metres -> screen px (scale = px per metre; screen y down, world y up)
 let scale = 0.25;
 let panX = 0;
 let panY = 0;
+let fitScale = 0.25;
+const MAX_SCALE = 20;
+const currentView = (): View => ({ scale, panX, panY });
+function setView(v: View): void {
+  scale = v.scale;
+  panX = v.panX;
+  panY = v.panY;
+}
+function fitWorld(): void {
+  const v = fitView(world.widthM, world.heightM, canvas.width, canvas.height, 40);
+  fitScale = v.scale;
+  setView(v);
+}
+
+// Projected-point cache for culling; invalidated by bumping geometryVersion.
+interface LocalWay {
+  pts: { x: number; y: number }[];
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+let geometryVersion = 0;
+let cacheVersion = -1;
+let localCache = new WeakMap<RawWay, LocalWay>();
+function localWay(way: RawWay): LocalWay {
+  if (cacheVersion !== geometryVersion) {
+    localCache = new WeakMap();
+    cacheVersion = geometryVersion;
+  }
+  let lw = localCache.get(way);
+  if (lw === undefined) {
+    const pts = way.geometry.map((g) => proj.toLocal(g));
+    lw = {
+      pts,
+      minX: Math.min(...pts.map((p) => p.x)),
+      maxX: Math.max(...pts.map((p) => p.x)),
+      minY: Math.min(...pts.map((p) => p.y)),
+      maxY: Math.max(...pts.map((p) => p.y)),
+    };
+    localCache.set(way, lw);
+  }
+  return lw;
+}
+
+let drawQueued = false;
+function requestDraw(): void {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    if (roads !== undefined) draw();
+  });
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -88,6 +158,7 @@ function snapshot(): void {
   undoStack.push(JSON.stringify([roads, buildings]));
   if (undoStack.length > 100) undoStack.shift();
   dirty = true;
+  geometryVersion++;
 }
 
 function undo(): void {
@@ -96,6 +167,7 @@ function undo(): void {
   [roads, buildings] = JSON.parse(prev) as [RawEnvelope, RawEnvelope];
   selected = undefined;
   dirty = true;
+  geometryVersion++;
   refresh("undone");
 }
 
@@ -103,17 +175,13 @@ async function loadArea(id: string): Promise<void> {
   area = id;
   roads = await api<RawEnvelope>(`/__editor/raw/${id}/roads`);
   buildings = await api<RawEnvelope>(`/__editor/raw/${id}/buildings`);
-  proj = makeProjector(roads.bbox);
+  world = worldFromBbox(roads.bbox);
+  proj = world.projector;
   undoStack.length = 0;
   dirty = false;
   selected = undefined;
-  panX = canvas.width / 2;
-  panY = canvas.height / 2;
-  const span = Math.max(
-    (roads.bbox.east - roads.bbox.west) * 111_320 * Math.cos((roads.bbox.south * Math.PI) / 180),
-    (roads.bbox.north - roads.bbox.south) * 110_540,
-  );
-  scale = Math.min(canvas.width, canvas.height) / span;
+  geometryVersion++;
+  fitWorld();
   refresh("loaded");
 }
 
@@ -140,28 +208,144 @@ const toScreen = (p: { x: number; y: number }) => ({
 });
 const toWorld = (sx: number, sy: number) => ({ x: (sx - panX) / scale, y: (panY - sy) / scale });
 
-function draw(): void {
-  ctx.fillStyle = "#14161a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  for (const b of buildings.response.elements) {
+function line(x1: number, y1: number, x2: number, y2: number): void {
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+}
+
+function drawGrid(vis: ReturnType<typeof visibleRect>): void {
+  const minor = gridStep(scale, 24);
+  const major = gridStep(scale, minor * scale * 2.5);
+  const x0 = Math.max(0, vis.minX);
+  const x1 = Math.min(world.widthM, vis.maxX);
+  const y0 = Math.max(0, vis.minY);
+  const y1 = Math.min(world.heightM, vis.maxY);
+  const a = toScreen({ x: x0, y: y1 });
+  const b = toScreen({ x: x1, y: y0 });
+  for (const [step, colour] of [
+    [minor, "rgba(255,255,255,0.05)"],
+    [major, "rgba(255,255,255,0.12)"],
+  ] as const) {
     ctx.beginPath();
-    b.geometry.forEach((g, i) => {
-      const s = toScreen(proj.toLocal(g));
+    for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
+      const sx = toScreen({ x, y: 0 }).x;
+      line(sx, a.y, sx, b.y);
+    }
+    for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) {
+      const sy = toScreen({ x: 0, y }).y;
+      line(a.x, sy, b.x, sy);
+    }
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+function drawTiles(vis: ReturnType<typeof visibleRect>): void {
+  const { xs, ys } = tileLines(world.widthM, world.heightM, tileM);
+  const top = toScreen({ x: 0, y: world.heightM }).y;
+  const bottom = toScreen({ x: 0, y: 0 }).y;
+  const left = toScreen({ x: 0, y: 0 }).x;
+  const right = toScreen({ x: world.widthM, y: 0 }).x;
+  ctx.beginPath();
+  for (const x of xs) {
+    if (x < vis.minX || x > vis.maxX) continue;
+    const sx = toScreen({ x, y: 0 }).x;
+    line(sx, top, sx, bottom);
+  }
+  for (const y of ys) {
+    if (y < vis.minY || y > vis.maxY) continue;
+    const sy = toScreen({ x: 0, y }).y;
+    line(left, sy, right, sy);
+  }
+  ctx.setLineDash([8, 6]);
+  ctx.strokeStyle = "rgba(240,170,40,0.7)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (tileM * scale < 60) return;
+  ctx.fillStyle = "rgba(240,170,40,0.8)";
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  const rows = ys.length - 1;
+  for (let c = 0; c + 1 < xs.length; c++) {
+    for (let r = 0; r < rows; r++) {
+      // Row 0 is the northernmost row; the label sits at the tile's top-left.
+      const x = xs[c] as number;
+      const y = ys[rows - r] as number;
+      if (x > vis.maxX || y < vis.minY || x + tileM < vis.minX || y - tileM > vis.maxY) continue;
+      const sp = toScreen({ x, y });
+      ctx.fillText(`${c},${r}`, sp.x + 4, sp.y + 4);
+    }
+  }
+}
+
+function drawHud(): void {
+  const bar = scaleBar(scale, 160);
+  const bx = 16;
+  const by = canvas.height - 20;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, by - 5);
+  ctx.lineTo(bx, by);
+  ctx.lineTo(bx + bar.px, by);
+  ctx.lineTo(bx + bar.px, by - 5);
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(bar.label, bx, by - 8);
+  const lines = [
+    hover === undefined ? "x -, y -" : `x ${Math.round(hover.x)} m, y ${Math.round(hover.y)} m`,
+    `${(world.widthM / 1000).toFixed(2)} x ${(world.heightM / 1000).toFixed(2)} km`,
+    `tile ${tileM} m`,
+  ];
+  ctx.textAlign = "right";
+  lines.forEach((t, i) => {
+    ctx.fillText(t, canvas.width - 12, canvas.height - 10 - (lines.length - 1 - i) * 15);
+  });
+}
+
+function draw(): void {
+  const vis = visibleRect(currentView(), canvas.width, canvas.height);
+  ctx.fillStyle = "#0b0c0f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const wTL = toScreen({ x: 0, y: world.heightM });
+  const wBR = toScreen({ x: world.widthM, y: 0 });
+  ctx.fillStyle = "#14161a";
+  ctx.fillRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
+  if (showGrid) drawGrid(vis);
+  ctx.strokeStyle = "#667";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
+  if (showTiles) drawTiles(vis);
+  const visible = (lw: LocalWay, padM: number) =>
+    lw.maxX + padM >= vis.minX &&
+    lw.minX - padM <= vis.maxX &&
+    lw.maxY + padM >= vis.minY &&
+    lw.minY - padM <= vis.maxY;
+  const trace = (lw: LocalWay) => {
+    ctx.beginPath();
+    lw.pts.forEach((p, i) => {
+      const s = toScreen(p);
       if (i === 0) ctx.moveTo(s.x, s.y);
       else ctx.lineTo(s.x, s.y);
     });
+  };
+  for (const b of buildings.response.elements) {
+    const lw = localWay(b);
+    if (!visible(lw, 0)) continue;
+    trace(lw);
     ctx.closePath();
     ctx.fillStyle = b === selected?.way ? "#ff6" : "#4a3f3a";
     ctx.fill();
   }
-  const drawRoad = (way: RawWay, colour: string, extra: number) => {
+  const drawRoad = (way: RawWay, lw: LocalWay, colour: string, extra: number) => {
     const w = Number.parseFloat(way.tags?.width ?? "") || DEFAULT_WIDTH_M;
-    ctx.beginPath();
-    way.geometry.forEach((g, i) => {
-      const s = toScreen(proj.toLocal(g));
-      if (i === 0) ctx.moveTo(s.x, s.y);
-      else ctx.lineTo(s.x, s.y);
-    });
+    trace(lw);
     ctx.strokeStyle = colour;
     ctx.lineWidth = Math.max(1.5, w * scale) + extra;
     ctx.lineCap = "round";
@@ -169,16 +353,20 @@ function draw(): void {
     ctx.stroke();
   };
   for (const way of roads.response.elements) {
-    if (way === selected?.way) drawRoad(way, "#ff6", 4);
-    drawRoad(way, SURFACE_COLOUR[effectiveSurface(way.tags)], 0);
+    const lw = localWay(way);
+    if (!visible(lw, DEFAULT_WIDTH_M + 20)) continue;
+    if (way === selected?.way) drawRoad(way, lw, "#ff6", 4);
+    drawRoad(way, lw, SURFACE_COLOUR[effectiveSurface(way.tags)], 0);
   }
   if (tool === "road" || tool === "move") {
     ctx.fillStyle = "#fff";
     for (const way of roads.response.elements) {
-      way.geometry.forEach((g, i) => {
-        const end = i === 0 || i === way.geometry.length - 1;
+      const lw = localWay(way);
+      if (!visible(lw, 0)) continue;
+      lw.pts.forEach((p, i) => {
+        const end = i === 0 || i === lw.pts.length - 1;
         if (!end && tool !== "move") return;
-        const sp = toScreen(proj.toLocal(g));
+        const sp = toScreen(p);
         ctx.fillRect(sp.x - 2, sp.y - 2, 4, 4);
       });
     }
@@ -206,6 +394,7 @@ function draw(): void {
     ctx.fillStyle = "rgba(255,220,120,0.5)";
     ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
   }
+  drawHud();
 }
 
 function setTool(next: Tool): void {
@@ -246,7 +435,7 @@ function setTool(next: Tool): void {
     $<HTMLInputElement>("o-height").onchange = (e) =>
       (buildingHeight = Number((e.target as HTMLInputElement).value) || 8);
   } else opts.innerHTML = "";
-  if (roads !== undefined) draw();
+  if (roads !== undefined) requestDraw();
 }
 
 function finishRoad(): void {
@@ -259,7 +448,7 @@ function finishRoad(): void {
     refresh("road added");
   }
   roadPoints = [];
-  draw();
+  requestDraw();
 }
 
 function field(label: string, control: string): string {
@@ -269,7 +458,7 @@ function field(label: string, control: string): string {
 function renderSelection(): void {
   const box = $("sel");
   if (selected === undefined) {
-    box.textContent = "Click a road or building. Drag to pan, wheel to zoom.";
+    box.textContent = "Click a road or building. Drag to pan, wheel to zoom, F to fit the world.";
     return;
   }
   const { kind, way } = selected;
@@ -345,7 +534,7 @@ function deleteSelected(): void {
 }
 
 function refresh(message: string): void {
-  draw();
+  requestDraw();
   renderSelection();
   setStatus(message);
 }
@@ -374,7 +563,7 @@ canvas.addEventListener("mousedown", (e) => {
 window.addEventListener("mousemove", (e) => {
   if (e.target === canvas) {
     hover = worldOf(e);
-    if (tool === "road" && roadPoints.length > 0) draw();
+    requestDraw();
   }
   if (dragging === undefined) return;
   const dx = e.clientX - dragging.x;
@@ -388,8 +577,9 @@ window.addEventListener("mousemove", (e) => {
     dragging.y = e.clientY;
   } else if (movingNode !== undefined) {
     moveNode(roads, movingNode, proj.toLatLon(worldOf(e)));
+    geometryVersion++;
   }
-  draw();
+  requestDraw();
 });
 window.addEventListener("mouseup", (e) => {
   const d = dragging;
@@ -410,14 +600,14 @@ window.addEventListener("mouseup", (e) => {
       const way = addBuildingRect(buildings, proj.toLatLon(a), proj.toLatLon(b), buildingHeight);
       selected = { kind: "building", way };
       refresh("building added");
-    } else draw();
+    } else requestDraw();
     return;
   }
   if (d.moved || e.target !== canvas) return;
   const p = worldOf(e);
   if (tool === "road") {
     roadPoints.push(snapPoint(p, roads, proj, snapTol()));
-    draw();
+    requestDraw();
     return;
   }
   if (tool !== "select") return;
@@ -443,11 +633,10 @@ canvas.addEventListener(
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const before = toWorld(sx, sy);
-    scale *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    panX = sx - before.x * scale;
-    panY = sy + before.y * scale;
-    draw();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.height : 1;
+    const factor = Math.exp(-e.deltaY * unit * 0.0015);
+    setView(zoomAt(currentView(), factor, sx, sy, fitScale / 4, MAX_SCALE));
+    requestDraw();
   },
   { passive: false },
 );
@@ -460,7 +649,17 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "Escape") {
     roadPoints = [];
     rectStart = undefined;
-    draw();
+    requestDraw();
+  } else if (e.key === "f" || e.key === "F") {
+    fitWorld();
+    requestDraw();
+  } else if (e.key.startsWith("Arrow")) {
+    e.preventDefault();
+    if (e.key === "ArrowLeft") panX += canvas.width / 4;
+    else if (e.key === "ArrowRight") panX -= canvas.width / 4;
+    else if (e.key === "ArrowUp") panY += canvas.height / 4;
+    else panY -= canvas.height / 4;
+    requestDraw();
   } else if (e.key === "v" || e.key === "V") setTool("select");
   else if (e.key === "r" || e.key === "R") setTool("road");
   else if (e.key === "m" || e.key === "M") setTool("move");
@@ -475,10 +674,26 @@ window.addEventListener("beforeunload", (e) => {
 function resize(): void {
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
-  if (roads !== undefined) draw();
+  if (roads !== undefined) requestDraw();
 }
 window.addEventListener("resize", resize);
 
+const tileSelect = $<HTMLSelectElement>("tile-size");
+tileSelect.innerHTML = TILE_SIZES_M.map(
+  (m) => `<option value="${m}" ${m === tileM ? "selected" : ""}>${m} m</option>`,
+).join("");
+tileSelect.onchange = () => {
+  tileM = Number(tileSelect.value) || DEFAULT_TILE_M;
+  requestDraw();
+};
+$<HTMLInputElement>("show-grid").onchange = (e) => {
+  showGrid = (e.target as HTMLInputElement).checked;
+  requestDraw();
+};
+$<HTMLInputElement>("show-tiles").onchange = (e) => {
+  showTiles = (e.target as HTMLInputElement).checked;
+  requestDraw();
+};
 $("save").onclick = () => void save();
 $("compile").onclick = () => void compile();
 $("undo").onclick = undo;

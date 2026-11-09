@@ -45,10 +45,15 @@
           <button type="button" id="undo">Undo (Z)</button>
           <button type="button" id="drive" class="primary">Compile &amp; drive</button>
         </div>
+        <h3>View</h3>
+        <label for="tile-size">Tile size</label>
+        <select id="tile-size"></select>
+        <label><input type="checkbox" id="show-grid" checked /> show grid</label>
+        <label><input type="checkbox" id="show-tiles" checked /> show tiles</label>
         <div id="status"></div>
         <div id="hint"></div>
         <h3>Selection</h3>
-        <div id="sel">Click a road or building. Drag to pan, wheel to zoom.</div>
+        <div id="sel">Click a road or building. Drag to pan, wheel to zoom, F to fit the world.</div>
         <h3>Legend</h3>
         <div class="legend" id="legend"></div>
         <div id="log"></div>
