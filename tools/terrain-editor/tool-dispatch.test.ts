@@ -295,9 +295,9 @@ describe("block and smooth tools (04.3-07)", () => {
       smoothStrength: 0.5,
       smoothPasses: 3,
     });
-    d.setOptions({ blockCells: 99, blockStepM: 0.1, smoothStrength: 5, smoothPasses: 99 });
+    d.setOptions({ blockCells: 999, blockStepM: 0.1, smoothStrength: 5, smoothPasses: 99 });
     expect(d.getOptions()).toMatchObject({
-      blockCells: 8,
+      blockCells: 64,
       blockStepM: 0.25,
       smoothStrength: 1,
       smoothPasses: 10,

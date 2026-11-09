@@ -10,7 +10,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { KNOWN_MAP_IDS, MAP_FORMATS, type MapId } from "../../src/core/map-select.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
-import { blockWindowAt } from "../../src/core/terrain-brush.ts";
+import { BLOCK_CELLS_MAX, blockWindowAt } from "../../src/core/terrain-brush.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
@@ -52,7 +52,8 @@ const canvas = $<HTMLCanvasElement>("view");
 const wrap = $("wrap");
 
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
-const DEFAULT_HINT = "Left-drag to sculpt. Right-drag to orbit, middle-drag to pan, wheel to zoom.";
+const DEFAULT_HINT =
+  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+right-drag or Ctrl+wheel to pan, wheel to zoom.";
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
@@ -98,14 +99,64 @@ camera.position.set(200, 250, 200);
 
 const controls = new OrbitControls(camera, canvas);
 // LEFT is reserved for brushes. Shift + right-drag pans (OrbitControls default).
+// MIDDLE is handled below: vertical drag tilts, horizontal drag spins.
+// Ctrl + wheel pans the view up/down on screen (plain wheel still zooms).
 controls.mouseButtons = {
   LEFT: null,
-  MIDDLE: THREE.MOUSE.PAN,
+  MIDDLE: null,
   RIGHT: THREE.MOUSE.ROTATE,
 } as unknown as typeof controls.mouseButtons;
 controls.enableDamping = false;
 controls.maxPolarAngle = Math.PI / 2 - 0.02;
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+let middleDrag: { id: number; x: number; y: number } | null = null;
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 1) return;
+  e.preventDefault(); // suppress browser middle-click autoscroll
+  middleDrag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!middleDrag || e.pointerId !== middleDrag.id) return;
+  const dx = e.clientX - middleDrag.x;
+  const dy = e.clientY - middleDrag.y;
+  middleDrag.x = e.clientX;
+  middleDrag.y = e.clientY;
+  const h = canvas.clientHeight || 1;
+  // Same sense as OrbitControls: horizontal drag spins, vertical drag tilts.
+  const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  sph.theta -= (2 * Math.PI * dx) / h;
+  sph.phi = Math.min(controls.maxPolarAngle, Math.max(0.01, sph.phi - (2 * Math.PI * dy) / h));
+  camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
+  camera.lookAt(controls.target);
+  controls.update();
+});
+canvas.addEventListener(
+  "wheel",
+  (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault(); // also stops browser page-zoom
+    e.stopImmediatePropagation(); // keep OrbitControls from zooming
+    const dist = camera.position.distanceTo(controls.target);
+    const worldPerPx =
+      (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / (canvas.clientHeight || 1);
+    const move = new THREE.Vector3()
+      .setFromMatrixColumn(camera.matrix, 1)
+      .multiplyScalar(-Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) * worldPerPx);
+    camera.position.add(move);
+    controls.target.add(move);
+    controls.update();
+  },
+  { capture: true, passive: false },
+);
+const endMiddleDrag = (e: PointerEvent): void => {
+  if (!middleDrag || e.pointerId !== middleDrag.id) return;
+  middleDrag = null;
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+};
+canvas.addEventListener("pointerup", endMiddleDrag);
+canvas.addEventListener("pointercancel", endMiddleDrag);
 
 const ringGeometry = new THREE.BufferGeometry();
 ringGeometry.setAttribute(
@@ -124,8 +175,8 @@ cursorRing.visible = false;
 scene.add(cursorRing);
 
 // D-22 block preview: closed rectangle on the exact cells the next click changes.
-// 8 cells max per side (BLOCK_CELLS_MAX) x 4 sides, with headroom.
-const BLOCK_OUTLINE_POINTS_MAX = 8 * 4 + 8;
+// BLOCK_CELLS_MAX cells per side x 4 sides, with headroom.
+const BLOCK_OUTLINE_POINTS_MAX = BLOCK_CELLS_MAX * 4 + 8;
 const blockOutlineGeometry = new THREE.BufferGeometry();
 blockOutlineGeometry.setAttribute(
   "position",
