@@ -710,6 +710,32 @@ $("legend").innerHTML = SURFACES.map(
   (s) => `<span><i class="sw" style="background:${SURFACE_COLOUR[s]}"></i>${s}</span>`,
 ).join("");
 
+async function refreshAreas(selectId: string): Promise<void> {
+  const areas = await api<string[]>("/__editor/areas");
+  const select = $<HTMLSelectElement>("area");
+  select.innerHTML = areas.map((a) => `<option>${a}</option>`).join("");
+  select.value = selectId;
+}
+
+$("nw-create").onclick = async () => {
+  if (dirty && !confirm("Discard unsaved edits?")) return;
+  const id = $<HTMLInputElement>("nw-id").value.trim();
+  const widthKm = Number($<HTMLInputElement>("nw-w").value);
+  const heightKm = Number($<HTMLInputElement>("nw-h").value);
+  try {
+    const out = await api<{ register: string[] }>("/__editor/new-world", {
+      method: "POST",
+      body: JSON.stringify({ id, widthKm, heightKm }),
+    });
+    await refreshAreas(id);
+    await loadArea(id);
+    $("log").textContent =
+      `Created "${id}". To compile it, add to tools/map-compiler/cli.ts:\n${out.register.join("\n")}`;
+  } catch (err) {
+    $("log").textContent = String(err);
+  }
+};
+
 async function main(): Promise<void> {
   resize();
   const areas = await api<string[]>("/__editor/areas");

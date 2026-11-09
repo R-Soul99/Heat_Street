@@ -8,6 +8,8 @@
  *   GET  /__editor/raw/<area>/<kind>      -> raw envelope (kind: roads|buildings)
  *   PUT  /__editor/raw/<area>/<kind>      -> overwrite it (body: envelope JSON)
  *   POST /__editor/compile/<area>         -> compile-map (+ route authoring), returns log
+ *   POST /__editor/new-world              -> body {id,widthKm,heightKm}: writes a blank
+ *                                            authored world; returns {ok,register:[cli.ts lines]}
  */
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -15,6 +17,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { WorldExistsError, writeNewWorld } from "./new-world.ts";
+import { MAX_WORLD_KM, MIN_WORLD_KM } from "./world.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const AREAS_DIR = path.join(ROOT, "tools", "map-compiler", "areas");
@@ -97,6 +101,39 @@ export function mapEditorApi(): Plugin {
               return send(res, 200, '{"ok":true}');
             }
           }
+          if (req.method === "POST" && parts[1] === "new-world") {
+            const body = JSON.parse(await readBody(req)) as {
+              id?: unknown;
+              widthKm?: unknown;
+              heightKm?: unknown;
+            };
+            const { id, widthKm, heightKm } = body;
+            const okKm = (n: unknown): n is number =>
+              typeof n === "number" && Number.isFinite(n) && n >= MIN_WORLD_KM && n <= MAX_WORLD_KM;
+            if (
+              typeof id !== "string" ||
+              !/^[a-z0-9-]+$/.test(id) ||
+              !okKm(widthKm) ||
+              !okKm(heightKm)
+            ) {
+              return send(res, 400, '{"error":"bad id or size"}');
+            }
+            try {
+              const register = writeNewWorld(
+                AREAS_DIR,
+                id,
+                widthKm,
+                heightKm,
+                new Date().toISOString(),
+              );
+              return send(res, 200, JSON.stringify({ ok: true, register }));
+            } catch (err) {
+              if (err instanceof WorldExistsError) {
+                return send(res, 409, JSON.stringify({ error: String(err.message) }));
+              }
+              return send(res, 400, JSON.stringify({ error: String(err) }));
+            }
+          }
           if (req.method === "POST" && parts[1] === "compile" && parts[2] !== undefined) {
             if (rawPath(parts[2], "roads") === undefined) {
               return send(res, 404, '{"error":"unknown area"}');
@@ -105,6 +142,10 @@ export function mapEditorApi(): Plugin {
             if (!log.includes("[exit")) {
               const post = POST_COMPILE[parts[2]];
               if (post !== undefined) log += await run(post);
+            }
+            if (log.includes("unknown area")) {
+              log +=
+                "\nNew world? Add its import and KNOWN_AREAS line (shown when it was created) to tools/map-compiler/cli.ts, then compile again.\n";
             }
             return send(res, 200, log, "text/plain");
           }
