@@ -22,7 +22,7 @@ export interface TraceOptions {
   threshold: number;
   /** Black blobs smaller than this many pixels are noise. */
   minComponentPx: number;
-  /** Junction pixels closer than this (or the local stroke radius x2) become one node. */
+  /** Junction pixels closer than this (or 3x the local half stroke width) become one node. */
   mergeJunctionPx: number;
   /** Dead-end branches shorter than this are removed. */
   minSpurPx: number;
@@ -103,6 +103,49 @@ export function removeSpecks(mask: Uint8Array, w: number, h: number, minPx: numb
 }
 
 /**
+ * Ring = N, NE, E, SE, S, SW, W, NW (1 = set). True when the centre pixel has
+ * 2+ set neighbours, those form ONE 8-connected group (orthogonal neighbours
+ * count as adjacent through the empty corner) and exactly one background run
+ * touches the centre's 4-neighbours - i.e. removal changes no topology.
+ */
+function isRemovableSimplePoint(r: number[]): boolean {
+  let count = 0;
+  for (const v of r) count += v;
+  if (count < 2) return false;
+  const par = [0, 1, 2, 3, 4, 5, 6, 7];
+  const find = (i: number): number => {
+    let x = i;
+    while (par[x] !== x) x = par[x] as number;
+    return x;
+  };
+  const join = (i: number, j: number): void => {
+    if (r[i] && r[j]) par[find(i)] = find(j);
+  };
+  for (let i = 0; i < 8; i++) join(i, (i + 1) % 8);
+  for (const i of [0, 2, 4, 6]) join(i, (i + 2) % 8);
+  const roots = new Set<number>();
+  for (let i = 0; i < 8; i++) if (r[i]) roots.add(find(i));
+  if (roots.size !== 1) return false;
+  // Background runs (circular) that contain at least one orthogonal neighbour.
+  const start = r.indexOf(1);
+  let runs = 0;
+  let inRun = false;
+  let touches = false;
+  for (let k = 1; k <= 8; k++) {
+    const i = (start + k) % 8;
+    if (!r[i]) {
+      inRun = true;
+      if (i % 2 === 0) touches = true;
+    } else if (inRun) {
+      if (touches) runs++;
+      inRun = false;
+      touches = false;
+    }
+  }
+  return runs === 1;
+}
+
+/**
  * Zhang-Suen thinning (out-of-bounds counts as empty) followed by removal of
  * redundant staircase corner pixels so diagonals stay one pixel wide.
  */
@@ -158,34 +201,25 @@ export function skeletonize(mask: Uint8Array, w: number, h: number): Uint8Array 
       }
     }
   }
-  // Staircase cleanup: drop a pixel whose set neighbours form one run, number
-  // 2..3 and include an orthogonal pair (an L corner). Connectivity is kept.
+  // Cleanup: remove every remaining simple point (deleting it neither splits
+  // nor holes the skeleton) that is not an endpoint, so staircases and 2x2
+  // blobs left by thinning collapse to a one-pixel-wide line.
   let again = true;
   while (again) {
     again = false;
     for (const p of cand) {
       if (!img[p]) continue;
-      const n = img[p - pw] as number;
-      const ne = img[p - pw + 1] as number;
-      const e = img[p + 1] as number;
-      const se = img[p + pw + 1] as number;
-      const s = img[p + pw] as number;
-      const sw = img[p + pw - 1] as number;
-      const wv = img[p - 1] as number;
-      const nw = img[p - pw - 1] as number;
-      const cnt = n + ne + e + se + s + sw + wv + nw;
-      if (cnt < 2 || cnt > 3) continue;
-      const trans =
-        (!n && ne ? 1 : 0) +
-        (!ne && e ? 1 : 0) +
-        (!e && se ? 1 : 0) +
-        (!se && s ? 1 : 0) +
-        (!s && sw ? 1 : 0) +
-        (!sw && wv ? 1 : 0) +
-        (!wv && nw ? 1 : 0) +
-        (!nw && n ? 1 : 0);
-      if (trans !== 1) continue;
-      if ((n && e) || (e && s) || (s && wv) || (wv && n)) {
+      const ringv = [
+        img[p - pw],
+        img[p - pw + 1],
+        img[p + 1],
+        img[p + pw + 1],
+        img[p + pw],
+        img[p + pw - 1],
+        img[p - 1],
+        img[p - pw - 1],
+      ] as number[];
+      if (isRemovableSimplePoint(ringv)) {
         img[p] = 0;
         again = true;
       }
@@ -241,6 +275,18 @@ const N8: ReadonlyArray<readonly [number, number]> = [
   [-1, -1],
 ];
 
+/** The 8 neighbours in circular order (N, NE, E, SE, S, SW, W, NW). */
+const N8_RING: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [1, -1],
+  [1, 0],
+  [1, 1],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [-1, -1],
+];
+
 function pathLength(pts: PxPoint[]): number {
   let l = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -283,13 +329,35 @@ export function traceSkeleton(
   const nodePix: number[] = [];
   const junctionPix: number[] = [];
   const clusterOf = new Map<number, number>(); // node pixel -> node index
-  const deg = new Map<number, number>();
+  // Classify by ring transitions (0->1 around the 8-neighbourhood), not raw
+  // neighbour count: staircase pixels on shallow lines have 3 neighbours but
+  // are plain path pixels.
+  const endpointPix: number[] = [];
+  /** Pixels of a surviving 2x2 block (an X crossing thins to one): all junction pixels. */
+  const blockPix = new Set<number>();
   for (let p = 0; p < w * h; p++) {
     if (!skel[p]) continue;
-    const d = nbrs(p).length;
-    deg.set(p, d);
-    if (d >= 3) junctionPix.push(p);
+    const x = p % w;
+    const y = (p - x) / w;
+    const ring = N8_RING.map(([dx, dy]) => {
+      const nx = x + dx;
+      const ny = y + dy;
+      return nx >= 0 && ny >= 0 && nx < w && ny < h && skel[ny * w + nx] ? 1 : 0;
+    });
+    let count = 0;
+    let trans = 0;
+    for (let i = 0; i < 8; i++) {
+      count += ring[i] as number;
+      if (!ring[i] && ring[(i + 1) % 8]) trans++;
+    }
+    if (count === 0) continue;
+    const block = x + 1 < w && y + 1 < h && skel[p + 1] && skel[p + w] && skel[p + w + 1];
+    if (block) for (const q of [p, p + 1, p + w, p + w + 1]) blockPix.add(q);
+    if (trans >= 3) junctionPix.push(p);
+    else if (trans <= 1 && !blockPix.has(p)) endpointPix.push(p);
   }
+  const isJunction = new Set(junctionPix);
+  for (const q of blockPix) if (!isJunction.has(q)) junctionPix.push(q);
   // Union-find over junction pixels.
   const parent = junctionPix.map((_, i) => i);
   const find = (i: number): number => {
@@ -305,15 +373,17 @@ export function traceSkeleton(
   };
   for (let i = 0; i < junctionPix.length; i++) {
     const pi = junctionPix[i] as number;
-    const ri = Math.max(mergeJunctionPx, 2 * (radius?.[pi] ?? 0));
+    const ri = Math.max(mergeJunctionPx, 3 * (radius?.[pi] ?? 0));
     for (let j = i + 1; j < junctionPix.length; j++) {
       const pj = junctionPix[j] as number;
-      const rj = Math.max(mergeJunctionPx, 2 * (radius?.[pj] ?? 0));
+      const rj = Math.max(mergeJunctionPx, 3 * (radius?.[pj] ?? 0));
       if (Math.hypot(cx(pi) - cx(pj), cy(pi) - cy(pj)) <= Math.max(ri, rj))
         parent[find(i)] = find(j);
     }
   }
   const nodes: GraphNodePx[] = [];
+  /** Cluster reach per node; a loop back to the same junction shorter than 4x this is a hole, not a road. */
+  const nodeReach: number[] = [];
   const members = new Map<number, number[]>();
   for (let i = 0; i < junctionPix.length; i++) {
     const r = find(i);
@@ -325,21 +395,22 @@ export function traceSkeleton(
     const id = nodes.length;
     let sx = 0;
     let sy = 0;
+    let reach = mergeJunctionPx;
     for (const p of list) {
+      reach = Math.max(reach, 3 * (radius?.[p] ?? 0));
       sx += cx(p);
       sy += cy(p);
       clusterOf.set(p, id);
     }
     nodes.push({ id, x: sx / list.length, y: sy / list.length, degree: 0 });
+    nodeReach[id] = reach;
     nodePix.push(...list);
   }
-  for (const [p, d] of deg) {
-    if (d === 1) {
-      const id = nodes.length;
-      nodes.push({ id, x: cx(p), y: cy(p), degree: 0 });
-      clusterOf.set(p, id);
-      nodePix.push(p);
-    }
+  for (const p of endpointPix) {
+    const id = nodes.length;
+    nodes.push({ id, x: cx(p), y: cy(p), degree: 0 });
+    clusterOf.set(p, id);
+    nodePix.push(p);
   }
 
   const visited = new Uint8Array(w * h);
@@ -348,7 +419,7 @@ export function traceSkeleton(
   const addPath = (a: number, b: number, pts: PxPoint[]): void => {
     if (pts.length < 2) return;
     if (a === b) {
-      if (pathLength(pts) < 3 * mergeJunctionPx) return;
+      if (pathLength(pts) < 4 * (nodeReach[a] ?? mergeJunctionPx)) return;
       // Split a real loop on one node at its middle so no way is a self-loop.
       const mid = Math.floor(pts.length / 2);
       const m = pts[mid] as PxPoint;
