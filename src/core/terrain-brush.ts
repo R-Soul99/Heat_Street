@@ -48,6 +48,8 @@ export interface StrokeDiff {
     nextEdgeIdBefore: number;
     nextEdgeIdAfter: number;
   };
+  /** Quick 261110-rdx: unlocked-edge-id list snapshots (DD-5), sorted ascending. */
+  readonly lock?: { before: readonly number[]; after: readonly number[] };
 }
 
 export interface StrokeRecorder {
@@ -59,6 +61,8 @@ export interface StrokeRecorder {
     nextEdgeIdBefore: number,
     nextEdgeIdAfter: number,
   ): void;
+  /** First `before` wins, latest `after` wins (same rule as recordGraph). */
+  recordLock(before: readonly number[], after: readonly number[]): void;
   commit(): StrokeDiff | undefined;
 }
 
@@ -663,10 +667,15 @@ export function erasePaintDisc(
   return paintDisc(paint, params, rec, () => value);
 }
 
+function asc(a: number, b: number): number {
+  return a - b;
+}
+
 export function createStrokeRecorder(grid: TerrainGrid, paint: PaintMap): StrokeRecorder {
   const heightBefore = new Map<number, number>();
   const paintBefore = new Map<number, number>();
   let graph: StrokeDiff["graph"];
+  let lock: StrokeDiff["lock"];
   const stride = grid.rows + 1;
   return {
     beforeHeightsWrite(w) {
@@ -702,6 +711,9 @@ export function createStrokeRecorder(grid: TerrainGrid, paint: PaintMap): Stroke
         nextEdgeIdAfter,
       };
     },
+    recordLock(before, after) {
+      lock = { before: lock ? lock.before : before, after };
+    },
     commit() {
       let heights: StrokeDiff["heights"];
       const hIdx: number[] = [];
@@ -729,8 +741,17 @@ export function createStrokeRecorder(grid: TerrainGrid, paint: PaintMap): Stroke
       heightBefore.clear();
       paintBefore.clear();
       graph = undefined;
-      if (!heights && !paintDiff && !g) return undefined;
-      return { heights, paint: paintDiff, graph: g };
+      const sameIds = (a: readonly number[], b: readonly number[]): boolean =>
+        a.length === b.length && a.every((v, i) => v === b[i]);
+      const l =
+        lock && !sameIds([...lock.before].sort(asc), [...lock.after].sort(asc))
+          ? { before: [...lock.before].sort(asc), after: [...lock.after].sort(asc) }
+          : undefined;
+      lock = undefined;
+      if (!heights && !paintDiff && !g && !l) return undefined;
+      return l
+        ? { heights, paint: paintDiff, graph: g, lock: l }
+        : { heights, paint: paintDiff, graph: g };
     },
   };
 }

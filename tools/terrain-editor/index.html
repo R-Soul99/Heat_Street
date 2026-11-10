@@ -57,10 +57,11 @@
           <button type="button" class="tool danger" data-tool="erase" aria-pressed="false">Erase road (E)</button>
           <button type="button" class="tool" data-tool="block" aria-pressed="false" title="Block raise/lower (B). Alt+click lowers.">Block (B)</button>
           <button type="button" class="tool" data-tool="smoothBox" aria-pressed="false" title="Drag a box to smooth that area.">Smooth area (box)</button>
+          <button type="button" class="tool" data-tool="lock" aria-pressed="false" title="Click a road to lock or unlock it. Alt+click selects it.">Lock/unlock road (L)</button>
         </div>
         <h3>Brush options</h3>
         <div id="tool-opts">
-          <div data-for="raise smooth flatten paint erase">
+          <div data-for="raise smooth flatten paint erase lock">
             <label for="opt-radius">Radius (m)</label>
             <input type="number" id="opt-radius" value="12" min="0.5" max="200" step="0.5" />
             <input type="range" id="opt-radius-r" value="12" min="0.5" max="200" step="0.5" aria-label="Radius slider" />
@@ -111,6 +112,13 @@
             <span id="opt-smooth-passes-v">3</span>
             <div class="muted">Drag a box to smooth it. Roads never move.</div>
             <button type="button" id="smooth-all">Smooth whole map</button>
+          </div>
+          <div data-for="lock">
+            <button type="button" id="lock-all">Lock all</button>
+            <button type="button" id="unlock-all">Unlock all</button>
+            <button type="button" id="regrade-selected">Re-grade selected</button>
+            <button type="button" id="regrade-all">Re-grade all unlocked</button>
+            <div class="muted">Grey = locked, orange = unlocked, cyan = selected. Unlocked roads must be re-graded or locked before saving.</div>
           </div>
           <div data-for="stamp">
             <label for="opt-stamp-kind">Stamp</label>

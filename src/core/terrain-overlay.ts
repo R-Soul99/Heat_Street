@@ -8,6 +8,7 @@
  *
  * Layering: pure core, no three/rapier/DOM.
  */
+import type { RoadGraph } from "./road-graph.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import type { CellWindow } from "./terrain-slope.ts";
 
@@ -146,4 +147,37 @@ export function cellPixelSize(
 /** True when cells are too small on screen for the grid overlay to be useful (also true for non-finite input). */
 export function needsZoomHint(cellPx: number): boolean {
   return !(cellPx >= ZOOM_HINT_MIN_CELL_PX);
+}
+
+/**
+ * Quick 261110-rdx: road centreline segments split by lock state for the editor
+ * overlay. `selectedEdgeId` goes only into `selected`; unlocked edges into
+ * `unlocked`; everything else into `locked`. y = point y + liftM.
+ */
+export function roadLockSegments(
+  graph: RoadGraph,
+  unlocked: readonly number[] | undefined,
+  selectedEdgeId: number | null,
+  liftM: number,
+): { locked: Float32Array; unlocked: Float32Array; selected: Float32Array } {
+  const free = new Set(unlocked ?? []);
+  const lists: Record<"locked" | "unlocked" | "selected", number[]> = {
+    locked: [],
+    unlocked: [],
+    selected: [],
+  };
+  for (const e of graph.edges) {
+    const bucket =
+      e.id === selectedEdgeId ? lists.selected : free.has(e.id) ? lists.unlocked : lists.locked;
+    for (let k = 0; k + 1 < e.points.length; k++) {
+      const a = e.points[k];
+      const b = e.points[k + 1];
+      bucket.push(a[0], a[1] + liftM, a[2], b[0], b[1] + liftM, b[2]);
+    }
+  }
+  return {
+    locked: Float32Array.from(lists.locked),
+    unlocked: Float32Array.from(lists.unlocked),
+    selected: Float32Array.from(lists.selected),
+  };
 }

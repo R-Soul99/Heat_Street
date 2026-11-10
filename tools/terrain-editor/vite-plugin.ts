@@ -26,7 +26,7 @@ import {
   readBodyCapped,
   resolveTerrainFile,
 } from "./paths.ts";
-import { assertSaveableGraph } from "./save-guard.ts";
+import { assertGradedRoads, assertSaveableGraph } from "./save-guard.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const MAPS_DIR = path.join(ROOT, "public", "maps");
@@ -111,7 +111,9 @@ export async function validateAreaPair(
   sidecarText: string | undefined,
 ): Promise<void> {
   if (bin === undefined || sidecarText === undefined) return;
-  await loadTerrainArea(bin, sidecarText, id, id);
+  const area = await loadTerrainArea(bin, sidecarText, id, id);
+  // Quick 261110-rdx (DD-3): an unlocked road that disagrees with the terrain must not be saved.
+  assertGradedRoads(area);
 }
 
 async function readIfExists(file: string | null): Promise<Buffer | undefined> {

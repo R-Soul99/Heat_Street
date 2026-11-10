@@ -197,3 +197,40 @@ describe("undo stack", () => {
     expect(stack.canUndo()).toBe(false);
   });
 });
+
+describe("lock snapshots (quick 261110-rdx)", () => {
+  it("applies diff.lock on both sides and reports lockChanged", () => {
+    const area = makeArea();
+    const rec = createStrokeRecorder(area.grid, area.paint);
+    rec.recordLock([], [2]);
+    const diff = rec.commit();
+    expect(diff).toBeDefined();
+    if (!diff) return;
+    expect(diff.heights).toBeUndefined();
+    expect(diff.graph).toBeUndefined();
+    const a = applyStrokeDiff(area, diff, "after");
+    expect(a.lockChanged).toBe(true);
+    expect(area.unlockedEdgeIds).toEqual([2]);
+    const b = applyStrokeDiff(area, diff, "before");
+    expect(b.lockChanged).toBe(true);
+    expect(area.unlockedEdgeIds).toEqual([]);
+  });
+
+  it("recordLock keeps the first before and the latest after; equal snapshots give no diff", () => {
+    const area = makeArea();
+    const rec = createStrokeRecorder(area.grid, area.paint);
+    rec.recordLock([], [1]);
+    rec.recordLock([1], [1, 3]);
+    expect(rec.commit()?.lock).toEqual({ before: [], after: [1, 3] });
+    rec.recordLock([2], [2]);
+    expect(rec.commit()).toBeUndefined();
+  });
+
+  it("a stroke diff without lock leaves lockChanged false and the list alone", () => {
+    const area = makeArea();
+    area.unlockedEdgeIds = [1];
+    const r = applyStrokeDiff(area, dab(area, 0), "before");
+    expect(r.lockChanged).toBe(false);
+    expect(area.unlockedEdgeIds).toEqual([1]);
+  });
+});

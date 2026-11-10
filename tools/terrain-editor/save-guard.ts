@@ -7,6 +7,8 @@
  */
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import type { RoadGraph } from "../../src/core/road-graph.ts";
+import type { TerrainGrid } from "../../src/core/terrain-grid.ts";
+import { staleUnlockedEdges } from "../../src/core/terrain-road-lock.ts";
 import {
   formatValidationFailures,
   type ValidationFailure,
@@ -40,5 +42,32 @@ export function saveBlockMessage(blocking: readonly ValidationFailure[]): string
 /** Throws a `terrain-save:` error when the graph has a blocking failure. */
 export function assertSaveableGraph(graph: RoadGraph): void {
   const message = saveBlockMessage(blockingRoadFailures(graph));
+  if (message !== null) throw new Error(`${SAVE_GUARD_PREFIX} ${message}`);
+}
+
+/**
+ * Quick 261110-rdx (DD-3): refuses a save while any UNLOCKED road no longer
+ * matches the terrain under it. Null when every unlocked road is consistent
+ * (or none is unlocked).
+ */
+export function staleRoadBlockMessage(
+  grid: TerrainGrid,
+  graph: RoadGraph,
+  unlocked: readonly number[] | undefined,
+): string | null {
+  const stale = staleUnlockedEdges(grid, graph, unlocked);
+  if (stale.length === 0) return null;
+  const ids = stale.map((s) => s.edgeId).join(", ");
+  const worst = Math.max(...stale.map((s) => s.maxDeltaM)).toFixed(2);
+  return `Unlocked road(s) ${ids} no longer match the terrain (up to ${worst} m). Re-grade them, or Lock them (locking re-grades), before saving.`;
+}
+
+/** Throws a `terrain-save:` error when an unlocked road is stale. */
+export function assertGradedRoads(area: {
+  grid: TerrainGrid;
+  graph: RoadGraph;
+  unlockedEdgeIds?: readonly number[];
+}): void {
+  const message = staleRoadBlockMessage(area.grid, area.graph, area.unlockedEdgeIds);
   if (message !== null) throw new Error(`${SAVE_GUARD_PREFIX} ${message}`);
 }

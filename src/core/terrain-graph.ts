@@ -98,6 +98,8 @@ export interface AddStrokeResult {
   readonly state: GraphEditState;
   readonly newEdgeIds: number[];
   readonly junctionNodeIds: number[];
+  /** Split pieces that took a fresh edge id, with the edge they were cut from (lock inheritance). */
+  readonly splitFrom: readonly { id: number; parentId: number }[];
   /** Set (and `state` is the unchanged input) when the stroke was rejected. */
   readonly reason?: string;
 }
@@ -106,6 +108,8 @@ export interface EraseResult {
   readonly state: GraphEditState;
   /** Edges that were deleted outright (no portion of them survives). */
   readonly removedEdgeIds: number[];
+  /** Split pieces that took a fresh edge id, with the edge they were cut from (lock inheritance). */
+  readonly splitFrom: readonly { id: number; parentId: number }[];
   readonly spawnLost: boolean;
 }
 
@@ -621,6 +625,7 @@ export function addRoadStroke(
     state,
     newEdgeIds: [],
     junctionNodeIds: [],
+    splitFrom: [],
     reason,
   });
   const poly0 = cleanPolyline(polyline);
@@ -684,6 +689,7 @@ export function addRoadStroke(
 
   // Split existing edges: first piece keeps the id, later pieces take fresh ids.
   const edges: RoadGraphEdge[] = [];
+  const splitFrom: { id: number; parentId: number }[] = [];
   for (const e of graph.edges) {
     if (removed.has(e.id)) continue;
     const list = splits.get(e.id);
@@ -710,9 +716,11 @@ export function addRoadStroke(
     while (next < e.points.length) cur.push(e.points[next++]);
     pieces.push(cur);
     pieces.forEach((pts, i) => {
+      const pieceId = i === 0 ? e.id : nextEdgeId++;
+      if (i > 0) splitFrom.push({ id: pieceId, parentId: e.id });
       edges.push({
         ...e,
-        id: i === 0 ? e.id : nextEdgeId++,
+        id: pieceId,
         from: i === 0 ? e.from : cutNodes[i - 1],
         to: i === pieces.length - 1 ? e.to : cutNodes[i],
         points: pts,
@@ -775,6 +783,7 @@ export function addRoadStroke(
     state: { graph: out, nextEdgeId },
     newEdgeIds,
     junctionNodeIds: outJunctions,
+    splitFrom,
   };
 }
 
@@ -848,9 +857,10 @@ export function eraseGraphDisc(
   radiusM: number,
 ): EraseResult {
   if (![x, z, radiusM].every(Number.isFinite) || radiusM <= 0) {
-    return { state, removedEdgeIds: [], spawnLost: false };
+    return { state, removedEdgeIds: [], splitFrom: [], spawnLost: false };
   }
   const graph = state.graph;
+  const splitFrom: { id: number; parentId: number }[] = [];
   let nextEdgeId = state.nextEdgeId;
   const nodes: RoadGraphNode[] = graph.nodes.slice();
   const edges: RoadGraphEdge[] = [];
@@ -890,9 +900,11 @@ export function eraseGraphDisc(
       };
       const from = endNode(s, s === 0 ? e.from : -1);
       const to = endNode(t, t === lastVertex ? e.to : -1);
+      const pieceId = pieceIndex === 0 ? e.id : nextEdgeId++;
+      if (pieceIndex > 0) splitFrom.push({ id: pieceId, parentId: e.id });
       edges.push({
         ...e,
-        id: pieceIndex === 0 ? e.id : nextEdgeId++,
+        id: pieceId,
         from,
         to,
         points: pts,
@@ -903,13 +915,14 @@ export function eraseGraphDisc(
     if (pieceIndex === 0) removedEdgeIds.push(e.id);
   }
 
-  if (!changed) return { state, removedEdgeIds: [], spawnLost: false };
+  if (!changed) return { state, removedEdgeIds: [], splitFrom: [], spawnLost: false };
 
   withJunctionFlags(nodes, edges, touched);
   const compact = compactInternal({ ...graph, nodes, edges });
   return {
     state: { graph: compact.graph, nextEdgeId },
     removedEdgeIds,
+    splitFrom,
     spawnLost: compact.spawnLost,
   };
 }

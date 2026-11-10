@@ -25,7 +25,7 @@
  * Layering: pure core, no three/rapier/DOM.
  */
 
-import type { RoadGraph } from "./road-graph.ts";
+import type { RoadGraph, RoadGraphEdge } from "./road-graph.ts";
 import type { SurfaceType } from "./surface-types.ts";
 import {
   createStrokeRecorder,
@@ -44,6 +44,7 @@ import {
 import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
 import { DEFAULT_MAX_BANK_DEG, MAX_SLOPE_DEG } from "./terrain-limits.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap, paintIndexAt } from "./terrain-paint.ts";
+import { carryUnlocked, staleUnlockedEdges, unlockedSet } from "./terrain-road-lock.ts";
 import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
 import { applyStrokeDiff } from "./terrain-undo.ts";
 
@@ -469,10 +470,13 @@ function roadVertexMaskFromGraph(
   graph: RoadGraph,
   area: CellWindow,
   into: Uint8Array,
+  edgeFilter?: (e: RoadGraphEdge) => boolean,
+  padM = 0,
 ): void {
   const stride = grid.rows + 1;
   for (const e of graph.edges) {
-    const R = roadLevelRadiusM(e.widthM / 2, grid.cellSizeM);
+    if (edgeFilter && !edgeFilter(e)) continue;
+    const R = roadLevelRadiusM(e.widthM / 2, grid.cellSizeM) + padM;
     for (let k = 0; k + 1 < e.points.length; k++) {
       const p = e.points[k];
       const q = e.points[k + 1];
@@ -516,9 +520,24 @@ export function roadVertexMask(
   paint: PaintMap,
   graph: RoadGraph,
   area: CellWindow,
+  free?: ReadonlySet<number>,
 ): Uint8Array {
   const mask = roadVertexMaskFromPaint(grid, paint, area);
-  roadVertexMaskFromGraph(grid, graph, area, mask);
+  if (free === undefined || free.size === 0) {
+    roadVertexMaskFromGraph(grid, graph, area, mask);
+    return mask;
+  }
+  // Quick 261110-rdx (DD-7): edges in `free` (unlocked) do not hold their own
+  // vertices, neither through their paint (zone padded by one paint pixel) nor
+  // through their levelled radius, unless a locked edge also owns the vertex.
+  const held = new Uint8Array(mask.length);
+  roadVertexMaskFromGraph(grid, graph, area, held, (e) => !free.has(e.id));
+  const zone = new Uint8Array(mask.length);
+  roadVertexMaskFromGraph(grid, graph, area, zone, (e) => free.has(e.id), paint.metresPerPixel);
+  for (let i = 0; i < mask.length; i++) {
+    if (held[i]) mask[i] = 1;
+    else if (zone[i]) mask[i] = 0;
+  }
   return mask;
 }
 
@@ -526,6 +545,8 @@ export interface LevelBandOptions {
   recorder?: { beforeHeightsWrite(window: CellWindow): void };
   /** Vertices (heights indexing) the shoulder blend must never write. */
   protect?: Uint8Array;
+  /** Vertices (heights indexing) that are never written at all, inner band included (re-grade). */
+  hold?: Uint8Array;
 }
 
 export interface LevelBandResult {
@@ -619,6 +640,7 @@ export function levelRoadBand(
       const d = bestD[li];
       if (!(d <= reach)) continue;
       const gi = r + c * stride;
+      if (opts.hold?.[gi]) continue;
       const old = grid.heights[gi];
       const tanBank = Math.tan(bestBank[li]);
       let next: number;
@@ -691,6 +713,8 @@ export interface RoadEditTarget {
   groundSurface: SurfaceType;
   graph: RoadGraph;
   nextEdgeId: number;
+  /** Quick 261110-rdx: unlocked road-edge ids (absent/empty = all locked). */
+  unlockedEdgeIds?: number[];
 }
 
 export interface ApplyRoadOptions {
@@ -747,6 +771,51 @@ function densify(entries: readonly Entry[], spacing: number): Entry[] {
 
 function slopeWarning(): string {
   return `Slope limit reached (${MAX_SLOPE_DEG} degrees). Lower the radius or flatten the area first.`;
+}
+
+/** Vertical profile + banking for one centreline (shared by strokes and re-grade; arithmetic unchanged). */
+function gradeProfile(
+  grid: TerrainGrid,
+  xz: readonly XZ[],
+  pins: readonly { index: number; heightM: number }[],
+  preset: RoadPreset,
+  bankCap: number,
+): { heights: Float64Array; banks: Float64Array } {
+  const curveM = Math.min(80, Math.max(15, 2.4 * (preset.designSpeedKph / 3.6)));
+  const heights = roadHeightProfile(grid, xz, { maxGrade: STROKE_GRADE, pins, smoothM: curveM });
+  const banks = roadBankAngles(xz, preset, bankCap);
+  if (pins.length > 0) {
+    const s = cumulativeLength(xz);
+    for (let i = 0; i < banks.length; i++) {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const p of pins) nearest = Math.min(nearest, Math.abs(s[i] - s[p.index]));
+      banks[i] *= Math.min(1, nearest / BANK_SMOOTH_M);
+    }
+  }
+  return { heights, banks };
+}
+
+/**
+ * Slope-limits the terrain around a levelled band with every road vertex fixed:
+ * the band's own mask plus every road not in `free` (WR-01). Returns the number
+ * of road violations (drives the slope warning).
+ */
+function limitAroundBand(
+  grid: TerrainGrid,
+  paint: PaintMap,
+  graph: RoadGraph,
+  window: CellWindow,
+  maxDeltaM: number,
+  bandMask: Uint8Array,
+  rec: { beforeHeightsWrite(window: CellWindow): void },
+  free?: ReadonlySet<number>,
+): number {
+  const win = expandWindow(window, grid, maxDeltaM, MAX_SLOPE_DEG);
+  rec.beforeHeightsWrite(win);
+  const mask = bandMask;
+  const existing = roadVertexMask(grid, paint, graph, win, free);
+  for (let i = 0; i < mask.length; i++) if (existing[i]) mask[i] = 1;
+  return limitSlope(grid, win, { mask }).roadViolations;
 }
 
 /**
@@ -833,37 +902,32 @@ export function applyRoadStroke(
   if (!reachWin) {
     return { diff: undefined, newEdgeIds: [], warnings: ["Stroke is outside the terrain area."] };
   }
-  const protect = roadVertexMaskFromPaint(grid, paint, reachWin);
-  roadVertexMaskFromGraph(grid, area.graph, reachWin, protect);
+  // Quick 261110-rdx (DD-10): unlocked roads are not held by a new stroke either.
+  const free = unlockedSet(area.unlockedEdgeIds);
+  const protect = roadVertexMask(grid, paint, area.graph, reachWin, free);
 
   // 3. Profile and banking.
-  const curveM = Math.min(80, Math.max(15, 2.4 * (preset.designSpeedKph / 3.6)));
-  const heights = roadHeightProfile(grid, xz, { maxGrade: STROKE_GRADE, pins, smoothM: curveM });
-  const banks = roadBankAngles(xz, preset, bankCap);
-  if (pins.length > 0) {
-    const s = cumulativeLength(xz);
-    for (let i = 0; i < banks.length; i++) {
-      let nearest = Number.POSITIVE_INFINITY;
-      for (const p of pins) nearest = Math.min(nearest, Math.abs(s[i] - s[p.index]));
-      banks[i] *= Math.min(1, nearest / BANK_SMOOTH_M);
-    }
-  }
+  const { heights, banks } = gradeProfile(grid, xz, pins, preset, bankCap);
 
   // 4. Level, paint, limit slope with all road vertices fixed.
   const rec = createStrokeRecorder(grid, paint);
   const band = levelRoadBand(grid, xz, heights, banks, half, shoulder, { recorder: rec, protect });
   paintRoadBand(paint, xz, half, encodePaintValue(preset.surface, true), rec);
   if (band.window) {
-    const win = expandWindow(band.window, grid, band.maxDeltaM, MAX_SLOPE_DEG);
-    rec.beforeHeightsWrite(win);
     // WR-01: fix every earlier road's vertices (paint AND the full levelled
     // radius from the graph, over the whole limiter window), not just paint.
     // `area.graph` is still the pre-stroke graph here.
-    const mask = band.mask;
-    const existing = roadVertexMask(grid, paint, area.graph, win);
-    for (let i = 0; i < mask.length; i++) if (existing[i]) mask[i] = 1;
-    const res = limitSlope(grid, win, { mask });
-    if (res.roadViolations > 0) warnings.push(slopeWarning());
+    const violations = limitAroundBand(
+      grid,
+      paint,
+      area.graph,
+      band.window,
+      band.maxDeltaM,
+      band.mask,
+      rec,
+      free,
+    );
+    if (violations > 0) warnings.push(slopeWarning());
   }
 
   // 5. Graph edges from the levelled centreline (y read back from terrain, D-16).
@@ -891,7 +955,23 @@ export function applyRoadStroke(
   area.graph = synced;
   area.nextEdgeId = withSpawn.nextEdgeId;
   rec.recordGraph(graphBefore, JSON.stringify(synced), nextIdBefore, withSpawn.nextEdgeId);
+  carryLock(area, rec, synced, added.splitFrom);
   return { diff: rec.commit(), newEdgeIds: added.newEdgeIds, warnings };
+}
+
+/** Split pieces inherit their parent's unlock state, removed edges drop out, new edges stay locked (DD-1). */
+function carryLock(
+  area: RoadEditTarget,
+  rec: { recordLock(before: readonly number[], after: readonly number[]): void },
+  graph: RoadGraph,
+  splitFrom: readonly { id: number; parentId: number }[],
+): void {
+  const prev = area.unlockedEdgeIds;
+  if (prev === undefined || prev.length === 0) return;
+  const next = carryUnlocked(prev, graph, splitFrom);
+  if (next.length === prev.length && next.every((v, i) => v === prev[i])) return;
+  area.unlockedEdgeIds = next;
+  rec.recordLock(prev, next);
 }
 
 /** Snaps node y (and the matching edge endpoint y) to the terrain for nodes near the stroke (D-16). */
@@ -975,6 +1055,303 @@ export function eraseRoad(
       before.nextEdgeId,
       next.nextEdgeId,
     );
+    carryLock(area, rec, next.graph, erased.splitFrom);
   }
   return { diff: rec.commit(), removedEdgeIds, warnings };
+}
+
+// ---------------------------------------------------------------- re-grade / lock (quick 261110-rdx)
+
+export interface RegradeResult {
+  diff: StrokeDiff | undefined;
+  regradedEdgeIds: number[];
+  /** Largest |new y - old y| over the re-graded edges' points. */
+  maxHeightChangeM: number;
+  /** Steepest consecutive-point grade of the re-graded edges, percent. */
+  maxGradePct: number;
+  warnings: string[];
+}
+
+type RegradeCore = Omit<RegradeResult, "diff">;
+
+/** DD-6: preset matching the edge's class and surface, else class only, else a street at the edge's speed. */
+function presetForEdge(e: RoadGraphEdge): RoadPreset {
+  const all = Object.values(ROAD_PRESETS);
+  const exact = all.find((p) => p.roadClass === e.roadClass && p.surface === e.surface);
+  if (exact) return exact;
+  const byClass = all.find((p) => p.roadClass === e.roadClass);
+  if (byClass) return byClass;
+  const speed = Number.isFinite(e.speedLimitKph) && e.speedLimitKph > 0 ? e.speedLimitKph : 40;
+  return { ...ROAD_PRESETS.street, designSpeedKph: speed };
+}
+
+function unionWindow(a: CellWindow | undefined, b: CellWindow | undefined): CellWindow | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    minRow: Math.min(a.minRow, b.minRow),
+    minCol: Math.min(a.minCol, b.minCol),
+    maxRow: Math.max(a.maxRow, b.maxRow),
+    maxCol: Math.max(a.maxCol, b.maxCol),
+  };
+}
+
+function polylineLength3(pts: readonly (readonly [number, number, number])[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(
+      pts[i][0] - pts[i - 1][0],
+      pts[i][1] - pts[i - 1][1],
+      pts[i][2] - pts[i - 1][2],
+    );
+  }
+  return len;
+}
+
+/**
+ * Re-grades the requested UNLOCKED edges onto the terrain as it is now (DD-6..DD-8):
+ * profile and banking through the same pipeline as a road stroke, junction heights
+ * pinned (locked neighbours never move), bands levelled, slope limited with every
+ * other road held, then graph y written back from the levelled terrain. Topology
+ * and edge ids never change. Mutates grid heights and `area.graph`; records into `rec`.
+ */
+function regradeInto(
+  area: RoadEditTarget,
+  ids: readonly number[] | "all-unlocked",
+  rec: ReturnType<typeof createStrokeRecorder>,
+): RegradeCore {
+  const { grid, paint } = area;
+  const graph = area.graph;
+  const warnings: string[] = [];
+  const none: RegradeCore = { regradedEdgeIds: [], maxHeightChangeM: 0, maxGradePct: 0, warnings };
+  const unl = new Set(area.unlockedEdgeIds ?? []);
+  const edgeById = new Map(graph.edges.map((e) => [e.id, e]));
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+
+  const reqIds = new Set<number>();
+  if (ids === "all-unlocked") {
+    for (const e of graph.edges) if (unl.has(e.id)) reqIds.add(e.id);
+  } else {
+    for (const id of ids) {
+      if (!edgeById.has(id)) continue;
+      if (!unl.has(id)) {
+        warnings.push(`Road ${id} is locked; unlock it to re-grade.`);
+        continue;
+      }
+      reqIds.add(id);
+    }
+  }
+  if (reqIds.size === 0) return none;
+
+  const cell = grid.cellSizeM;
+  const spacing = Math.min(4, Math.max(1, cell / 2));
+  const shoulder = Math.max(2 * cell, 4);
+  interface Job {
+    edge: RoadGraphEdge;
+    xz: XZ[];
+    preset: RoadPreset;
+    half: number;
+    unpinned: Float64Array;
+  }
+  const jobs: Job[] = [];
+  for (const edge of graph.edges) {
+    if (!reqIds.has(edge.id)) continue;
+    const entries: Entry[] = edge.points.map((p) => ({ x: p[0], z: p[2] }));
+    const xz: XZ[] = densify(entries, spacing).map((e) => ({ x: e.x, z: e.z }));
+    const preset = presetForEdge(edge);
+    // Pass 1: unpinned profile, used only for the heights free junctions settle on.
+    const unpinned = gradeProfile(grid, xz, [], preset, preset.maxBankDeg).heights;
+    jobs.push({ edge, xz, preset, half: edge.widthM / 2, unpinned });
+  }
+  const jobById = new Map(jobs.map((j) => [j.edge.id, j]));
+
+  // DD-8: one pin height per touched node.
+  const incident = new Map<number, { edgeId: number; end: "from" | "to" }[]>();
+  const addInc = (nodeId: number, edgeId: number, end: "from" | "to") => {
+    const list = incident.get(nodeId) ?? [];
+    list.push({ edgeId, end });
+    incident.set(nodeId, list);
+  };
+  for (const e of graph.edges) {
+    addInc(e.from, e.id, "from");
+    addInc(e.to, e.id, "to");
+  }
+  const pinOf = new Map<number, number>();
+  const writeNodes = new Set<number>();
+  for (const job of jobs) {
+    for (const nodeId of [job.edge.from, job.edge.to]) {
+      if (pinOf.has(nodeId)) continue;
+      const node = nodeById.get(nodeId);
+      const inc = incident.get(nodeId);
+      if (!node || !inc) continue;
+      if (inc.some((i) => !unl.has(i.edgeId))) {
+        pinOf.set(nodeId, node.y);
+      } else if (inc.some((i) => !reqIds.has(i.edgeId))) {
+        pinOf.set(nodeId, sampleTerrainHeight(grid, node.x, node.z));
+        writeNodes.add(nodeId);
+      } else {
+        let sum = 0;
+        for (const i of inc) {
+          const u = (jobById.get(i.edgeId) as Job).unpinned;
+          sum += i.end === "from" ? u[0] : u[u.length - 1];
+        }
+        pinOf.set(nodeId, sum / inc.length);
+        writeNodes.add(nodeId);
+      }
+    }
+  }
+
+  // Pass 2: pinned profiles from the terrain as it was before any levelling.
+  const planned = jobs.map((job) => {
+    const n = job.xz.length;
+    const pins = [
+      { index: 0, heightM: pinOf.get(job.edge.from) as number },
+      { index: n - 1, heightM: pinOf.get(job.edge.to) as number },
+    ];
+    return { job, ...gradeProfile(grid, job.xz, pins, job.preset, job.preset.maxBankDeg) };
+  });
+
+  // DD-7: hold every road that is not being re-graded (locked or not).
+  let reach: CellWindow | undefined;
+  for (const { job } of planned) {
+    reach = unionWindow(
+      reach,
+      reachWindow(grid, job.xz, roadLevelRadiusM(job.half, cell) + shoulder),
+    );
+  }
+  if (!reach) {
+    warnings.push("Road is outside the terrain area.");
+    return none;
+  }
+  const hold = roadVertexMask(grid, paint, graph, reach, reqIds);
+  const protect = hold.slice();
+  const bandMask = new Uint8Array(grid.heights.length);
+  let bandWin: CellWindow | undefined;
+  let maxDelta = 0;
+  for (const { job, heights, banks } of planned) {
+    const band = levelRoadBand(grid, job.xz, heights, banks, job.half, shoulder, {
+      recorder: rec,
+      protect,
+      hold,
+    });
+    for (let i = 0; i < band.mask.length; i++) {
+      if (band.mask[i]) {
+        protect[i] = 1;
+        bandMask[i] = 1;
+      }
+    }
+    bandWin = unionWindow(bandWin, band.window);
+    maxDelta = Math.max(maxDelta, band.maxDeltaM);
+  }
+  if (bandWin) {
+    const violations = limitAroundBand(
+      grid,
+      paint,
+      graph,
+      bandWin,
+      maxDelta,
+      bandMask,
+      rec,
+      reqIds,
+    );
+    if (violations > 0) warnings.push(slopeWarning());
+  }
+
+  // Write graph y back from the levelled terrain (D-16).
+  const newNodeY = new Map<number, number>();
+  for (const nodeId of writeNodes) {
+    const node = nodeById.get(nodeId);
+    if (node) newNodeY.set(nodeId, sampleTerrainHeight(grid, node.x, node.z));
+  }
+  const yOfNode = (id: number): number => newNodeY.get(id) ?? (nodeById.get(id)?.y as number);
+  let maxChange = 0;
+  let maxGrade = 0;
+  const edges = graph.edges.map((e) => {
+    if (reqIds.has(e.id)) {
+      const pts = e.points.map(
+        (p) => [p[0], sampleTerrainHeight(grid, p[0], p[2]), p[2]] as [number, number, number],
+      );
+      pts[0][1] = yOfNode(e.from);
+      pts[pts.length - 1][1] = yOfNode(e.to);
+      for (let i = 0; i < pts.length; i++) {
+        maxChange = Math.max(maxChange, Math.abs(pts[i][1] - e.points[i][1]));
+        if (i > 0) {
+          const dxz = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]);
+          if (dxz > 1e-9)
+            maxGrade = Math.max(maxGrade, (100 * Math.abs(pts[i][1] - pts[i - 1][1])) / dxz);
+        }
+      }
+      return { ...e, points: pts, lengthM: polylineLength3(pts) };
+    }
+    if (newNodeY.has(e.from) || newNodeY.has(e.to)) {
+      const pts = e.points.map((p) => [p[0], p[1], p[2]] as [number, number, number]);
+      if (newNodeY.has(e.from)) pts[0][1] = yOfNode(e.from);
+      if (newNodeY.has(e.to)) pts[pts.length - 1][1] = yOfNode(e.to);
+      return { ...e, points: pts, lengthM: polylineLength3(pts) };
+    }
+    return e;
+  });
+  const nodes = graph.nodes.map((n) => (newNodeY.has(n.id) ? { ...n, y: yOfNode(n.id) } : n));
+  const next: RoadGraph = { ...graph, nodes, edges };
+  area.graph = next;
+  rec.recordGraph(JSON.stringify(graph), JSON.stringify(next), area.nextEdgeId, area.nextEdgeId);
+  return {
+    regradedEdgeIds: [...reqIds].sort((a, b) => a - b),
+    maxHeightChangeM: maxChange,
+    maxGradePct: maxGrade,
+    warnings,
+  };
+}
+
+/**
+ * Re-grade road edges onto the current terrain as ONE undoable diff (heights +
+ * graph). Locked edges are skipped with a warning; "all-unlocked" with nothing
+ * unlocked returns no diff.
+ */
+export function regradeRoads(
+  area: RoadEditTarget,
+  edgeIds: readonly number[] | "all-unlocked",
+): RegradeResult {
+  const rec = createStrokeRecorder(area.grid, area.paint);
+  const core = regradeInto(area, edgeIds, rec);
+  return { diff: rec.commit(), ...core };
+}
+
+export interface SetLockResult extends RegradeResult {
+  changedEdgeIds: number[];
+}
+
+/**
+ * Lock or unlock edges as one undoable diff (DD-4). Unlocking is a pure flag
+ * change. Locking a stale road re-grades it first so a road can never be locked
+ * with graph data that disagrees with the terrain.
+ */
+export function setRoadLock(
+  area: RoadEditTarget,
+  edgeIds: readonly number[],
+  locked: boolean,
+): SetLockResult {
+  const rec = createStrokeRecorder(area.grid, area.paint);
+  const prev = [...(area.unlockedEdgeIds ?? [])].sort((a, b) => a - b);
+  const exists = new Set(area.graph.edges.map((e) => e.id));
+  const wanted = [...new Set(edgeIds)].filter((id) => exists.has(id));
+  const warnings: string[] = [];
+  let core: RegradeCore = { regradedEdgeIds: [], maxHeightChangeM: 0, maxGradePct: 0, warnings };
+  let changed: number[];
+  let next: number[];
+  if (!locked) {
+    changed = wanted.filter((id) => !prev.includes(id));
+    next = [...new Set([...prev, ...changed])].sort((a, b) => a - b);
+  } else {
+    changed = wanted.filter((id) => prev.includes(id));
+    const stale = staleUnlockedEdges(area.grid, area.graph, changed).map((s) => s.edgeId);
+    if (stale.length > 0) core = regradeInto(area, stale, rec);
+    const drop = new Set(changed);
+    next = prev.filter((id) => !drop.has(id));
+  }
+  if (changed.length > 0) {
+    area.unlockedEdgeIds = next;
+    rec.recordLock(prev, next);
+  }
+  return { diff: rec.commit(), changedEdgeIds: changed, ...core };
 }
