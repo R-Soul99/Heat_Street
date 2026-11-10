@@ -109,8 +109,9 @@ const BRUSH = (x: number, z: number): BrushParams => ({
 });
 
 /** The canned edit sequence. `free` is passed straight through as roadVertexMask's optional 5th argument. */
-function runGoldenSequence(free?: ReadonlySet<number>): string {
+function runGoldenSequence(free?: ReadonlySet<number>, unlockedEdgeIds?: number[]): string {
   const area = makeArea();
+  if (unlockedEdgeIds !== undefined) area.unlockedEdgeIds = unlockedEdgeIds;
   const opts = (): HeightOpOptions => ({
     roadMask: (win) =>
       free === undefined
@@ -156,5 +157,15 @@ function runGoldenSequence(free?: ReadonlySet<number>): string {
 describe("golden hash of road edits (no road unlocked)", () => {
   it("matches the value recorded before the lock feature", () => {
     expect(runGoldenSequence()).toBe(GOLDEN_HASH);
+  });
+
+  it("is unchanged with an empty unlocked list and an empty free set", () => {
+    expect(runGoldenSequence(new Set(), [])).toBe(GOLDEN_HASH);
+    expect(runGoldenSequence(undefined, [])).toBe(GOLDEN_HASH);
+  });
+
+  it("is unchanged with an empty unlocked list and an empty free set", () => {
+    expect(runGoldenSequence(new Set(), [])).toBe(GOLDEN_HASH);
+    expect(runGoldenSequence(undefined, [])).toBe(GOLDEN_HASH);
   });
 });
