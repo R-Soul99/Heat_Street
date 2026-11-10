@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-10T00:31:17.419Z",
+  "endpoint": "authored://heat-street/popp",
+  "bbox": {
+    "south": 32.9957577441065,
+    "west": -84.01048653426655,
+    "north": 33.0042422558935,
+    "east": -83.98951346573345
+  },
+  "query": "authored popp buildings (none)",
+  "response": {
+    "elements": []
+  }
+}
