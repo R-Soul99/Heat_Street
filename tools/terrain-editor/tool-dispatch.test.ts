@@ -443,3 +443,137 @@ describe("block and smooth tools (04.3-07)", () => {
     for (let i = 0; i < mask.length; i++) if (mask[i]) expect(area.grid.heights[i]).toBe(before[i]);
   });
 });
+
+describe("road lock tool (quick 261110-rdx)", () => {
+  /** Area 240 m, cell 3: one street along z = 0. Returns the edge id. */
+  function withRoad() {
+    const s = setup();
+    s.d.setTool("road");
+    drag(s.d, [
+      [-80, 0],
+      [-40, 0],
+      [0, 0],
+      [40, 0],
+      [80, 0],
+    ]);
+    expect(s.area.graph.edges.length).toBeGreaterThan(0);
+    s.d.clearHistory();
+    return { ...s, id: s.area.graph.edges[0].id };
+  }
+
+  function raiseUnder(d: ReturnType<typeof setup>["d"], x: number, z: number) {
+    d.setTool("block");
+    d.setOptions({ blockStepM: 4, blockCells: 8 });
+    return d.pointerDown(x, z, { alt: false }) && d.pointerUp(x, z);
+  }
+
+  it("L selects the lock tool", () => {
+    expect(TOOL_KEYS.KeyL).toBe("lock");
+  });
+
+  it("click unlocks a road, a second click locks it; each is one undo step", () => {
+    const { area, d, id } = withRoad();
+    d.setTool("lock");
+    const a = d.pointerDown(0, 1, { alt: false });
+    expect(a.lockChanged).toBe(true);
+    expect(a.status).toContain("Unlocked");
+    expect(a.status).toContain("Re-grade");
+    expect(area.unlockedEdgeIds).toEqual([id]);
+    expect(d.getSelectedEdgeId()).toBe(id);
+    const b = d.pointerDown(0, 1, { alt: false });
+    expect(b.status).toContain("Locked road");
+    expect(area.unlockedEdgeIds).toEqual([]);
+    d.undo();
+    expect(area.unlockedEdgeIds).toEqual([id]);
+    d.undo();
+    expect(area.unlockedEdgeIds).toEqual([]);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("clicking empty ground says so and pushes nothing", () => {
+    const { d } = withRoad();
+    d.setTool("lock");
+    const r = d.pointerDown(0, 90, { alt: false });
+    expect(r.status).toBe("No road under the cursor.");
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("alt+click selects without toggling", () => {
+    const { area, d, id } = withRoad();
+    d.setTool("lock");
+    const r = d.pointerDown(0, 0, { alt: true });
+    expect(r.selectionChanged).toBe(true);
+    expect(d.getSelectedEdgeId()).toBe(id);
+    expect(area.unlockedEdgeIds ?? []).toEqual([]);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("unlock all then undo restores the previous list", () => {
+    const { area, d, id } = withRoad();
+    const r = d.lockAll(false);
+    expect(r.lockChanged).toBe(true);
+    expect(area.unlockedEdgeIds).toEqual([id]);
+    d.undo();
+    expect(area.unlockedEdgeIds ?? []).toEqual([]);
+    expect(d.lockAll(true).status).toBe("No unlocked roads.");
+  });
+
+  it("sculpting moves terrain under an unlocked road but not under a locked one", () => {
+    const { area, d, id } = withRoad();
+    const at = () => sampleTerrainHeight(area.grid, 0, 0);
+    const h0 = at();
+    raiseUnder(d, 0, 0);
+    expect(at()).toBe(h0);
+    d.lockAll(false);
+    expect(area.unlockedEdgeIds).toEqual([id]);
+    raiseUnder(d, 0, 0);
+    expect(at()).toBeGreaterThan(h0 + 1);
+  });
+
+  it("re-grade all unlocked reports the change and undo restores heights and graph", () => {
+    const { area, d } = withRoad();
+    d.lockAll(false);
+    raiseUnder(d, 0, 0);
+    const heights = Float32Array.from(area.grid.heights);
+    const graph = JSON.stringify(area.graph);
+    const r = d.regradeAllUnlocked();
+    expect(r.status).toMatch(
+      /^Re-graded 1 road\(s\): max height change \d+\.\d\d m, max grade \d+\.\d%\.$/,
+    );
+    expect(r.graphChanged).toBe(true);
+    expect(r.dirtyHeights).toBeDefined();
+    expect(JSON.stringify(area.graph)).not.toBe(graph);
+    d.undo();
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(heights));
+    expect(JSON.stringify(area.graph)).toBe(graph);
+    expect(d.regradeAllUnlocked().status).toBeDefined();
+  });
+
+  it("re-grade selected warns on a locked road and pushes nothing", () => {
+    const { d, id } = withRoad();
+    d.setTool("lock");
+    d.pointerDown(0, 0, { alt: true });
+    const r = d.regradeSelected();
+    expect(r.warnings).toContain(`Road ${id} is locked; unlock it to re-grade.`);
+    expect(d.canUndo()).toBe(false);
+    d.clearHistory();
+    expect(d.regradeSelected().status).toContain("Select a road first");
+  });
+
+  it("an erase stroke that carries locks merges the lock into its single undo entry", () => {
+    const { area, d, id } = withRoad();
+    d.lockAll(false);
+    d.clearHistory();
+    d.setTool("erase");
+    d.setOptions({ radiusM: 6 });
+    const r = d.pointerDown(0, 0, { alt: false });
+    d.pointerUp(0, 0);
+    expect(r.graphChanged).toBe(true);
+    expect(r.lockChanged).toBe(true);
+    expect(area.unlockedEdgeIds?.length).toBe(2);
+    expect(area.unlockedEdgeIds).toContain(id);
+    d.undo();
+    expect(area.unlockedEdgeIds).toEqual([id]);
+    expect(d.canUndo()).toBe(false);
+  });
+});

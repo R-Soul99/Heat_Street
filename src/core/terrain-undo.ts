@@ -22,12 +22,16 @@ export interface UndoTarget {
   paint: PaintMap;
   graph: RoadGraph;
   nextEdgeId: number;
+  /** Quick 261110-rdx: unlocked road-edge ids (absent/empty = all locked). */
+  unlockedEdgeIds?: number[];
 }
 
 export interface ApplyResult {
   heightsWindow?: CellWindow;
   paintRect?: PaintRect;
   graphChanged: boolean;
+  /** True when the unlocked-edge list was restored by this diff. */
+  lockChanged: boolean;
 }
 
 export function applyStrokeDiff(
@@ -35,7 +39,7 @@ export function applyStrokeDiff(
   diff: StrokeDiff,
   side: "before" | "after",
 ): ApplyResult {
-  const result: ApplyResult = { graphChanged: false };
+  const result: ApplyResult = { graphChanged: false, lockChanged: false };
 
   if (diff.heights) {
     const { indices } = diff.heights;
@@ -85,6 +89,11 @@ export function applyStrokeDiff(
     area.graph = parseRoadGraph(diff.graph[side], "undo");
     area.nextEdgeId = side === "before" ? diff.graph.nextEdgeIdBefore : diff.graph.nextEdgeIdAfter;
     result.graphChanged = true;
+  }
+
+  if (diff.lock) {
+    area.unlockedEdgeIds = [...diff.lock[side]];
+    result.lockChanged = true;
   }
   return result;
 }

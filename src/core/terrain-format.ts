@@ -382,6 +382,12 @@ export interface TerrainSidecar {
   readonly graph: RoadGraph;
   readonly objects: readonly TerrainObject[];
   readonly buildings: readonly MapCollisionBuilding[];
+  /**
+   * Quick 261110-rdx (DD-2): ids of road-graph edges the editor has UNLOCKED (not held by the
+   * road mask). Absent or empty = every road locked. Written only when non-empty so all-locked
+   * areas serialise exactly as before. The game runtime ignores it.
+   */
+  readonly unlockedEdgeIds?: readonly number[];
 }
 
 export interface TerrainArea extends TerrainSidecar {
@@ -544,6 +550,9 @@ export function serializeTerrainSidecar(area: TerrainSidecar): string {
     graph: area.graph,
     objects,
     buildings,
+    ...(area.unlockedEdgeIds !== undefined && area.unlockedEdgeIds.length > 0
+      ? { unlockedEdgeIds: [...area.unlockedEdgeIds].sort((a, b) => a - b) }
+      : {}),
   };
   return `${JSON.stringify(wire, null, 2)}\n`;
 }
@@ -610,6 +619,25 @@ export function parseTerrainSidecar(
   }
   const buildings = parsed.buildings.map((b, i) => parseBuilding(sourceLabel, b, i));
 
+  let unlockedEdgeIds: number[] = [];
+  if (parsed.unlockedEdgeIds !== undefined) {
+    if (!Array.isArray(parsed.unlockedEdgeIds)) {
+      fail(sourceLabel, "root.unlockedEdgeIds must be an array");
+    }
+    const edgeIds = new Set(graph.edges.map((e) => e.id));
+    const seen = new Set<number>();
+    for (const [i, v] of (parsed.unlockedEdgeIds as unknown[]).entries()) {
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+        fail(sourceLabel, `root.unlockedEdgeIds[${i}] must be a non-negative integer`);
+      }
+      if (seen.has(v)) fail(sourceLabel, `root.unlockedEdgeIds[${i}] duplicate edge id ${v}`);
+      if (!edgeIds.has(v)) fail(sourceLabel, `root.unlockedEdgeIds[${i}] unknown edge id ${v}`);
+      seen.add(v);
+      unlockedEdgeIds.push(v);
+    }
+    unlockedEdgeIds = unlockedEdgeIds.sort((a, b) => a - b);
+  }
+
   return {
     areaId,
     name,
@@ -619,6 +647,7 @@ export function parseTerrainSidecar(
     graph,
     objects,
     buildings,
+    ...(unlockedEdgeIds.length > 0 ? { unlockedEdgeIds } : {}),
   };
 }
 
@@ -654,5 +683,6 @@ export async function loadTerrainArea(
     buildings: side.buildings,
     legacyGlbBuildings: side.legacyGlbBuildings,
     nextEdgeId: side.nextEdgeId,
+    ...(side.unlockedEdgeIds !== undefined ? { unlockedEdgeIds: side.unlockedEdgeIds } : {}),
   };
 }

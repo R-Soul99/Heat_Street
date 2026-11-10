@@ -394,3 +394,62 @@ describe("terrain sidecar", () => {
     expect(TERRAIN_FORMAT_VERSION).toBe(1);
   });
 });
+
+function twoEdgeArea(): TerrainArea {
+  const a = sampleArea();
+  const e = a.graph.edges[0];
+  return {
+    ...a,
+    graph: {
+      ...a.graph,
+      edges: [e, { ...e, id: 7, from: 1, to: 0, points: [...e.points].reverse() }],
+    },
+    nextEdgeId: 9,
+  };
+}
+
+describe("terrain sidecar unlockedEdgeIds (quick 261110-rdx)", () => {
+  const edgeIds = twoEdgeArea().graph.edges.map((e) => e.id);
+
+  it("an all-locked area serialises with no unlockedEdgeIds key and round-trips without one", () => {
+    const area = sampleArea();
+    const text = serializeTerrainSidecar(area);
+    expect(text).not.toContain("unlockedEdgeIds");
+    expect(serializeTerrainSidecar({ ...area, unlockedEdgeIds: [] })).toBe(text);
+    const side = parseTerrainSidecar(text, "t-area", "t.json");
+    expect(Object.hasOwn(side, "unlockedEdgeIds")).toBe(false);
+  });
+
+  it("writes the list sorted after buildings and round-trips it", () => {
+    const area = { ...twoEdgeArea(), unlockedEdgeIds: [edgeIds[1], edgeIds[0]] };
+    const text = serializeTerrainSidecar(area);
+    expect(Object.keys(JSON.parse(text)).at(-1)).toBe("unlockedEdgeIds");
+    expect(JSON.parse(text).unlockedEdgeIds).toEqual(
+      [edgeIds[0], edgeIds[1]].sort((a, b) => a - b),
+    );
+    const side = parseTerrainSidecar(text, "t-area", "t.json");
+    expect(side.unlockedEdgeIds).toEqual([edgeIds[0], edgeIds[1]].sort((a, b) => a - b));
+  });
+
+  it("rejects non-array, negative, non-integer, duplicate and unknown edge ids", () => {
+    const withIds = (v: unknown): string => {
+      const o = JSON.parse(serializeTerrainSidecar(twoEdgeArea())) as Record<string, unknown>;
+      o.unlockedEdgeIds = v;
+      return JSON.stringify(o);
+    };
+    const p = (v: unknown) => () => parseTerrainSidecar(withIds(v), "t-area", "t.json");
+    expect(p("x")).toThrow(/unlockedEdgeIds/);
+    expect(p([-1])).toThrow(/unlockedEdgeIds/);
+    expect(p([1.5])).toThrow(/unlockedEdgeIds/);
+    expect(p([edgeIds[0], edgeIds[0]])).toThrow(/unlockedEdgeIds/);
+    expect(p([9999])).toThrow(/unlockedEdgeIds/);
+    expect(p([edgeIds[0]])).not.toThrow();
+  });
+
+  it("loadTerrainArea passes the list through", async () => {
+    const area = { ...twoEdgeArea(), unlockedEdgeIds: [edgeIds[0]] };
+    const bin = await encodeTerrainBinary(area);
+    const loaded = await loadTerrainArea(bin, serializeTerrainSidecar(area), "t-area", "t");
+    expect(loaded.unlockedEdgeIds).toEqual([edgeIds[0]]);
+  });
+});

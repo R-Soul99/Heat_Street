@@ -149,3 +149,24 @@ describe("limits", () => {
     expect(MAX_JSON_BYTES).toBe(8 * 1024 * 1024);
   });
 });
+
+describe("validateAreaPair stale unlocked road (quick 261110-rdx)", () => {
+  const read = (ext: string) => readFile(path.join("public", "maps", `feel-test.terrain.${ext}`));
+  it("rejects a pair whose unlocked road no longer matches the terrain", async () => {
+    const bin = new Uint8Array(await read("bin"));
+    const json = JSON.parse((await read("json")).toString("utf8"));
+    json.unlockedEdgeIds = [json.graph.edges[0].id];
+    for (const n of json.graph.nodes) n.y += 3;
+    for (const e of json.graph.edges) for (const p of e.points) p[1] += 3;
+    await expect(validateAreaPair("feel-test", bin, JSON.stringify(json))).rejects.toThrow(
+      /^terrain-save:/,
+    );
+  });
+  it("accepts the same pair when every road is locked", async () => {
+    const bin = new Uint8Array(await read("bin"));
+    const json = JSON.parse((await read("json")).toString("utf8"));
+    for (const n of json.graph.nodes) n.y += 3;
+    for (const e of json.graph.edges) for (const p of e.points) p[1] += 3;
+    await expect(validateAreaPair("feel-test", bin, JSON.stringify(json))).resolves.toBeUndefined();
+  });
+});
