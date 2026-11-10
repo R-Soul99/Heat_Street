@@ -33,11 +33,15 @@ import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import {
   applyRoadStroke,
   eraseRoad,
+  type RegradeResult,
   ROAD_PRESETS,
   type RoadEditTarget,
   type RoadPresetId,
+  regradeRoads,
   roadVertexMask,
+  setRoadLock,
 } from "../../src/core/terrain-road.ts";
+import { isUnlocked, nearestEdgeWithin, unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
 
@@ -50,7 +54,8 @@ export type Tool =
   | "stamp"
   | "erase"
   | "block"
-  | "smoothBox";
+  | "smoothBox"
+  | "lock";
 
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyH: "raise",
@@ -61,6 +66,7 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyW: "stamp",
   KeyE: "erase",
   KeyB: "block",
+  KeyL: "lock",
 };
 
 export interface ToolOptions {
@@ -90,6 +96,10 @@ export interface ToolResult {
   /** Cell window whose paint changed. */
   dirtyPaint?: CellWindow;
   graphChanged: boolean;
+  /** Quick 261110-rdx: the unlocked-road list changed (repaint the lock overlay, mark dirty). */
+  lockChanged: boolean;
+  /** Quick 261110-rdx: the selected road changed (Lock tool click). */
+  selectionChanged: boolean;
   slopeClamped: boolean;
   warnings: string[];
   status?: string;
@@ -101,6 +111,7 @@ export interface UndoRedoResult {
   dirtyHeights?: CellWindow;
   dirtyPaint?: CellWindow;
   graphChanged: boolean;
+  lockChanged: boolean;
 }
 
 export interface Modifiers {
@@ -121,11 +132,19 @@ export const SLOPE_CLAMP_HINT = `Slope limit reached (${MAX_SLOPE_DEG} degrees).
  * terrain and graph y stays equal to the terrain (D-16).
  */
 function heightOpOptions(area: EditArea): HeightOpOptions {
-  return { roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win) };
+  // Quick 261110-rdx: unlocked roads are not held; undefined when none, so the old path runs.
+  const free = unlockedSet(area.unlockedEdgeIds);
+  return { roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win, free) };
 }
 
 function emptyResult(): ToolResult {
-  return { graphChanged: false, slopeClamped: false, warnings: [] };
+  return {
+    graphChanged: false,
+    lockChanged: false,
+    selectionChanged: false,
+    slopeClamped: false,
+    warnings: [],
+  };
 }
 
 function unionWindow(a: CellWindow | undefined, b: CellWindow | undefined): CellWindow | undefined {
@@ -143,6 +162,8 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.dirtyHeights = unionWindow(into.dirtyHeights, r.dirtyHeights);
   into.dirtyPaint = unionWindow(into.dirtyPaint, r.dirtyPaint);
   into.graphChanged ||= r.graphChanged;
+  into.lockChanged ||= r.lockChanged;
+  into.selectionChanged ||= r.selectionChanged;
   into.slopeClamped ||= r.slopeClamped;
   into.warnings.push(...r.warnings);
   if (r.status !== undefined) into.status = r.status;
@@ -179,8 +200,11 @@ function paintRectToCells(
 function windowsOfDiff(
   area: EditArea,
   diff: StrokeDiff | undefined,
-): { heights?: CellWindow; paint?: CellWindow; graph: boolean } {
-  const out: { heights?: CellWindow; paint?: CellWindow; graph: boolean } = { graph: false };
+): { heights?: CellWindow; paint?: CellWindow; graph: boolean; lock: boolean } {
+  const out: { heights?: CellWindow; paint?: CellWindow; graph: boolean; lock: boolean } = {
+    graph: false,
+    lock: false,
+  };
   if (!diff) return out;
   if (diff.heights) {
     const stride = area.grid.rows + 1;
@@ -209,6 +233,7 @@ function windowsOfDiff(
     if (maxPx >= 0) out.paint = paintRectToCells(area, { minPx, minPz, maxPx, maxPz });
   }
   out.graph = diff.graph !== undefined;
+  out.lock = diff.lock !== undefined;
   return out;
 }
 
@@ -220,7 +245,9 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
   const hBefore = new Map<number, number>();
   const hAfter = new Map<number, number>();
   let graph: StrokeDiff["graph"];
+  let lock: StrokeDiff["lock"];
   for (const d of diffs) {
+    if (d.lock) lock = lock ? { before: lock.before, after: d.lock.after } : d.lock;
     if (d.paint) {
       d.paint.indices.forEach((idx, k) => {
         if (!pBefore.has(idx)) pBefore.set(idx, d.paint?.before[k] as number);
@@ -264,6 +291,7 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
           }
         : undefined,
     graph,
+    ...(lock ? { lock } : {}),
   };
 }
 
@@ -373,6 +401,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       res.dirtyHeights = w.heights;
       res.dirtyPaint = w.paint;
       res.graphChanged = w.graph;
+      res.lockChanged = w.lock;
     }
     if (r.removedEdgeIds.length > 0 || r.diff?.graph !== undefined) {
       s.removedAny = true;
@@ -436,7 +465,71 @@ export function createToolDispatcher(getArea: () => EditArea) {
       dirtyHeights: r.heightsWindow,
       dirtyPaint: r.paintRect ? paintRectToCells(area, r.paintRect) : undefined,
       graphChanged: r.graphChanged,
+      lockChanged: r.lockChanged,
     };
+  }
+
+  /** Quick 261110-rdx: selected road (Lock tool); null once the edge is gone. */
+  let selectedEdgeId: number | null = null;
+
+  function currentSelection(): number | null {
+    if (selectedEdgeId === null) return null;
+    return getArea().graph.edges.some((e) => e.id === selectedEdgeId) ? selectedEdgeId : null;
+  }
+
+  const fmtChange = (r: { maxHeightChangeM: number; maxGradePct: number }): string =>
+    `max height change ${r.maxHeightChangeM.toFixed(2)} m, max grade ${r.maxGradePct.toFixed(1)}%`;
+
+  /** Pushes a lock / re-grade diff as ONE undo entry and reports what changed. */
+  function commitLockDiff(area: EditArea, diff: StrokeDiff | undefined): ToolResult {
+    const res = emptyResult();
+    if (!diff) return res;
+    stack.push(diff);
+    const w = windowsOfDiff(area, diff);
+    res.dirtyHeights = w.heights;
+    res.dirtyPaint = w.paint;
+    res.graphChanged = w.graph;
+    res.lockChanged = w.lock;
+    return res;
+  }
+
+  function regradeResult(area: EditArea, r: RegradeResult): ToolResult {
+    const res = commitLockDiff(area, r.diff);
+    res.warnings.push(...r.warnings);
+    if (r.diff && r.regradedEdgeIds.length > 0) {
+      res.status = `Re-graded ${r.regradedEdgeIds.length} road(s): ${fmtChange(r)}.`;
+    }
+    return res;
+  }
+
+  function lockClick(x: number, z: number, mods: Modifiers): ToolResult {
+    const area = getArea();
+    const res = emptyResult();
+    const hit = nearestEdgeWithin(area.graph, x, z, options.radiusM);
+    if (!hit) {
+      res.status = "No road under the cursor.";
+      return res;
+    }
+    const id = hit.edgeId;
+    if (selectedEdgeId !== id) res.selectionChanged = true;
+    selectedEdgeId = id;
+    if (mods.alt) {
+      res.selectionChanged = true;
+      res.status = `Selected road ${id}.`;
+      return res;
+    }
+    const wasUnlocked = isUnlocked(area, id);
+    const r = setRoadLock(area, [id], wasUnlocked);
+    mergeInto(res, commitLockDiff(area, r.diff));
+    res.warnings.push(...r.warnings);
+    if (!wasUnlocked) {
+      res.status = `Unlocked road ${id}. Sculpt freely, then Re-grade or Lock it before saving.`;
+    } else if (r.regradedEdgeIds.length > 0) {
+      res.status = `Locked road ${id} (re-graded first: ${fmtChange(r)}).`;
+    } else {
+      res.status = `Locked road ${id}.`;
+    }
+    return res;
   }
 
   return {
@@ -484,6 +577,52 @@ export function createToolDispatcher(getArea: () => EditArea) {
     },
     isStroking: (): boolean => stroke !== null,
 
+    getSelectedEdgeId: (): number | null => currentSelection(),
+
+    /** Lock (re-grading stale roads first) or unlock every road: one undo step. */
+    lockAll(locked: boolean): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const area = getArea();
+      const ids = locked ? [...(area.unlockedEdgeIds ?? [])] : area.graph.edges.map((e) => e.id);
+      const r = setRoadLock(area, ids, locked);
+      const res = commitLockDiff(area, r.diff);
+      res.warnings.push(...r.warnings);
+      if (r.changedEdgeIds.length === 0) {
+        res.status = locked ? "No unlocked roads." : "No roads to unlock.";
+      } else if (locked) {
+        res.status =
+          r.regradedEdgeIds.length > 0
+            ? `Locked all roads (re-graded ${r.regradedEdgeIds.length} first: ${fmtChange(r)}).`
+            : "Locked all roads.";
+      } else {
+        res.status = "Unlocked all roads. Re-grade or Lock them before saving.";
+      }
+      return res;
+    },
+
+    /** Re-grades the selected road onto the terrain: one undo step. */
+    regradeSelected(): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const area = getArea();
+      const id = currentSelection();
+      if (id === null) {
+        const res = emptyResult();
+        res.status = "Select a road first (Lock tool, Alt+click).";
+        return res;
+      }
+      return regradeResult(area, regradeRoads(area, [id]));
+    },
+
+    /** Re-grades every unlocked road onto the terrain: one undo step. */
+    regradeAllUnlocked(): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const area = getArea();
+      const r = regradeRoads(area, "all-unlocked");
+      const res = regradeResult(area, r);
+      if (!r.diff) res.status = "No unlocked roads to re-grade.";
+      return res;
+    },
+
     /**
      * Smooth-area box for the active drag: the exact cell window pointerUp will smooth
      * (same windowBetween math), from the drag start corner to (x, z). Null when no
@@ -505,6 +644,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     pointerDown(x: number, z: number, mods: Modifiers): ToolResult {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       if (stroke) this.pointerUp(x, z);
+      if (tool === "lock") return lockClick(x, z, mods);
       const area = getArea();
       const s: Stroke = {
         tool,
@@ -581,6 +721,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
             res.dirtyHeights = w.heights;
             res.dirtyPaint = w.paint;
             res.graphChanged = w.graph;
+            res.lockChanged = w.lock;
             finish(r.diff);
             return res;
           }
@@ -680,6 +821,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     clearHistory(): void {
       stack.clear();
       stroke = null;
+      selectedEdgeId = null;
     },
   };
 }

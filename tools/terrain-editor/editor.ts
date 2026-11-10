@@ -24,6 +24,7 @@ import {
   contourSegments,
   gridLineSegments,
   needsZoomHint,
+  roadLockSegments,
 } from "../../src/core/terrain-overlay.ts";
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
@@ -36,7 +37,7 @@ import {
 } from "../../src/render/terrain-view.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { blockingRoadFailures, saveBlockMessage } from "./save-guard.ts";
+import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
 import {
   createToolDispatcher,
@@ -371,6 +372,7 @@ function installArea(next: TerrainArea): void {
   overlayCentre = null;
   refreshOverlays();
   syncBlockLabel();
+  refreshRoadLockOverlay();
 }
 
 async function loadArea(id: string): Promise<void> {
@@ -436,6 +438,17 @@ async function save(): Promise<boolean> {
     if (blockText !== null) {
       setStatus(blockText);
       log(blockText);
+      return false;
+    }
+    // Quick 261110-rdx (DD-3): an unlocked road that no longer matches the terrain is not saved.
+    const staleText = staleRoadBlockMessage(
+      target.grid,
+      target.graph,
+      (target as unknown as EditArea).unlockedEdgeIds,
+    );
+    if (staleText !== null) {
+      setStatus(staleText);
+      log(staleText);
       return false;
     }
     // Snapshot synchronously: the sidecar text is serialised and the binary
@@ -717,6 +730,49 @@ for (const l of [gridLines, contourLines]) {
 }
 let overlayCentre: { row: number; col: number } | null = null;
 
+// Quick 261110-rdx: road lock overlay (grey = locked, orange = unlocked, cyan = selected).
+const ROAD_LOCK_LIFT_M = 0.4;
+const lockedLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xcfd4da, depthTest: false }),
+);
+const unlockedLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xff8a1f, depthTest: false }),
+);
+const selectedLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0x44ddff, depthTest: false }),
+);
+for (const l of [lockedLines, unlockedLines, selectedLines]) {
+  l.frustumCulled = false;
+  l.renderOrder = 997;
+  scene.add(l);
+}
+
+function refreshRoadLockOverlay(): void {
+  if (!area) {
+    for (const l of [lockedLines, unlockedLines, selectedLines]) l.visible = false;
+    return;
+  }
+  const segs = roadLockSegments(
+    area.graph,
+    (area as unknown as EditArea).unlockedEdgeIds,
+    dispatcher.getSelectedEdgeId(),
+    ROAD_LOCK_LIFT_M,
+  );
+  const set = (target: THREE.LineSegments, data: Float32Array): void => {
+    target.geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(data, 3));
+    target.geometry = g;
+    target.visible = data.length > 0;
+  };
+  set(lockedLines, segs.locked);
+  set(unlockedLines, segs.unlocked);
+  set(selectedLines, segs.selected);
+}
+
 function overlayOn(): boolean {
   return $<HTMLInputElement>("opt-grid").checked || $<HTMLInputElement>("opt-contours").checked;
 }
@@ -882,7 +938,12 @@ function applyResult(res: ToolResult, ms: number): void {
   rebuild(res.dirtyHeights, { heights: true });
   rebuild(res.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(res.dirtyHeights);
-  const edited = res.dirtyHeights !== undefined || res.dirtyPaint !== undefined || res.graphChanged;
+  const edited =
+    res.dirtyHeights !== undefined ||
+    res.dirtyPaint !== undefined ||
+    res.graphChanged ||
+    res.lockChanged;
+  if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
   if (edited) {
     setDirty(true);
     lastEditMs = ms;
@@ -964,6 +1025,7 @@ function undoRedo(kind: "undo" | "redo"): void {
   lastEditMs = performance.now() - t0;
   setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.");
   updateHistoryButtons();
+  if (r.graphChanged || r.lockChanged) refreshRoadLockOverlay();
   if (r.graphChanged) validateRoads();
 }
 
@@ -1089,6 +1151,21 @@ function wireBlockAndSmooth(): void {
   );
   $("smooth-all").addEventListener("click", () => void smoothWholeMap());
   syncBlockLabel();
+  wireLockButtons();
+}
+
+/** Quick 261110-rdx: Lock tool buttons. Logic lives in the dispatcher; this only wires. */
+function wireLockButtons(): void {
+  const run = (fn: () => ToolResult): void => {
+    if (!area || stroking) return;
+    const t0 = performance.now();
+    applyResult(fn(), performance.now() - t0);
+    updateHistoryButtons();
+  };
+  $("lock-all").addEventListener("click", () => run(() => dispatcher.lockAll(true)));
+  $("unlock-all").addEventListener("click", () => run(() => dispatcher.lockAll(false)));
+  $("regrade-selected").addEventListener("click", () => run(() => dispatcher.regradeSelected()));
+  $("regrade-all").addEventListener("click", () => run(() => dispatcher.regradeAllUnlocked()));
 }
 
 async function smoothWholeMap(): Promise<void> {

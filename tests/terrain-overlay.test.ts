@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { RoadGraph } from "../src/core/road-graph.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import {
   cellPixelSize,
   contourSegments,
   gridLineSegments,
   needsZoomHint,
+  roadLockSegments,
   ZOOM_HINT_MIN_CELL_PX,
 } from "../src/core/terrain-overlay.ts";
 
@@ -94,5 +96,36 @@ describe("zoom check", () => {
   });
   it("non-finite size counts as needing a hint", () => {
     expect(needsZoomHint(Number.NaN)).toBe(true);
+  });
+});
+
+describe("roadLockSegments", () => {
+  const edge = (id: number, y: number) => ({
+    id,
+    from: 0,
+    to: 1,
+    points: [
+      [0, y, 0],
+      [5, y, 0],
+      [10, y, 0],
+    ] as [number, number, number][],
+  });
+  const graph = { edges: [edge(1, 1), edge(2, 2), edge(3, 3)] } as unknown as RoadGraph;
+
+  it("puts every edge in locked when nothing is unlocked", () => {
+    const s = roadLockSegments(graph, [], null, 0.4);
+    expect(s.locked.length).toBe(3 * 2 * 6);
+    expect(s.unlocked.length).toBe(0);
+    expect(s.selected.length).toBe(0);
+  });
+
+  it("splits unlocked and selected edges and lifts y", () => {
+    const s = roadLockSegments(graph, [2, 3], 3, 0.4);
+    expect(s.locked.length).toBe(2 * 6);
+    expect(s.unlocked.length).toBe(2 * 6);
+    expect(s.selected.length).toBe(2 * 6);
+    expect(s.locked[1]).toBeCloseTo(1.4);
+    expect(s.unlocked[1]).toBeCloseTo(2.4);
+    expect(s.selected[1]).toBeCloseTo(3.4);
   });
 });

@@ -6,16 +6,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { RoadGraph } from "../src/core/road-graph.ts";
 import { parseTerrainSidecar } from "../src/core/terrain-format.ts";
+import { createTerrainGrid } from "../src/core/terrain-grid.ts";
+import { createPaintMap } from "../src/core/terrain-paint.ts";
+import { applyRoadStroke, type RoadEditTarget, regradeRoads } from "../src/core/terrain-road.ts";
 import {
   formatValidationFailures,
   type ValidationFailure,
 } from "../tools/map-compiler/validate/validator.ts";
 import {
+  assertGradedRoads,
   assertSaveableGraph,
   blockingRoadFailures,
   NON_BLOCKING_ON_TERRAIN,
   SAVE_GUARD_PREFIX,
   saveBlockMessage,
+  staleRoadBlockMessage,
 } from "../tools/terrain-editor/save-guard.ts";
 
 const SHIPPED = ["demo-hills", "feel-test", "grid-test", "juliette-ga"] as const;
@@ -112,4 +117,65 @@ describe("shipped terrain maps stay saveable", () => {
       expect(blockingRoadFailures(shippedGraph(id))).toEqual([]);
     });
   }
+});
+
+describe("stale unlocked road guard (quick 261110-rdx)", () => {
+  function roadArea(): RoadEditTarget {
+    const grid = createTerrainGrid({
+      rows: 100,
+      cols: 100,
+      cellSizeM: 2,
+      originX: -100,
+      originZ: -100,
+    });
+    const area: RoadEditTarget = {
+      grid,
+      paint: createPaintMap({
+        originX: -100,
+        originZ: -100,
+        widthM: 200,
+        depthM: 200,
+        metresPerPixel: 0.5,
+        fill: "grass",
+      }),
+      groundSurface: "grass",
+      graph: {
+        schemaVersion: 1,
+        areaId: "g",
+        name: "G",
+        source: { osmExtract: "n/a", osmSnapshot: "n/a", demSource: "n/a", compilerVersion: "t" },
+        attribution: { osm: "n/a", osmLicense: "n/a", osmLicenseUrl: "n/a", dem: "n/a" },
+        origin: { lat: 0, lon: 0, projection: "local" },
+        bounds: { minX: -100, minZ: -100, maxX: 100, maxZ: 100 },
+        nodes: [],
+        edges: [],
+      },
+      nextEdgeId: 0,
+    };
+    const pts = Array.from({ length: 61 }, (_, i) => ({ x: -60 + 2 * i, z: 0 }));
+    applyRoadStroke(area, pts, "street");
+    return area;
+  }
+
+  it("is null when everything is locked or the unlocked road matches the terrain", () => {
+    const a = roadArea();
+    for (let i = 0; i < a.grid.heights.length; i++) a.grid.heights[i] += 3;
+    expect(staleRoadBlockMessage(a.grid, a.graph, [])).toBeNull();
+    expect(staleRoadBlockMessage(a.grid, a.graph, undefined)).toBeNull();
+    expect(() => assertGradedRoads({ ...a })).not.toThrow();
+  });
+
+  it("names the stale edge, throws with the terrain-save prefix, and clears after a re-grade", () => {
+    const a = roadArea();
+    const id = a.graph.edges[0].id;
+    a.unlockedEdgeIds = [id];
+    expect(staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds)).toBeNull();
+    for (let i = 0; i < a.grid.heights.length; i++) a.grid.heights[i] += 3;
+    const msg = staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds);
+    expect(msg).toContain(String(id));
+    expect(msg).toContain("Re-grade");
+    expect(() => assertGradedRoads(a)).toThrow(new RegExp(`^${SAVE_GUARD_PREFIX}`));
+    regradeRoads(a, [id]);
+    expect(staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds)).toBeNull();
+  });
 });
