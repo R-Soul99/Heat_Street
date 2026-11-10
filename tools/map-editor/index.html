@@ -23,6 +23,9 @@
       button.active { background: #2f6f55; border-color: #6c9; }
       #hint { color: #9aa; margin-top: 6px; min-height: 2.4em; }
       .dirty { color: #fb4; }
+      .warn { color: #fb4; margin: 4px 0; }
+      .ro { color: #9aa; margin: 2px 0; }
+      details summary { cursor: pointer; color: #9aa; margin-top: 6px; }
     </style>
   </head>
   <body>
@@ -58,6 +61,37 @@
         <label for="nw-h">Height (km)</label>
         <input type="number" id="nw-h" value="6" min="0.5" max="10" step="0.5" />
         <button type="button" id="nw-create">Create</button>
+        <h3>Import image</h3>
+        <input type="file" id="im-file" accept="image/png,image/jpeg" />
+        <label for="im-thr">Threshold: <span id="im-thr-v">128</span> (darker = road)</label>
+        <input type="range" id="im-thr" min="0" max="255" value="128" />
+        <label for="im-km">Real width (km)</label>
+        <input type="number" id="im-km" min="0.01" step="0.01" />
+        <label for="im-mpp">Metres per pixel</label>
+        <input type="number" id="im-mpp" min="0.01" step="0.05" />
+        <div class="ro" id="im-derived">no image loaded</div>
+        <label for="im-ox">Offset X (m from world SW corner)</label>
+        <input type="number" id="im-ox" value="0" step="10" />
+        <label for="im-oy">Offset Y (m from world SW corner)</label>
+        <input type="number" id="im-oy" value="0" step="10" />
+        <label for="im-width">Road width (m)</label>
+        <input type="number" id="im-width" value="8" min="2" max="40" step="0.5" />
+        <label for="im-hw">Highway class</label>
+        <select id="im-hw"></select>
+        <label for="im-surf">Surface</label>
+        <select id="im-surf"></select>
+        <details>
+          <summary>Advanced tracing (pixels)</summary>
+          <label for="im-spur">Prune spurs shorter than (px)</label>
+          <input type="number" id="im-spur" min="0" step="1" />
+          <label for="im-simp">Simplify tolerance (px)</label>
+          <input type="number" id="im-simp" min="0" step="0.1" />
+          <label for="im-smooth">Smoothing passes</label>
+          <input type="number" id="im-smooth" min="0" max="5" step="1" />
+        </details>
+        <div class="warn" id="im-warn"></div>
+        <button type="button" id="im-preview">Preview</button>
+        <button type="button" id="im-go" class="primary">Import roads</button>
         <div id="status"></div>
         <div id="hint"></div>
         <h3>Selection</h3>
