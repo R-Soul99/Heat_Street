@@ -7,6 +7,8 @@
  *   GET /__terrain/areas              -> ["demo-hills", ...]
  *   GET /__terrain/<id>/bin|json      -> file bytes
  *   PUT /__terrain/<id>/bin|json      -> validate, then write via temp + rename
+ *                                        (a sidecar PUT also registers a new area as a terrain map)
+ *   GET /__terrain/drivable/<id>      -> {drivable} (is `?map=<id>` a registered terrain map?)
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
@@ -19,6 +21,7 @@ import {
   loadTerrainArea,
   parseTerrainSidecar,
 } from "../../src/core/terrain-format.ts";
+import { isDrivableTerrain, registerAuthoredMap } from "../map-compiler/authored-registry.ts";
 import {
   isSafeAreaId,
   MAX_BIN_BYTES,
@@ -143,6 +146,11 @@ export function terrainEditorApi(): Plugin {
               : [];
             return send(res, 200, JSON.stringify(areas));
           }
+          if (req.method === "GET" && parts[1] === "drivable" && parts.length === 3) {
+            const q = parts[2] ?? "";
+            if (!isSafeAreaId(q)) return sendError(res, 400, "invalid area id");
+            return send(res, 200, JSON.stringify({ drivable: isDrivableTerrain(ROOT, q) }));
+          }
           const id = parts[1];
           const kind = parts[2];
           if (id === undefined || kind === undefined || parts.length !== 3) {
@@ -158,6 +166,7 @@ export function terrainEditorApi(): Plugin {
           }
 
           // PUT: cap, validate with the shared codec, then write atomically.
+          let extra = "";
           if (kind === "bin") {
             const body = await readBodyCapped(req, MAX_BIN_BYTES);
             const bytes = new Uint8Array(body);
@@ -172,8 +181,19 @@ export function terrainEditorApi(): Plugin {
             const bin = await readIfExists(resolveTerrainFile(ROOT, id, "bin"));
             await validateAreaPair(id, bin === undefined ? undefined : new Uint8Array(bin), text);
             await writeAtomic(file, text);
+            const binExists = existsSync(path.join(MAPS_DIR, `${id}.terrain.bin`));
+            if (binExists && !isDrivableTerrain(ROOT, id)) {
+              try {
+                await registerAuthoredMap(ROOT, { id, format: "terrain" });
+                extra = ',"registered":true';
+              } catch (e) {
+                extra = `,"registered":false,"warning":${JSON.stringify(
+                  `Saved, but could not register for driving: ${safeMessage(e)}`,
+                )}`;
+              }
+            }
           }
-          return send(res, 200, '{"ok":true}');
+          return send(res, 200, `{"ok":true${extra}}`);
         } catch (err) {
           const status = (err as { status?: number }).status;
           if (status === 413) {

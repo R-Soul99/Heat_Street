@@ -7,7 +7,6 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { KNOWN_MAP_IDS, MAP_FORMATS, type MapId } from "../../src/core/map-select.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
 import { BLOCK_CELLS_MAX, blockWindowAt } from "../../src/core/terrain-brush.ts";
@@ -430,6 +429,7 @@ async function save(): Promise<boolean> {
     return false;
   }
   saving = true;
+  let registerWarning = "";
   const target = area;
   const editsAtStart = editCounter;
   try {
@@ -461,7 +461,12 @@ async function save(): Promise<boolean> {
     // graph was already validated client-side above (D-15), so the sidecar is
     // the half least likely to be rejected.
     await putTerrainPair(
-      (kind, body) => api(`/__terrain/${target.areaId}/${kind}`, { method: "PUT", body }),
+      async (kind, body) => {
+        const res = await api(`/__terrain/${target.areaId}/${kind}`, { method: "PUT", body });
+        const out = (await res.json().catch(() => ({}))) as { warning?: string };
+        if (out.warning) registerWarning = out.warning;
+        return out;
+      },
       bin as BodyInit,
       sidecar,
     );
@@ -474,6 +479,10 @@ async function save(): Promise<boolean> {
         : `Saved ${target.areaId} v1, ${kb} KB`,
     );
     log(`saved ${target.areaId} (${kb} KB)`);
+    if (registerWarning !== "") {
+      setStatus(registerWarning);
+      log(registerWarning);
+    }
     await refreshAreaList(target.areaId);
     return true;
   } catch (err) {
@@ -1194,17 +1203,21 @@ wireOverlays();
 async function driveHere(): Promise<void> {
   if (!area) return;
   const id = area.areaId;
-  const terrainIds = (KNOWN_MAP_IDS as readonly string[]).filter(
-    (m) => MAP_FORMATS[m as MapId] === "terrain",
-  );
-  if (!terrainIds.includes(id)) {
-    const text = `Drive here needs a registered terrain map id (${terrainIds.join(", ")}).`;
+  const spot = lastHit ?? { x: controls.target.x, z: controls.target.z };
+  if (!(await save())) return;
+  let drivable = false;
+  try {
+    const res = await fetch(`/__terrain/drivable/${id}`);
+    drivable = res.ok && ((await res.json()) as { drivable?: boolean }).drivable === true;
+  } catch {
+    drivable = false;
+  }
+  if (!drivable) {
+    const text = "Drive here: this area is not registered yet. Save it once, then try again.";
     setStatus(text);
     log(text);
     return;
   }
-  const spot = lastHit ?? { x: controls.target.x, z: controls.target.z };
-  if (!(await save())) return;
   const url = `/?map=${id}&at=${spot.x.toFixed(1)},${spot.z.toFixed(1)}&debug`;
   const w = window.open(url, "_blank");
   if (!w) log(`Pop-up blocked. Open ${url} manually.`);
