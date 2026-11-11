@@ -13,6 +13,7 @@ import { crestsForArea } from "../../../src/core/crest-geometry.ts";
 import { parseMapCollision } from "../../../src/core/map-collision.ts";
 import { parseRoadGraph } from "../../../src/core/road-graph.ts";
 import { encodeTerrainBinary, serializeTerrainSidecar } from "../../../src/core/terrain-format.ts";
+import { groundBounds } from "../author/heightfield.ts";
 import { readAuthoredManifest } from "../authored-registry.ts";
 import { authoredConvertConfig, convertCompiledArea } from "./convert.ts";
 
@@ -51,7 +52,9 @@ export async function convertAuthoredMap(
   }
   const graph = parseRoadGraph(await readFile(graphPath, "utf8"), graphPath);
   const collision = parseMapCollision(await readFile(collisionPath, "utf8"), id, collisionPath);
-  const b = graph.bounds;
+  // Every road point plus a 40 m margin: graph.bounds covers junctions only,
+  // so a road looping out past its end nodes would otherwise run off the ground.
+  const b = groundBounds(graph);
   const config = authoredConvertConfig(
     b.maxX - b.minX,
     b.maxZ - b.minZ,
@@ -63,6 +66,7 @@ export async function convertAuthoredMap(
     collision,
     crests: crestsForArea(id),
     config,
+    bounds: b,
   });
   const bin = await encodeTerrainBinary(area, { paintEncoding: 1 });
   const sidecar = serializeTerrainSidecar(area);

@@ -401,3 +401,18 @@ describe("feel-test legacy vs terrain drive (D-07)", () => {
     expect(near(terrain.speed, legacy.speed), `v ${terrain.speed} vs ${legacy.speed}`).toBe(true);
   });
 });
+
+describe("convertHeights: bounds override (07.1 authored maps)", () => {
+  it("spans the given bounds instead of graph.bounds, and omitting it keeps graph.bounds", () => {
+    const b = GRID.graph.bounds;
+    const wide = { minX: b.minX - 40, minZ: b.minZ - 40, maxX: b.maxX + 40, maxZ: b.maxZ + 40 };
+    const grid = convertHeights({ ...input(GRID), bounds: wide });
+    expect(grid.originX).toBe(wide.minX);
+    expect(grid.originZ).toBe(wide.minZ);
+    expect(grid.originX + grid.cols * grid.cellSizeM).toBeGreaterThanOrEqual(wide.maxX);
+    expect(grid.originZ + grid.rows * grid.cellSizeM).toBeGreaterThanOrEqual(wide.maxZ);
+    const plain = convertHeights(input(GRID));
+    expect(plain.originX).toBe(b.minX);
+    expect(plain.originZ).toBe(b.minZ);
+  });
+});

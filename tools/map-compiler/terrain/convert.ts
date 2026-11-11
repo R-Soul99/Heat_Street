@@ -16,7 +16,7 @@ import type { AuthoredCrest } from "../../../src/core/crest-geometry.ts";
 import { groundSurfaceForArea, isFlatTestArea } from "../../../src/core/ground-surface.ts";
 import { sampleHeightfieldBilinear } from "../../../src/core/heightfield-sample.ts";
 import type { MapCollision } from "../../../src/core/map-collision.ts";
-import type { RoadGraph, RoadGraphEdge } from "../../../src/core/road-graph.ts";
+import type { RoadGraph, RoadGraphBounds, RoadGraphEdge } from "../../../src/core/road-graph.ts";
 import type { TerrainArea } from "../../../src/core/terrain-format.ts";
 import { createTerrainGrid, type TerrainGrid } from "../../../src/core/terrain-grid.ts";
 import { DEFAULT_COLLIDER_SUBDIV } from "../../../src/core/terrain-limits.ts";
@@ -114,6 +114,12 @@ export interface ConvertInput {
    * wrapper (convert-authored.ts) passes this, after an exact registry match.
    */
   readonly config?: ConvertConfig;
+  /**
+   * Ground extent override. Authored maps pass groundBounds(graph) (every road
+   * point plus a margin) so no road runs off the ground; builtin maps omit it
+   * and keep graph.bounds, so their committed terrain stays byte-identical.
+   */
+  readonly bounds?: RoadGraphBounds;
   readonly graph: RoadGraph;
   readonly collision: MapCollision;
   readonly crests: readonly AuthoredCrest[];
@@ -159,7 +165,7 @@ export function convertHeights(input: ConvertInput): TerrainGrid {
   const { areaId, graph, collision } = input;
   const cfg = configFor(areaId, input.config);
   const cell = cfg.cellSizeM;
-  const b = graph.bounds;
+  const b = input.bounds ?? graph.bounds;
   const cols = Math.max(1, Math.ceil((b.maxX - b.minX) / cell));
   const rows = Math.max(1, Math.ceil((b.maxZ - b.minZ) / cell));
   const grid = createTerrainGrid({ rows, cols, cellSizeM: cell, originX: b.minX, originZ: b.minZ });
