@@ -1,9 +1,11 @@
+import "./controls.css";
 import { confirmDialog, isDialogOpen, openDialog } from "./dialog";
 import { createInfoBar } from "./infobar";
 import { createMenubar } from "./menubar";
 import "./shell.css";
 import { createToolRail } from "./tool-rail";
-import type { ShellHandle, ShellOptions } from "./types";
+import { installTooltips } from "./tooltips";
+import type { MenuSpec, ShellHandle, ShellOptions } from "./types";
 
 function button(label: string, tip: string, run: () => void, cls?: string): HTMLButtonElement {
   const b = document.createElement("button");
@@ -20,7 +22,20 @@ export function createShell(o: ShellOptions): ShellHandle {
   o.root.classList.add("es-root");
   o.root.replaceChildren();
 
-  const menubar = createMenubar(o.title, o.menus, o.topbarExtras ?? []);
+  // Delegation lives on document.body so dialog controls get tooltips too.
+  const tooltips = installTooltips(document.body);
+  const tipItem = {
+    label: "Show tooltips",
+    tip: "Turn the explanations that appear when you hover a control on or off. Remembered in this browser.",
+    run: () => tooltips.toggle(),
+    checked: () => tooltips.enabled(),
+  };
+  const menus: MenuSpec[] = o.menus.map((m) => ({ ...m, items: [...m.items] }));
+  const help = menus.find((m) => m.label === "Help");
+  if (help) help.items.push("separator", tipItem);
+  else menus.push({ label: "Help", tip: "Help and preferences", items: [tipItem] });
+
+  const menubar = createMenubar(o.title, menus, o.topbarExtras ?? []);
 
   const canvasHost = document.createElement("div");
   canvasHost.className = "es-canvas-host";
@@ -101,5 +116,6 @@ export function createShell(o: ShellOptions): ShellHandle {
     dialog: openDialog,
     confirm: confirmDialog,
     isDialogOpen,
+    tooltips,
   };
 }

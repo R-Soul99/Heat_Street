@@ -1,3 +1,5 @@
+import type { TooltipControl } from "./tooltips";
+
 export interface MenuItem {
   label: string;
   tip: string;
@@ -78,4 +80,5 @@ export interface ShellHandle {
   dialog(spec: DialogSpec): Promise<string | null>;
   confirm(o: { title: string; message: string; okLabel: string }): Promise<boolean>;
   isDialogOpen(): boolean;
+  tooltips: TooltipControl;
 }
