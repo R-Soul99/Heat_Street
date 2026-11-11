@@ -845,3 +845,66 @@ describe("buildRoadShoulders — flat-terrain grade (phase 04.1)", () => {
     expect(demEraDelta / demEraWidth).toBeGreaterThan(Math.tan((12 * Math.PI) / 180));
   });
 });
+
+describe("buildRibbon inner-rail fold pinch", () => {
+  /** Counts triangles whose XZ signed area sign differs from the first non-degenerate one. */
+  function flips(r: { positions: Float32Array; indices: Uint32Array }): number {
+    let ref = 0;
+    let bad = 0;
+    for (let t = 0; t < r.indices.length / 3; t++) {
+      const v = (k: number): [number, number] => [
+        r.positions[r.indices[t * 3 + k] * 3],
+        r.positions[r.indices[t * 3 + k] * 3 + 2],
+      ];
+      const [a, b, c] = [v(0), v(1), v(2)];
+      const area = 0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]));
+      if (Math.abs(area) < 1e-9) continue;
+      if (ref === 0) ref = Math.sign(area);
+      else if (Math.sign(area) !== ref) bad++;
+    }
+    return bad;
+  }
+
+  const edgeOf = (pts: Vec3[], widthM: number) =>
+    makeEdge({ id: 0, from: 0, to: 1, points: pts, widthM });
+
+  it("a ~1 m hook on an 8 m road has no flipped triangles and keeps every centreline point", () => {
+    const pts: Vec3[] = [
+      [0, 0, 0],
+      [200, 0, 0],
+      [201, 0, 0.6],
+      [201.4, 0, 1.5],
+      [201.5, 0, 200],
+    ];
+    const r = buildRibbon(edgeOf(pts, 8));
+    expect(r.positions.length / 6).toBe(pts.length);
+    expect(flips(r)).toBe(0);
+  });
+
+  it("a hairpin tighter than the width has no flipped triangles", () => {
+    const pts: Vec3[] = [
+      [0, 0, 0],
+      [50, 0, 0],
+      [52, 0, 1],
+      [50, 0, 2],
+      [0, 0, 2],
+    ];
+    expect(flips(buildRibbon(edgeOf(pts, 8)))).toBe(0);
+  });
+
+  it("a gentle curve is untouched: rails sit exactly half-width off the centreline", () => {
+    const pts: Vec3[] = [
+      [0, 0, 0],
+      [50, 0, 0],
+      [100, 0, 20],
+      [150, 0, 60],
+    ];
+    const r = buildRibbon(edgeOf(pts, 6));
+    expect(flips(r)).toBe(0);
+    for (let i = 0; i < pts.length; i++) {
+      const dx = r.positions[i * 6] - pts[i][0];
+      const dz = r.positions[i * 6 + 2] - pts[i][2];
+      expect(Math.hypot(dx, dz)).toBeGreaterThan(2.9);
+    }
+  });
+});

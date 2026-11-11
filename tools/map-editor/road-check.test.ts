@@ -35,27 +35,20 @@ describe("checkRoads", () => {
     expect(checkRoads("t", roads).problems).toEqual([]);
   });
 
-  it("explains a folded road in plain English and marks it fixable", () => {
-    const { problems } = checkRoads("t", hooked());
-    expect(problems.length).toBeGreaterThan(0);
-    expect(problems[0].category).toBe("GEOMETRY_SELF_INTERSECTION");
-    expect(problems[0].fixable).toBe(true);
-    expect(problems[0].text).toMatch(/bends back on itself/);
-    expect(problems[0].wayId).toBeDefined();
+  it("a hooked road no longer reports a fold (the ribbon builder pinches it)", () => {
+    expect(checkRoads("t", hooked()).problems).toEqual([]);
   });
 });
 
 describe("fixFoldedRoads", () => {
-  it("removes kink points until the road compiles, keeping both ends", () => {
+  it("removes no points from a hooked road", () => {
     const roads = hooked();
     const way = roads.response.elements[0];
-    const [first, last] = [way.nodes?.[0], way.nodes?.at(-1)];
+    const before = JSON.stringify(roads);
     const r = fixFoldedRoads("t", roads);
-    expect(r.removedPoints).toBeGreaterThan(0);
-    expect(r.changedWays).toEqual([way.id]);
+    expect(r.removedPoints).toBe(0);
     expect(r.remaining).toEqual([]);
-    expect(way.nodes?.[0]).toBe(first);
-    expect(way.nodes?.at(-1)).toBe(last);
+    expect(JSON.stringify(roads)).toBe(before);
     expect(way.nodes?.length).toBe(way.geometry.length);
   });
 
