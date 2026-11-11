@@ -280,10 +280,25 @@ describe("createMapScene: off-road heightfield ground (plan 04-10, D-P28/D-P29)"
     const heightfield = collision.heightfield;
     expect(heightfield).toBeDefined();
     if (heightfield === undefined) return;
-    expect(heightfield.originX).toBeCloseTo(graph.bounds.minX, 3);
-    expect(heightfield.originZ).toBeCloseTo(graph.bounds.minZ, 3);
-    expect(heightfield.originX + heightfield.scaleX).toBeCloseTo(graph.bounds.maxX, 3);
-    expect(heightfield.originZ + heightfield.scaleZ).toBeCloseTo(graph.bounds.maxZ, 3);
+    // At least the node bounds AND every road polyline point (a curved road can
+    // bulge past graph.bounds; ground must still be under it).
+    const eps = 1e-3;
+    expect(heightfield.originX).toBeLessThanOrEqual(graph.bounds.minX + eps);
+    expect(heightfield.originZ).toBeLessThanOrEqual(graph.bounds.minZ + eps);
+    expect(heightfield.originX + heightfield.scaleX).toBeGreaterThanOrEqual(
+      graph.bounds.maxX - eps,
+    );
+    expect(heightfield.originZ + heightfield.scaleZ).toBeGreaterThanOrEqual(
+      graph.bounds.maxZ - eps,
+    );
+    for (const edge of graph.edges) {
+      for (const p of edge.points) {
+        expect(p[0]).toBeGreaterThanOrEqual(heightfield.originX - eps);
+        expect(p[0]).toBeLessThanOrEqual(heightfield.originX + heightfield.scaleX + eps);
+        expect(p[2]).toBeGreaterThanOrEqual(heightfield.originZ - eps);
+        expect(p[2]).toBeLessThanOrEqual(heightfield.originZ + heightfield.scaleZ + eps);
+      }
+    }
   });
 
   it("a downward raycast from well off the road network hits the heightfield collider and resolves to grass", () => {

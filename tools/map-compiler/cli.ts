@@ -77,7 +77,7 @@ import { skiddersAndPoppConfig } from "./areas/skidders-and-popp.config.ts";
 import { straightTestConfig } from "./areas/straight-test.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
-import { buildOffRoadRelief, type HeightfieldGrid } from "./author/heightfield.ts";
+import { buildOffRoadRelief, groundBounds, type HeightfieldGrid } from "./author/heightfield.ts";
 import { buildRealRelief, decodeGreyPng } from "./author/real-relief.ts";
 import { type BuildingReport, buildingBoxes } from "./geometry/building-box.ts";
 import { type BuildReport, buildGraph } from "./graph/build-graph.ts";
@@ -539,7 +539,7 @@ async function main(argv: readonly string[]): Promise<void> {
         });
   const heightfield: HeightfieldGrid = buildOffRoadRelief(
     flatGraph,
-    flatGraph.bounds,
+    groundBounds(flatGraph),
     undefined,
     isFlatTestArea(config.areaId),
     realRelief,

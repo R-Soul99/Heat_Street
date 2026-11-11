@@ -321,6 +321,28 @@ export function reliefAt(x: number, z: number, distanceToPavedEdgeM: number): nu
   return noise * RELIEF_AMPLITUDE_M * falloff;
 }
 
+/** Ground margin beyond the outermost road point, metres (road half-width + shoulder + slack). */
+export const GROUND_MARGIN_M = 40;
+
+/**
+ * The extent the ground heightfield must cover: every road POLYLINE point (not
+ * just `graph.bounds`, which only spans junction/end nodes - a curved road can
+ * bulge tens of metres past it and leave road with no ground under it), plus
+ * `marginM` on every side so leaving the outermost road lands on grass.
+ */
+export function groundBounds(graph: RoadGraph, marginM: number = GROUND_MARGIN_M): RoadGraphBounds {
+  let { minX, minZ, maxX, maxZ } = graph.bounds;
+  for (const edge of graph.edges) {
+    for (const p of edge.points) {
+      minX = Math.min(minX, p[0]);
+      maxX = Math.max(maxX, p[0]);
+      minZ = Math.min(minZ, p[2]);
+      maxZ = Math.max(maxZ, p[2]);
+    }
+  }
+  return { minX: minX - marginM, minZ: minZ - marginM, maxX: maxX + marginM, maxZ: maxZ + marginM };
+}
+
 /**
  * Builds the off-road relief grid: samples `reliefAt` (shaped by
  * `buildRoadDistanceField`'s paved-edge distance query) on a regular
