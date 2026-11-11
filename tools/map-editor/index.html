@@ -3,57 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <title>Heat Street map editor (dev only)</title>
+    <link rel="stylesheet" href="../editor-shell/shell.css" />
     <style>
-      html, body { margin: 0; height: 100%; background: #14161a; color: #ddd; font: 13px system-ui, sans-serif; }
-      #app { display: flex; height: 100%; }
-      #wrap { flex: 1; min-width: 0; position: relative; }
-      #map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
-      #side { width: 300px; flex: none; padding: 10px; overflow-y: auto; background: #1d2026; border-left: 1px solid #333; }
-      h3 { margin: 12px 0 6px; font-size: 13px; color: #fff; }
-      label { display: block; margin: 6px 0 2px; color: #9aa; }
-      select, input[type="text"], input[type="number"] { width: 100%; box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 4px; }
-      button { background: #2d3440; color: #eee; border: 1px solid #556; padding: 5px 9px; margin: 3px 3px 3px 0; cursor: pointer; }
-      button:hover { background: #3a4456; }
-      button.danger { border-color: #a44; }
-      button.primary { border-color: #4a8; }
-      #status { margin-top: 8px; color: #9aa; }
-      #log { white-space: pre-wrap; font: 11px monospace; max-height: 220px; overflow-y: auto; background: #0c0d10; padding: 6px; margin-top: 8px; }
-      .legend span { display: inline-block; margin-right: 8px; }
-      .sw { display: inline-block; width: 10px; height: 10px; margin-right: 3px; vertical-align: middle; }
-      button.active { background: #2f6f55; border-color: #6c9; }
-      #hint { color: #9aa; margin-top: 6px; min-height: 2.4em; }
-      .dirty { color: #fb4; }
+      #map { cursor: crosshair; }
+      #legend { position: absolute; left: 70px; bottom: 36px; z-index: 9; display: none; padding: 6px 8px; background: rgba(29, 32, 38, 0.92); border: 1px solid #333; }
+      #legend span { display: block; }
+      .sw { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: middle; }
+      #log-text { white-space: pre-wrap; font: 11px monospace; max-height: 60vh; min-width: 50ch; overflow: auto; background: #0c0d10; padding: 6px; }
+      dialog label { display: block; margin: 6px 0 2px; color: #9aa; }
+      dialog select, dialog input[type="text"], dialog input[type="number"] { box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 4px; }
       .warn { color: #fb4; margin: 4px 0; }
       .ro { color: #9aa; margin: 2px 0; }
-      details summary { cursor: pointer; color: #9aa; margin-top: 6px; }
     </style>
   </head>
   <body>
     <div id="app">
-      <div id="wrap"><canvas id="map"></canvas></div>
-      <div id="side">
-        <h3>Tool</h3>
-        <div id="tools">
-          <button type="button" data-tool="select" class="tool">Select (V)</button>
-          <button type="button" data-tool="road" class="tool">Draw road (R)</button>
-          <button type="button" data-tool="move" class="tool">Move node (M)</button>
-          <button type="button" data-tool="building" class="tool">Building (B)</button>
-        </div>
-        <div id="tool-opts"></div>
-        <h3>Area</h3>
-        <select id="area"></select>
-        <div>
-          <button type="button" id="save" class="primary">Save (S)</button>
-          <button type="button" id="compile" class="primary">Save &amp; compile</button>
-          <button type="button" id="undo">Undo (Z)</button>
-          <button type="button" id="drive" class="primary">Compile &amp; drive</button>
-        </div>
-        <h3>View</h3>
-        <label for="tile-size">Tile size</label>
-        <select id="tile-size"></select>
-        <label><input type="checkbox" id="show-grid" checked /> show grid</label>
-        <label><input type="checkbox" id="show-tiles" checked /> show tiles</label>
-        <h3>New world</h3>
+      <canvas id="map" class="shell-canvas"></canvas>
+      <div id="legend"></div>
+    </div>
+    <dialog id="legacy-new">
+      <h3>New world</h3>
         <label for="nw-id">Id (a-z, 0-9, -)</label>
         <input type="text" id="nw-id" placeholder="my-world" />
         <label for="nw-w">Width (km)</label>
@@ -61,7 +30,10 @@
         <label for="nw-h">Height (km)</label>
         <input type="number" id="nw-h" value="6" min="0.5" max="10" step="0.5" />
         <button type="button" id="nw-create">Create</button>
-        <h3>Import image</h3>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
+    <dialog id="legacy-import">
+      <h3>Import image</h3>
         <input type="file" id="im-file" accept="image/png,image/jpeg" />
         <label for="im-thr">Threshold: <span id="im-thr-v">128</span> (darker = road)</label>
         <input type="range" id="im-thr" min="0" max="255" value="128" />
@@ -92,15 +64,13 @@
         <div class="warn" id="im-warn"></div>
         <button type="button" id="im-preview">Preview</button>
         <button type="button" id="im-go" class="primary">Import roads</button>
-        <div id="status"></div>
-        <div id="hint"></div>
-        <h3>Selection</h3>
-        <div id="sel">Click a road or building. Drag to pan, wheel to zoom, F to fit the world.</div>
-        <h3>Legend</h3>
-        <div class="legend" id="legend"></div>
-        <div id="log"></div>
-      </div>
-    </div>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
+    <dialog id="log-dialog">
+      <h3>Compile log</h3>
+      <div id="log-text">No compile has run yet.</div>
+      <form method="dialog"><button type="submit">Close</button></form>
+    </dialog>
     <script type="module" src="./editor.ts"></script>
   </body>
 </html>
