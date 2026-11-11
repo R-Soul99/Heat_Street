@@ -376,12 +376,42 @@ Plans:
 **Map editor:** Select tool: drag a box, then tickboxes for Roads/Buildings/Objects delete or disable what's inside, per type or all at once. Draw road: click centre-line points, double-click or Enter to finish, with width (m) and surface options. Eraser (click or drag). Undo/Redo. Clear all. A **New** button opens a popup with Width and Height fields and a Create button, which creates and opens a blank canvas of that size with clear validation errors. The same popup has an **Import image** button with its own Width field (height derived from the image aspect). Import creates a fresh map instead of laying the image over the existing one.
 **Terrain editor:** Separate Raise and Lower tool buttons with no Alt modifier (and find out why the current raise/lower doesn't work for the user). Grid select: drag a rectangle of cells, then ▲/▼ buttons raise or lower the selection by a step set on a collapsible slider. Ctrl+drag up/down pushes or pulls the selection by hand. Brush options live in the tool flyout. Every tool has a keyboard shortcut, and [ ] and the arrow keys adjust values.
 **Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
-**Requirements**: Working IDs to be assigned during planning (no v1.0 REQUIREMENTS.md ID applies to this tooling phase)
+**Requirements**: Working IDs EDUX-01 (shell layout, D-01/D-02), EDUX-02 (info bar, no silent failures, D-03), EDUX-03 (tooltips toggle, D-04), EDUX-04 (steppers, content-sized selects, 3 dp, D-05), EDUX-05 (New/Import popup, fresh map, D-06), EDUX-06 (map tools + Redo, D-07), EDUX-07 (terrain Raise/Lower, Grid select, push/pull, D-08), EDUX-08 (shortcuts, D-09), EDUX-09 (new maps register themselves). Tooling phase; not in v1.0 REQUIREMENTS.md
 **Depends on:** Phase 7
-**Plans:** 0 plans
+**Plans:** 13 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 07.1 to break down)
+
+**Wave 1**
+
+- [ ] 07.1-01-PLAN.md — Shared shell pure logic: fmt3, prefs, snapshot undo/redo, stepper maths, shortcut resolution (+ tests) (wave 1)
+- [ ] 07.1-02-PLAN.md — Authored-map registry: manifest + generated compiler/runtime registries; cli.ts and map-select consume them; popp registered (wave 1)
+- [ ] 07.1-03-PLAN.md — Terrain core: separate Raise/Lower, no Alt, Block direction, Shift+click lock, height/held reporting, window ops (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07.1-04-PLAN.md — Shared shell DOM: layout CSS, menubar, tool rail + flyout, info bar, dialog, tooltips toggle, steppers/selects (wave 2)
+- [ ] 07.1-05-PLAN.md — Dev-server wiring: precise New-world errors, auto-registration on create/save, compile status, Drive here via server (wave 2)
+- [ ] 07.1-06-PLAN.md — TDD: Grid select in the terrain dispatcher (selection, step raise/lower, Ctrl+drag push/pull) (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07.1-07-PLAN.md — Map editor onto the shell: menus, rail, flyouts, info bar, Redo, Ctrl shortcuts, Clear all, 3 dp display (wave 3)
+- [ ] 07.1-08-PLAN.md — Terrain editor onto the shell: rail with Raise/Lower, flyout brush options, New popup, info bar, keyboard (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07.1-09-PLAN.md — Map New popup: blank map or Import image (own Width) into a fresh map; inline validation (wave 4)
+- [ ] 07.1-10-PLAN.md — Terrain Grid select UI + Ctrl+drag push/pull + raise/lower feedback fixes (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 07.1-11-PLAN.md — Map Select box (Roads/Buildings/Objects, delete/disable) and Eraser (wave 5)
+- [ ] 07.1-12-PLAN.md — Human verification: terrain editor incl. raise/lower diagnosis (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 07.1-13-PLAN.md — Human verification: map editor incl. poppmap import into a fresh map (wave 6)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
@@ -417,7 +447,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
-| 7.1. Editor UX Overhaul (INSERTED) | 0/TBD | Not started | - |
+| 7.1. Editor UX Overhaul (INSERTED) | 0/13 | Planned | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes
