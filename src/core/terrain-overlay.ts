@@ -41,7 +41,11 @@ function clipWindow(grid: TerrainGrid, w: CellWindow): CellWindow | null {
  * cell so each piece follows the terrain at height + 0.05 m. A window of
  * N x M cells yields (N+1)*M + (M+1)*N segments.
  */
-export function gridLineSegments(grid: TerrainGrid, window: CellWindow): Float32Array {
+export function gridLineSegments(
+  grid: TerrainGrid,
+  window: CellWindow,
+  liftM: number = GRID_LIFT_M,
+): Float32Array {
   const w = clipWindow(grid, window);
   if (!w) return new Float32Array(0);
   const stride = grid.rows + 1;
@@ -51,7 +55,7 @@ export function gridLineSegments(grid: TerrainGrid, window: CellWindow): Float32
   let k = 0;
   const put = (r: number, c: number): void => {
     out[k++] = grid.originX + c * grid.cellSizeM;
-    out[k++] = grid.heights[r + c * stride] + GRID_LIFT_M;
+    out[k++] = grid.heights[r + c * stride] + liftM;
     out[k++] = grid.originZ + r * grid.cellSizeM;
   };
   for (let r = w.minRow; r <= w.maxRow; r++) {

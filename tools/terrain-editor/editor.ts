@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
-import { BLOCK_CELLS_MAX, blockWindowAt } from "../../src/core/terrain-brush.ts";
+import { BLOCK_CELLS_MAX, blockWindowAt, stepRadiusCells } from "../../src/core/terrain-brush.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
@@ -20,7 +20,11 @@ import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { DEFAULT_CELL_SIZE_M, MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
 import {
   cellPixelSize,
+  contourIntervalForZoom,
   contourSegments,
+  FOOTPRINT_LIFT_M,
+  footprintGridSegments,
+  footprintOutline,
   gridLineSegments,
   needsZoomHint,
   roadLockSegments,
@@ -75,14 +79,19 @@ const wrap = $("wrap");
 
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT =
-  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+right-drag or Ctrl+wheel to pan, wheel to zoom.";
+  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+right-drag or Ctrl+wheel to pan, wheel to zoom, Alt+wheel = brush size in cells.";
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
 const HEIGHT_TOOLS: readonly Tool[] = ["block", "raise", "lower", "smooth", "flatten", "smoothBox"];
-/** Overlay window size in cells (T-04.3-28 cap) and re-centre threshold. */
+/** Contour window size in cells (T-04.3-28 cap) and re-centre threshold. */
 const OVERLAY_CELLS = 64;
-const OVERLAY_RECENTRE_CELLS = 16;
+const CONTOUR_RECENTRE_CELLS = 16;
+/** Footprint grid is skipped beyond this many cells per side (T-x00-01 cap). */
+const FOOTPRINT_GRID_MAX_CELLS = 160;
+/** Radius brushes that draw the standout yellow footprint. */
+const FOOTPRINT_TOOLS: readonly Tool[] = ["raise", "lower", "smooth", "flatten", "paint"];
+const FOOTPRINT_YELLOW = 0xffd400;
 const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
 const BLOCK_YELLOW = 0xffee66;
@@ -174,6 +183,14 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener(
   "wheel",
   (e) => {
+    if (e.altKey) {
+      // Alt + wheel: brush radius in whole terrain cells (block size on Block).
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const raw = e.deltaY || e.deltaX;
+      if (raw !== 0) altWheelStep(raw < 0 ? 1 : -1);
+      return;
+    }
     if (!e.ctrlKey) return;
     e.preventDefault(); // also stops browser page-zoom
     e.stopImmediatePropagation(); // keep OrbitControls from zooming
@@ -747,6 +764,11 @@ function pickTerrain(clientX: number, clientY: number) {
   return raycastTerrain(area.grid, r.origin, r.direction, camera.far * 2);
 }
 
+/** Footprint shape of the active tool: the Shape option for the five radius brushes, else round. */
+function footprintShape(): "round" | "square" {
+  return FOOTPRINT_TOOLS.includes(tool) ? dispatcher.getOptions().brushShape : "round";
+}
+
 function ringRadius(): number {
   return tool === "road" || tool === "stamp" || tool === "smoothBox"
     ? CURSOR_RADIUS_M
@@ -826,7 +848,13 @@ function paintSmoothBox(hit: { x: number; z: number }): string | null {
   return `Smooth area ${cols} x ${rows} cells (${round(cols * g.cellSizeM)} x ${round(rows * g.cellSizeM)} m), ${o.smoothPasses} passes`;
 }
 
+/** Draws the cursor shapes for the active tool, then refreshes the footprint grid under it. */
 function paintRing(hit: { x: number; z: number }): void {
+  paintRingShapes(hit);
+  updateFootprintGrid(hit);
+}
+
+function paintRingShapes(hit: { x: number; z: number }): void {
   if (!area) return;
   if (tool === "gridSelect") {
     cursorRing.visible = false;
@@ -855,18 +883,33 @@ function paintRing(hit: { x: number; z: number }): void {
   blockOutline.visible = false;
   if (tool !== "smoothBox") blockReadoutLine = null;
   const radius = ringRadius();
+  const outline = footprintOutline(hit.x, hit.z, radius, footprintShape(), RING_SEGMENTS);
+  const n = Math.min(RING_SEGMENTS, outline.length / 2);
   const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
-  for (let i = 0; i < RING_SEGMENTS; i++) {
-    const ang = (i / RING_SEGMENTS) * Math.PI * 2;
-    const px = hit.x + Math.cos(ang) * radius;
-    const pz = hit.z + Math.sin(ang) * radius;
-    pos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + 0.15, pz);
+  for (let i = 0; i < n; i++) {
+    const px = outline[i * 2];
+    const pz = outline[i * 2 + 1];
+    pos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + FOOTPRINT_LIFT_M, pz);
   }
+  ringGeometry.setDrawRange(0, n);
   pos.needsUpdate = true;
-  (cursorRing.material as THREE.LineBasicMaterial).color.setHex(
-    slopeAmber ? RING_AMBER : tool === "smoothBox" ? BOX_CYAN : RING_GREEN,
-  );
+  const base = FOOTPRINT_TOOLS.includes(tool)
+    ? FOOTPRINT_YELLOW
+    : tool === "smoothBox"
+      ? BOX_CYAN
+      : RING_GREEN;
+  (cursorRing.material as THREE.LineBasicMaterial).color.setHex(slopeAmber ? RING_AMBER : base);
   cursorRing.visible = true;
+}
+
+/** On-screen size (px) of one terrain cell at the cursor hit point (or the orbit target). */
+function cellPxAtAnchor(): number {
+  if (!area) return Number.NaN;
+  const target = lastHit
+    ? new THREE.Vector3(lastHit.x, sampleTerrainHeight(area.grid, lastHit.x, lastHit.z), lastHit.z)
+    : controls.target;
+  const dist = camera.position.distanceTo(target);
+  return cellPixelSize(dist, camera.fov, canvas.clientHeight, area.grid.cellSizeM);
 }
 
 /** D-22 zoom check: flag cells too small to see, without clobbering other hints. */
@@ -874,16 +917,7 @@ function updateZoomHint(): void {
   if (!area) return;
   let show = false;
   if (HEIGHT_TOOLS.includes(tool)) {
-    const target = lastHit
-      ? new THREE.Vector3(
-          lastHit.x,
-          sampleTerrainHeight(area.grid, lastHit.x, lastHit.z),
-          lastHit.z,
-        )
-      : controls.target;
-    const dist = camera.position.distanceTo(target);
-    const px = cellPixelSize(dist, camera.fov, canvas.clientHeight, area.grid.cellSizeM);
-    show = needsZoomHint(px);
+    show = needsZoomHint(cellPxAtAnchor());
   }
   // Only swap between the default hint and ours, so other hints (slope clamp) win.
   if (show && currentHint === DEFAULT_HINT) setHint(ZOOM_HINT);
@@ -894,8 +928,14 @@ function updateZoomHint(): void {
 
 const gridLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.55 }),
+  new THREE.LineBasicMaterial({
+    color: 0x88aacc,
+    transparent: true,
+    opacity: 0.7,
+    depthTest: false,
+  }),
 );
+gridLines.renderOrder = 998;
 const contourLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
   new THREE.LineBasicMaterial({ color: 0xff8855 }),
@@ -906,6 +946,10 @@ for (const l of [gridLines, contourLines]) {
   scene.add(l);
 }
 let overlayCentre: { row: number; col: number } | null = null;
+/** Cache key of the footprint grid currently built (tool, size, shape, cell window). */
+let gridKey = "";
+/** Contour interval used by the last contour build (for zoom-driven rebuilds). */
+let lastContourInterval = Number.NaN;
 
 // Quick 261110-rdx: road lock overlay (grey = locked, orange = unlocked, cyan = selected).
 const ROAD_LOCK_LIFT_M = 0.4;
@@ -950,12 +994,9 @@ function refreshRoadLockOverlay(): void {
   set(selectedLines, segs.selected);
 }
 
-function overlayOn(): boolean {
-  return gridOn || contoursOn;
-}
-
 function contourIntervalM(): number {
-  return Math.min(CONTOUR_MAX_M, Math.max(CONTOUR_MIN_M, contourInterval));
+  const base = Math.min(CONTOUR_MAX_M, Math.max(CONTOUR_MIN_M, contourInterval));
+  return contourIntervalForZoom(cellPxAtAnchor(), base);
 }
 
 function overlayWindow(row: number, col: number): CellWindow | null {
@@ -978,40 +1019,95 @@ function setLines(target: THREE.LineSegments, data: Float32Array): void {
   target.geometry = g;
 }
 
-function rebuildOverlays(x: number, z: number): void {
+/** Grid lines for the active tool's footprint only, rebuilt when its cell window changes. */
+function updateFootprintGrid(hit: { x: number; z: number } | null): void {
+  if (!area || !gridOn || !hit) {
+    gridLines.visible = false;
+    return;
+  }
+  const g = area.grid;
+  const o = dispatcher.getOptions();
+  let w: CellWindow | null;
+  let r = 0;
+  let shape: "round" | "square" = "round";
+  if (tool === "block") {
+    w = blockWindowAt(g, hit.x, hit.z, o.blockCells);
+  } else {
+    r = ringRadius();
+    shape = footprintShape();
+    const cs = g.cellSizeM;
+    w = {
+      minCol: Math.max(0, Math.floor((hit.x - r - g.originX) / cs)),
+      maxCol: Math.min(g.cols, Math.ceil((hit.x + r - g.originX) / cs)),
+      minRow: Math.max(0, Math.floor((hit.z - r - g.originZ) / cs)),
+      maxRow: Math.min(g.rows, Math.ceil((hit.z + r - g.originZ) / cs)),
+    };
+    if (w.minCol >= w.maxCol || w.minRow >= w.maxRow) w = null;
+  }
+  if (
+    !w ||
+    needsZoomHint(cellPxAtAnchor()) ||
+    w.maxCol - w.minCol > FOOTPRINT_GRID_MAX_CELLS ||
+    w.maxRow - w.minRow > FOOTPRINT_GRID_MAX_CELLS
+  ) {
+    gridLines.visible = false;
+    return;
+  }
+  // A round footprint also depends on the exact cursor spot, so quantise it to half a cell.
+  const q = shape === "round" && tool !== "block" ? g.cellSizeM / 2 : 0;
+  const qx = q > 0 ? Math.round(hit.x / q) : 0;
+  const qz = q > 0 ? Math.round(hit.z / q) : 0;
+  const key = `${tool}|${r}|${shape}|${w.minRow},${w.minCol},${w.maxRow},${w.maxCol}|${qx},${qz}`;
+  gridLines.visible = true;
+  if (key === gridKey) return;
+  gridKey = key;
+  setLines(
+    gridLines,
+    tool === "block"
+      ? gridLineSegments(g, w, FOOTPRINT_LIFT_M)
+      : footprintGridSegments(g, hit.x, hit.z, r, shape, FOOTPRINT_LIFT_M),
+  );
+}
+
+function rebuildContours(x: number, z: number): void {
   if (!area) return;
   const g = area.grid;
-  gridLines.visible = gridOn;
   contourLines.visible = contoursOn;
+  if (!contoursOn) return;
   const row = Math.round((z - g.originZ) / g.cellSizeM);
   const col = Math.round((x - g.originX) / g.cellSizeM);
   const w = overlayWindow(row, col);
   if (!w) return;
   overlayCentre = { row, col };
-  if (gridOn) setLines(gridLines, gridLineSegments(g, w));
-  if (contoursOn) setLines(contourLines, contourSegments(g, w, contourIntervalM()));
+  lastContourInterval = contourIntervalM();
+  setLines(contourLines, contourSegments(g, w, lastContourInterval));
 }
 
 function overlayAnchor(): { x: number; z: number } {
   return lastHit ?? { x: controls.target.x, z: controls.target.z };
 }
 
-function maybeRebuildOverlays(x: number, z: number): void {
-  if (!area || !overlayOn()) return;
+function maybeRebuildContours(x: number, z: number): void {
+  if (!area || !contoursOn) return;
   const g = area.grid;
   const row = Math.round((z - g.originZ) / g.cellSizeM);
   const col = Math.round((x - g.originX) / g.cellSizeM);
   if (
     overlayCentre === null ||
-    Math.abs(row - overlayCentre.row) > OVERLAY_RECENTRE_CELLS ||
-    Math.abs(col - overlayCentre.col) > OVERLAY_RECENTRE_CELLS
+    Math.abs(row - overlayCentre.row) > CONTOUR_RECENTRE_CELLS ||
+    Math.abs(col - overlayCentre.col) > CONTOUR_RECENTRE_CELLS
   ) {
-    rebuildOverlays(x, z);
+    rebuildContours(x, z);
   }
 }
 
 function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
-  if (!w || !overlayCentre || !area || !overlayOn()) return;
+  if (!w || !area) return;
+  if (gridOn) {
+    gridKey = "";
+    updateFootprintGrid(lastHit);
+  }
+  if (!overlayCentre || !contoursOn) return;
   const g = area.grid;
   const half = OVERLAY_CELLS / 2;
   const intersects =
@@ -1020,7 +1116,7 @@ function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
     w.maxCol >= overlayCentre.col - half &&
     w.minCol <= overlayCentre.col + half;
   if (intersects) {
-    rebuildOverlays(
+    rebuildContours(
       g.originX + overlayCentre.col * g.cellSizeM,
       g.originZ + overlayCentre.row * g.cellSizeM,
     );
@@ -1029,8 +1125,20 @@ function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
 
 function refreshOverlays(): void {
   const a = overlayAnchor();
-  rebuildOverlays(a.x, a.z);
+  gridKey = "";
+  updateFootprintGrid(lastHit);
+  rebuildContours(a.x, a.z);
 }
+
+/** Camera moved: rebuild contours only when the zoom-scaled interval changed. */
+function onCameraChange(): void {
+  if (!area || !contoursOn) return;
+  if (contourIntervalM() === lastContourInterval) return;
+  const a = overlayAnchor();
+  rebuildContours(a.x, a.z);
+  setStatus(`Contours every ${lastContourInterval} m`);
+}
+controls.addEventListener("change", onCameraChange);
 
 function toggleOverlay(which: "grid" | "contours"): void {
   if (which === "grid") gridOn = !gridOn;
@@ -1039,12 +1147,29 @@ function toggleOverlay(which: "grid" | "contours"): void {
   shell.refreshMenus();
 }
 
+/** Alt + wheel: step the brush radius by whole cells (Block: its size by one cell). */
+function altWheelStep(dir: 1 | -1): void {
+  if (!area) return;
+  const o = dispatcher.getOptions();
+  if (tool === "block") {
+    const n = Math.min(BLOCK_CELLS_MAX, Math.max(1, o.blockCells + dir));
+    if (activeValue) activeValue.set(n);
+    else dispatcher.setOptions({ blockCells: n });
+  } else if (activeValue && activeValue.spec === RADIUS_SPEC) {
+    activeValue.set(stepRadiusCells(o.radiusM, area.grid.cellSizeM, dir));
+  } else {
+    return;
+  }
+  if (lastHit) paintRing(lastHit);
+}
+
 function updateCursor(clientX: number, clientY: number): void {
   if (!area) return;
   const hit = pickTerrain(clientX, clientY);
   if (!hit) {
     cursorRing.visible = false;
     blockOutline.visible = false;
+    gridLines.visible = false;
     if (!stroking) clearBoxOutline();
     lastHit = null;
     shell.info.set("cursor", "off the terrain");
@@ -1053,7 +1178,7 @@ function updateCursor(clientX: number, clientY: number): void {
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
-  maybeRebuildOverlays(hit.x, hit.z);
+  maybeRebuildContours(hit.x, hit.z);
   shell.info.set(
     "cursor",
     `x ${fmt3(hit.x)}  z ${fmt3(hit.z)}  h ${fmt3(sampleTerrainHeight(area.grid, hit.x, hit.z))} m`,
@@ -1653,6 +1778,23 @@ function buildFlyout(t: Tool): void {
       }).el,
       "Brush edge falloff",
     );
+  const shapeSel = (): HTMLElement =>
+    createField(
+      "Shape",
+      createSelect({
+        options: [
+          { value: "round", label: "Round" },
+          { value: "square", label: "Square" },
+        ],
+        value: o.brushShape,
+        tip: "Brush footprint shape; the brush acts on exactly the outlined area",
+        onChange: (v) => {
+          dispatcher.setOptions({ brushShape: v === "square" ? "square" : "round" });
+          if (lastHit) paintRing(lastHit);
+        },
+      }).el,
+      "Brush footprint shape",
+    );
   const surface = (): HTMLElement =>
     createField(
       "Surface",
@@ -1670,10 +1812,10 @@ function buildFlyout(t: Tool): void {
     case "lower":
     case "smooth":
     case "flatten":
-      f.append(radius(true), strength(), falloff());
+      f.append(radius(true), strength(), falloff(), shapeSel());
       break;
     case "paint": {
-      f.append(radius(true), strength(), falloff(), surface());
+      f.append(radius(true), strength(), falloff(), shapeSel(), surface());
       const key = el("div", "legend");
       for (const s of SURFACE_TYPES) {
         const span = el("span");
@@ -2013,13 +2155,17 @@ async function contourIntervalDialog(): Promise<void> {
   const st = createStepper({
     value: contourInterval,
     spec: { step: 0.25, coarse: 4, min: CONTOUR_MIN_M, max: CONTOUR_MAX_M, decimals: 2 },
-    tip: "Height between contour lines in metres",
+    tip: "Contour spacing at normal zoom; zooming out makes it coarser, zooming in finer",
     unit: "m",
     onChange: () => {},
   });
   const r = await openDialog<"apply" | "close">({
     title: "Contour interval",
-    body: createField("Interval (m)", st.el, "Height between contour lines"),
+    body: createField(
+      "Base interval (m)",
+      st.el,
+      "Contour spacing at normal zoom; zooming out makes it coarser, zooming in finer",
+    ),
     actions: [
       { id: "apply", label: "Apply", tip: "Use this interval", primary: true },
       { id: "close", label: "Cancel", tip: "Close without changing it" },
@@ -2107,7 +2253,7 @@ const shell = createShell({
         {
           id: "grid",
           label: "Grid",
-          tip: "Show the cell grid around the cursor",
+          tip: "Show the cell grid under the brush",
           shortcut: "X",
           run: () => toggleOverlay("grid"),
           checked: () => gridOn,
@@ -2168,6 +2314,20 @@ const shell = createShell({
     },
     pan: (dx, dy) => panView(dx, dy),
     extra: [
+      {
+        id: "grid",
+        label: "Grid",
+        tip: "Show the terrain cell grid under the brush (X)",
+        run: () => toggleOverlay("grid"),
+        pressed: () => gridOn,
+      },
+      {
+        id: "contours",
+        label: "Contours",
+        tip: "Show lines of equal height around the cursor; spacing follows zoom (C)",
+        run: () => toggleOverlay("contours"),
+        pressed: () => contoursOn,
+      },
       {
         id: "topdown",
         label: "Top-down",
