@@ -13,6 +13,7 @@ import {
   readAuthoredManifest,
   registerAuthoredMap,
   runtimeRegistrySource,
+  setAuthoredFormat,
 } from "./authored-registry.ts";
 
 describe("parseAuthoredManifest", () => {
@@ -118,5 +119,25 @@ describe("manifest helpers", () => {
   it("BUILTIN_TERRAIN_IDS matches map-select", () => {
     const expected = BUILTIN_MAP_IDS.filter((id) => MAP_FORMATS[id] === "terrain");
     expect([...BUILTIN_TERRAIN_IDS].sort()).toEqual([...expected].sort());
+  });
+});
+
+describe("setAuthoredFormat", () => {
+  it("flips the format, regenerates the registries and reports the previous one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "reg-format-"));
+    try {
+      await mkdir(join(root, "tools", "map-compiler", "areas"), { recursive: true });
+      await writeFile(join(root, "tools", "map-compiler", "areas", "x.config.ts"), "export {}");
+      await registerAuthoredMap(root, { id: "x", format: "legacy" });
+      expect(await setAuthoredFormat(root, "x", "terrain")).toEqual({ previous: "legacy" });
+      expect(readAuthoredManifest(root)).toEqual([{ id: "x", format: "terrain" }]);
+      const gen = await readFile(join(root, "src", "core", "authored-maps.generated.ts"), "utf8");
+      expect(gen).toContain('"x": "terrain"');
+      expect(await setAuthoredFormat(root, "x", "terrain")).toEqual({ previous: "terrain" });
+      expect(await setAuthoredFormat(root, "x", "legacy")).toEqual({ previous: "terrain" });
+      await expect(setAuthoredFormat(root, "nope", "terrain")).rejects.toThrow(/not a registered/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

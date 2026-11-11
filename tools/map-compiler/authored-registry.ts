@@ -197,3 +197,30 @@ export function authoredLegacyIds(root: string): string[] {
     .filter((e) => e.format === "legacy")
     .map((e) => e.id);
 }
+
+/**
+ * Changes a registered map's format and regenerates both registries. Used by
+ * "Open in terrain editor" (legacy -> terrain) and, briefly, to let a terrain
+ * map be recompiled from its drawing. Returns the previous format.
+ */
+export async function setAuthoredFormat(
+  root: string,
+  id: string,
+  format: AuthoredFormat,
+): Promise<{ previous: AuthoredFormat }> {
+  const p = paths(root);
+  const entries = await readManifest(p.manifest);
+  const entry = entries.find((e) => e.id === id);
+  if (entry === undefined) throw new Error(`${id} is not a registered map`);
+  const previous = entry.format;
+  if (previous === format) return { previous };
+  if (format === "legacy") {
+    const cfg = join(root, "tools", "map-compiler", "areas", `${id}.config.ts`);
+    if (!existsSync(cfg)) throw new Error(`no area config for ${id} (expected ${cfg})`);
+  }
+  entry.format = format;
+  await atomicWrite(p.manifest, `${JSON.stringify(entries, null, 2)}\n`);
+  await atomicWrite(p.compiler, compilerRegistrySource(entries));
+  await atomicWrite(p.runtime, runtimeRegistrySource(entries));
+  return { previous };
+}

@@ -76,14 +76,51 @@ export const CONVERT_CONFIG: Readonly<Record<ConvertibleAreaId, ConvertConfig>> 
   },
 };
 
+/** Most grid vertices an authored map's default grid aims for (Juliette at 8 m is ~487k). */
+export const AUTHORED_TARGET_VERTICES = 450_000;
+/** Most paint pixels an authored map's default paint map aims for (a 2 km square at 0.5 m). */
+export const AUTHORED_TARGET_PAINT_PIXELS = 16_000_000;
+
+const roundUpToHalf = (v: number): number => Math.ceil(v * 2) / 2;
+
+/**
+ * Default conversion settings for a map made in the editors (any id on the
+ * authored list). 3 m cells for anything up to about 2 km square (about 445k
+ * vertices there); bigger maps get coarser cells so the grid stays near
+ * AUTHORED_TARGET_VERTICES. Paint is 0.5 m per pixel unless that would pass
+ * AUTHORED_TARGET_PAINT_PIXELS. Pure: depends only on the extents.
+ */
+export function authoredConvertConfig(
+  extentXM: number,
+  extentZM: number,
+  hasBuildings: boolean,
+): ConvertConfig {
+  const area = Math.max(1, extentXM) * Math.max(1, extentZM);
+  return {
+    cellSizeM: Math.max(3, roundUpToHalf(Math.sqrt(area / AUTHORED_TARGET_VERTICES))),
+    paintMetresPerPixel: Math.max(
+      0.5,
+      roundUpToHalf(Math.sqrt(area / AUTHORED_TARGET_PAINT_PIXELS)),
+    ),
+    legacyGlbBuildings: hasBuildings,
+    roadWidenM: 2,
+  };
+}
+
 export interface ConvertInput {
   readonly areaId: string;
+  /**
+   * Settings for a map that is not in CONVERT_CONFIG. Only the authored-map
+   * wrapper (convert-authored.ts) passes this, after an exact registry match.
+   */
+  readonly config?: ConvertConfig;
   readonly graph: RoadGraph;
   readonly collision: MapCollision;
   readonly crests: readonly AuthoredCrest[];
 }
 
-function configFor(areaId: string): ConvertConfig {
+function configFor(areaId: string, override?: ConvertConfig): ConvertConfig {
+  if (override !== undefined) return override;
   const cfg = (CONVERT_CONFIG as Readonly<Record<string, ConvertConfig | undefined>>)[areaId];
   if (cfg === undefined || !Object.hasOwn(CONVERT_CONFIG, areaId)) {
     throw new RangeError(`convert: no CONVERT_CONFIG for area "${areaId}"`);
@@ -120,7 +157,7 @@ function incidentHalfWidth(graph: RoadGraph, nodeId: number, cfg: ConvertConfig)
  */
 export function convertHeights(input: ConvertInput): TerrainGrid {
   const { areaId, graph, collision } = input;
-  const cfg = configFor(areaId);
+  const cfg = configFor(areaId, input.config);
   const cell = cfg.cellSizeM;
   const b = graph.bounds;
   const cols = Math.max(1, Math.ceil((b.maxX - b.minX) / cell));
@@ -253,7 +290,7 @@ function rasteriseRoads(paint: PaintMap, graph: RoadGraph, cfg: ConvertConfig): 
 
 export function convertCompiledArea(input: ConvertInput): TerrainArea {
   const { areaId, graph, collision, crests } = input;
-  const cfg = configFor(areaId);
+  const cfg = configFor(areaId, input.config);
   const grid = convertHeights(input);
   const groundSurface = groundSurfaceForArea(areaId);
   const paint = createPaintMap({
