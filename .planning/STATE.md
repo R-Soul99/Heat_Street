@@ -249,6 +249,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261004-otc | Arcade front-drive thrust for FWD/AWD: front-axle share applied as a chassis impulse along heading (scaled by front contact) so throttle works while cornering; FWD engine force back to 4800. Feel not yet user-verified | 2026-10-04 | ca9daae | [261004-otc-arcade-front-drive-thrust-for-fwd-and-aw](./quick/261004-otc-arcade-front-drive-thrust-for-fwd-and-aw/) |
 | 261104-o1l | Playground map step 2: dome field, gap jumps with landing ramps, ovals | 2026-11-04 | ec9d016 | [261104-o1l-playground-map-step-2-dome-field-big-ram](./quick/261104-o1l-playground-map-step-2-dome-field-big-ram/) |
 | 261104-vdb | Playground map step 3: five surface strips (grass, sand, mud, gravel, dirt road) | 2026-11-04 | 0c3d810 | [261104-vdb-playground-map-step-3-terrain-surface-gr](./quick/261104-vdb-playground-map-step-3-terrain-surface-gr/) |
+| 261111-x00 | Terrain editor gap closure: yellow round/square brush footprint, grid only under the brush (grid-offset root cause fixed), separate Grid/Contours buttons, Alt+wheel radius in cells, zoom-scaled contours, opt-in dock layout | 2026-11-11 | 64c8570 | [261111-x00-terrain-editor-gap-closure-brush-overlay](./quick/261111-x00-terrain-editor-gap-closure-brush-overlay/) |
 
 ## Session Continuity
 
