@@ -1,5 +1,38 @@
 [
-  { "id": "popp", "format": "legacy" },
-  { "id": "world-test", "format": "legacy" },
-  { "id": "hills", "format": "terrain" }
+  {
+    "id": "popp",
+    "format": "legacy"
+  },
+  {
+    "id": "world-test",
+    "format": "legacy"
+  },
+  {
+    "id": "hills",
+    "format": "terrain"
+  },
+  {
+    "id": "popp3",
+    "format": "legacy"
+  },
+  {
+    "id": "popp-1",
+    "format": "legacy"
+  },
+  {
+    "id": "map-1",
+    "format": "legacy"
+  },
+  {
+    "id": "map-2",
+    "format": "legacy"
+  },
+  {
+    "id": "map-3",
+    "format": "legacy"
+  },
+  {
+    "id": "map-4",
+    "format": "legacy"
+  }
 ]

@@ -3,8 +3,20 @@
 import type { AreaConfig } from "./juliette-ga.config.ts";
 import { poppConfig } from "./popp.config.ts";
 import { worldTestConfig } from "./world-test.config.ts";
+import { popp3Config } from "./popp3.config.ts";
+import { popp1Config } from "./popp-1.config.ts";
+import { map1Config } from "./map-1.config.ts";
+import { map2Config } from "./map-2.config.ts";
+import { map3Config } from "./map-3.config.ts";
+import { map4Config } from "./map-4.config.ts";
 
 export const AUTHORED_AREAS: Record<string, AreaConfig> = {
   "popp": poppConfig,
   "world-test": worldTestConfig,
+  "popp3": popp3Config,
+  "popp-1": popp1Config,
+  "map-1": map1Config,
+  "map-2": map2Config,
+  "map-3": map3Config,
+  "map-4": map4Config,
 };
