@@ -66,6 +66,7 @@ import {
   resolvePointShoulderWidth,
 } from "../../src/core/shoulder-clearance.ts";
 import { arenaTestConfig } from "./areas/arena-test.config.ts";
+import { AUTHORED_AREAS } from "./areas/authored-areas.generated.ts";
 import { feelTestConfig } from "./areas/feel-test.config.ts";
 import { gridTestConfig } from "./areas/grid-test.config.ts";
 import { type AreaConfig, julietteGaConfig } from "./areas/juliette-ga.config.ts";
@@ -74,7 +75,6 @@ import { newtonPopplefordConfig } from "./areas/newton-poppleford.config.ts";
 import { playgroundConfig } from "./areas/playground.config.ts";
 import { skiddersAndPoppConfig } from "./areas/skidders-and-popp.config.ts";
 import { straightTestConfig } from "./areas/straight-test.config.ts";
-import { worldTestConfig } from "./areas/world-test.config.ts";
 import { buildMapCollision } from "./author/collision.ts";
 import { buildGltfDocument, writeGlb } from "./author/gltf.ts";
 import { buildOffRoadRelief, type HeightfieldGrid } from "./author/heightfield.ts";
@@ -109,7 +109,7 @@ const KNOWN_AREAS: Record<string, AreaConfig> = {
   "newton-poppleford": newtonPopplefordConfig,
   "my-map": myMapConfig,
   "skidders-and-popp": skiddersAndPoppConfig,
-  "world-test": worldTestConfig,
+  ...AUTHORED_AREAS,
 };
 
 /** Parses `--area <id>` out of an argv-shaped string array. Returns `null` if absent. */

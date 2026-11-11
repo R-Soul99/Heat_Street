@@ -1,0 +1,5 @@
+[
+  { "id": "popp", "format": "legacy" },
+  { "id": "world-test", "format": "legacy" },
+  { "id": "hills", "format": "terrain" }
+]
