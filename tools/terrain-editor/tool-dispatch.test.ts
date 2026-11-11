@@ -622,3 +622,189 @@ describe("road lock tool (quick 261110-rdx)", () => {
     expect(d.canUndo()).toBe(false);
   });
 });
+
+describe("grid select (07.1)", () => {
+  const A = { x: -30, z: -30 };
+  const B = { x: -9, z: -9 };
+
+  function selected() {
+    const s = setup();
+    s.d.setTool("gridSelect");
+    s.d.pointerDown(A.x, A.z, {});
+    s.d.pointerMove(B.x, B.z, {});
+    s.d.pointerUp(B.x, B.z);
+    return s;
+  }
+
+  function winHeights(area: EditArea, win: NonNullable<ReturnType<ReturnType<typeof setup>["d"]["getSelection"]>>) {
+    const out: number[] = [];
+    const stride = area.grid.rows + 1;
+    for (let c = win.minCol; c <= win.maxCol; c++) {
+      for (let r = win.minRow; r <= win.maxRow; r++) out.push(area.grid.heights[r + c * stride]);
+    }
+    return out;
+  }
+
+  it("KeyS selects the gridSelect tool", () => {
+    expect(TOOL_KEYS.KeyS).toBe("gridSelect");
+  });
+
+  it("dragging selects a window without editing or undo entry", () => {
+    const { area, d } = setup();
+    d.setTool("gridSelect");
+    d.pointerDown(A.x, A.z, {});
+    const live = d.selectionPreview(B.x, B.z);
+    d.pointerMove(B.x, B.z, {});
+    const up = d.pointerUp(B.x, B.z);
+    const sel = d.getSelection();
+    expect(sel).toEqual({ minCol: 30, maxCol: 37, minRow: 30, maxRow: 37 });
+    expect(live).toEqual(sel);
+    expect(up.selectionChanged).toBe(true);
+    expect(d.canUndo()).toBe(false);
+    expect(Math.max(...(area.grid.heights as unknown as number[]))).toBe(0);
+  });
+
+  it("a click selects the single cell under the pointer", () => {
+    const { d } = setup();
+    d.setTool("gridSelect");
+    d.pointerDown(-29, -29, {});
+    d.pointerUp(-29, -29);
+    const w = d.getSelection();
+    expect(w).toBeTruthy();
+    expect((w?.maxCol as number) - (w?.minCol as number)).toBe(1);
+    expect((w?.maxRow as number) - (w?.minRow as number)).toBe(1);
+  });
+
+  it("raiseSelection steps by selectStepM as one undo entry and keeps the selection", () => {
+    const { area, d } = selected();
+    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const before = winHeights(area, sel);
+    const r = d.raiseSelection(1);
+    expect(r.dirtyHeights).toBeDefined();
+    expect(winHeights(area, sel)).toEqual(before.map((h) => h + 1));
+    expect(d.getSelection()).toEqual(sel);
+    d.raiseSelection(-1);
+    expect(winHeights(area, sel)).toEqual(before);
+    d.undo();
+    expect(winHeights(area, sel)).toEqual(before.map((h) => h + 1));
+    d.undo();
+    expect(winHeights(area, sel)).toEqual(before);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("selectStepM clamps to 0.25..5", () => {
+    const { d } = setup();
+    d.setOptions({ selectStepM: 9 });
+    expect(d.getOptions().selectStepM).toBe(5);
+    d.setOptions({ selectStepM: 0.1 });
+    expect(d.getOptions().selectStepM).toBe(0.25);
+    expect(d.getOptions().selectStepM).toBeGreaterThan(0);
+  });
+
+  it("raiseSelection without a selection reports and pushes nothing", () => {
+    const { d } = setup();
+    const r = d.raiseSelection(1);
+    expect(r.status).toBe("Select some cells first (Grid select, S).");
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("push/pull is absolute from the snapshot and one undo entry", () => {
+    const { area, d } = selected();
+    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const base = winHeights(area, sel);
+    expect(d.beginPushPull()).toBe(true);
+    d.pushPullTo(2.5);
+    expect(winHeights(area, sel)).toEqual(base.map((h) => h + 2.5));
+    d.pushPullTo(-1);
+    expect(winHeights(area, sel)).toEqual(base.map((h) => h - 1));
+    d.pushPullTo(0);
+    expect(winHeights(area, sel)).toEqual(base);
+    d.pushPullTo(2);
+    d.endPushPull();
+    d.undo();
+    expect(winHeights(area, sel)).toEqual(base);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("beginPushPull is false without a selection; cancel restores with no undo entry", () => {
+    const empty = setup();
+    expect(empty.d.beginPushPull()).toBe(false);
+    const { area, d } = selected();
+    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const base = winHeights(area, sel);
+    d.beginPushPull();
+    d.pushPullTo(3);
+    d.cancelPushPull();
+    expect(winHeights(area, sel)).toEqual(base);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("pushPullTo clamps delta to 50 m", () => {
+    const { area, d } = selected();
+    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    d.beginPushPull();
+    d.pushPullTo(500);
+    const max = Math.max(...winHeights(area, sel));
+    expect(max).toBeLessThanOrEqual(50);
+    d.cancelPushPull();
+  });
+
+  it("Ctrl+pointerDown on an existing selection starts push/pull, not a new band", () => {
+    const { d } = selected();
+    const sel = d.getSelection();
+    const r = d.pointerDown(60, 60, { ctrl: true });
+    expect(r.pushPullStarted).toBe(true);
+    d.pointerMove(90, 90, {});
+    d.pointerUp(90, 90);
+    expect(d.getSelection()).toEqual(sel);
+    d.cancelPushPull();
+  });
+
+  it("road-held vertices keep their height under raiseSelection and pushPullTo", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    drag(d, [
+      [-80, 0],
+      [-40, 0],
+      [0, 0],
+      [40, 0],
+      [80, 0],
+    ]);
+    d.clearHistory();
+    const mask = roadVertexMask(area.grid, area.paint, area.graph, {
+      minRow: 0,
+      minCol: 0,
+      maxRow: area.grid.rows,
+      maxCol: area.grid.cols,
+    });
+    d.setTool("gridSelect");
+    d.pointerDown(-20, -20, {});
+    d.pointerUp(20, 20);
+    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const stride = area.grid.rows + 1;
+    const held: number[] = [];
+    for (let c = sel.minCol; c <= sel.maxCol; c++) {
+      for (let r = sel.minRow; r <= sel.maxRow; r++) if (mask[r + c * stride]) held.push(r + c * stride);
+    }
+    expect(held.length).toBeGreaterThan(0);
+    const before = held.map((i) => area.grid.heights[i]);
+    const r1 = d.raiseSelection(1);
+    expect(r1.heldVertices).toBeGreaterThan(0);
+    expect(held.map((i) => area.grid.heights[i])).toEqual(before);
+    d.beginPushPull();
+    const r2 = d.pushPullTo(2);
+    expect(r2.heldVertices).toBeGreaterThan(0);
+    expect(held.map((i) => area.grid.heights[i])).toEqual(before);
+    d.cancelPushPull();
+  });
+
+  it("clearSelection clears; windows clip to the grid", () => {
+    const { d } = setup();
+    d.setTool("gridSelect");
+    d.pointerDown(-1000, -1000, {});
+    d.pointerUp(1000, 1000);
+    expect(d.getSelection()).toEqual({ minRow: 0, minCol: 0, maxRow: 80, maxCol: 80 });
+    d.clearSelection();
+    expect(d.getSelection()).toBeNull();
+  });
+});
