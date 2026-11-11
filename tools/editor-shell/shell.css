@@ -369,3 +369,101 @@ dialog button {
   border-radius: 3px;
   pointer-events: none;
 }
+
+/* ---- Dock layout variant (opt-in via createShell({ layout: "dock" }); terrain editor) ---- */
+.shell-dock .shell-canvas {
+  height: calc(100% - 28px);
+}
+.shell-topbar,
+.shell-toolbar-bottom,
+.shell-infobox {
+  position: absolute;
+  background: var(--panel);
+  pointer-events: auto;
+  z-index: 10;
+  border-radius: 4px;
+  user-select: none;
+}
+.shell-topbar {
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  max-width: calc(100% - 520px);
+}
+.shell-topbar .rail-btn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+}
+.shell-topbar .shell-flyout {
+  position: static;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 0 4px 0 8px;
+}
+.shell-topbar .shell-flyout:empty {
+  display: none;
+}
+.shell-topbar .field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.shell-topbar .field-label {
+  margin: 0;
+}
+.shell-toolbar-bottom {
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px;
+  max-width: calc(100% - 380px);
+  flex-wrap: wrap;
+}
+.shell-dock .shell-flyout.floating {
+  top: auto;
+  width: 260px;
+  max-height: calc(100% - 160px);
+}
+.shell-dock .shell-viewpad {
+  top: 80px;
+  bottom: auto;
+}
+.shell-infobox {
+  right: 8px;
+  bottom: 8px;
+  width: 300px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+}
+.shell-infobox .info-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.shell-infobox .info-value {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.shell-infobox .status {
+  flex: none;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

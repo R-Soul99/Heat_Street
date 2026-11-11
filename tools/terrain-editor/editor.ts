@@ -1573,6 +1573,7 @@ const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     id: "raise",
     label: "Raise",
     icon: "▲",
+    dock: "top",
     keyLabel: "H",
     tip: "Click or drag to raise terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
   },
@@ -1580,6 +1581,7 @@ const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     id: "lower",
     label: "Lower",
     icon: "▼",
+    dock: "top",
     keyLabel: "J",
     tip: "Click or drag to lower terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
   },
@@ -2196,6 +2198,7 @@ function cancelActiveStroke(): void {
 
 const shell = createShell({
   root: $("app"),
+  layout: "dock",
   menus: [
     {
       label: "File",

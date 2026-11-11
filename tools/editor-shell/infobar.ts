@@ -13,8 +13,9 @@ export interface Infobar {
   setDirty(dirty: boolean): void;
 }
 
-export function createInfobar(fields: InfoField[]): Infobar {
-  const bar = el("div", "shell-infobar");
+/** "bar" = one row along the bottom (classic); "box" = a static box, one row per item (dock). */
+export function createInfobar(fields: InfoField[], variant: "bar" | "box" = "bar"): Infobar {
+  const bar = el("div", variant === "box" ? "shell-infobox" : "shell-infobar");
   const values = new Map<string, HTMLElement>();
   for (const f of fields) {
     const span = el("span", "info-field", undefined, f.tip);
