@@ -18,9 +18,11 @@ import {
   type Falloff,
   flattenBrush,
   type HeightOpOptions,
+  offsetWindowFrom,
   paintSurface,
   raiseBlock,
   raiseLower,
+  raiseWindow,
   SMOOTH_PASSES_MAX,
   type StrokeDiff,
   type StrokeRecorder,
@@ -47,6 +49,7 @@ import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/co
 
 export type Tool =
   | "raise"
+  | "lower"
   | "smooth"
   | "flatten"
   | "paint"
@@ -55,10 +58,12 @@ export type Tool =
   | "erase"
   | "block"
   | "smoothBox"
+  | "gridSelect"
   | "lock";
 
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyH: "raise",
+  KeyJ: "lower",
   KeyG: "smooth",
   KeyF: "flatten",
   KeyP: "paint",
@@ -66,6 +71,8 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyW: "stamp",
   KeyE: "erase",
   KeyB: "block",
+  KeyA: "smoothBox",
+  KeyV: "gridSelect",
   KeyL: "lock",
 };
 
@@ -86,6 +93,12 @@ export interface ToolOptions {
   blockCells: number;
   /** Block tool step in metres (0.25..5, multiples of 0.25). */
   blockStepM: number;
+  /** Block tool direction: 1 raises, -1 lowers (replaces Alt+click). */
+  blockDirection: 1 | -1;
+  /** Grid select step in metres (0.25..5, multiples of 0.25). */
+  gridStepM: number;
+  /** Grid select Ctrl+drag sensitivity, metres per pixel (0.005..1); used by the page. */
+  pushPullMPerPx: number;
   smoothStrength: number;
   smoothPasses: number;
 }
@@ -105,6 +118,12 @@ export interface ToolResult {
   status?: string;
   /** Road tool: polyline to draw while dragging. */
   previewPoints?: { x: number; z: number }[];
+  /** How far a finished height stroke moved the ground (metres). */
+  heightChange?: { maxUpM: number; maxDownM: number };
+  /** Vertices in the brush footprint that belong to a (locked) road and were held. */
+  heldVertices?: number;
+  /** The grid selection was set or cleared. */
+  gridSelectionChanged?: boolean;
 }
 
 export interface UndoRedoResult {
@@ -115,7 +134,10 @@ export interface UndoRedoResult {
 }
 
 export interface Modifiers {
-  alt: boolean;
+  /** Kept so older callers compile; Raise/Lower/Block ignore it. Lock treats it as Shift. */
+  alt?: boolean;
+  ctrl?: boolean;
+  shift?: boolean;
 }
 
 export type EditArea = RoadEditTarget & UndoTarget;
@@ -168,6 +190,27 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.warnings.push(...r.warnings);
   if (r.status !== undefined) into.status = r.status;
   if (r.previewPoints !== undefined) into.previewPoints = r.previewPoints;
+  if (r.heldVertices !== undefined) into.heldVertices = (into.heldVertices ?? 0) + r.heldVertices;
+  if (r.gridSelectionChanged) into.gridSelectionChanged = true;
+}
+
+const NO_SELECTION_MSG = "Drag a selection first (Grid select, V).";
+const fmtM = (v: number): string => v.toFixed(2);
+
+/** Largest rise and fall in a committed diff (metres). */
+function heightChangeOf(
+  diff: StrokeDiff | undefined,
+): { maxUpM: number; maxDownM: number } | undefined {
+  if (!diff?.heights) return undefined;
+  let up = 0;
+  let down = 0;
+  const { before, after } = diff.heights;
+  for (let i = 0; i < before.length; i++) {
+    const d = after[i] - before[i];
+    if (d > up) up = d;
+    if (-d > down) down = -d;
+  }
+  return { maxUpM: up, maxDownM: down };
 }
 
 /** Cell window covering a paint pixel rectangle. */
@@ -298,7 +341,11 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
 interface Stroke {
   tool: Tool;
   recorder: StrokeRecorder;
-  alt: boolean;
+  mode: "paint" | "select" | "pushpull";
+  /** Push/pull: full-grid snapshot taken at stroke start. */
+  base?: Float32Array;
+  /** Push/pull: window already rewritten by earlier pushPullTo calls. */
+  pushDirty?: CellWindow;
   last: { x: number; z: number };
   start: { x: number; z: number };
   flattenTarget: number;
@@ -330,6 +377,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
     stampHeightM: 4,
     blockCells: 2,
     blockStepM: 1,
+    blockDirection: 1,
+    gridStepM: 1,
+    pushPullMPerPx: 0.05,
     smoothStrength: 0.5,
     smoothPasses: 3,
   };
@@ -373,7 +423,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       r = raiseBlock(
         area.grid,
         { x, z, blockCells: options.blockCells, stepM: options.blockStepM },
-        s.alt ? -1 : 1,
+        options.blockDirection,
         s.recorder,
         blockOpts,
       );
@@ -381,13 +431,37 @@ export function createToolDispatcher(getArea: () => EditArea) {
       for (let c = win.minCol; c <= win.maxCol; c++) {
         for (let rr = win.minRow; rr <= win.maxRow; rr++) stepped[rr + c * stride] = 1;
       }
-    } else if (s.tool === "raise") r = raiseLower(area.grid, p, s.alt ? -1 : 1, 1, s.recorder, hop);
+    } else if (s.tool === "raise") r = raiseLower(area.grid, p, 1, 1, s.recorder, hop);
+    else if (s.tool === "lower") r = raiseLower(area.grid, p, -1, 1, s.recorder, hop);
     else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder, hop);
     else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
     res.dirtyHeights = r.window;
     res.slopeClamped = r.slopeClamped;
     if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
     return res;
+  }
+
+  /** Road-held vertices inside the brush footprint (0 when the area has no roads). */
+  function countHeld(s: Stroke, x: number, z: number): number {
+    const area = getArea();
+    const mask = heightOpOptions(area).roadMask;
+    if (!mask) return 0;
+    const win =
+      s.tool === "block"
+        ? blockWindowAt(area.grid, x, z, options.blockCells)
+        : windowBetween(
+            area,
+            { x: x - options.radiusM, z: z - options.radiusM },
+            { x: x + options.radiusM, z: z + options.radiusM },
+          );
+    if (!win) return 0;
+    const m = mask(win);
+    const stride = area.grid.rows + 1;
+    let n = 0;
+    for (let c = win.minCol; c <= win.maxCol; c++) {
+      for (let r = win.minRow; r <= win.maxRow; r++) if (m[r + c * stride]) n++;
+    }
+    return n;
   }
 
   function doErase(s: Stroke, x: number, z: number): ToolResult {
@@ -471,6 +545,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
   /** Quick 261110-rdx: selected road (Lock tool); null once the edge is gone. */
   let selectedEdgeId: number | null = null;
+  /** 07.1-06: persistent grid-select rectangle (vertex window). */
+  let gridSelection: CellWindow | null = null;
 
   function currentSelection(): number | null {
     if (selectedEdgeId === null) return null;
@@ -513,7 +589,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     const id = hit.edgeId;
     if (selectedEdgeId !== id) res.selectionChanged = true;
     selectedEdgeId = id;
-    if (mods.alt) {
+    if (mods.shift || mods.alt) {
       res.selectionChanged = true;
       res.status = `Selected road ${id}.`;
       return res;
@@ -568,6 +644,19 @@ export function createToolDispatcher(getArea: () => EditArea) {
           BLOCK_STEP_MAX_M,
         );
       }
+      if (patch.gridStepM !== undefined) {
+        options.gridStepM = clamp(
+          Math.round(options.gridStepM * 4) / 4,
+          BLOCK_STEP_MIN_M,
+          BLOCK_STEP_MAX_M,
+        );
+      }
+      if (patch.pushPullMPerPx !== undefined) {
+        options.pushPullMPerPx = clamp(options.pushPullMPerPx, 0.005, 1);
+      }
+      if (patch.blockDirection !== undefined) {
+        options.blockDirection = patch.blockDirection < 0 ? -1 : 1;
+      }
       if (patch.smoothStrength !== undefined) {
         options.smoothStrength = clamp(options.smoothStrength, 0, 1);
       }
@@ -607,7 +696,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const id = currentSelection();
       if (id === null) {
         const res = emptyResult();
-        res.status = "Select a road first (Lock tool, Alt+click).";
+        res.status = "Select a road first (Lock tool, Shift+click).";
         return res;
       }
       return regradeResult(area, regradeRoads(area, [id]));
@@ -641,15 +730,107 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return true;
     },
 
+    getGridSelection: (): CellWindow | null => gridSelection,
+
+    clearGridSelection(): ToolResult {
+      const res = emptyResult();
+      if (stroke?.mode === "pushpull") this.pointerUp(Number.NaN, Number.NaN);
+      res.gridSelectionChanged = gridSelection !== null;
+      gridSelection = null;
+      return res;
+    },
+
+    /** Live selection window for the active grid-select drag (null otherwise). */
+    gridSelectDragWindow(x: number, z: number): CellWindow | null {
+      const s = stroke;
+      if (s?.tool !== "gridSelect" || s.mode !== "select") return null;
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return windowBetween(getArea(), s.start, { x, z });
+    },
+
+    /** Raises (1) or lowers (-1) the selection by gridStepM: ONE undo entry. */
+    raiseSelection(sign: 1 | -1): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const res = emptyResult();
+      if (!gridSelection) {
+        res.status = NO_SELECTION_MSG;
+        return res;
+      }
+      const area = getArea();
+      const rec = createStrokeRecorder(area.grid, area.paint);
+      const r = raiseWindow(
+        area.grid,
+        gridSelection,
+        sign * options.gridStepM,
+        rec,
+        heightOpOptions(area),
+      );
+      res.dirtyHeights = r.window;
+      res.slopeClamped = r.slopeClamped;
+      const diff = rec.commit();
+      if (diff) stack.push(diff);
+      res.heightChange = heightChangeOf(diff);
+      if (!diff) {
+        res.status =
+          "Nothing changed: the selection is held by roads. Unlock the road with the Lock tool (L) to sculpt it.";
+      } else if (r.slopeClamped) {
+        res.status = SLOPE_CLAMP_HINT;
+      } else {
+        res.status = `${sign > 0 ? "Raised" : "Lowered"} selection ${fmtM(options.gridStepM)} m`;
+      }
+      return res;
+    },
+
+    /** Absolute push/pull of the selection from where the Ctrl-drag started. */
+    pushPullTo(deltaM: number): ToolResult {
+      const s = stroke;
+      const res = emptyResult();
+      if (s?.mode !== "pushpull" || !s.base || !gridSelection || !Number.isFinite(deltaM)) {
+        return res;
+      }
+      const area = getArea();
+      const g = area.grid;
+      const prev = s.pushDirty;
+      if (prev) {
+        // Restore the previous result first (indices are already recorded, so the
+        // recorder's earliest-before stays correct), then re-apply from the base.
+        const stride = g.rows + 1;
+        for (let c = prev.minCol; c <= prev.maxCol; c++) {
+          for (let r = prev.minRow; r <= prev.maxRow; r++) {
+            g.heights[r + c * stride] = s.base[r + c * stride];
+          }
+        }
+      }
+      const r = offsetWindowFrom(
+        g,
+        gridSelection,
+        s.base,
+        deltaM,
+        s.recorder,
+        heightOpOptions(area),
+      );
+      s.pushDirty = unionWindow(prev, r.window);
+      res.dirtyHeights = unionWindow(prev, r.window);
+      res.slopeClamped = r.slopeClamped;
+      if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+      return res;
+    },
+
     pointerDown(x: number, z: number, mods: Modifiers): ToolResult {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       if (stroke) this.pointerUp(x, z);
       if (tool === "lock") return lockClick(x, z, mods);
       const area = getArea();
+      if (tool === "gridSelect" && mods.ctrl && !gridSelection) {
+        const res = emptyResult();
+        res.status = NO_SELECTION_MSG;
+        return res;
+      }
       const s: Stroke = {
         tool,
         recorder: createStrokeRecorder(area.grid, area.paint),
-        alt: mods.alt,
+        mode: tool === "gridSelect" ? (mods.ctrl ? "pushpull" : "select") : "paint",
+        base: tool === "gridSelect" && mods.ctrl ? Float32Array.from(area.grid.heights) : undefined,
         last: { x, z },
         start: { x, z },
         flattenTarget: sampleTerrainHeight(area.grid, x, z),
@@ -662,12 +843,22 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const res = emptyResult();
       if (
         tool === "raise" ||
+        tool === "lower" ||
         tool === "smooth" ||
         tool === "flatten" ||
         tool === "paint" ||
         tool === "block"
       ) {
         mergeInto(res, dab(s, x, z));
+        if (tool !== "paint") {
+          const held = countHeld(s, x, z);
+          if (held > 0) {
+            res.heldVertices = held;
+            if (!res.dirtyHeights) {
+              res.status = `Nothing changed: ${held} vertices here belong to a road. Unlock the road with the Lock tool (L) to sculpt it, or move off the road.`;
+            }
+          }
+        }
       } else if (tool === "erase") {
         mergeInto(res, doErase(s, x, z));
       } else if (tool === "road") {
@@ -689,7 +880,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
           res,
           dabAlong(s, x, z, (px, pz) => doErase(s, px, pz)),
         );
-      } else if (s.tool !== "stamp" && s.tool !== "smoothBox") {
+      } else if (s.tool !== "stamp" && s.tool !== "smoothBox" && s.tool !== "gridSelect") {
         mergeInto(
           res,
           dabAlong(s, x, z, (px, pz) => dab(s, px, pz)),
@@ -782,7 +973,22 @@ export function createToolDispatcher(getArea: () => EditArea) {
         finish(mergeDiffs(s.diffs));
         return res;
       }
-      finish(s.recorder.commit());
+      if (s.tool === "gridSelect") {
+        if (s.mode === "select") {
+          const end = finite ? { x, z } : s.start;
+          gridSelection = windowBetween(area, s.start, end);
+          res.gridSelectionChanged = true;
+          finish(undefined);
+          return res;
+        }
+        const diff = s.recorder.commit();
+        res.heightChange = heightChangeOf(diff);
+        finish(diff);
+        return res;
+      }
+      const diff = s.recorder.commit();
+      if (s.tool !== "paint") res.heightChange = heightChangeOf(diff);
+      finish(diff);
       return res;
     },
 
@@ -822,6 +1028,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       stack.clear();
       stroke = null;
       selectedEdgeId = null;
+      gridSelection = null;
     },
   };
 }

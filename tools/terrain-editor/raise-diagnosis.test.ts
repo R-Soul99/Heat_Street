@@ -56,7 +56,7 @@ describe("raise/lower diagnosis", () => {
     expect(() => d.pointerDown(0, 0, { alt: false })).toThrow("no area loaded");
   });
 
-  it("C3 raising on a road changes nothing and says nothing", () => {
+  it("C3 raising on a road changes nothing and now says why", () => {
     const area = makeArea(240);
     const d = createToolDispatcher(() => area);
     d.setTool("road");
@@ -70,17 +70,17 @@ describe("raise/lower diagnosis", () => {
     const r = d.pointerDown(0, 0, { alt: false });
     d.pointerUp(0, 0);
     expect(r.dirtyHeights).toBeUndefined();
-    expect(r.status).toBeUndefined();
+    expect(r.status).toMatch(/^Nothing changed: .*road.*Lock tool \(L\)/);
     expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
   });
 
-  it("C4 Alt held (or stuck) turns Raise into Lower", () => {
+  it("C4 Alt is ignored by Raise (it used to invert it)", () => {
     const area = makeArea(240);
     const d = createToolDispatcher(() => area);
     d.setTool("raise");
     d.pointerDown(0, 0, { alt: true });
     d.pointerUp(0, 0);
-    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeLessThan(0);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
   });
 
   it("C5 slope limiter clamps a raise next to a steep neighbour", () => {
