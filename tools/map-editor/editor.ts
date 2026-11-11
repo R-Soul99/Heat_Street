@@ -30,20 +30,11 @@ import type { StepperSpec } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
 import {
   appendImportedRoads,
-  COARSE_M_PER_PX,
   DEFAULT_IMPORT_ROAD,
-  footprintWarnings,
   type ImportRoadOptions,
-  type ImportScale,
-  importScale,
-  pixelToWorld,
+  planImportWorld,
 } from "./image-import.ts";
-import {
-  DEFAULT_TRACE_OPTIONS,
-  imageToRoadGraph,
-  type RoadGraphPx,
-  type TraceOptions,
-} from "./image-trace.ts";
+import { DEFAULT_TRACE_OPTIONS, imageToRoadGraph, type TraceOptions } from "./image-trace.ts";
 import {
   addBuildingRect,
   addRoad,
@@ -67,6 +58,8 @@ import {
   DEFAULT_TILE_M,
   fitView,
   gridStep,
+  MAX_WORLD_KM,
+  MIN_WORLD_KM,
   scaleBar,
   TILE_SIZES_M,
   tileLines,
@@ -265,7 +258,6 @@ async function loadArea(id: string): Promise<boolean> {
     dirty = false;
     selected = undefined;
     geometryVersion++;
-    clearImport();
     fitWorld();
     refresh(`Loaded ${id}.`);
     return true;
@@ -429,7 +421,6 @@ function draw(): void {
   ctx.lineWidth = 1.5;
   ctx.strokeRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
   if (showTiles) drawTiles(vis);
-  drawImportOverlay();
   const visible = (lw: LocalWay, padM: number) =>
     lw.maxX + padM >= vis.minX &&
     lw.minX - padM <= vis.maxX &&
@@ -479,7 +470,6 @@ function draw(): void {
       });
     }
   }
-  drawImportPreview();
   if (tool === "road" && roadPoints.length > 0) {
     ctx.beginPath();
     roadPoints.forEach((pt, i) => {
@@ -1032,7 +1022,7 @@ function buildShell(): Shell {
             id: "new",
             label: "New...",
             tip: "Create a new blank world",
-            run: () => openDialogEl("legacy-new"),
+            run: () => openNewMapDialog("blank"),
           },
         ],
       },
@@ -1044,7 +1034,7 @@ function buildShell(): Shell {
             id: "import",
             label: "Import image...",
             tip: "Trace roads from a black-and-white road image",
-            run: () => openDialogEl("legacy-import"),
+            run: () => openNewMapDialog("image"),
           },
         ],
       },
@@ -1163,296 +1153,377 @@ function buildShell(): Shell {
   });
 }
 
-$("nw-create").onclick = async () => {
-  if (!(await confirmDiscard())) return;
-  const id = $<HTMLInputElement>("nw-id").value.trim();
-  const widthKm = Number($<HTMLInputElement>("nw-w").value);
-  const heightKm = Number($<HTMLInputElement>("nw-h").value);
-  try {
-    const out = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
-      method: "POST",
-      body: JSON.stringify({ id, widthKm, heightKm }),
-    });
-    ($("legacy-new") as HTMLDialogElement).close();
-    if (await loadArea(id)) {
-      setStatus(
-        out.registered ? `Created and registered "${id}".` : (out.warning ?? `Created "${id}".`),
-        out.registered ? "ok" : "info",
-      );
-    }
-  } catch (err) {
-    setStatus(`Could not create "${id}": ${errText(err)}`, "error");
-  }
-};
-
-// --- image import (pure maths lives in image-trace.ts / image-import.ts) ---
+// --- New map popup: blank map or fresh map traced from an image (D-06) ---
+// Pure maths lives in image-trace.ts / image-import.ts. Importing never touches
+// the currently open map: it always creates a new one and traces into it at 0,0.
 const MAX_IMPORT_PIXELS = 25_000_000;
+const NAME_RE = /^[a-z0-9-]{1,64}$/;
+const WORLD_KM_SPEC: StepperSpec = { step: 0.1, coarse: 10, min: 0.5, max: 10, decimals: 3 };
+// Wider than the legal range so a typed 12 reaches validation instead of being clamped silently.
+const IMPORT_KM_SPEC: StepperSpec = { step: 0.1, coarse: 10, min: 0.01, max: 100, decimals: 3 };
+const THUMB_MAX_PX = 240;
+
 interface ImportImage {
   w: number;
   h: number;
   lum: Uint8Array;
 }
-let impImage: ImportImage | undefined;
-let impMask: HTMLCanvasElement | undefined;
-let impGraph: RoadGraphPx | undefined;
-let impMode: "km" | "mpp" = "km";
 
-const impInput = (id: string) => $<HTMLInputElement>(id);
-
-function impOffset(): { x: number; y: number } {
-  return { x: Number(impInput("im-ox").value) || 0, y: Number(impInput("im-oy").value) || 0 };
-}
-
-function impScaleNow(): ImportScale | undefined {
-  if (impImage === undefined) return undefined;
-  try {
-    return impMode === "km"
-      ? importScale({
-          imageW: impImage.w,
-          imageH: impImage.h,
-          widthKm: Number(impInput("im-km").value),
-        })
-      : importScale({
-          imageW: impImage.w,
-          imageH: impImage.h,
-          mPerPx: Number(impInput("im-mpp").value),
-        });
-  } catch {
-    return undefined;
+async function readImageFile(file: File): Promise<ImportImage> {
+  const bmp = await createImageBitmap(file);
+  if (bmp.width * bmp.height > MAX_IMPORT_PIXELS) {
+    const mp = fmt3((bmp.width * bmp.height) / 1_000_000);
+    throw new Error(`Image is ${mp} MP; the limit is 25 MP.`);
   }
-}
-
-function impOptions(): Partial<TraceOptions> {
-  return {
-    threshold: Number(impInput("im-thr").value),
-    minSpurPx: Number(impInput("im-spur").value),
-    simplifyPx: Number(impInput("im-simp").value),
-    smoothIterations: Number(impInput("im-smooth").value),
-  };
-}
-
-/** Recomputes the linked km / m-per-px fields, the readout and warnings. */
-function updateImportUi(): void {
-  const readout = $("im-derived");
-  const warn = $("im-warn");
-  const scaleNow = impScaleNow();
-  if (impImage === undefined || scaleNow === undefined) {
-    readout.textContent = impImage === undefined ? "no image loaded" : "enter a width or m/px";
-    warn.replaceChildren();
-    requestDraw();
-    return;
-  }
-  if (impMode === "km") impInput("im-mpp").value = fmt3(scaleNow.mPerPx);
-  else impInput("im-km").value = fmt3(scaleNow.widthM / 1000);
-  readout.textContent = `${impImage.w} x ${impImage.h} px; height ${fmt3(scaleNow.heightM / 1000)} km; ${fmt3(scaleNow.mPerPx)} m/px`;
-  const warnings = [...scaleNow.warnings, ...footprintWarnings(scaleNow, impOffset(), world)];
-  warn.replaceChildren(...warnings.map((w) => el("div", undefined, w)));
-  requestDraw();
-}
-
-function rebuildImportMask(): void {
-  if (impImage === undefined) {
-    impMask = undefined;
-    return;
-  }
-  const { w, h, lum } = impImage;
-  const level = Number(impInput("im-thr").value);
   const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const g = c.getContext("2d") as CanvasRenderingContext2D;
-  const data = g.createImageData(w, h);
-  for (let i = 0; i < w * h; i++) {
-    if ((lum[i] as number) < level) {
-      data.data[i * 4] = 255;
-      data.data[i * 4 + 1] = 170;
-      data.data[i * 4 + 2] = 40;
-      data.data[i * 4 + 3] = 150;
+  c.width = bmp.width;
+  c.height = bmp.height;
+  const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
+  g.fillStyle = "#fff"; // transparent = white = no road
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0);
+  const px = g.getImageData(0, 0, c.width, c.height).data;
+  const lum = new Uint8Array(c.width * c.height);
+  for (let i = 0; i < lum.length; i++) {
+    lum[i] = Math.round(
+      0.299 * (px[i * 4] as number) +
+        0.587 * (px[i * 4 + 1] as number) +
+        0.114 * (px[i * 4 + 2] as number),
+    );
+  }
+  return { w: c.width, h: c.height, lum };
+}
+
+/** Draws the thresholded mask (dark = road) into a small canvas. */
+function drawMaskThumb(target: HTMLCanvasElement, img: ImportImage, level: number): void {
+  const k = Math.min(1, THUMB_MAX_PX / img.w);
+  const tw = Math.max(1, Math.round(img.w * k));
+  const th = Math.max(1, Math.round(img.h * k));
+  target.width = tw;
+  target.height = th;
+  const g = target.getContext("2d") as CanvasRenderingContext2D;
+  const data = g.createImageData(tw, th);
+  for (let y = 0; y < th; y++) {
+    const sy = Math.min(img.h - 1, Math.floor(y / k));
+    for (let x = 0; x < tw; x++) {
+      const sx = Math.min(img.w - 1, Math.floor(x / k));
+      const road = (img.lum[sy * img.w + sx] as number) < level;
+      const o = (y * tw + x) * 4;
+      data.data[o] = road ? 255 : 24;
+      data.data[o + 1] = road ? 170 : 26;
+      data.data[o + 2] = road ? 40 : 30;
+      data.data[o + 3] = 255;
     }
   }
   g.putImageData(data, 0, 0);
-  impMask = c;
 }
 
-function clearImport(): void {
-  impImage = undefined;
-  impMask = undefined;
-  impGraph = undefined;
-  impInput("im-file").value = "";
-  updateImportUi();
+function firstFreeMapName(areas: string[]): string {
+  for (let n = 1; ; n++) if (!areas.includes(`map-${n}`)) return `map-${n}`;
 }
 
-async function onImportFile(file: File): Promise<void> {
+async function openNewMapDialog(mode: "blank" | "image"): Promise<void> {
+  let areas: string[];
   try {
-    const bmp = await createImageBitmap(file);
-    if (bmp.width * bmp.height > MAX_IMPORT_PIXELS) {
-      setStatus(`Image is ${bmp.width}x${bmp.height}; refusing more than 25 megapixels.`, "error");
+    areas = await api<string[]>("/__editor/areas");
+  } catch (err) {
+    setStatus(`Could not list areas: ${errText(err)}`, "error");
+    return;
+  }
+  let image: ImportImage | undefined;
+  let imageError = "";
+
+  const nameInput = el(
+    "input",
+    undefined,
+    undefined,
+    "Name of the new map: lowercase letters, digits and dashes",
+  );
+  nameInput.type = "text";
+  nameInput.value = firstFreeMapName(areas);
+  const nameHint = el("div", "flyout-hint", "a-z, 0-9 and -");
+
+  // Blank map group
+  const blankW = createStepper({
+    value: 2,
+    spec: WORLD_KM_SPEC,
+    unit: "km",
+    tip: "Width of the new blank map in kilometres (0.5 to 10)",
+    onChange: () => {},
+  });
+  const blankH = createStepper({
+    value: 2,
+    spec: WORLD_KM_SPEC,
+    unit: "km",
+    tip: "Height of the new blank map in kilometres (0.5 to 10)",
+    onChange: () => {},
+  });
+  const blankSection = createSection(
+    "Blank map",
+    "Create an empty map of a chosen size",
+    mode === "blank",
+    [createField("Width", blankW.el), createField("Height", blankH.el)],
+  );
+
+  // Image group
+  const fileInput = el("input", undefined, undefined, "Choose a black-and-white road image");
+  fileInput.type = "file";
+  fileInput.accept = "image/png,image/jpeg,image/webp";
+  fileInput.style.display = "none";
+  const readout = el("div", "ro", "No image chosen yet.");
+  const warnBox = el("div", "warn");
+  const thumb = el("canvas", undefined, undefined, "Roads that will be traced (orange)");
+  thumb.style.display = "none";
+  thumb.style.maxWidth = `${THUMB_MAX_PX}px`;
+  const update = (): void => {
+    if (image === undefined) {
+      readout.textContent = imageError || "No image chosen yet.";
+      readout.className = imageError ? "warn" : "ro";
+      warnBox.replaceChildren();
+      thumb.style.display = "none";
       return;
     }
-    const c = document.createElement("canvas");
-    c.width = bmp.width;
-    c.height = bmp.height;
-    const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
-    g.fillStyle = "#fff"; // transparent = white = no road
-    g.fillRect(0, 0, c.width, c.height);
-    g.drawImage(bmp, 0, 0);
-    const px = g.getImageData(0, 0, c.width, c.height).data;
-    const lum = new Uint8Array(c.width * c.height);
-    for (let i = 0; i < lum.length; i++) {
-      lum[i] = Math.round(
-        0.299 * (px[i * 4] as number) +
-          0.587 * (px[i * 4 + 1] as number) +
-          0.114 * (px[i * 4 + 2] as number),
+    readout.className = "ro";
+    const plan = planImportWorld(image.w, image.h, imgW.get());
+    readout.textContent =
+      plan.errors.length > 0
+        ? `Image ${image.w} x ${image.h} px`
+        : `Image ${image.w} x ${image.h} px -> ${fmt3(plan.widthKm)} x ${fmt3(plan.heightKm)} km, ${fmt3(plan.mPerPx)} m/px`;
+    warnBox.replaceChildren(
+      ...[...plan.errors, ...plan.warnings].map((w) => el("div", undefined, w)),
+    );
+    thumb.style.display = "block";
+    drawMaskThumb(thumb, image, thr.get());
+  };
+  const imgW = createStepper({
+    value: 2,
+    spec: IMPORT_KM_SPEC,
+    unit: "km",
+    tip: "Real-world width of the image in kilometres; height follows the image shape",
+    onChange: () => update(),
+  });
+  const thr = createStepper({
+    value: 128,
+    spec: { step: 1, coarse: 10, min: 0, max: 255, decimals: 0 },
+    tip: "Threshold: pixels darker than this count as road",
+    onChange: () => update(),
+  });
+  const spur = createStepper({
+    value: DEFAULT_TRACE_OPTIONS.minSpurPx,
+    spec: { step: 1, coarse: 5, min: 0, max: 1000, decimals: 0 },
+    unit: "px",
+    tip: "Prune dead-end spurs shorter than this many pixels",
+    onChange: () => {},
+  });
+  const simp = createStepper({
+    value: DEFAULT_TRACE_OPTIONS.simplifyPx,
+    spec: { step: 0.1, coarse: 5, min: 0, max: 50, decimals: 1 },
+    unit: "px",
+    tip: "Simplify tolerance: higher gives fewer road points",
+    onChange: () => {},
+  });
+  const smooth = createStepper({
+    value: DEFAULT_TRACE_OPTIONS.smoothIterations,
+    spec: { step: 1, coarse: 1, min: 0, max: 5, decimals: 0 },
+    tip: "Smoothing passes applied to traced roads",
+    onChange: () => {},
+  });
+  const roadWidth = createStepper({
+    value: DEFAULT_IMPORT_ROAD.widthM,
+    spec: ROAD_WIDTH_SPEC,
+    unit: "m",
+    tip: "Width given to every imported road in metres",
+    onChange: () => {},
+  });
+  const surface = createSelect({
+    options: SURFACES.map((s) => ({ value: s, label: s })),
+    value: DEFAULT_IMPORT_ROAD.surface,
+    tip: "Surface given to every imported road",
+    onChange: () => {},
+  });
+  const highway = createSelect({
+    options: HIGHWAY_CLASSES.map((s) => ({ value: s, label: s })),
+    value: DEFAULT_IMPORT_ROAD.highway,
+    tip: "Road class given to every imported road",
+    onChange: () => {},
+  });
+
+  const chooseBtn = createButton({
+    label: "Import image",
+    tip: "Choose a black-and-white road image (PNG, JPEG or WebP). Photoshop .psd files must be exported to PNG first.",
+    onClick: () => fileInput.click(),
+  });
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files?.[0];
+    if (f === undefined) return;
+    try {
+      image = await readImageFile(f);
+      imageError = "";
+      // Default width: the image at about 1 m/px, kept inside the legal range.
+      imgW.set(Math.min(10, Math.max(0.5, image.w / 1000)));
+    } catch (err) {
+      image = undefined;
+      imageError = `Could not read image: ${errText(err)}`;
+    }
+    update();
+  });
+  const advanced = createSection("Advanced", "Road class and tracing tuning", false, [
+    createField("Road class", highway.el),
+    createField("Threshold", thr.el),
+    createField("Spur prune", spur.el),
+    createField("Simplify", simp.el),
+    createField("Smoothing", smooth.el),
+  ]);
+  const imageSection = createSection(
+    "From image",
+    "Trace roads from a picture into a brand new map",
+    mode === "image",
+    [
+      chooseBtn,
+      fileInput,
+      createField("Width", imgW.el),
+      readout,
+      warnBox,
+      thumb,
+      createField("Road width", roadWidth.el),
+      createField("Surface", surface.el),
+      advanced,
+    ],
+  );
+
+  const body = el("div");
+  body.append(createField("Name", nameInput), nameHint, blankSection, imageSection);
+
+  /** Name check shared by both actions; returns an error string or undefined. */
+  const checkName = (): string | undefined => {
+    const id = nameInput.value.trim();
+    if (!NAME_RE.test(id)) return "Name must be 1 to 64 characters: a-z, 0-9 and -.";
+    if (areas.includes(id)) return `A map called "${id}" already exists. Pick another name.`;
+    return undefined;
+  };
+  const discardOk = async (): Promise<boolean> =>
+    !dirty ||
+    (await confirmDialog(
+      "Discard changes?",
+      `${area} has unsaved changes. Creating a new map closes it.`,
+      "Discard",
+    ));
+
+  const createBlank = async (): Promise<string | undefined> => {
+    const bad = checkName();
+    if (bad !== undefined) return bad;
+    const widthKm = blankW.get();
+    const heightKm = blankH.get();
+    if (!(widthKm >= MIN_WORLD_KM && widthKm <= MAX_WORLD_KM))
+      return `Width must be between ${MIN_WORLD_KM} and ${MAX_WORLD_KM} km.`;
+    if (!(heightKm >= MIN_WORLD_KM && heightKm <= MAX_WORLD_KM))
+      return `Height must be between ${MIN_WORLD_KM} and ${MAX_WORLD_KM} km.`;
+    if (!(await discardOk())) return "Cancelled - your unsaved edits are still open.";
+    const id = nameInput.value.trim();
+    const out = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
+      method: "POST",
+      body: JSON.stringify({ id, widthKm, heightKm }),
+    });
+    if (await loadArea(id)) {
+      if (out.registered) {
+        setStatus(
+          `Created ${id} (${fmt3(widthKm)} x ${fmt3(heightKm)} km) and registered it for compiling.`,
+          "ok",
+        );
+      } else {
+        setStatus(out.warning ?? `Created ${id} but it is not registered for compiling.`, "error");
+      }
+    }
+    return undefined;
+  };
+
+  const createFromImage = async (): Promise<string | undefined> => {
+    const bad = checkName();
+    if (bad !== undefined) return bad;
+    if (image === undefined) return imageError || "Choose an image first.";
+    const img = image;
+    if (img.w * img.h > MAX_IMPORT_PIXELS)
+      return `Image is ${fmt3((img.w * img.h) / 1_000_000)} MP; the limit is 25 MP.`;
+    const plan = planImportWorld(img.w, img.h, imgW.get());
+    if (plan.errors.length > 0) return plan.errors.join(" ");
+    if (!(await discardOk())) return "Cancelled - your unsaved edits are still open.";
+    const id = nameInput.value.trim();
+    const opts: Partial<TraceOptions> = {
+      threshold: thr.get(),
+      minSpurPx: spur.get(),
+      simplifyPx: simp.get(),
+      smoothIterations: smooth.get(),
+    };
+    const roadOpts: ImportRoadOptions = {
+      widthM: roadWidth.get(),
+      highway: highway.get(),
+      surface: surface.get() as Surface,
+    };
+    // Step 1: the new world. Failure here stays inline in the popup.
+    const made = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
+      method: "POST",
+      body: JSON.stringify({ id, widthKm: plan.widthKm, heightKm: plan.heightKm }),
+    });
+    try {
+      // Step 2: open the fresh, empty map.
+      if (!(await loadArea(id))) throw new Error(`could not open the new map ${id}`);
+      setStatus("Tracing roads...");
+      // Step 3: trace (yield first so the status paints), then add at offset 0,0.
+      await new Promise<void>((r) => setTimeout(r, 0));
+      const g = imageToRoadGraph(img.lum, img.w, img.h, opts);
+      snapshot(); // Undo returns to the empty map
+      const ways = appendImportedRoads(
+        roads,
+        proj,
+        g,
+        { imageH: img.h, mPerPx: plan.mPerPx, offset: { x: 0, y: 0 } },
+        roadOpts,
+      );
+      const junctions = g.nodes.filter((n) => n.degree >= 3).length;
+      if (!(await save())) throw new Error("saving failed");
+      const notes = [...plan.warnings, ...(made.registered ? [] : [made.warning ?? ""])].filter(
+        (s) => s !== "",
+      );
+      setStatus(
+        `Imported ${ways.length} roads (${junctions} junctions) into new map ${id}, ${fmt3(plan.widthKm)} x ${fmt3(plan.heightKm)} km.${
+          notes.length > 0 ? ` ${notes.join(" ")}` : ""
+        }`,
+        made.registered ? "ok" : "error",
+      );
+    } catch (err) {
+      setStatus(
+        `Map ${id} was created (empty) but importing failed: ${errText(err)}. Open it from File > Open area and try Import again.`,
+        "error",
       );
     }
-    impImage = { w: c.width, h: c.height, lum };
-    impGraph = undefined;
-    const worldKm = world.widthM / 1000;
-    const initialKm = (worldKm * 1000) / c.width <= COARSE_M_PER_PX ? worldKm : c.width / 1000;
-    impInput("im-km").value = fmt3(initialKm);
-    impMode = "km";
-    rebuildImportMask();
-    updateImportUi();
-    setStatus(`image loaded: ${c.width} x ${c.height} px`);
-  } catch (err) {
-    setStatus(`Could not read image: ${errText(err)}`, "error");
-  }
-}
-
-function traceImport(): RoadGraphPx | undefined {
-  if (impImage === undefined) return undefined;
-  impGraph = imageToRoadGraph(impImage.lum, impImage.w, impImage.h, impOptions());
-  return impGraph;
-}
-
-function importCounts(g: RoadGraphPx): string {
-  const junctions = g.nodes.filter((n) => n.degree >= 3).length;
-  const deadEnds = g.nodes.filter((n) => n.degree === 1).length;
-  return `${g.paths.length} roads, ${junctions} junctions, ${deadEnds} dead ends`;
-}
-
-function drawImportOverlay(): void {
-  const s = impScaleNow();
-  if (impMask === undefined || s === undefined) return;
-  const o = impOffset();
-  const tl = toScreen({ x: o.x, y: o.y + s.heightM });
-  const br = toScreen({ x: o.x + s.widthM, y: o.y });
-  ctx.drawImage(impMask, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-  ctx.strokeStyle = "rgba(255,170,40,0.6)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-}
-
-function drawImportPreview(): void {
-  const s = impScaleNow();
-  if (impGraph === undefined || impImage === undefined || s === undefined) return;
-  const o = impOffset();
-  const imageH = impImage.h;
-  const toS = (p: { x: number; y: number }) => toScreen(pixelToWorld(p, imageH, s.mPerPx, o));
-  ctx.save();
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = "#4df";
-  ctx.lineWidth = 2;
-  for (const path of impGraph.paths) {
-    ctx.beginPath();
-    path.points.forEach((p, i) => {
-      const sp = toS(p);
-      if (i === 0) ctx.moveTo(sp.x, sp.y);
-      else ctx.lineTo(sp.x, sp.y);
-    });
-    ctx.stroke();
-  }
-  ctx.restore();
-  for (const n of impGraph.nodes) {
-    if (n.degree < 3) continue;
-    const sp = toS(n);
-    ctx.fillStyle = "#4df";
-    ctx.beginPath();
-    ctx.arc(sp.x, sp.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-impInput("im-spur").value = `${DEFAULT_TRACE_OPTIONS.minSpurPx}`;
-impInput("im-simp").value = `${DEFAULT_TRACE_OPTIONS.simplifyPx}`;
-impInput("im-smooth").value = `${DEFAULT_TRACE_OPTIONS.smoothIterations}`;
-function fillOptions(id: string, values: readonly string[], selectedValue: string): void {
-  const sel = $<HTMLSelectElement>(id);
-  sel.replaceChildren(...values.map((v) => el("option", undefined, v)));
-  sel.value = selectedValue;
-}
-fillOptions("im-hw", HIGHWAY_CLASSES, "residential");
-fillOptions("im-surf", SURFACES, "tarmac");
-impInput("im-file").onchange = () => {
-  const f = impInput("im-file").files?.[0];
-  if (f !== undefined) void onImportFile(f);
-};
-impInput("im-thr").oninput = () => {
-  $("im-thr-v").textContent = impInput("im-thr").value;
-  impGraph = undefined;
-  rebuildImportMask();
-  requestDraw();
-};
-impInput("im-km").oninput = () => {
-  impMode = "km";
-  updateImportUi();
-};
-impInput("im-mpp").oninput = () => {
-  impMode = "mpp";
-  updateImportUi();
-};
-for (const id of ["im-ox", "im-oy"]) impInput(id).oninput = updateImportUi;
-for (const id of ["im-spur", "im-simp", "im-smooth"]) {
-  impInput(id).oninput = () => {
-    impGraph = undefined;
-    requestDraw();
+    return undefined;
   };
+
+  update();
+  const done = openDialog({
+    title: mode === "image" ? "New map from image" : "New map",
+    body,
+    actions: [
+      {
+        id: "create",
+        label: "Create",
+        tip: "Create an empty map with the name and size above",
+        primary: mode === "blank",
+        run: createBlank,
+      },
+      {
+        id: "import",
+        label: "Create from image",
+        tip: "Create a new map and trace the chosen image into it",
+        primary: mode === "image",
+        run: createFromImage,
+      },
+      { id: "cancel", label: "Cancel", tip: "Close without creating anything" },
+    ],
+  });
+  if (mode === "image") setTimeout(() => chooseBtn.focus(), 0);
+  await done;
 }
-$("im-preview").onclick = () => {
-  if (impImage === undefined) {
-    setStatus("Load an image first.", "error");
-    return;
-  }
-  setStatus("tracing...");
-  setTimeout(() => {
-    const g = traceImport();
-    if (g !== undefined) setStatus(`preview: ${importCounts(g)} (not imported yet)`);
-    requestDraw();
-  }, 0);
-};
-$("im-go").onclick = () => {
-  const s = impScaleNow();
-  if (impImage === undefined || s === undefined) {
-    setStatus("Load an image and give a valid width first.", "error");
-    return;
-  }
-  setStatus("tracing...");
-  const image = impImage;
-  setTimeout(() => {
-    const g = impGraph ?? traceImport();
-    if (g === undefined) return;
-    snapshot();
-    const opts: ImportRoadOptions = {
-      widthM: Number(impInput("im-width").value) || DEFAULT_IMPORT_ROAD.widthM,
-      highway: $<HTMLSelectElement>("im-hw").value,
-      surface: $<HTMLSelectElement>("im-surf").value as Surface,
-    };
-    const ways = appendImportedRoads(
-      roads,
-      proj,
-      g,
-      { imageH: image.h, mPerPx: s.mPerPx, offset: impOffset() },
-      opts,
-    );
-    const warnings = footprintWarnings(s, impOffset(), world);
-    impGraph = undefined;
-    refresh(
-      `imported ${ways.length} roads (${g.nodes.filter((n) => n.degree >= 3).length} junctions)${
-        warnings.length > 0 ? `; WARNING: ${warnings.join("; ")}` : ""
-      }`,
-    );
-  }, 0);
-};
 
 async function main(): Promise<void> {
   shell = buildShell();
