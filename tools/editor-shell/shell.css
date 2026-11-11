@@ -1,0 +1,365 @@
+/* Editor shell theme + layout. Shared by map and terrain editors. */
+:root {
+  --bg: #14161a;
+  --panel: #1d2026;
+  --panel-2: #262a32;
+  --text: #d8dde6;
+  --accent: #4aa3ff;
+  --error: #ff6b6b;
+  --ok: #66cc99;
+  --warn: #ffb347;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px system-ui,
+    sans-serif;
+}
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+.shell-canvas {
+  position: absolute;
+  inset: 28px 0 24px 0;
+}
+.shell-menubar,
+.shell-rail,
+.shell-flyout,
+.shell-history,
+.shell-viewpad,
+.shell-infobar {
+  position: absolute;
+  background: var(--panel);
+  pointer-events: auto;
+  z-index: 10;
+}
+.shell-menubar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #000;
+  z-index: 20;
+}
+.menu-wrap {
+  position: relative;
+}
+.menu-btn,
+.menu-item,
+.btn,
+.step-btn,
+.rail-btn,
+.shell-history button,
+.shell-viewpad button,
+dialog button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid #000;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.menu-btn {
+  height: 28px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.menu-btn:hover,
+.menu-btn[aria-expanded="true"] {
+  background: var(--panel-2);
+}
+.menu-panel {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  min-width: 220px;
+  background: var(--panel);
+  border: 1px solid #000;
+  padding: 4px 0;
+  z-index: 30;
+}
+.menu-item {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 5px 10px;
+}
+.menu-item:hover:not(:disabled) {
+  background: var(--accent);
+  color: #000;
+}
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.menu-check {
+  width: 1.2em;
+}
+.menu-label {
+  flex: 1;
+}
+.menu-shortcut {
+  opacity: 0.6;
+  margin-left: 16px;
+}
+.menu-sep {
+  height: 1px;
+  background: #000;
+  margin: 4px 0;
+}
+.shell-rail {
+  left: 8px;
+  top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 4px;
+  user-select: none;
+}
+.rail-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.rail-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: #000;
+}
+.rail-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.rail-key {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.shell-flyout {
+  left: 64px;
+  top: 40px;
+  width: 260px;
+  max-height: calc(100% - 28px - 24px - 24px);
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.shell-flyout:empty {
+  display: none;
+}
+.shell-history {
+  top: 36px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 4px;
+}
+.shell-history button {
+  padding: 4px 10px;
+}
+.shell-viewpad {
+  right: 8px;
+  bottom: 32px;
+  padding: 4px;
+  border-radius: 4px;
+  user-select: none;
+}
+.pad-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.pad-row button {
+  flex: 1;
+}
+.pan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  gap: 2px;
+}
+.shell-viewpad button {
+  min-height: 28px;
+  padding: 2px 6px;
+}
+.shell-viewpad button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #000;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.btn.primary,
+dialog button.primary {
+  background: var(--accent);
+  color: #000;
+}
+.btn.danger {
+  background: #6b2b2b;
+}
+.shell-infobar {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 8px;
+  border-top: 1px solid #000;
+  user-select: none;
+}
+.shell-infobar > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.info-label {
+  opacity: 0.6;
+}
+.dirty {
+  color: var(--warn);
+}
+.status {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+.status.ok {
+  color: var(--ok);
+}
+.status.error {
+  color: var(--error);
+  font-weight: 600;
+}
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.step-btn {
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 18px;
+  line-height: 1;
+}
+.step-input {
+  width: 7ch;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #000;
+  border-radius: 3px;
+  font: inherit;
+}
+.unit {
+  align-self: center;
+  opacity: 0.6;
+  padding: 0 2px;
+}
+select {
+  field-sizing: content;
+  width: auto;
+  min-width: 4ch;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #000;
+  border-radius: 3px;
+  font: inherit;
+  padding: 3px 4px;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.field {
+  margin-bottom: 8px;
+}
+.field-label {
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
+details.section {
+  border-top: 1px solid #000;
+  padding: 4px 0;
+}
+details.section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 2px 0;
+}
+dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid #000;
+  border-radius: 6px;
+  padding: 16px;
+  min-width: 320px;
+  max-width: 520px;
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+dialog h3 {
+  margin: 0 0 8px;
+}
+.dialog-error {
+  color: var(--error);
+  font-weight: 600;
+  min-height: 1.2em;
+  margin: 8px 0;
+}
+.dialog-error:empty {
+  min-height: 0;
+  margin: 0;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+dialog button {
+  padding: 6px 14px;
+}
+.shortcut-row {
+  display: flex;
+  gap: 12px;
+  margin: 2px 0;
+}
+.shortcut-row kbd {
+  min-width: 9ch;
+  color: var(--accent);
+}
+#shell-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 280px;
+  padding: 4px 8px;
+  background: #000;
+  color: var(--text);
+  border: 1px solid #444;
+  border-radius: 3px;
+  pointer-events: none;
+}
