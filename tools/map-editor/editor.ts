@@ -1,12 +1,30 @@
 /**
  * Dev-only top-down map editor. Loads/saves the compiler's raw-OSM files via the
  * `/__editor/*` dev middleware (`vite-plugin.ts`), so it edits imported and
- * synthetic areas alike. Slice 1: view, pick, edit tags (highway / surface /
- * width / name / oneway / building height), delete, undo, save, save & compile.
+ * synthetic areas alike. Built on the shared editor shell (tools/editor-shell):
+ * the DOM half lives in createShell options and the flyout builders below, the
+ * canvas drawing and interaction are unchanged.
  *
  * NOTE: re-running an importer or generator overwrites the raw files and loses
  * hand edits made here.
  */
+import { apiJson, apiText } from "../editor-shell/api.ts";
+import {
+  createButton,
+  createCheckbox,
+  hintText,
+  labelled,
+  readout,
+} from "../editor-shell/fields.ts";
+import { fmt3, fmtXY } from "../editor-shell/format.ts";
+import { createSnapshotHistory } from "../editor-shell/history.ts";
+import { type Binding, installShortcuts, shortcutsDialogBody } from "../editor-shell/keys.ts";
+import { createMessageLog, logDialogBody } from "../editor-shell/log.ts";
+import { createSelect } from "../editor-shell/select.ts";
+import { createShell } from "../editor-shell/shell.ts";
+import { createStepper, type StepperHandle } from "../editor-shell/stepper.ts";
+import { reportMissingTips } from "../editor-shell/tooltips.ts";
+import type { ShellHandle, StatusKind } from "../editor-shell/types.ts";
 import {
   appendImportedRoads,
   COARSE_M_PER_PX,
@@ -42,6 +60,7 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
+import { compileOutcome, countsText, worldSizeText } from "./ui-text.ts";
 import {
   DEFAULT_TILE_M,
   fitView,
@@ -66,8 +85,8 @@ const SURFACE_COLOUR: Record<Surface, string> = {
 };
 const DEFAULT_WIDTH_M = 7;
 
-const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>("map");
+const canvas = document.createElement("canvas");
+canvas.style.cursor = "crosshair";
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 
 let area = "";
@@ -80,9 +99,10 @@ let showGrid = true;
 let showTiles = true;
 let dirty = false;
 let selected: { kind: "road" | "building"; way: RawWay } | undefined;
-const undoStack: string[] = [];
+const history = createSnapshotHistory<string>(100);
+const messageLog = createMessageLog();
 
-type Tool = "select" | "road" | "move" | "building";
+type Tool = "select" | "road" | "move" | "building" | "import";
 let tool: Tool = "select";
 let roadPoints: Snap[] = [];
 let hover: { x: number; y: number } | undefined;
@@ -97,7 +117,11 @@ const HINTS: Record<Tool, string> = {
   road: "Click to add points; double-click or Enter to finish, Esc to cancel. Clicking on an existing road or node connects to it.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building.",
+  import:
+    "Load a road-map image, set its real size, preview the trace, then import. Roads are added to the map you are editing.",
 };
+
+let shell: ShellHandle;
 
 // view: world metres -> screen px (scale = px per metre; screen y down, world y up)
 let scale = 0.25;
@@ -158,42 +182,65 @@ function requestDraw(): void {
   });
 }
 
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`${url}: ${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
+/** Status line + message log. Empty text is ignored. */
+function say(text: string, kind: StatusKind = "info", log = true): void {
+  if (text === "") return;
+  shell.info.status(text, kind);
+  if (log) messageLog.add(text, kind);
 }
 
-function setStatus(text: string): void {
-  $("status").innerHTML = `${area}: ${roads.response.elements.length} roads, ${
-    buildings.response.elements.length
-  } buildings ${dirty ? '<span class="dirty">● unsaved</span>' : ""}<br>${text}`;
+function updateInfo(): void {
+  shell.info.set("area", area === "" ? "-" : area);
+  if (world !== undefined) shell.info.set("world", worldSizeText(world.widthM, world.heightM));
+  shell.info.set("tile", `${tileM} m`);
+  if (roads !== undefined) {
+    shell.info.set(
+      "counts",
+      countsText(roads.response.elements.length, buildings.response.elements.length),
+    );
+  }
+  shell.info.setDirty(dirty);
 }
+
+const syncHistory = (): void => shell.setHistoryState(history.canUndo(), history.canRedo());
+const currentJson = (): string => JSON.stringify([roads, buildings]);
 
 function snapshot(): void {
-  undoStack.push(JSON.stringify([roads, buildings]));
-  if (undoStack.length > 100) undoStack.shift();
+  history.record(currentJson());
   dirty = true;
   geometryVersion++;
+  syncHistory();
 }
 
-function undo(): void {
-  const prev = undoStack.pop();
-  if (prev === undefined) return;
-  [roads, buildings] = JSON.parse(prev) as [RawEnvelope, RawEnvelope];
+function restore(json: string, message: string): void {
+  [roads, buildings] = JSON.parse(json) as [RawEnvelope, RawEnvelope];
   selected = undefined;
   dirty = true;
   geometryVersion++;
-  refresh("undone");
+  syncHistory();
+  refresh(message);
+}
+
+function undo(): void {
+  const prev = history.undo(currentJson());
+  if (prev !== undefined) restore(prev, "undone");
+}
+
+function redo(): void {
+  const next = history.redo(currentJson());
+  if (next !== undefined) restore(next, "redone");
 }
 
 async function loadArea(id: string): Promise<void> {
+  const r = await apiJson<RawEnvelope>(`/__editor/raw/${id}/roads`);
+  const b = await apiJson<RawEnvelope>(`/__editor/raw/${id}/buildings`);
   area = id;
-  roads = await api<RawEnvelope>(`/__editor/raw/${id}/roads`);
-  buildings = await api<RawEnvelope>(`/__editor/raw/${id}/buildings`);
+  roads = r;
+  buildings = b;
   world = worldFromBbox(roads.bbox);
   proj = world.projector;
-  undoStack.length = 0;
+  history.clear();
+  syncHistory();
   dirty = false;
   selected = undefined;
   geometryVersion++;
@@ -202,22 +249,41 @@ async function loadArea(id: string): Promise<void> {
   refresh("loaded");
 }
 
-async function save(): Promise<void> {
-  const put = (kind: string, body: RawEnvelope) =>
-    api(`/__editor/raw/${area}/${kind}`, { method: "PUT", body: JSON.stringify(body) });
-  await put("roads", roads);
-  await put("buildings", buildings);
-  dirty = false;
-  refresh("saved");
+/** Resolves true when both files were written; failures show in the info bar. */
+async function save(): Promise<boolean> {
+  try {
+    const put = (kind: string, body: RawEnvelope) =>
+      apiText(`/__editor/raw/${area}/${kind}`, { method: "PUT", body: JSON.stringify(body) });
+    await put("roads", roads);
+    await put("buildings", buildings);
+    dirty = false;
+    refresh("saved");
+    return true;
+  } catch (err) {
+    say(`Save failed: ${errText(err)}`, "error");
+    return false;
+  }
 }
 
-async function compile(): Promise<void> {
-  await save();
-  $("log").textContent = "compiling…";
-  const res = await fetch(`/__editor/compile/${area}`, { method: "POST" });
-  $("log").textContent = await res.text();
-  setStatus("compile finished — reload the game tab to see it");
+async function compile(): Promise<boolean> {
+  if (!(await save())) return false;
+  say("Compiling...", "info", false);
+  try {
+    const log = await apiText(`/__editor/compile/${area}`, { method: "POST" });
+    const out = compileOutcome(log);
+    messageLog.add(log, out.ok ? "info" : "error");
+    if (out.ok) say("Compiled. Reload the game tab to see it.", "ok");
+    else say(out.summary, "error", false);
+    return out.ok;
+  } catch (err) {
+    const msg = errText(err);
+    const out = compileOutcome(msg);
+    say(out.ok ? `Compile failed: ${msg}` : out.summary, "error");
+    return false;
+  }
 }
+
+const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 const toScreen = (p: { x: number; y: number }) => ({
   x: panX + p.x * scale,
@@ -298,6 +364,7 @@ function drawTiles(vis: ReturnType<typeof visibleRect>): void {
   }
 }
 
+/** Scale bar only; the text readouts live in the shell info bar. */
 function drawHud(): void {
   const bar = scaleBar(scale, 160);
   const bx = 16;
@@ -315,15 +382,6 @@ function drawHud(): void {
   ctx.textAlign = "left";
   ctx.textBaseline = "bottom";
   ctx.fillText(bar.label, bx, by - 8);
-  const lines = [
-    hover === undefined ? "x -, y -" : `x ${Math.round(hover.x)} m, y ${Math.round(hover.y)} m`,
-    `${(world.widthM / 1000).toFixed(2)} x ${(world.heightM / 1000).toFixed(2)} km`,
-    `tile ${tileM} m`,
-  ];
-  ctx.textAlign = "right";
-  lines.forEach((t, i) => {
-    ctx.fillText(t, canvas.width - 12, canvas.height - 10 - (lines.length - 1 - i) * 15);
-  });
 }
 
 function draw(): void {
@@ -416,44 +474,11 @@ function draw(): void {
   drawHud();
 }
 
-function setTool(next: Tool): void {
-  tool = next;
+function onToolChange(next: string): void {
+  tool = next as Tool;
   roadPoints = [];
   rectStart = undefined;
   movingNode = undefined;
-  for (const b of document.querySelectorAll<HTMLElement>(".tool")) {
-    b.classList.toggle("active", b.dataset.tool === next);
-  }
-  $("hint").textContent = HINTS[next];
-  const opts = $("tool-opts");
-  if (next === "road") {
-    opts.innerHTML =
-      field(
-        "highway",
-        `<select id="o-highway">${HIGHWAY_CLASSES.map((h) => `<option ${h === drawHighway ? "selected" : ""}>${h}</option>`).join("")}</select>`,
-      ) +
-      field(
-        "surface",
-        `<select id="o-surface"><option value="">(auto)</option>${SURFACES.map((x) => `<option ${x === drawSurface ? "selected" : ""}>${x}</option>`).join("")}</select>`,
-      ) +
-      field(
-        "width (m)",
-        `<input type="number" id="o-width" min="2" step="0.5" value="${drawWidth}">`,
-      );
-    $<HTMLSelectElement>("o-highway").onchange = (e) =>
-      (drawHighway = (e.target as HTMLSelectElement).value);
-    $<HTMLSelectElement>("o-surface").onchange = (e) =>
-      (drawSurface = (e.target as HTMLSelectElement).value);
-    $<HTMLInputElement>("o-width").onchange = (e) =>
-      (drawWidth = Number((e.target as HTMLInputElement).value) || 5);
-  } else if (next === "building") {
-    opts.innerHTML = field(
-      "height (m)",
-      `<input type="number" id="o-height" min="2" step="1" value="${buildingHeight}">`,
-    );
-    $<HTMLInputElement>("o-height").onchange = (e) =>
-      (buildingHeight = Number((e.target as HTMLInputElement).value) || 8);
-  } else opts.innerHTML = "";
   if (roads !== undefined) requestDraw();
 }
 
@@ -470,77 +495,158 @@ function finishRoad(): void {
   requestDraw();
 }
 
-function field(label: string, control: string): string {
-  return `<label>${label}</label>${control}`;
+const strOptions = (vals: readonly string[]) => vals.map((v) => ({ value: v, label: v }));
+
+function renderRoadOptions(host: HTMLElement): void {
+  const hw = createSelect<string>({
+    label: "Highway",
+    tip: "Road class for new roads (sets the default look and traffic rules).",
+    options: strOptions(HIGHWAY_CLASSES),
+    value: drawHighway,
+    onChange: (v) => {
+      drawHighway = v;
+    },
+  });
+  const surf = createSelect<string>({
+    label: "Surface",
+    tip: "Surface for new roads. Auto picks one from the highway class.",
+    options: [{ value: "", label: "(auto)" }, ...strOptions(SURFACES)],
+    value: drawSurface,
+    onChange: (v) => {
+      drawSurface = v;
+    },
+  });
+  const width = createStepper({
+    label: "Width (m)",
+    tip: "Width of new roads in metres.",
+    value: drawWidth,
+    min: 2,
+    max: 40,
+    step: 0.5,
+    coarse: 4,
+    decimals: 1,
+    onChange: (v) => {
+      drawWidth = v;
+    },
+  });
+  host.append(hintText(HINTS.road), hw.el, surf.el, width.el);
 }
 
-function renderSelection(): void {
-  const box = $("sel");
+function renderBuildingOptions(host: HTMLElement): void {
+  const height = createStepper({
+    label: "Height (m)",
+    tip: "Height of new buildings in metres.",
+    value: buildingHeight,
+    min: 2,
+    max: 200,
+    step: 1,
+    coarse: 5,
+    decimals: 0,
+    onChange: (v) => {
+      buildingHeight = v;
+    },
+  });
+  host.append(hintText(HINTS.building), height.el);
+}
+
+/** Select tool flyout: hint plus the tag editor for the current selection. No markup strings. */
+function renderSelectOptions(host: HTMLElement): void {
+  host.append(hintText(HINTS.select));
   if (selected === undefined) {
-    box.textContent = "Click a road or building. Drag to pan, wheel to zoom, F to fit the world.";
+    host.append(hintText("Nothing selected."));
     return;
   }
   const { kind, way } = selected;
   const t = way.tags ?? {};
+  const heading = document.createElement("div");
+  heading.className = "es-subhead";
+  const edit = (fn: () => void) => {
+    snapshot();
+    fn();
+    refresh("edited", false);
+  };
   if (kind === "road") {
-    const opts = (vals: readonly string[], cur: string) =>
-      vals.map((v) => `<option ${v === cur ? "selected" : ""}>${v}</option>`).join("");
-    const surfaceOpts =
-      `<option value="">(auto from highway)</option>` +
-      SURFACES.map(
-        (s) =>
-          `<option value="${s}" ${t.surface !== undefined && effectiveSurface(t) === s ? "selected" : ""}>${s}</option>`,
-      ).join("");
-    box.innerHTML =
-      `<b>Road</b> way ${way.id} (${way.geometry.length} pts)` +
-      field(
-        "highway",
-        `<select id="f-highway">${opts(HIGHWAY_CLASSES, t.highway ?? "")}</select>`,
-      ) +
-      field("surface", `<select id="f-surface">${surfaceOpts}</select>`) +
-      field(
-        "width (m)",
-        `<input type="number" step="0.5" min="2" id="f-width" value="${t.width ?? ""}">`,
-      ) +
-      field("name", `<input type="text" id="f-name" value="${t.name ?? ""}">`) +
-      field(
-        "one-way",
-        `<input type="checkbox" id="f-oneway" ${t.oneway === "yes" ? "checked" : ""}>`,
-      ) +
-      `<button class="danger" id="f-delete">Delete road (Del)</button>`;
-    const edit = (fn: () => void) => {
-      snapshot();
-      fn();
-      refresh("edited");
-    };
-    $<HTMLSelectElement>("f-highway").onchange = (e) =>
-      edit(() => setTag(way, "highway", (e.target as HTMLSelectElement).value));
-    $<HTMLSelectElement>("f-surface").onchange = (e) =>
-      edit(() => {
-        const v = (e.target as HTMLSelectElement).value;
-        setSurface(way, v === "" ? null : (v as Surface));
-      });
-    $<HTMLInputElement>("f-width").onchange = (e) =>
-      edit(() => setTag(way, "width", (e.target as HTMLInputElement).value));
-    $<HTMLInputElement>("f-name").onchange = (e) =>
-      edit(() => setTag(way, "name", (e.target as HTMLInputElement).value));
-    $<HTMLInputElement>("f-oneway").onchange = (e) =>
-      edit(() => setTag(way, "oneway", (e.target as HTMLInputElement).checked ? "yes" : null));
+    heading.textContent = `Road way ${way.id} (${way.geometry.length} pts)`;
+    const hw = createSelect<string>({
+      label: "Highway",
+      tip: "Road class of this road.",
+      options: strOptions(HIGHWAY_CLASSES),
+      value: t.highway ?? "",
+      onChange: (v) => edit(() => setTag(way, "highway", v)),
+    });
+    const surf = createSelect<string>({
+      label: "Surface",
+      tip: "Surface of this road. Auto derives it from the highway class.",
+      options: [{ value: "", label: "(auto from highway)" }, ...strOptions(SURFACES)],
+      value: t.surface !== undefined ? effectiveSurface(t) : "",
+      onChange: (v) => edit(() => setSurface(way, v === "" ? null : (v as Surface))),
+    });
+    const hasWidth = t.width !== undefined && t.width !== "";
+    const note = readout(hasWidth ? "" : `(default ${DEFAULT_WIDTH_M} m)`);
+    const width = createStepper({
+      label: "Width (m)",
+      tip: "Width of this road in metres.",
+      value: Number.parseFloat(t.width ?? "") || DEFAULT_WIDTH_M,
+      min: 2,
+      max: 40,
+      step: 0.5,
+      coarse: 4,
+      decimals: 1,
+      onChange: (v) => {
+        edit(() => setTag(way, "width", String(v)));
+        note.set("");
+      },
+    });
+    const name = document.createElement("input");
+    name.type = "text";
+    name.value = t.name ?? "";
+    name.dataset.tip = "Street name of this road. Press Enter or click away to apply.";
+    name.addEventListener("change", () => edit(() => setTag(way, "name", name.value)));
+    const oneway = createCheckbox({
+      label: "One-way",
+      tip: "Traffic only flows in the direction the road was drawn.",
+      checked: t.oneway === "yes",
+      onChange: (b) => edit(() => setTag(way, "oneway", b ? "yes" : null)),
+    });
+    host.append(
+      heading,
+      hw.el,
+      surf.el,
+      width.el,
+      note.el,
+      labelled("Name", "Street name of this road.", name),
+      oneway.el,
+      createButton({
+        label: "Delete road (Del)",
+        tip: "Remove this road from the map. Undo brings it back.",
+        kind: "danger",
+        onClick: deleteSelected,
+      }),
+    );
   } else {
-    box.innerHTML =
-      `<b>Building</b> ${way.id}` +
-      field(
-        "height (m)",
-        `<input type="number" step="0.5" min="1" id="f-height" value="${t.height ?? ""}">`,
-      ) +
-      `<button class="danger" id="f-delete">Delete building (Del)</button>`;
-    $<HTMLInputElement>("f-height").onchange = (e) => {
-      snapshot();
-      setTag(way, "height", (e.target as HTMLInputElement).value);
-      refresh("edited");
-    };
+    heading.textContent = `Building ${way.id}`;
+    const height = createStepper({
+      label: "Height (m)",
+      tip: "Height of this building in metres.",
+      value: Number.parseFloat(t.height ?? "") || buildingHeight,
+      min: 1,
+      max: 200,
+      step: 0.5,
+      coarse: 5,
+      decimals: 1,
+      onChange: (v) => edit(() => setTag(way, "height", String(v))),
+    });
+    host.append(
+      heading,
+      height.el,
+      createButton({
+        label: "Delete building (Del)",
+        tip: "Remove this building from the map. Undo brings it back.",
+        kind: "danger",
+        onClick: deleteSelected,
+      }),
+    );
   }
-  $("f-delete").onclick = deleteSelected;
 }
 
 function deleteSelected(): void {
@@ -552,10 +658,12 @@ function deleteSelected(): void {
   refresh("deleted");
 }
 
-function refresh(message: string): void {
+/** Redraws, updates the info bar and (unless told not to) rebuilds the Select flyout. */
+function refresh(message: string, rebuildPanel = true): void {
   requestDraw();
-  renderSelection();
-  setStatus(message);
+  updateInfo();
+  if (rebuildPanel && tool === "select") shell.refreshToolOptions();
+  say(message, "info", message !== "selected" && message !== "nothing here");
 }
 
 // --- interaction ---
@@ -567,8 +675,13 @@ const worldOf = (e: MouseEvent) => {
 const snapTol = () => Math.max(3, 10 / scale);
 
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+canvas.addEventListener("mouseleave", () => {
+  hover = undefined;
+  shell.info.set("cursor", "-");
+  requestDraw();
+});
 canvas.addEventListener("mousedown", (e) => {
-  const wantsPan = e.button !== 0 || tool === "select";
+  const wantsPan = e.button !== 0 || tool === "select" || tool === "import";
   dragging = { x: e.clientX, y: e.clientY, moved: false, pan: wantsPan };
   if (e.button === 0 && tool === "move") {
     const n = pickNode(worldOf(e), roads, proj, snapTol());
@@ -582,6 +695,7 @@ canvas.addEventListener("mousedown", (e) => {
 window.addEventListener("mousemove", (e) => {
   if (e.target === canvas) {
     hover = worldOf(e);
+    shell.info.set("cursor", fmtXY(hover.x, hover.y));
     requestDraw();
   }
   if (dragging === undefined) return;
@@ -659,101 +773,6 @@ canvas.addEventListener(
   },
   { passive: false },
 );
-window.addEventListener("keydown", (e) => {
-  const typing =
-    (e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "SELECT";
-  if (typing) return;
-  if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
-  else if (e.key === "Enter" && tool === "road") finishRoad();
-  else if (e.key === "Escape") {
-    roadPoints = [];
-    rectStart = undefined;
-    requestDraw();
-  } else if (e.key === "f" || e.key === "F") {
-    fitWorld();
-    requestDraw();
-  } else if (e.key.startsWith("Arrow")) {
-    e.preventDefault();
-    if (e.key === "ArrowLeft") panX += canvas.width / 4;
-    else if (e.key === "ArrowRight") panX -= canvas.width / 4;
-    else if (e.key === "ArrowUp") panY += canvas.height / 4;
-    else panY -= canvas.height / 4;
-    requestDraw();
-  } else if (e.key === "v" || e.key === "V") setTool("select");
-  else if (e.key === "r" || e.key === "R") setTool("road");
-  else if (e.key === "m" || e.key === "M") setTool("move");
-  else if (e.key === "b" || e.key === "B") setTool("building");
-  else if (e.key === "z" || e.key === "Z") undo();
-  else if (e.key === "s" || e.key === "S") void save();
-});
-window.addEventListener("beforeunload", (e) => {
-  if (dirty) e.preventDefault();
-});
-
-function resize(): void {
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-  if (roads !== undefined) requestDraw();
-}
-window.addEventListener("resize", resize);
-
-const tileSelect = $<HTMLSelectElement>("tile-size");
-tileSelect.innerHTML = TILE_SIZES_M.map(
-  (m) => `<option value="${m}" ${m === tileM ? "selected" : ""}>${m} m</option>`,
-).join("");
-tileSelect.onchange = () => {
-  tileM = Number(tileSelect.value) || DEFAULT_TILE_M;
-  requestDraw();
-};
-$<HTMLInputElement>("show-grid").onchange = (e) => {
-  showGrid = (e.target as HTMLInputElement).checked;
-  requestDraw();
-};
-$<HTMLInputElement>("show-tiles").onchange = (e) => {
-  showTiles = (e.target as HTMLInputElement).checked;
-  requestDraw();
-};
-$("save").onclick = () => void save();
-$("compile").onclick = () => void compile();
-$("undo").onclick = undo;
-$("drive").onclick = () => {
-  const tab = window.open("about:blank", "_blank");
-  void compile().then(() => {
-    if (tab !== null) tab.location.href = `/?map=${encodeURIComponent(area)}`;
-  });
-};
-for (const b of document.querySelectorAll<HTMLElement>(".tool")) {
-  b.onclick = () => setTool(b.dataset.tool as Tool);
-}
-$("legend").innerHTML = SURFACES.map(
-  (s) => `<span><i class="sw" style="background:${SURFACE_COLOUR[s]}"></i>${s}</span>`,
-).join("");
-
-async function refreshAreas(selectId: string): Promise<void> {
-  const areas = await api<string[]>("/__editor/areas");
-  const select = $<HTMLSelectElement>("area");
-  select.innerHTML = areas.map((a) => `<option>${a}</option>`).join("");
-  select.value = selectId;
-}
-
-$("nw-create").onclick = async () => {
-  if (dirty && !confirm("Discard unsaved edits?")) return;
-  const id = $<HTMLInputElement>("nw-id").value.trim();
-  const widthKm = Number($<HTMLInputElement>("nw-w").value);
-  const heightKm = Number($<HTMLInputElement>("nw-h").value);
-  try {
-    const out = await api<{ register: string[] }>("/__editor/new-world", {
-      method: "POST",
-      body: JSON.stringify({ id, widthKm, heightKm }),
-    });
-    await refreshAreas(id);
-    await loadArea(id);
-    $("log").textContent =
-      `Created "${id}". To compile it, add to tools/map-compiler/cli.ts:\n${out.register.join("\n")}`;
-  } catch (err) {
-    $("log").textContent = String(err);
-  }
-};
 
 // --- image import (pure maths lives in image-trace.ts / image-import.ts) ---
 const MAX_IMPORT_PIXELS = 25_000_000;
@@ -766,27 +785,33 @@ let impImage: ImportImage | undefined;
 let impMask: HTMLCanvasElement | undefined;
 let impGraph: RoadGraphPx | undefined;
 let impMode: "km" | "mpp" = "km";
+// Raw (full precision) import parameters; the flyout steppers only DISPLAY them.
+let impThreshold = 128;
+let impKm = 1;
+let impMpp = 1;
+let impOx = 0;
+let impOy = 0;
+let impRoadWidth = DEFAULT_IMPORT_ROAD.widthM;
+let impHighway = "residential";
+let impSurface = "tarmac";
+let impSpur = DEFAULT_TRACE_OPTIONS.minSpurPx;
+let impSimp = DEFAULT_TRACE_OPTIONS.simplifyPx;
+let impSmooth = DEFAULT_TRACE_OPTIONS.smoothIterations;
+// Live flyout handles (null while the Image trace flyout is not shown).
+let impKmStepper: StepperHandle | null = null;
+let impMppStepper: StepperHandle | null = null;
+let impDerived: { set(t: string): void } | null = null;
+let impWarnEl: HTMLElement | null = null;
+let impFileInput: HTMLInputElement | null = null;
 
-const impInput = (id: string) => $<HTMLInputElement>(id);
-
-function impOffset(): { x: number; y: number } {
-  return { x: Number(impInput("im-ox").value) || 0, y: Number(impInput("im-oy").value) || 0 };
-}
+const impOffset = (): { x: number; y: number } => ({ x: impOx, y: impOy });
 
 function impScaleNow(): ImportScale | undefined {
   if (impImage === undefined) return undefined;
   try {
     return impMode === "km"
-      ? importScale({
-          imageW: impImage.w,
-          imageH: impImage.h,
-          widthKm: Number(impInput("im-km").value),
-        })
-      : importScale({
-          imageW: impImage.w,
-          imageH: impImage.h,
-          mPerPx: Number(impInput("im-mpp").value),
-        });
+      ? importScale({ imageW: impImage.w, imageH: impImage.h, widthKm: impKm })
+      : importScale({ imageW: impImage.w, imageH: impImage.h, mPerPx: impMpp });
   } catch {
     return undefined;
   }
@@ -794,29 +819,39 @@ function impScaleNow(): ImportScale | undefined {
 
 function impOptions(): Partial<TraceOptions> {
   return {
-    threshold: Number(impInput("im-thr").value),
-    minSpurPx: Number(impInput("im-spur").value),
-    simplifyPx: Number(impInput("im-simp").value),
-    smoothIterations: Number(impInput("im-smooth").value),
+    threshold: impThreshold,
+    minSpurPx: impSpur,
+    simplifyPx: impSimp,
+    smoothIterations: impSmooth,
   };
 }
 
 /** Recomputes the linked km / m-per-px fields, the readout and warnings. */
 function updateImportUi(): void {
-  const readout = $("im-derived");
-  const warn = $("im-warn");
   const scaleNow = impScaleNow();
   if (impImage === undefined || scaleNow === undefined) {
-    readout.textContent = impImage === undefined ? "no image loaded" : "enter a width or m/px";
-    warn.textContent = "";
+    impDerived?.set(impImage === undefined ? "no image loaded" : "enter a width or m/px");
+    impWarnEl?.replaceChildren();
     requestDraw();
     return;
   }
-  if (impMode === "km") impInput("im-mpp").value = scaleNow.mPerPx.toFixed(3);
-  else impInput("im-km").value = (scaleNow.widthM / 1000).toFixed(3);
-  readout.textContent = `${impImage.w} x ${impImage.h} px; height ${(scaleNow.heightM / 1000).toFixed(3)} km; ${scaleNow.mPerPx.toFixed(3)} m/px`;
-  const warnings = [...scaleNow.warnings, ...footprintWarnings(scaleNow, impOffset(), world)];
-  warn.innerHTML = warnings.map((w) => `<div>${w}</div>`).join("");
+  // Only the non-driving field is written back; it displays 3 dp, raw value kept.
+  if (impMode === "km") impMppStepper?.set(scaleNow.mPerPx);
+  else impKmStepper?.set(scaleNow.widthM / 1000);
+  impDerived?.set(
+    `${impImage.w} x ${impImage.h} px; height ${fmt3(scaleNow.heightM / 1000)} km; ${fmt3(scaleNow.mPerPx)} m/px`,
+  );
+  if (impWarnEl !== null) {
+    const warnings = [...scaleNow.warnings, ...footprintWarnings(scaleNow, impOffset(), world)];
+    impWarnEl.replaceChildren(
+      ...warnings.map((w) => {
+        const d = document.createElement("div");
+        d.className = "es-warn";
+        d.textContent = w;
+        return d;
+      }),
+    );
+  }
   requestDraw();
 }
 
@@ -826,7 +861,7 @@ function rebuildImportMask(): void {
     return;
   }
   const { w, h, lum } = impImage;
-  const level = Number(impInput("im-thr").value);
+  const level = impThreshold;
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -848,7 +883,7 @@ function clearImport(): void {
   impImage = undefined;
   impMask = undefined;
   impGraph = undefined;
-  impInput("im-file").value = "";
+  if (impFileInput !== null) impFileInput.value = "";
   updateImportUi();
 }
 
@@ -856,7 +891,7 @@ async function onImportFile(file: File): Promise<void> {
   try {
     const bmp = await createImageBitmap(file);
     if (bmp.width * bmp.height > MAX_IMPORT_PIXELS) {
-      setStatus(`image is ${bmp.width}x${bmp.height}; refusing more than 25 megapixels`);
+      say(`Image is ${bmp.width}x${bmp.height}; refusing more than 25 megapixels.`, "error");
       return;
     }
     const c = document.createElement("canvas");
@@ -878,15 +913,15 @@ async function onImportFile(file: File): Promise<void> {
     impImage = { w: c.width, h: c.height, lum };
     impGraph = undefined;
     const worldKm = world.widthM / 1000;
-    impInput("im-km").value = String(
-      (worldKm * 1000) / c.width <= COARSE_M_PER_PX ? worldKm : c.width / 1000,
-    );
+    // Raw number kept; the stepper displays it at 3 dp (D-05).
+    impKm = (worldKm * 1000) / c.width <= COARSE_M_PER_PX ? worldKm : c.width / 1000;
+    impKmStepper?.set(impKm);
     impMode = "km";
     rebuildImportMask();
     updateImportUi();
-    setStatus(`image loaded: ${c.width} x ${c.height} px`);
+    say(`Image loaded: ${c.width} x ${c.height} px`, "ok");
   } catch (err) {
-    setStatus(`could not read image: ${String(err)}`);
+    say(`Could not read image: ${errText(err)}`, "error");
   }
 }
 
@@ -944,68 +979,35 @@ function drawImportPreview(): void {
   }
 }
 
-impInput("im-spur").value = String(DEFAULT_TRACE_OPTIONS.minSpurPx);
-impInput("im-simp").value = String(DEFAULT_TRACE_OPTIONS.simplifyPx);
-impInput("im-smooth").value = String(DEFAULT_TRACE_OPTIONS.smoothIterations);
-$<HTMLSelectElement>("im-hw").innerHTML = HIGHWAY_CLASSES.map(
-  (h) => `<option ${h === "residential" ? "selected" : ""}>${h}</option>`,
-).join("");
-$<HTMLSelectElement>("im-surf").innerHTML = SURFACES.map(
-  (s) => `<option ${s === "tarmac" ? "selected" : ""}>${s}</option>`,
-).join("");
-impInput("im-file").onchange = () => {
-  const f = impInput("im-file").files?.[0];
-  if (f !== undefined) void onImportFile(f);
-};
-impInput("im-thr").oninput = () => {
-  $("im-thr-v").textContent = impInput("im-thr").value;
-  impGraph = undefined;
-  rebuildImportMask();
-  requestDraw();
-};
-impInput("im-km").oninput = () => {
-  impMode = "km";
-  updateImportUi();
-};
-impInput("im-mpp").oninput = () => {
-  impMode = "mpp";
-  updateImportUi();
-};
-for (const id of ["im-ox", "im-oy"]) impInput(id).oninput = updateImportUi;
-for (const id of ["im-spur", "im-simp", "im-smooth"]) {
-  impInput(id).oninput = () => {
-    impGraph = undefined;
-    requestDraw();
-  };
-}
-$("im-preview").onclick = () => {
+function previewImport(): void {
   if (impImage === undefined) {
-    setStatus("load an image first");
+    say("Load an image first.", "error");
     return;
   }
-  setStatus("tracing...");
+  say("Tracing...", "info", false);
   setTimeout(() => {
     const g = traceImport();
-    if (g !== undefined) setStatus(`preview: ${importCounts(g)} (not imported yet)`);
+    if (g !== undefined) say(`Preview: ${importCounts(g)} (not imported yet)`);
     requestDraw();
   }, 0);
-};
-$("im-go").onclick = () => {
+}
+
+function runImport(): void {
   const s = impScaleNow();
   if (impImage === undefined || s === undefined) {
-    setStatus("load an image and give a valid width first");
+    say("Load an image and give a valid width first.", "error");
     return;
   }
-  setStatus("tracing...");
+  say("Tracing...", "info", false);
   const image = impImage;
   setTimeout(() => {
     const g = impGraph ?? traceImport();
     if (g === undefined) return;
     snapshot();
     const opts: ImportRoadOptions = {
-      widthM: Number(impInput("im-width").value) || DEFAULT_IMPORT_ROAD.widthM,
-      highway: $<HTMLSelectElement>("im-hw").value,
-      surface: $<HTMLSelectElement>("im-surf").value as Surface,
+      widthM: impRoadWidth || DEFAULT_IMPORT_ROAD.widthM,
+      highway: impHighway,
+      surface: impSurface as Surface,
     };
     const ways = appendImportedRoads(
       roads,
@@ -1022,26 +1024,607 @@ $("im-go").onclick = () => {
       }`,
     );
   }, 0);
-};
+}
+
+/** Image trace flyout. State is module-level so a tool switch does not lose the loaded image. */
+function renderImportOptions(host: HTMLElement): void {
+  const file = document.createElement("input");
+  file.type = "file";
+  file.accept = "image/png,image/jpeg";
+  file.dataset.tip = "Pick a PNG or JPEG road map. Dark pixels are treated as road.";
+  file.addEventListener("change", () => {
+    const f = file.files?.[0];
+    if (f !== undefined) void onImportFile(f);
+  });
+  impFileInput = file;
+
+  const thr = createStepper({
+    label: "Threshold",
+    tip: "Pixels darker than this count as road (0 to 255).",
+    value: impThreshold,
+    min: 0,
+    max: 255,
+    step: 1,
+    coarse: 16,
+    decimals: 0,
+    slider: "open",
+    onChange: (v) => {
+      impThreshold = v;
+      impGraph = undefined;
+      rebuildImportMask();
+      requestDraw();
+    },
+  });
+  const km = createStepper({
+    label: "Real width",
+    tip: "How wide the image is in the real world. Drives the scale.",
+    unit: "km",
+    value: impKm,
+    min: 0.01,
+    max: 50,
+    step: 0.01,
+    coarse: 10,
+    decimals: 3,
+    onChange: (v) => {
+      impKm = v;
+      impMode = "km";
+      updateImportUi();
+    },
+  });
+  const mpp = createStepper({
+    label: "Metres per pixel",
+    tip: "Alternative to Real width: how many metres one image pixel covers.",
+    value: impMpp,
+    min: 0.01,
+    max: 20,
+    step: 0.05,
+    coarse: 10,
+    decimals: 3,
+    onChange: (v) => {
+      impMpp = v;
+      impMode = "mpp";
+      updateImportUi();
+    },
+  });
+  impKmStepper = km;
+  impMppStepper = mpp;
+  const derived = readout("no image loaded");
+  impDerived = derived;
+
+  const offX = createStepper({
+    label: "Offset X",
+    tip: "Metres from the world's south-west corner to the image's left edge.",
+    unit: "m",
+    value: impOx,
+    min: -100000,
+    max: 100000,
+    step: 10,
+    coarse: 10,
+    decimals: 1,
+    onChange: (v) => {
+      impOx = v;
+      updateImportUi();
+    },
+  });
+  const offY = createStepper({
+    label: "Offset Y",
+    tip: "Metres from the world's south-west corner to the image's bottom edge.",
+    unit: "m",
+    value: impOy,
+    min: -100000,
+    max: 100000,
+    step: 10,
+    coarse: 10,
+    decimals: 1,
+    onChange: (v) => {
+      impOy = v;
+      updateImportUi();
+    },
+  });
+  const rw = createStepper({
+    label: "Road width (m)",
+    tip: "Width given to every imported road.",
+    value: impRoadWidth,
+    min: 2,
+    max: 40,
+    step: 0.5,
+    coarse: 4,
+    decimals: 1,
+    onChange: (v) => {
+      impRoadWidth = v;
+    },
+  });
+  const hw = createSelect<string>({
+    label: "Highway class",
+    tip: "Road class given to every imported road.",
+    options: strOptions(HIGHWAY_CLASSES),
+    value: impHighway,
+    onChange: (v) => {
+      impHighway = v;
+    },
+  });
+  const surf = createSelect<string>({
+    label: "Surface",
+    tip: "Surface given to every imported road.",
+    options: strOptions(SURFACES),
+    value: impSurface,
+    onChange: (v) => {
+      impSurface = v;
+    },
+  });
+
+  const retrace = (): void => {
+    impGraph = undefined;
+    requestDraw();
+  };
+  const spur = createStepper({
+    label: "Prune spurs shorter than (px)",
+    tip: "Dead-end stubs shorter than this are removed from the trace.",
+    value: impSpur,
+    min: 0,
+    max: 1000,
+    step: 1,
+    coarse: 10,
+    decimals: 0,
+    onChange: (v) => {
+      impSpur = v;
+      retrace();
+    },
+  });
+  const simp = createStepper({
+    label: "Simplify tolerance (px)",
+    tip: "Higher values give fewer, straighter road points.",
+    value: impSimp,
+    min: 0,
+    max: 50,
+    step: 0.1,
+    coarse: 10,
+    decimals: 1,
+    onChange: (v) => {
+      impSimp = v;
+      retrace();
+    },
+  });
+  const smooth = createStepper({
+    label: "Smoothing passes",
+    tip: "How many times corners are smoothed (0 to 5).",
+    value: impSmooth,
+    min: 0,
+    max: 5,
+    step: 1,
+    coarse: 1,
+    decimals: 0,
+    onChange: (v) => {
+      impSmooth = v;
+      retrace();
+    },
+  });
+  const adv = document.createElement("details");
+  const sum = document.createElement("summary");
+  sum.textContent = "Advanced tracing (pixels)";
+  sum.dataset.tip = "Fine controls for how the traced lines are cleaned up.";
+  adv.append(sum, spur.el, simp.el, smooth.el);
+
+  const warn = document.createElement("div");
+  impWarnEl = warn;
+
+  host.append(
+    hintText(HINTS.import),
+    file,
+    thr.el,
+    km.el,
+    mpp.el,
+    derived.el,
+    offX.el,
+    offY.el,
+    rw.el,
+    hw.el,
+    surf.el,
+    adv,
+    warn,
+    createButton({
+      label: "Preview",
+      tip: "Trace the image and show the result as dashed lines without changing the map.",
+      onClick: previewImport,
+    }),
+    createButton({
+      label: "Import roads",
+      tip: "Add the traced roads to the map you are editing. Undo removes them.",
+      kind: "primary",
+      onClick: runImport,
+    }),
+  );
+  updateImportUi();
+}
+
+// --- view helpers ---
+function zoomBy(factor: number): void {
+  setView(
+    zoomAt(currentView(), factor, canvas.width / 2, canvas.height / 2, fitScale / 4, MAX_SCALE),
+  );
+  requestDraw();
+}
+function panBy(dx: number, dy: number): void {
+  panX -= (dx * canvas.width) / 4;
+  panY -= (dy * canvas.height) / 4;
+  requestDraw();
+}
+function fit(): void {
+  if (world === undefined) return;
+  fitWorld();
+  requestDraw();
+}
+
+window.addEventListener("beforeunload", (e) => {
+  if (dirty) e.preventDefault();
+});
+
+function resize(): void {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  if (roads !== undefined) requestDraw();
+}
+
+// --- areas + New world (temporary home until the D-06 New popup) ---
+const areaSelect = createSelect<string>({
+  tip: "Which map you are editing. Switching asks before discarding unsaved changes.",
+  options: [],
+  value: "",
+  onChange: (v) => void changeArea(v),
+});
+
+async function refreshAreas(selectId: string): Promise<void> {
+  const areas = await apiJson<string[]>("/__editor/areas");
+  areaSelect.setOptions(strOptions(areas));
+  areaSelect.set(selectId);
+}
+
+async function changeArea(id: string): Promise<void> {
+  if (id === area) return;
+  if (dirty) {
+    const ok = await shell.confirm({
+      title: "Discard changes?",
+      message: `Discard unsaved changes to ${area}?`,
+      okLabel: "Discard",
+    });
+    if (!ok) {
+      areaSelect.set(area);
+      return;
+    }
+  }
+  try {
+    await loadArea(id);
+  } catch (err) {
+    areaSelect.set(area);
+    say(`Could not load ${id}: ${errText(err)}`, "error");
+  }
+}
+
+function openNewWorld(): void {
+  const idInput = document.createElement("input");
+  idInput.type = "text";
+  idInput.placeholder = "my-world";
+  idInput.dataset.tip = "Name for the new map: lowercase letters, digits and dashes only.";
+  const mk = (label: string, tip: string): StepperHandle =>
+    createStepper({
+      label,
+      tip,
+      value: 6,
+      min: 0.5,
+      max: 10,
+      step: 0.5,
+      coarse: 2,
+      decimals: 1,
+      unit: "km",
+      onChange: () => {},
+    });
+  const w = mk("Width", "How wide the new map is, 0.5 to 10 km.");
+  const h = mk("Height", "How tall the new map is, 0.5 to 10 km.");
+  const body = document.createElement("div");
+  body.append(labelled("Id (a-z, 0-9, -)", idInput.dataset.tip ?? "", idInput), w.el, h.el);
+  void shell.dialog({
+    title: "New world",
+    body,
+    actions: [
+      { id: "cancel", label: "Cancel", tip: "Close without creating anything" },
+      {
+        id: "create",
+        label: "Create",
+        tip: "Create an empty map of this size and open it",
+        primary: true,
+        run: async () => {
+          const id = idInput.value.trim();
+          if (dirty) {
+            const ok = await shell.confirm({
+              title: "Discard changes?",
+              message: `Creating "${id}" will discard unsaved changes to ${area}.`,
+              okLabel: "Discard",
+            });
+            if (!ok) return "Not created: your unsaved changes were kept.";
+          }
+          try {
+            const out = await apiJson<{ register: string[] }>("/__editor/new-world", {
+              method: "POST",
+              body: JSON.stringify({ id, widthKm: w.get(), heightKm: h.get() }),
+            });
+            messageLog.add(
+              `Register "${id}" in tools/map-compiler/cli.ts:\n${out.register.join("\n")}`,
+            );
+            await refreshAreas(id);
+            await loadArea(id);
+            say(
+              `Created "${id}". To compile it, add its two lines to tools/map-compiler/cli.ts (Help > Show log has them).`,
+              "ok",
+              false,
+            );
+            return null;
+          } catch (err) {
+            return errText(err);
+          }
+        },
+      },
+    ],
+  });
+}
+
+// --- dialogs ---
+const closeAction = [{ id: "close", label: "Close", tip: "Close this window" }];
+
+function showSurfaceColours(): void {
+  const body = document.createElement("div");
+  body.className = "es-legend";
+  for (const s of SURFACES) {
+    const row = document.createElement("div");
+    const sw = document.createElement("span");
+    sw.className = "es-swatch";
+    sw.style.background = SURFACE_COLOUR[s];
+    row.append(sw, document.createTextNode(` ${s}`));
+    body.append(row);
+  }
+  void shell.dialog({ title: "Surface colours", body, actions: closeAction });
+}
+
+// --- shortcuts ---
+const bindings: Binding[] = [
+  {
+    code: "KeyS",
+    ctrl: true,
+    label: "Ctrl+S",
+    description: "Save",
+    allowInTextEntry: true,
+    run: () => void save(),
+  },
+  { code: "KeyZ", ctrl: true, label: "Ctrl+Z", description: "Undo", run: undo },
+  { code: "KeyZ", ctrl: true, shift: true, label: "Ctrl+Shift+Z", description: "Redo", run: redo },
+  { code: "KeyY", ctrl: true, label: "Ctrl+Y", description: "Redo", run: redo },
+  { code: "KeyV", label: "V", description: "Select tool", run: () => shell.setTool("select") },
+  { code: "KeyR", label: "R", description: "Draw road tool", run: () => shell.setTool("road") },
+  { code: "KeyM", label: "M", description: "Move node tool", run: () => shell.setTool("move") },
+  { code: "KeyB", label: "B", description: "Building tool", run: () => shell.setTool("building") },
+  { code: "KeyI", label: "I", description: "Image trace tool", run: () => shell.setTool("import") },
+  { code: "KeyF", label: "F", description: "Fit the whole world", run: fit },
+  { code: "Delete", label: "Delete", description: "Delete the selection", run: deleteSelected },
+  {
+    code: "Backspace",
+    label: "Backspace",
+    description: "Delete the selection",
+    run: deleteSelected,
+  },
+  {
+    code: "Enter",
+    label: "Enter",
+    description: "Finish the road being drawn",
+    enabled: () => tool === "road",
+    run: finishRoad,
+  },
+  {
+    code: "Escape",
+    label: "Esc",
+    description: "Cancel the road or rectangle being drawn",
+    run: () => {
+      roadPoints = [];
+      rectStart = undefined;
+      requestDraw();
+    },
+  },
+  { code: "ArrowLeft", label: "Arrow keys", description: "Pan the view", run: () => panBy(-1, 0) },
+  { code: "ArrowRight", label: "Right", description: "Pan right", run: () => panBy(1, 0) },
+  { code: "ArrowUp", label: "Up", description: "Pan up", run: () => panBy(0, -1) },
+  { code: "ArrowDown", label: "Down", description: "Pan down", run: () => panBy(0, 1) },
+];
+
+// --- shell ---
+function driveCompile(): void {
+  const tab = window.open("about:blank", "_blank");
+  void compile().then((ok) => {
+    if (tab === null) return;
+    if (ok) tab.location.href = `/?map=${encodeURIComponent(area)}`;
+    else tab.close();
+  });
+}
+
+shell = createShell({
+  root: document.getElementById("app") as HTMLElement,
+  title: "Map editor",
+  topbarExtras: [areaSelect.el],
+  initialTool: "select",
+  onToolChange,
+  tools: [
+    {
+      id: "select",
+      label: "Select",
+      icon: "▭",
+      tip: "Click a road or building to edit it",
+      shortcut: "V",
+      renderOptions: renderSelectOptions,
+    },
+    {
+      id: "road",
+      label: "Draw road",
+      icon: "╱",
+      tip: "Click points to draw a road",
+      shortcut: "R",
+      renderOptions: renderRoadOptions,
+    },
+    {
+      id: "move",
+      label: "Move node",
+      icon: "✥",
+      tip: "Drag a road node to move it",
+      shortcut: "M",
+      renderOptions: (host) => host.append(hintText(HINTS.move)),
+    },
+    {
+      id: "building",
+      label: "Building",
+      icon: "▣",
+      tip: "Drag a rectangle to add a building",
+      shortcut: "B",
+      renderOptions: renderBuildingOptions,
+    },
+    {
+      id: "import",
+      label: "Image trace",
+      icon: "▦",
+      tip: "Trace roads from an image",
+      shortcut: "I",
+      renderOptions: renderImportOptions,
+    },
+  ],
+  menus: [
+    {
+      label: "File",
+      tip: "Create, save and compile maps",
+      items: [
+        { label: "New world...", tip: "Create a new empty map", run: openNewWorld },
+        {
+          label: "Save",
+          tip: "Write the roads and buildings to disk",
+          shortcut: "Ctrl+S",
+          run: () => void save(),
+        },
+        {
+          label: "Save & compile",
+          tip: "Save, then rebuild the game map",
+          run: () => void compile(),
+        },
+        {
+          label: "Compile & drive",
+          tip: "Save, compile and open the map in the game",
+          run: driveCompile,
+        },
+      ],
+    },
+    {
+      label: "View",
+      tip: "Grid, tile and zoom options",
+      items: [
+        {
+          label: "Show grid",
+          tip: "Show or hide the metre grid",
+          checked: () => showGrid,
+          run: () => {
+            showGrid = !showGrid;
+            requestDraw();
+          },
+        },
+        {
+          label: "Show tiles",
+          tip: "Show or hide the game tile boundaries",
+          checked: () => showTiles,
+          run: () => {
+            showTiles = !showTiles;
+            requestDraw();
+          },
+        },
+        "separator",
+        ...TILE_SIZES_M.map((m) => ({
+          label: `Tile size ${m} m`,
+          tip: `Draw tile boundaries every ${m} m`,
+          checked: () => tileM === m,
+          run: () => {
+            tileM = m;
+            updateInfo();
+            requestDraw();
+          },
+        })),
+        "separator" as const,
+        { label: "Fit world", tip: "Zoom to show the whole map", shortcut: "F", run: fit },
+      ],
+    },
+    {
+      label: "Import",
+      tip: "Bring in outside data",
+      items: [
+        {
+          label: "Image trace...",
+          tip: "Open the image trace tool",
+          run: () => shell.setTool("import"),
+        },
+      ],
+    },
+    {
+      label: "Help",
+      tip: "Shortcuts, colours and the message log",
+      items: [
+        {
+          label: "Keyboard shortcuts...",
+          tip: "List every keyboard shortcut",
+          run: () =>
+            void shell.dialog({
+              title: "Keyboard shortcuts",
+              body: shortcutsDialogBody(bindings),
+              actions: closeAction,
+            }),
+        },
+        {
+          label: "Surface colours...",
+          tip: "What each road colour means",
+          run: showSurfaceColours,
+        },
+        {
+          label: "Show log...",
+          tip: "Every message and the full compile output",
+          run: () =>
+            void shell.dialog({
+              title: "Log",
+              body: logDialogBody(messageLog.lines()),
+              actions: closeAction,
+            }),
+        },
+      ],
+    },
+  ],
+  history: { onUndo: undo, onRedo: redo },
+  view: {
+    onZoomIn: () => zoomBy(1.25),
+    onZoomOut: () => zoomBy(0.8),
+    onFit: fit,
+    onPan: panBy,
+  },
+  infoFields: [
+    { key: "area", label: "Area", tip: "The map being edited" },
+    { key: "world", label: "World", tip: "Width x height of the map in km" },
+    { key: "tile", label: "Tile", tip: "Tile size used for the tile overlay" },
+    { key: "cursor", label: "Cursor", tip: "Mouse position in metres from the south-west corner" },
+    { key: "counts", label: "Contents", tip: "How many roads and buildings the map has" },
+  ],
+});
+shell.canvasHost.append(canvas);
+new ResizeObserver(resize).observe(shell.canvasHost);
+installShortcuts(bindings, shell.isDialogOpen);
 
 async function main(): Promise<void> {
   resize();
-  const areas = await api<string[]>("/__editor/areas");
-  const select = $<HTMLSelectElement>("area");
-  select.innerHTML = areas.map((a) => `<option>${a}</option>`).join("");
-  select.onchange = () => {
-    if (dirty && !confirm("Discard unsaved edits?")) {
-      select.value = area;
-      return;
-    }
-    void loadArea(select.value);
-  };
+  const areas = await apiJson<string[]>("/__editor/areas");
+  areaSelect.setOptions(strOptions(areas));
   const initial = areas.includes("my-map") ? "my-map" : (areas[0] ?? "");
-  select.value = initial;
+  areaSelect.set(initial);
   await loadArea(initial);
-  setTool("select");
+  shell.setTool("select");
+  reportMissingTips(document.body);
 }
 
 main().catch((err: unknown) => {
-  $("status").textContent = String(err);
+  say(`Could not start the editor: ${errText(err)}`, "error");
 });
