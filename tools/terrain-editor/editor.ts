@@ -1097,9 +1097,11 @@ resize();
 
 async function confirmDiscard(): Promise<boolean> {
   if (!dirty || !area) return true;
-  return confirm(
-    `Discard unsaved edits?: You have unsaved changes to ${area.areaId}. Discard them and continue?`,
-  );
+  return shell.confirm({
+    title: "Discard changes?",
+    message: `Discard unsaved changes to ${area.areaId}?`,
+    okLabel: "Discard",
+  });
 }
 
 async function api(url: string, init?: RequestInit): Promise<Response> {
