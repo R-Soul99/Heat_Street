@@ -107,6 +107,17 @@ let currentHint = "";
 const logLines: string[] = [];
 const LOG_MAX = 200;
 let activePointerId: number | null = null;
+/** Ctrl+drag push/pull in progress (Ctrl is read at pointerdown only). */
+let pushPull: {
+  startY: number;
+  pointerId: number;
+  dirtyBefore: boolean;
+  lastDeltaM: number;
+} | null = null;
+const PUSH_PULL_M_PER_PX = 0.05;
+const PUSH_PULL_FINE_M_PER_PX = 0.01;
+const NO_AREA_MSG = "Load or create an area first (File > Open area or File > New).";
+const NO_SELECTION_CLICK_MSG = "Select some cells first (Grid select, S), then Ctrl+drag.";
 
 // ---------------------------------------------------------------- three setup
 
@@ -233,6 +244,61 @@ function clearBoxOutline(): void {
   boxOutline.geometry = new THREE.BufferGeometry();
 }
 
+/** Terrain-hugging perimeter of a vertex window, lifted above the surface. */
+function windowPerimeter(w: CellWindow, lift: number): Float32Array | null {
+  if (!area) return null;
+  const g = area.grid;
+  const pts: number[] = [];
+  const put = (x: number, z: number): void => {
+    pts.push(x, sampleTerrainHeight(g, x, z) + lift, z);
+  };
+  const x0 = g.originX + w.minCol * g.cellSizeM;
+  const x1 = g.originX + w.maxCol * g.cellSizeM;
+  const z0 = g.originZ + w.minRow * g.cellSizeM;
+  const z1 = g.originZ + w.maxRow * g.cellSizeM;
+  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
+  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
+  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
+  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
+  return new Float32Array(pts);
+}
+
+function setOutline(line: THREE.LineLoop, w: CellWindow | null, lift: number): void {
+  line.geometry.dispose();
+  const arr = w ? windowPerimeter(w, lift) : null;
+  const geo = new THREE.BufferGeometry();
+  if (arr) geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+  line.geometry = geo;
+  line.visible = arr !== null;
+}
+
+let selectionReadoutEl: HTMLElement | null = null;
+
+/** Rebuilds the persistent Grid select outline and its flyout read-out (heights move under it). */
+function refreshSelectionOutline(): void {
+  const sel = area ? dispatcher.getSelection() : null;
+  setOutline(selectionOutline, sel, 0.2);
+  if (!selectionReadoutEl) return;
+  if (!sel || !area) {
+    selectionReadoutEl.textContent = "Nothing selected";
+    return;
+  }
+  const cols = sel.maxCol - sel.minCol;
+  const rows = sel.maxRow - sel.minRow;
+  const c = area.grid.cellSizeM;
+  selectionReadoutEl.textContent = `${cols} x ${rows} cells, ${fmt3(cols * c)} x ${fmt3(rows * c)} m`;
+}
+
+// Grid select: persistent yellow outline of the selected cells (the cyan box is the live drag).
+const selectionOutline = new THREE.LineLoop(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: BLOCK_YELLOW, depthTest: false, transparent: true }),
+);
+selectionOutline.renderOrder = 999;
+selectionOutline.frustumCulled = false;
+selectionOutline.visible = false;
+scene.add(selectionOutline);
+
 const previewMaterial = new THREE.LineBasicMaterial({
   color: RING_GREEN,
   depthTest: false,
@@ -321,7 +387,8 @@ async function confirmDiscard(): Promise<boolean> {
 
 function refreshInfo(): void {
   if (!area) {
-    for (const k of ["area", "size", "cell", "cursor", "surface", "roads"]) shell.info.set(k, "");
+    for (const k of ["area", "size", "cell", "cursor", "surface", "roads", "change"])
+      shell.info.set(k, "");
     return;
   }
   const g = area.grid;
@@ -385,6 +452,9 @@ function installArea(next: TerrainArea): void {
   }
   area = next;
   dispatcher.clearHistory();
+  pushPull = null; // dialogs cancel a live push/pull before an area is replaced
+  dispatcher.clearSelection();
+  shell.info.set("change", "");
   setPreview(null);
   stroking = false;
   slopeAmber = false;
@@ -396,6 +466,7 @@ function installArea(next: TerrainArea): void {
   cursorRing.visible = false;
   blockOutline.visible = false;
   clearBoxOutline();
+  refreshSelectionOutline();
   overlayCentre = null;
   refreshOverlays();
   syncBlockLabel();
@@ -640,6 +711,7 @@ function setTopDown(on: boolean): void {
 // ---------------------------------------------------------------- tools
 
 function selectTool(next: Tool): void {
+  if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   tool = next;
   dispatcher.setTool(next);
   if (tool !== "block") blockOutline.visible = false;
@@ -751,6 +823,14 @@ function paintSmoothBox(hit: { x: number; z: number }): string | null {
 
 function paintRing(hit: { x: number; z: number }): void {
   if (!area) return;
+  if (tool === "gridSelect") {
+    cursorRing.visible = false;
+    blockOutline.visible = false;
+    const w = pushPull ? null : dispatcher.selectionPreview(hit.x, hit.z);
+    if (w) setOutline(boxOutline, w, 0.12);
+    else clearBoxOutline();
+    return;
+  }
   if (tool === "smoothBox") {
     blockOutline.visible = false;
     blockReadoutLine = paintSmoothBox(hit);
@@ -1014,21 +1094,45 @@ function applyResult(res: ToolResult, _ms: number): void {
   rebuild(res.dirtyHeights, { heights: true });
   rebuild(res.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(res.dirtyHeights);
+  const delta = res.heightDeltaM;
+  const held = res.heldVertices ?? 0;
+  // A height op that moved nothing (all held by roads, or clamped to zero) is not an edit.
+  const noopHeights =
+    delta === 0 && res.dirtyPaint === undefined && !res.graphChanged && !res.lockChanged;
   const edited =
-    res.dirtyHeights !== undefined ||
-    res.dirtyPaint !== undefined ||
-    res.graphChanged ||
-    res.lockChanged;
+    !noopHeights &&
+    (res.dirtyHeights !== undefined ||
+      res.dirtyPaint !== undefined ||
+      res.graphChanged ||
+      res.lockChanged);
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
+  refreshSelectionOutline();
   if (edited) setDirty(true);
   slopeAmber = res.slopeClamped;
   if (res.previewPoints !== undefined) setPreview(res.previewPoints);
   for (const w of res.warnings) log(w);
+  if (delta !== undefined) {
+    const sign = delta > 0 ? "+" : "";
+    shell.info.set(
+      "change",
+      `last ${sign}${fmt3(delta)} m${held > 0 ? ` (${held} held by roads)` : ""}`,
+    );
+  }
+  const heldNoChange = delta === 0 && held > 0;
   if (res.status !== undefined) {
-    setStatus(res.status);
+    setStatus(res.status, res.slopeClamped || heldNoChange ? "error" : "info");
     if (res.status === SLOPE_CLAMP_HINT) setHint(SLOPE_CLAMP_HINT);
   } else if (edited) {
-    setStatus("Edited.");
+    if (delta !== undefined) {
+      const sign = delta > 0 ? "+" : "";
+      setStatus(
+        held > 0
+          ? `Changed ${sign}${fmt3(delta)} m; ${held} vertices held by roads did not move. Unlock the road (Lock tool, L) to sculpt under it.`
+          : `Changed ${sign}${fmt3(delta)} m.`,
+      );
+    } else {
+      setStatus("Edited.");
+    }
   }
   if (res.graphChanged) {
     validateRoads();
@@ -1064,23 +1168,84 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (hit) paintRing(hit);
 }
 
+function pushPullText(deltaM: number): string {
+  return `${deltaM > 0 ? "+" : ""}${fmt3(deltaM)} m`;
+}
+
+/** Restores the pre-drag heights; no undo entry, and the unsaved marker returns to its old state. */
+function cancelPushPullDrag(message: string): void {
+  const pp = pushPull;
+  if (!pp) return;
+  pushPull = null;
+  if (!area) return;
+  const r = dispatcher.cancelPushPull();
+  rebuild(r.dirtyHeights, { heights: true });
+  refreshOverlaysAfterEdit(r.dirtyHeights);
+  refreshSelectionOutline();
+  if (!pp.dirtyBefore) setDirty(false);
+  shell.info.set("change", "");
+  setStatus(message);
+  if (canvas.hasPointerCapture(pp.pointerId)) canvas.releasePointerCapture(pp.pointerId);
+}
+
 canvas.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !area) return;
+  if (e.button !== 0) return;
+  if (!area) {
+    setStatus(NO_AREA_MSG, "error");
+    return;
+  }
+  if (tool === "gridSelect" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault(); // no text selection while dragging
+    if (pushPull) return;
+    if (!dispatcher.getSelection() || !dispatcher.beginPushPull()) {
+      setStatus(NO_SELECTION_CLICK_MSG, "error");
+      return;
+    }
+    pushPull = { startY: e.clientY, pointerId: e.pointerId, dirtyBefore: dirty, lastDeltaM: 0 };
+    canvas.setPointerCapture(e.pointerId);
+    setStatus("Push/pull the selection: drag up or down. Shift = fine, Esc cancels.");
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   activePointerId = e.pointerId;
   strokeEvent(e, "down");
 });
 canvas.addEventListener("pointermove", (e) => {
   updateCursor(e.clientX, e.clientY);
+  if (pushPull && e.pointerId === pushPull.pointerId && area) {
+    const perPx = e.shiftKey ? PUSH_PULL_FINE_M_PER_PX : PUSH_PULL_M_PER_PX;
+    const delta = -(e.clientY - pushPull.startY) * perPx;
+    const res = dispatcher.pushPullTo(delta);
+    pushPull.lastDeltaM = res.heightDeltaM ?? pushPull.lastDeltaM;
+    applyResult(res, 0);
+    if (res.status === undefined) setStatus(`Push/pull ${pushPullText(pushPull.lastDeltaM)}`);
+    return;
+  }
   if (stroking) strokeEvent(e, "move");
 });
 canvas.addEventListener("pointerup", (e) => {
+  if (pushPull && e.pointerId === pushPull.pointerId && e.button === 0) {
+    const pp = pushPull;
+    pushPull = null;
+    const res = dispatcher.endPushPull();
+    applyResult(res, 0);
+    updateHistoryButtons();
+    setStatus(
+      res.dirtyHeights
+        ? `Push/pull ${pushPullText(pp.lastDeltaM)} applied. Ctrl+Z undoes it.`
+        : "Push/pull made no change.",
+      res.dirtyHeights ? "ok" : "info",
+    );
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    return;
+  }
   if (e.button !== 0 || !stroking) return;
   strokeEvent(e, "up");
   activePointerId = null;
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointercancel", (e) => {
+  if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (stroking) strokeEvent(e, "up");
   activePointerId = null;
 });
@@ -1093,12 +1258,13 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 function undoRedo(kind: "undo" | "redo"): void {
-  if (!area || stroking) return;
+  if (!area || stroking || pushPull) return;
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
   rebuild(r.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(r.dirtyHeights);
+  refreshSelectionOutline();
   setDirty(true);
   setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.", "ok");
   updateHistoryButtons();
@@ -1117,14 +1283,14 @@ const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     label: "Raise",
     icon: "▲",
     keyLabel: "H",
-    tip: "Raise the terrain under the brush. Hold the mouse button and drag to sculpt.",
+    tip: "Click or drag to raise terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
   },
   {
     id: "lower",
     label: "Lower",
     icon: "▼",
     keyLabel: "J",
-    tip: "Lower the terrain under the brush. Hold the mouse button and drag to sculpt.",
+    tip: "Click or drag to lower terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
   },
   {
     id: "smooth",
@@ -1183,6 +1349,13 @@ const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     tip: "Drag a box to smooth that whole area. Roads never move.",
   },
   {
+    id: "gridSelect",
+    label: "Grid select",
+    icon: "▦",
+    keyLabel: "S",
+    tip: "Drag a rectangle of cells. Then raise/lower it with the ▲/▼ buttons, or Ctrl+drag up/down to push or pull it by hand.",
+  },
+  {
     id: "lock",
     label: "Lock/unlock road",
     icon: "⚿",
@@ -1216,6 +1389,7 @@ const BLOCK_CELLS_SPEC: StepperSpec = {
   decimals: 0,
 };
 const BLOCK_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
+const SELECT_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
 const PASSES_SPEC: StepperSpec = { step: 1, coarse: 3, min: 1, max: 10, decimals: 0 };
 
 function optStepper(
@@ -1271,6 +1445,7 @@ function buildFlyout(t: Tool): void {
   flyoutReadout = null;
   blockLabelEl = null;
   rotationEl = null;
+  selectionReadoutEl = null;
   const o = dispatcher.getOptions();
   const f = shell.flyout;
   f.replaceChildren();
@@ -1499,6 +1674,68 @@ function buildFlyout(t: Tool): void {
       syncBlockLabel();
       break;
     }
+    case "gridSelect": {
+      selectionReadoutEl = el("div", "muted");
+      const bigButton = (label: string, tip: string, sign: 1 | -1): HTMLButtonElement => {
+        const b = createButton({
+          label,
+          tip,
+          onClick: () => runLockAction(() => dispatcher.raiseSelection(sign)),
+        });
+        b.style.fontSize = "1.1em";
+        b.style.padding = "10px 12px";
+        b.style.width = "100%";
+        return b;
+      };
+      const range = el("input", undefined, undefined, "Step size in metres, 0.25 to 5");
+      range.type = "range";
+      range.min = String(SELECT_STEP_SPEC.min);
+      range.max = String(SELECT_STEP_SPEC.max);
+      range.step = String(SELECT_STEP_SPEC.step);
+      range.value = String(o.selectStepM);
+      const rangeLabel = el("div", "muted", `Step ${fmt3(o.selectStepM)} m`);
+      const applyStep = (v: number): void => {
+        dispatcher.setOptions({ selectStepM: v });
+        const real = dispatcher.getOptions().selectStepM;
+        range.value = String(real);
+        rangeLabel.textContent = `Step ${fmt3(real)} m`;
+      };
+      const stepField = optStepper(
+        "Step size",
+        "Height change per raise/lower press in metres",
+        SELECT_STEP_SPEC,
+        o.selectStepM,
+        "m",
+        applyStep,
+        true,
+      );
+      range.addEventListener("input", () => {
+        const v = Number(range.value);
+        stepField.stepper.set(v);
+        applyStep(v);
+      });
+      f.append(
+        selectionReadoutEl,
+        bigButton(
+          "▲ Raise selection",
+          "Raise the selected cells by the Step amount (one undo step)",
+          1,
+        ),
+        bigButton(
+          "▼ Lower selection",
+          "Lower the selected cells by the Step amount (one undo step)",
+          -1,
+        ),
+        createSection("Step", "Set how far each raise/lower press moves the selection", false, [
+          range,
+          rangeLabel,
+          stepField.field,
+        ]),
+        note("Ctrl+drag up/down pushes or pulls the selection. Esc cancels."),
+      );
+      refreshSelectionOutline();
+      break;
+    }
     case "smoothBox":
       flyoutReadout = el("div", "muted");
       f.append(
@@ -1629,6 +1866,7 @@ async function contourIntervalDialog(): Promise<void> {
 }
 
 function cancelActiveStroke(): void {
+  if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (!stroking) return;
   stroking = false;
   setPreview(null);
@@ -1744,6 +1982,7 @@ const shell = createShell({
       dispatcher.cancelBoxDrag();
       dispatcher.clearSelection();
       clearBoxOutline();
+      refreshSelectionOutline();
     },
     clearLabel: "Clear selection",
     clearTip: "Clear the Grid selection or cancel a box drag (does not change terrain)",
@@ -1808,6 +2047,21 @@ window.addEventListener("keydown", (e) => {
       undoRedo("redo");
       return;
     case "escape":
+      if (!dialogOpen && pushPull) {
+        cancelPushPullDrag("Push/pull cancelled.");
+        return;
+      }
+      if (!dialogOpen && tool === "gridSelect" && stroking) {
+        // Abandon a rubber-band drag without selecting anything.
+        const prev = dispatcher.getSelection();
+        dispatcher.pointerUp(Number.NaN, Number.NaN);
+        dispatcher.setSelection(prev);
+        stroking = false;
+        clearBoxOutline();
+        refreshSelectionOutline();
+        setStatus("Selection drag cancelled.");
+        return;
+      }
       if (!dialogOpen && dispatcher.cancelBoxDrag()) {
         stroking = false;
         clearBoxOutline();
