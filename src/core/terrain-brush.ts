@@ -71,6 +71,10 @@ export interface BrushResult {
   window?: CellWindow;
   /** True when the slope limiter had to move vertices. */
   slopeClamped: boolean;
+  /** Signed change of largest magnitude actually written (after the slope limiter). */
+  maxDeltaM: number;
+  /** Vertices in the touched window skipped because a road holds them. */
+  heldCount: number;
 }
 
 export interface PaintResult {
@@ -95,7 +99,7 @@ const RELAX = 0.25;
 /** A pair only counts as pre-existing over-cap beyond this (Float32 / 0.01 m save quantisation noise). */
 const PREEXISTING_TOL_M = 0.02;
 
-const NO_OP: BrushResult = { slopeClamped: false };
+const noOp = (heldCount = 0): BrushResult => ({ slopeClamped: false, maxDeltaM: 0, heldCount });
 
 function falloffAt(kind: Falloff, d: number, r: number): number {
   const t = d / r;
@@ -211,17 +215,20 @@ function runHeightOp(
   // sculpting over a road never moves road terrain away from its graph y.
   const hold = opts.roadMask?.(touched);
   let maxDelta = 0;
+  let heldCount = 0;
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
     for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
       const x = grid.originX + c * grid.cellSizeM;
       const z = grid.originZ + r * grid.cellSizeM;
-      const v = hold?.[r + c * stride] ? old[k] : compute(x, z, old[k], (rr, cc) => snap(rr, cc));
+      const isHeld = !!hold?.[r + c * stride];
+      if (isHeld) heldCount++;
+      const v = isHeld ? old[k] : compute(x, z, old[k], (rr, cc) => snap(rr, cc));
       next[k] = Number.isFinite(v) ? v : old[k];
       maxDelta = Math.max(maxDelta, Math.abs(Math.fround(next[k]) - old[k]));
     }
   }
-  if (maxDelta === 0) return NO_OP;
+  if (maxDelta === 0) return noOp(heldCount);
 
   const dirty = expandWindow(
     {
@@ -286,7 +293,15 @@ function runHeightOp(
   }
 
   const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: limiterMask });
-  return { window: dirty, slopeClamped: res.changed.length > 0 };
+  let signed = 0;
+  k = 0;
+  for (let c = touched.minCol; c <= touched.maxCol; c++) {
+    for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
+      const d = grid.heights[r + c * stride] - old[k];
+      if (Math.abs(d) > Math.abs(signed)) signed = d;
+    }
+  }
+  return { window: dirty, slopeClamped: res.changed.length > 0, maxDeltaM: signed, heldCount };
 }
 
 export function raiseLower(
@@ -298,9 +313,9 @@ export function raiseLower(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p || !Number.isFinite(rateM)) return NO_OP;
+  if (!p || !Number.isFinite(rateM)) return noOp();
   const w = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!w) return NO_OP;
+  if (!w) return noOp();
   return runHeightOp(
     grid,
     w,
@@ -321,9 +336,9 @@ export function smoothBrush(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p) return NO_OP;
+  if (!p) return noOp();
   const cw = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!cw) return NO_OP;
+  if (!cw) return noOp();
   // Widen by one so the kernel reads real neighbours at the footprint edge.
   const w = {
     minRow: Math.max(0, cw.minRow - 1),
@@ -406,22 +421,77 @@ export function raiseBlock(
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
 ): BrushResult {
-  if (!Number.isFinite(params.stepM) || !Number.isFinite(params.blockCells)) return NO_OP;
+  if (!Number.isFinite(params.stepM) || !Number.isFinite(params.blockCells)) return noOp();
   const stepM = Math.min(BLOCK_STEP_MAX_M, Math.max(BLOCK_STEP_MIN_M, params.stepM));
   const win = blockWindowAt(grid, params.x, params.z, params.blockCells);
-  if (!win) return NO_OP;
+  if (!win) return noOp();
+  return raiseWindow(grid, win, sign * stepM, rec, opts);
+}
+
+/**
+ * Raise (or lower, negative) every vertex of `win` by exactly `deltaM`. Sharp
+ * edges (no relax); the slope limiter, road holds and recorder still apply.
+ */
+export function raiseWindow(
+  grid: TerrainGrid,
+  win: CellWindow,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM)) return noOp();
+  const w = clipWindow(grid, win);
+  if (!w) return noOp();
+  return runHeightOp(grid, w, (_x, _z, h) => h + deltaM, rec, false, opts);
+}
+
+function clipWindow(grid: TerrainGrid, win: CellWindow): CellWindow | null {
+  const w = {
+    minRow: Math.max(0, Math.floor(win.minRow)),
+    minCol: Math.max(0, Math.floor(win.minCol)),
+    maxRow: Math.min(grid.rows, Math.ceil(win.maxRow)),
+    maxCol: Math.min(grid.cols, Math.ceil(win.maxCol)),
+  };
+  return w.minRow <= w.maxRow && w.minCol <= w.maxCol ? w : null;
+}
+
+/** Copy of the window's heights in the column-major order runHeightOp uses. */
+export function snapshotWindow(grid: TerrainGrid, win: CellWindow): Float32Array {
+  const w = clipWindow(grid, win);
+  if (!w) return new Float32Array(0);
   const stride = grid.rows + 1;
-  const mask = opts?.roadMask?.(win);
+  const out = new Float32Array((w.maxRow - w.minRow + 1) * (w.maxCol - w.minCol + 1));
+  let k = 0;
+  for (let c = w.minCol; c <= w.maxCol; c++) {
+    for (let r = w.minRow; r <= w.maxRow; r++) out[k++] = grid.heights[r + c * stride];
+  }
+  return out;
+}
+
+/**
+ * Absolute push/pull: sets each window vertex to `base[k] + deltaM` (base from
+ * snapshotWindow). Incremental `h + step` would ratchet under the slope limiter.
+ */
+export function setWindowFromBase(
+  grid: TerrainGrid,
+  win: CellWindow,
+  base: Float32Array,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM)) return noOp();
+  const w = clipWindow(grid, win);
+  if (!w) return noOp();
+  const rowsN = w.maxRow - w.minRow + 1;
+  if (base.length !== rowsN * (w.maxCol - w.minCol + 1)) return noOp();
   return runHeightOp(
     grid,
-    win,
+    w,
     (x, z, h) => {
-      if (mask) {
-        const col = Math.round((x - grid.originX) / grid.cellSizeM);
-        const row = Math.round((z - grid.originZ) / grid.cellSizeM);
-        if (mask[row + col * stride]) return h;
-      }
-      return h + sign * stepM;
+      const col = Math.round((x - grid.originX) / grid.cellSizeM) - w.minCol;
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM) - w.minRow;
+      return base[row + col * rowsN] + deltaM;
     },
     rec,
     false,
@@ -443,7 +513,7 @@ export function smoothRegion(
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
 ): BrushResult {
-  if (!Number.isFinite(params.strength) || !Number.isFinite(params.passes)) return NO_OP;
+  if (!Number.isFinite(params.strength) || !Number.isFinite(params.passes)) return noOp();
   const strength = Math.min(1, Math.max(0, params.strength));
   const passes = Math.min(SMOOTH_PASSES_MAX, Math.max(1, Math.round(params.passes)));
   const win: CellWindow = {
@@ -452,7 +522,7 @@ export function smoothRegion(
     maxRow: Math.min(grid.rows, Math.ceil(region.maxRow)),
     maxCol: Math.min(grid.cols, Math.ceil(region.maxCol)),
   };
-  if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return NO_OP;
+  if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return noOp();
   const stride = grid.rows + 1;
   const rowsN = win.maxRow - win.minRow + 1;
   const colsN = win.maxCol - win.minCol + 1;
@@ -517,9 +587,9 @@ export function flattenBrush(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p || !Number.isFinite(targetM)) return NO_OP;
+  if (!p || !Number.isFinite(targetM)) return noOp();
   const w = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!w) return NO_OP;
+  if (!w) return noOp();
   return runHeightOp(
     grid,
     w,
@@ -558,7 +628,7 @@ export function stampTerrain(
     !Number.isFinite(s.widthM) ||
     !Number.isFinite(s.heightM)
   ) {
-    return NO_OP;
+    return noOp();
   }
   const clampSize = (v: number): number => Math.min(MAX_RADIUS_M * 2, Math.max(1, v));
   const length = clampSize(s.lengthM);
@@ -566,7 +636,7 @@ export function stampTerrain(
   const height = Math.min(200, Math.max(-200, s.heightM));
   const reach = s.kind === "wedge" ? Math.hypot(length / 2, width / 2) : width / 2;
   const w = circleWindow(grid, s.x, s.z, reach);
-  if (!w) return NO_OP;
+  if (!w) return noOp();
   const cos = Math.cos(s.rotationRad);
   const sin = Math.sin(s.rotationRad);
   const base = sampleTerrainHeight(grid, s.x, s.z);

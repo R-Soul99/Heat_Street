@@ -9,8 +9,11 @@ import {
   paintSurface,
   raiseBlock,
   raiseLower,
+  raiseWindow,
+  setWindowFromBase,
   smoothBrush,
   smoothRegion,
+  snapshotWindow,
   stampTerrain,
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
@@ -506,5 +509,61 @@ describe("smoothRegion", () => {
     smoothRegion(a, win, { strength: 1, passes: 1 });
     smoothRegion(b, win, { strength: 1, passes: 4 });
     expect(variance(b)).toBeLessThan(variance(a));
+  });
+});
+
+describe("height reporting and window ops (07.1-03)", () => {
+  const win = { minRow: 28, minCol: 28, maxRow: 32, maxCol: 32 };
+
+  it("raiseLower reports maxDeltaM and heldCount", () => {
+    const g = grid();
+    const r = raiseLower(g, brush({ strength: 1 }), 1);
+    expect(r.maxDeltaM).toBeGreaterThan(0.5);
+    expect(r.heldCount).toBe(0);
+    const l = raiseLower(g, brush({ strength: 1 }), -1);
+    expect(l.maxDeltaM).toBeLessThan(0);
+  });
+
+  it("reports held vertices when a road mask holds everything", () => {
+    const g = grid();
+    const roadMask = () => new Uint8Array(g.heights.length).fill(1);
+    const r = raiseLower(g, brush({ strength: 1 }), 1, 1, undefined, { roadMask });
+    expect(r.window).toBeUndefined();
+    expect(r.maxDeltaM).toBe(0);
+    expect(r.heldCount).toBeGreaterThan(0);
+  });
+
+  it("raiseWindow raises every vertex by exactly the delta, one diff", () => {
+    const g = grid();
+    const rec = createStrokeRecorder(g);
+    const res = raiseWindow(g, win, 1, rec);
+    expect(res.maxDeltaM).toBeCloseTo(1, 5);
+    for (let c = 28; c <= 32; c++) {
+      for (let r = 28; r <= 32; r++) expect(g.heights[terrainIndex(g, r, c)]).toBeCloseTo(1, 5);
+    }
+    expect(rec.commit()?.heights).toBeDefined();
+  });
+
+  it("raiseWindow holds road-masked vertices and counts them", () => {
+    const g = grid();
+    const held = terrainIndex(g, 30, 30);
+    const roadMask = () => {
+      const m = new Uint8Array(g.heights.length);
+      m[held] = 1;
+      return m;
+    };
+    const res = raiseWindow(g, win, 1, undefined, { roadMask });
+    expect(g.heights[held]).toBe(0);
+    expect(res.heldCount).toBe(1);
+  });
+
+  it("setWindowFromBase is absolute and restores the base", () => {
+    const g = grid();
+    const base = snapshotWindow(g, win);
+    setWindowFromBase(g, win, base, 2.5);
+    expect(g.heights[terrainIndex(g, 30, 30)]).toBeCloseTo(2.5, 5);
+    setWindowFromBase(g, win, base, 0);
+    expect(g.heights[terrainIndex(g, 30, 30)]).toBe(0);
+    expect(g.heights[terrainIndex(g, 28, 28)]).toBe(0);
   });
 });
