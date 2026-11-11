@@ -62,6 +62,13 @@ import {
   type ToolOptions,
   type ToolResult,
 } from "./tool-dispatch.ts";
+import {
+  adjustPrimary,
+  editFeedback,
+  NO_AREA_MESSAGE,
+  primaryValue,
+  pushPullDelta,
+} from "./value-keys.ts";
 
 const DEFAULT_HINT =
   "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+right-drag or Ctrl+wheel to pan, wheel to zoom.";
@@ -76,6 +83,7 @@ const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
 const BLOCK_YELLOW = 0xffee66;
 const BOX_CYAN = 0x44ddff;
+const SELECT_PINK = 0xff66cc;
 
 // ---------------------------------------------------------------- state
 
@@ -235,12 +243,14 @@ function brushOptions(hint: string, withSurface: boolean): (host: HTMLElement) =
 
 function runAction(fn: () => ToolResult): void {
   if (!area) {
-    say("Load an area first (pick one at the top and press Load, or File > New...).", "error");
+    say(NO_AREA_MESSAGE, "error");
     return;
   }
   if (stroking) return;
   const t0 = performance.now();
-  applyResult(fn(), performance.now() - t0);
+  const res = fn();
+  applyResult(res, performance.now() - t0);
+  giveFeedback(res);
   updateHistoryButtons();
 }
 
@@ -414,6 +424,84 @@ function renderLockOptions(host: HTMLElement): void {
   );
 }
 
+let selectionLabel: ReturnType<typeof readout> | null = null;
+
+function selectionText(): string {
+  const w = dispatcher.getGridSelection();
+  if (!w) return "No selection: drag on the terrain.";
+  const cols = w.maxCol - w.minCol;
+  const rows = w.maxRow - w.minRow;
+  const cell = area ? area.grid.cellSizeM : DEFAULT_CELL_SIZE_M;
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return `Selection: ${cols} x ${rows} cells (${round(cols * cell)} x ${round(rows * cell)} m)`;
+}
+
+function renderGridSelectOptions(host: HTMLElement): void {
+  selectionLabel = readout(selectionText());
+  const row = document.createElement("div");
+  row.className = "es-row";
+  row.append(
+    createButton({
+      label: "▲ Raise",
+      tip: "Raise the selected cells by the step. One click = one undo step.",
+      onClick: () => runAction(() => dispatcher.raiseSelection(1)),
+    }),
+    createButton({
+      label: "▼ Lower",
+      tip: "Lower the selected cells by the step. One click = one undo step.",
+      onClick: () => runAction(() => dispatcher.raiseSelection(-1)),
+    }),
+  );
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Push/pull";
+  details.append(
+    summary,
+    numStepper({
+      label: "Sensitivity",
+      tip: "How many metres one pixel of Ctrl+drag moves the selection.",
+      key: "pushPullMPerPx",
+      min: 0.005,
+      max: 1,
+      step: 0.005,
+      coarse: 0.05,
+      decimals: 3,
+      unit: "m/px",
+    }).el,
+  );
+  host.append(
+    hintText(
+      "Drag to select cells. ▲/▼ move them by the step. Ctrl+drag up or down pushes or pulls them by hand (hold Shift for fine). Esc clears the selection.",
+    ),
+    selectionLabel.el,
+    row,
+    numStepper({
+      label: "Step",
+      tip: "How far one ▲ or ▼ click moves the selection, in metres.",
+      key: "gridStepM",
+      min: 0.25,
+      max: 5,
+      step: 0.25,
+      coarse: 1,
+      decimals: 2,
+      unit: "m",
+      slider: "collapsed",
+    }).el,
+    details,
+    createButton({
+      label: "Clear selection",
+      tip: "Remove the selection outline. Esc does the same.",
+      onClick: () => clearSelection(),
+    }),
+  );
+}
+
+function clearSelection(): void {
+  if (!dispatcher.getGridSelection()) return;
+  runAction(() => dispatcher.clearGridSelection());
+  say("Selection cleared.");
+}
+
 function stampRotationText(): string {
   const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
   return `Rotation ${deg} deg ([ ] rotate 15 deg). Drag to set length.`;
@@ -500,7 +588,7 @@ const TOOL_RENDERERS: Record<Tool, (host: HTMLElement) => void> = {
   block: renderBlockOptions,
   smoothBox: renderSmoothBoxOptions,
   lock: renderLockOptions,
-  gridSelect: (host) => host.append(hintText("Drag a rectangle of cells to select them.")),
+  gridSelect: renderGridSelectOptions,
 };
 
 const CONTOUR_INTERVALS_M = [0.25, 0.5, 1, 2, 5, 10];
@@ -708,13 +796,16 @@ const bindings: Binding[] = [
   {
     code: "Escape",
     label: "Esc",
-    description: "Cancel the smooth-area drag",
+    description: "Cancel the smooth-area drag or clear the grid selection",
     run: () => {
-      if (!dispatcher.cancelBoxDrag()) return;
-      stroking = false;
-      clearBoxOutline();
-      if (lastHit) paintRing(lastHit);
-      say("Smooth area cancelled.");
+      if (dispatcher.cancelBoxDrag()) {
+        stroking = false;
+        clearBoxOutline();
+        if (lastHit) paintRing(lastHit);
+        say("Smooth area cancelled.");
+        return;
+      }
+      if (tool === "gridSelect" && dispatcher.getGridSelection() && !stroking) clearSelection();
     },
   },
   { code: "KeyT", label: "T", description: "Top-down camera on/off", run: toggleTopDown },
@@ -740,14 +831,17 @@ const bindings: Binding[] = [
   {
     code: "BracketLeft",
     label: "[",
-    description: "Rotate the stamp back 15 degrees",
-    run: () => rotateStampBy(-1),
+    shift: "any",
+    description: "Make the tool's main value smaller (Shift: bigger steps); rotates the stamp back",
+    run: (e) => bracketKey(-1, e.shiftKey),
   },
   {
     code: "BracketRight",
     label: "]",
-    description: "Rotate the stamp forward 15 degrees",
-    run: () => rotateStampBy(1),
+    shift: "any",
+    description:
+      "Make the tool's main value bigger (Shift: bigger steps); rotates the stamp forward",
+    run: (e) => bracketKey(1, e.shiftKey),
   },
   { code: "ArrowUp", label: "Up", description: "Pan the view up", run: () => panView(0, -1) },
   { code: "ArrowDown", label: "Down", description: "Pan the view down", run: () => panView(0, 1) },
@@ -767,6 +861,25 @@ const bindings: Binding[] = [
     }),
   ),
 ];
+
+function bracketKey(dir: 1 | -1, coarse: boolean): void {
+  if (tool === "stamp") {
+    rotateStampBy(dir);
+    return;
+  }
+  const p = primaryValue(tool);
+  const patch = adjustPrimary(tool, dispatcher.getOptions(), dir, coarse);
+  if (!p || !patch) {
+    say("This tool has no adjustable value.");
+    return;
+  }
+  dispatcher.setOptions(patch);
+  const value = dispatcher.getOptions()[p.key] as number;
+  say(`${p.label} ${value.toFixed(p.decimals)}${p.unit ? ` ${p.unit}` : ""}`);
+  shell.refreshToolOptions();
+  syncBlockLabel();
+  if (lastHit) paintRing(lastHit);
+}
 
 function rotateStampBy(sign: 1 | -1): void {
   dispatcher.rotateStamp(sign);
@@ -1048,6 +1161,50 @@ boxOutline.frustumCulled = false;
 boxOutline.visible = false;
 scene.add(boxOutline);
 
+// Grid-select outline: persistent pink terrain-hugging rectangle of the selected cells.
+const selectionOutline = new THREE.LineLoop(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: SELECT_PINK, depthTest: false, transparent: true }),
+);
+selectionOutline.renderOrder = 999;
+selectionOutline.frustumCulled = false;
+selectionOutline.visible = false;
+scene.add(selectionOutline);
+
+function hideSelectionOutline(): void {
+  selectionOutline.visible = false;
+  selectionOutline.geometry.dispose();
+  selectionOutline.geometry = new THREE.BufferGeometry();
+}
+
+/** Draws the live drag window if there is one, else the stored selection (or nothing). */
+function paintSelectionOutline(hit?: { x: number; z: number } | null): void {
+  const w =
+    (hit ? dispatcher.gridSelectDragWindow(hit.x, hit.z) : null) ?? dispatcher.getGridSelection();
+  if (!area || !w) {
+    hideSelectionOutline();
+    return;
+  }
+  const g = area.grid;
+  const pts: number[] = [];
+  const put = (x: number, z: number): void => {
+    pts.push(x, sampleTerrainHeight(g, x, z) + 0.12, z);
+  };
+  const x0 = g.originX + w.minCol * g.cellSizeM;
+  const x1 = g.originX + w.maxCol * g.cellSizeM;
+  const z0 = g.originZ + w.minRow * g.cellSizeM;
+  const z1 = g.originZ + w.maxRow * g.cellSizeM;
+  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
+  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
+  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
+  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
+  selectionOutline.geometry.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
+  selectionOutline.geometry = geo;
+  selectionOutline.visible = true;
+}
+
 function clearBoxOutline(): void {
   boxOutline.visible = false;
   boxOutline.geometry.dispose();
@@ -1172,6 +1329,8 @@ function installArea(next: TerrainArea): void {
   cursorRing.visible = false;
   blockOutline.visible = false;
   clearBoxOutline();
+  hideSelectionOutline();
+  selectionLabel?.set(selectionText());
   overlayCentre = null;
   refreshOverlays();
   syncBlockLabel();
@@ -1327,6 +1486,8 @@ function selectTool(next: Tool): void {
   }
   blockReadoutLine = null;
   shell.info.set("brush", "-");
+  if (tool === "gridSelect") paintSelectionOutline(null);
+  else hideSelectionOutline();
   if (lastHit) paintRing(lastHit);
   updateZoomHint();
 }
@@ -1452,6 +1613,13 @@ function paintSmoothBox(hit: { x: number; z: number }): string | null {
 
 function paintRing(hit: { x: number; z: number }): void {
   if (!area) return;
+  if (tool === "gridSelect") {
+    blockOutline.visible = false;
+    clearBoxOutline();
+    cursorRing.visible = false;
+    paintSelectionOutline(hit);
+    return;
+  }
   if (tool === "smoothBox") {
     blockOutline.visible = false;
     blockReadoutLine = paintSmoothBox(hit);
@@ -1741,7 +1909,25 @@ function applyResult(res: ToolResult, ms: number): void {
     say(`Edited (${ms.toFixed(1)} ms).`);
   }
   if (res.graphChanged) validateRoads();
+  if (res.gridSelectionChanged || (tool === "gridSelect" && res.dirtyHeights)) {
+    if (tool === "gridSelect") paintSelectionOutline(null);
+    selectionLabel?.set(selectionText());
+  }
 }
+
+/** Says how far the ground moved, or why nothing did (07.1-06 diagnosis). */
+function giveFeedback(res: ToolResult): void {
+  if (res.status?.startsWith("Nothing changed: ")) {
+    say(res.status, "error");
+    return;
+  }
+  if (res.status === SLOPE_CLAMP_HINT) return;
+  const msg = editFeedback(res, tool);
+  if (msg !== null) say(msg, "ok");
+}
+
+let pushPull = false;
+let pushPullStartY = 0;
 
 function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (!area) return;
@@ -1751,12 +1937,36 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   let res: ToolResult;
   if (phase === "down") {
     if (!hit) return;
+    // Latch Ctrl once at pointer-down; never re-read it per move.
+    pushPull = tool === "gridSelect" && (e.ctrlKey || e.metaKey);
+    pushPullStartY = e.clientY;
     stroking = true;
-    res = dispatcher.pointerDown(hit.x, hit.z, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey });
+    res = dispatcher.pointerDown(hit.x, hit.z, { ctrl: pushPull, shift: e.shiftKey });
+    if (pushPull && !dispatcher.isStroking()) {
+      // No selection to push or pull: the dispatcher refused.
+      stroking = false;
+      pushPull = false;
+      if (res.status) say(res.status, "error");
+      return;
+    }
   } else if (phase === "move") {
-    if (!hit) return;
-    res = dispatcher.pointerMove(hit.x, hit.z, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey });
+    if (pushPull) {
+      res = dispatcher.pushPullTo(
+        pushPullDelta(
+          e.clientY - pushPullStartY,
+          dispatcher.getOptions().pushPullMPerPx,
+          e.shiftKey,
+        ),
+      );
+    } else {
+      if (!hit) return;
+      res = dispatcher.pointerMove(hit.x, hit.z, {
+        ctrl: e.ctrlKey || e.metaKey,
+        shift: e.shiftKey,
+      });
+    }
   } else {
+    pushPull = false;
     stroking = false;
     setPreview(null);
     const end = hit ?? lastHit;
@@ -1764,6 +1974,7 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   }
   applyResult(res, performance.now() - t0);
   if (phase === "up") {
+    giveFeedback(res);
     slopeAmber = false;
     setHint(DEFAULT_HINT);
     updateHistoryButtons();
@@ -1772,7 +1983,11 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
 }
 
 canvas.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || !area) return;
+  if (e.button !== 0) return;
+  if (!area) {
+    say(NO_AREA_MESSAGE, "error");
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   strokeEvent(e, "down");
 });
@@ -1814,6 +2029,7 @@ function undoRedo(kind: "undo" | "redo"): void {
   lastEditMs = performance.now() - t0;
   say(kind === "undo" ? "Undid last stroke." : "Redid stroke.");
   updateHistoryButtons();
+  if (tool === "gridSelect") paintSelectionOutline(null);
   if (r.graphChanged || r.lockChanged) refreshRoadLockOverlay();
   if (r.graphChanged) validateRoads();
 }
