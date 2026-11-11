@@ -570,7 +570,11 @@ function setTool(next: Tool): void {
   boxHit = { roads: [], buildings: [] };
   erasing = false;
   const fly = shell.flyout;
-  fly.replaceChildren(hintEl(HINTS[next]));
+  // The tool's help goes to the info bar, not the flyout, so an empty flyout
+  // (Select with nothing selected, Move) hides instead of covering the map.
+  fly.replaceChildren();
+  fly.hidden = false;
+  setStatus(HINTS[next]);
   if (next === "road") {
     widthStepper = createStepper({
       value: drawWidth,
@@ -696,16 +700,17 @@ function editTag(way: RawWay, key: string, fn: () => void, rebuild: boolean): vo
 function renderSelection(): void {
   const box = selBox;
   if (box === undefined) return;
+  if (boxRect === undefined && selected === undefined) {
+    box.replaceChildren();
+    shell.flyout.hidden = true;
+    return;
+  }
+  shell.flyout.hidden = false;
   if (boxRect !== undefined) {
     renderBoxPanel(box);
     return;
   }
-  if (selected === undefined) {
-    box.replaceChildren(
-      hintEl("Nothing selected. Click a road or building; drag to pan, wheel to zoom."),
-    );
-    return;
-  }
+  if (selected === undefined) return;
   const { kind, way } = selected;
   const t = way.tags ?? {};
   const parts: HTMLElement[] = [];

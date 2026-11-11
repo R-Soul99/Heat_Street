@@ -25,8 +25,14 @@ body {
   overflow: hidden;
 }
 .shell-canvas {
+  /* A canvas is a replaced element: inset alone leaves it at its intrinsic
+     300x150, so size it explicitly between the menubar (28px) and info bar (24px). */
   position: absolute;
-  inset: 28px 0 24px 0;
+  top: 28px;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: calc(100% - 52px);
 }
 .shell-menubar,
 .shell-rail,
