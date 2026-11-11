@@ -27,9 +27,7 @@ import { reportMissingTips } from "../editor-shell/tooltips.ts";
 import type { ShellHandle, StatusKind } from "../editor-shell/types.ts";
 import {
   appendImportedRoads,
-  COARSE_M_PER_PX,
   DEFAULT_IMPORT_ROAD,
-  footprintWarnings,
   type ImportRoadOptions,
   type ImportScale,
   importScale,
@@ -60,11 +58,14 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
+import { type ImportPlan, planImportWorld, suggestMapId, validateNewMapInput } from "./new-map.ts";
 import { compileOutcome, countsText, worldSizeText } from "./ui-text.ts";
 import {
   DEFAULT_TILE_M,
   fitView,
   gridStep,
+  MAX_WORLD_KM,
+  MIN_WORLD_KM,
   scaleBar,
   TILE_SIZES_M,
   tileLines,
@@ -118,7 +119,7 @@ const HINTS: Record<Tool, string> = {
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building.",
   import:
-    "Load a road-map image, set its real size, preview the trace, then import. Roads are added to the map you are editing.",
+    "Trace roads from the image you chose in File > New... > Import image. Set the threshold, preview, then import into the new map.",
 };
 
 let shell: ShellHandle;
@@ -774,7 +775,9 @@ canvas.addEventListener(
   { passive: false },
 );
 
-// --- image import (pure maths lives in image-trace.ts / image-import.ts) ---
+// --- image import (pure maths lives in image-trace.ts / image-import.ts / new-map.ts) ---
+// Import is the second stage of File > New... > Import image: the New popup creates a
+// FRESH map sized from the image, then this tool traces roads into it (D-06).
 const MAX_IMPORT_PIXELS = 25_000_000;
 interface ImportImage {
   w: number;
@@ -782,15 +785,12 @@ interface ImportImage {
   lum: Uint8Array;
 }
 let impImage: ImportImage | undefined;
+/** Locked scale from the New popup. The world was created to fit exactly. */
+let impMPerPx: number | undefined;
 let impMask: HTMLCanvasElement | undefined;
 let impGraph: RoadGraphPx | undefined;
-let impMode: "km" | "mpp" = "km";
 // Raw (full precision) import parameters; the flyout steppers only DISPLAY them.
 let impThreshold = 128;
-let impKm = 1;
-let impMpp = 1;
-let impOx = 0;
-let impOy = 0;
 let impRoadWidth = DEFAULT_IMPORT_ROAD.widthM;
 let impHighway = "residential";
 let impSurface = "tarmac";
@@ -798,20 +798,16 @@ let impSpur = DEFAULT_TRACE_OPTIONS.minSpurPx;
 let impSimp = DEFAULT_TRACE_OPTIONS.simplifyPx;
 let impSmooth = DEFAULT_TRACE_OPTIONS.smoothIterations;
 // Live flyout handles (null while the Image trace flyout is not shown).
-let impKmStepper: StepperHandle | null = null;
-let impMppStepper: StepperHandle | null = null;
 let impDerived: { set(t: string): void } | null = null;
 let impWarnEl: HTMLElement | null = null;
-let impFileInput: HTMLInputElement | null = null;
 
-const impOffset = (): { x: number; y: number } => ({ x: impOx, y: impOy });
+/** Import always starts at the SW corner of a world made to fit the image. */
+const IMPORT_OFFSET = { x: 0, y: 0 } as const;
 
 function impScaleNow(): ImportScale | undefined {
-  if (impImage === undefined) return undefined;
+  if (impImage === undefined || impMPerPx === undefined) return undefined;
   try {
-    return impMode === "km"
-      ? importScale({ imageW: impImage.w, imageH: impImage.h, widthKm: impKm })
-      : importScale({ imageW: impImage.w, imageH: impImage.h, mPerPx: impMpp });
+    return importScale({ imageW: impImage.w, imageH: impImage.h, mPerPx: impMPerPx });
   } catch {
     return undefined;
   }
@@ -826,25 +822,15 @@ function impOptions(): Partial<TraceOptions> {
   };
 }
 
-/** Recomputes the linked km / m-per-px fields, the readout and warnings. */
+/** Refreshes the scale readout and warnings in the flyout, then redraws. */
 function updateImportUi(): void {
   const scaleNow = impScaleNow();
-  if (impImage === undefined || scaleNow === undefined) {
-    impDerived?.set(impImage === undefined ? "no image loaded" : "enter a width or m/px");
-    impWarnEl?.replaceChildren();
-    requestDraw();
-    return;
-  }
-  // Only the non-driving field is written back; it displays 3 dp, raw value kept.
-  if (impMode === "km") impMppStepper?.set(scaleNow.mPerPx);
-  else impKmStepper?.set(scaleNow.widthM / 1000);
-  impDerived?.set(
-    `${impImage.w} x ${impImage.h} px; height ${fmt3(scaleNow.heightM / 1000)} km; ${fmt3(scaleNow.mPerPx)} m/px`,
-  );
-  if (impWarnEl !== null) {
-    const warnings = [...scaleNow.warnings, ...footprintWarnings(scaleNow, impOffset(), world)];
-    impWarnEl.replaceChildren(
-      ...warnings.map((w) => {
+  if (impImage !== undefined && scaleNow !== undefined) {
+    impDerived?.set(
+      `${impImage.w} x ${impImage.h} px; ${fmt3(scaleNow.widthM / 1000)} x ${fmt3(scaleNow.heightM / 1000)} km; ${fmt3(scaleNow.mPerPx)} m/px`,
+    );
+    impWarnEl?.replaceChildren(
+      ...scaleNow.warnings.map((w) => {
         const d = document.createElement("div");
         d.className = "es-warn";
         d.textContent = w;
@@ -881,48 +867,36 @@ function rebuildImportMask(): void {
 
 function clearImport(): void {
   impImage = undefined;
+  impMPerPx = undefined;
   impMask = undefined;
   impGraph = undefined;
-  if (impFileInput !== null) impFileInput.value = "";
-  updateImportUi();
+  shell.refreshToolOptions();
+  requestDraw();
 }
 
-async function onImportFile(file: File): Promise<void> {
-  try {
-    const bmp = await createImageBitmap(file);
-    if (bmp.width * bmp.height > MAX_IMPORT_PIXELS) {
-      say(`Image is ${bmp.width}x${bmp.height}; refusing more than 25 megapixels.`, "error");
-      return;
-    }
-    const c = document.createElement("canvas");
-    c.width = bmp.width;
-    c.height = bmp.height;
-    const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
-    g.fillStyle = "#fff"; // transparent = white = no road
-    g.fillRect(0, 0, c.width, c.height);
-    g.drawImage(bmp, 0, 0);
-    const px = g.getImageData(0, 0, c.width, c.height).data;
-    const lum = new Uint8Array(c.width * c.height);
-    for (let i = 0; i < lum.length; i++) {
-      lum[i] = Math.round(
-        0.299 * (px[i * 4] as number) +
-          0.587 * (px[i * 4 + 1] as number) +
-          0.114 * (px[i * 4 + 2] as number),
-      );
-    }
-    impImage = { w: c.width, h: c.height, lum };
-    impGraph = undefined;
-    const worldKm = world.widthM / 1000;
-    // Raw number kept; the stepper displays it at 3 dp (D-05).
-    impKm = (worldKm * 1000) / c.width <= COARSE_M_PER_PX ? worldKm : c.width / 1000;
-    impKmStepper?.set(impKm);
-    impMode = "km";
-    rebuildImportMask();
-    updateImportUi();
-    say(`Image loaded: ${c.width} x ${c.height} px`, "ok");
-  } catch (err) {
-    say(`Could not read image: ${errText(err)}`, "error");
+/** Decodes a PNG/JPEG into luminance. Throws an Error with a readable message. */
+async function decodeImportFile(file: File): Promise<ImportImage> {
+  const bmp = await createImageBitmap(file);
+  if (bmp.width * bmp.height > MAX_IMPORT_PIXELS) {
+    throw new Error(`Image is ${bmp.width}x${bmp.height}; refusing more than 25 megapixels.`);
   }
+  const c = document.createElement("canvas");
+  c.width = bmp.width;
+  c.height = bmp.height;
+  const g = c.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
+  g.fillStyle = "#fff"; // transparent = white = no road
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0);
+  const px = g.getImageData(0, 0, c.width, c.height).data;
+  const lum = new Uint8Array(c.width * c.height);
+  for (let i = 0; i < lum.length; i++) {
+    lum[i] = Math.round(
+      0.299 * (px[i * 4] as number) +
+        0.587 * (px[i * 4 + 1] as number) +
+        0.114 * (px[i * 4 + 2] as number),
+    );
+  }
+  return { w: c.width, h: c.height, lum };
 }
 
 function traceImport(): RoadGraphPx | undefined {
@@ -940,7 +914,7 @@ function importCounts(g: RoadGraphPx): string {
 function drawImportOverlay(): void {
   const s = impScaleNow();
   if (impMask === undefined || s === undefined) return;
-  const o = impOffset();
+  const o = IMPORT_OFFSET;
   const tl = toScreen({ x: o.x, y: o.y + s.heightM });
   const br = toScreen({ x: o.x + s.widthM, y: o.y });
   ctx.drawImage(impMask, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
@@ -952,9 +926,9 @@ function drawImportOverlay(): void {
 function drawImportPreview(): void {
   const s = impScaleNow();
   if (impGraph === undefined || impImage === undefined || s === undefined) return;
-  const o = impOffset();
   const imageH = impImage.h;
-  const toS = (p: { x: number; y: number }) => toScreen(pixelToWorld(p, imageH, s.mPerPx, o));
+  const toS = (p: { x: number; y: number }) =>
+    toScreen(pixelToWorld(p, imageH, s.mPerPx, IMPORT_OFFSET));
   ctx.save();
   ctx.setLineDash([6, 4]);
   ctx.strokeStyle = "#4df";
@@ -981,7 +955,7 @@ function drawImportPreview(): void {
 
 function previewImport(): void {
   if (impImage === undefined) {
-    say("Load an image first.", "error");
+    say("Start with File > New... > Import image.", "error");
     return;
   }
   say("Tracing...", "info", false);
@@ -995,7 +969,15 @@ function previewImport(): void {
 function runImport(): void {
   const s = impScaleNow();
   if (impImage === undefined || s === undefined) {
-    say("Load an image and give a valid width first.", "error");
+    say("Start with File > New... > Import image.", "error");
+    return;
+  }
+  // The overlay fix (D-06): traced roads are never added on top of existing roads.
+  if (roads.response.elements.length > 0) {
+    say(
+      "This map already has roads, so the image was not imported on top of them. Undo the earlier import (Ctrl+Z) or start a New map.",
+      "error",
+    );
     return;
   }
   say("Tracing...", "info", false);
@@ -1013,30 +995,31 @@ function runImport(): void {
       roads,
       proj,
       g,
-      { imageH: image.h, mPerPx: s.mPerPx, offset: impOffset() },
+      { imageH: image.h, mPerPx: s.mPerPx, offset: { ...IMPORT_OFFSET } },
       opts,
     );
-    const warnings = footprintWarnings(s, impOffset(), world);
+    const junctions = g.nodes.filter((n) => n.degree >= 3).length;
+    impImage = undefined;
+    impMPerPx = undefined;
+    impMask = undefined;
     impGraph = undefined;
-    refresh(
-      `imported ${ways.length} roads (${g.nodes.filter((n) => n.degree >= 3).length} junctions)${
-        warnings.length > 0 ? `; WARNING: ${warnings.join("; ")}` : ""
-      }`,
-    );
+    shell.refreshToolOptions();
+    refresh("");
+    say(`Imported ${ways.length} roads (${junctions} junctions). Ctrl+S to save.`, "ok");
   }, 0);
 }
 
-/** Image trace flyout. State is module-level so a tool switch does not lose the loaded image. */
+/**
+ * Image trace flyout: the trace stage of a fresh-map import. State is module-level
+ * so a tool switch does not lose the loaded image.
+ */
 function renderImportOptions(host: HTMLElement): void {
-  const file = document.createElement("input");
-  file.type = "file";
-  file.accept = "image/png,image/jpeg";
-  file.dataset.tip = "Pick a PNG or JPEG road map. Dark pixels are treated as road.";
-  file.addEventListener("change", () => {
-    const f = file.files?.[0];
-    if (f !== undefined) void onImportFile(f);
-  });
-  impFileInput = file;
+  impDerived = null;
+  impWarnEl = null;
+  if (impImage === undefined || impMPerPx === undefined) {
+    host.append(hintText(HINTS.import), hintText("Start with File > New... > Import image."));
+    return;
+  }
 
   const thr = createStepper({
     label: "Threshold",
@@ -1055,72 +1038,8 @@ function renderImportOptions(host: HTMLElement): void {
       requestDraw();
     },
   });
-  const km = createStepper({
-    label: "Real width",
-    tip: "How wide the image is in the real world. Drives the scale.",
-    unit: "km",
-    value: impKm,
-    min: 0.01,
-    max: 50,
-    step: 0.01,
-    coarse: 10,
-    decimals: 3,
-    onChange: (v) => {
-      impKm = v;
-      impMode = "km";
-      updateImportUi();
-    },
-  });
-  const mpp = createStepper({
-    label: "Metres per pixel",
-    tip: "Alternative to Real width: how many metres one image pixel covers.",
-    value: impMpp,
-    min: 0.01,
-    max: 20,
-    step: 0.05,
-    coarse: 10,
-    decimals: 3,
-    onChange: (v) => {
-      impMpp = v;
-      impMode = "mpp";
-      updateImportUi();
-    },
-  });
-  impKmStepper = km;
-  impMppStepper = mpp;
-  const derived = readout("no image loaded");
+  const derived = readout("");
   impDerived = derived;
-
-  const offX = createStepper({
-    label: "Offset X",
-    tip: "Metres from the world's south-west corner to the image's left edge.",
-    unit: "m",
-    value: impOx,
-    min: -100000,
-    max: 100000,
-    step: 10,
-    coarse: 10,
-    decimals: 1,
-    onChange: (v) => {
-      impOx = v;
-      updateImportUi();
-    },
-  });
-  const offY = createStepper({
-    label: "Offset Y",
-    tip: "Metres from the world's south-west corner to the image's bottom edge.",
-    unit: "m",
-    value: impOy,
-    min: -100000,
-    max: 100000,
-    step: 10,
-    coarse: 10,
-    decimals: 1,
-    onChange: (v) => {
-      impOy = v;
-      updateImportUi();
-    },
-  });
   const rw = createStepper({
     label: "Road width (m)",
     tip: "Width given to every imported road.",
@@ -1210,13 +1129,8 @@ function renderImportOptions(host: HTMLElement): void {
 
   host.append(
     hintText(HINTS.import),
-    file,
-    thr.el,
-    km.el,
-    mpp.el,
     derived.el,
-    offX.el,
-    offY.el,
+    thr.el,
     rw.el,
     hw.el,
     surf.el,
@@ -1229,9 +1143,17 @@ function renderImportOptions(host: HTMLElement): void {
     }),
     createButton({
       label: "Import roads",
-      tip: "Add the traced roads to the map you are editing. Undo removes them.",
+      tip: "Add the traced roads to this new map. Undo removes them.",
       kind: "primary",
       onClick: runImport,
+    }),
+    createButton({
+      label: "Discard image",
+      tip: "Forget the loaded image. The map keeps whatever it already has.",
+      onClick: () => {
+        clearImport();
+        say("Image discarded.", "info");
+      },
     }),
   );
   updateImportUi();
@@ -1265,7 +1187,8 @@ function resize(): void {
   if (roads !== undefined) requestDraw();
 }
 
-// --- areas + New world (temporary home until the D-06 New popup) ---
+// --- areas + New map popup ---
+let knownAreas: string[] = [];
 const areaSelect = createSelect<string>({
   tip: "Which map you are editing. Switching asks before discarding unsaved changes.",
   options: [],
@@ -1275,6 +1198,7 @@ const areaSelect = createSelect<string>({
 
 async function refreshAreas(selectId: string): Promise<void> {
   const areas = await apiJson<string[]>("/__editor/areas");
+  knownAreas = areas;
   areaSelect.setOptions(strOptions(areas));
   areaSelect.set(selectId);
 }
@@ -1300,67 +1224,255 @@ async function changeArea(id: string): Promise<void> {
   }
 }
 
-function openNewWorld(): void {
-  const idInput = document.createElement("input");
-  idInput.type = "text";
-  idInput.placeholder = "my-world";
-  idInput.dataset.tip = "Name for the new map: lowercase letters, digits and dashes only.";
+/**
+ * Creates the files on the server and opens the new map. Returns an error string
+ * (shown inside the popup) or null. Discards unsaved work only after a confirm.
+ */
+async function createWorldOnServer(
+  id: string,
+  widthKm: number,
+  heightKm: number,
+): Promise<string | null> {
+  if (dirty) {
+    const ok = await shell.confirm({
+      title: "Discard changes?",
+      message: `Discard unsaved changes to ${area}?`,
+      okLabel: "Discard",
+    });
+    if (!ok) return "Not created: you kept your unsaved changes.";
+  }
+  let register: string[];
+  try {
+    const out = await apiJson<{ register: string[] }>("/__editor/new-world", {
+      method: "POST",
+      body: JSON.stringify({ id, widthKm, heightKm }),
+    });
+    register = out.register;
+  } catch (err) {
+    return errText(err);
+  }
+  messageLog.add(`Register "${id}" in tools/map-compiler/cli.ts:\n${register.join("\n")}`);
+  try {
+    await refreshAreas(id);
+    await loadArea(id);
+  } catch (err) {
+    return `Map files for "${id}" were created, but loading failed: ${errText(err)}. Pick it from the area list.`;
+  }
+  return null;
+}
+
+/** The single New popup: a blank map, or a fresh map sized from an image (D-06). */
+function openNewMap(): void {
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.placeholder = "my-map";
+  nameInput.value = suggestMapId(knownAreas);
+  nameInput.dataset.tip = "Name for the new map: lowercase letters, digits and dashes only.";
+  let nameTouched = false;
+  nameInput.addEventListener("input", () => {
+    nameTouched = true;
+  });
   const mk = (label: string, tip: string): StepperHandle =>
     createStepper({
       label,
       tip,
       value: 6,
-      min: 0.5,
-      max: 10,
+      min: MIN_WORLD_KM,
+      max: MAX_WORLD_KM,
       step: 0.5,
       coarse: 2,
-      decimals: 1,
+      decimals: 3,
       unit: "km",
       onChange: () => {},
     });
   const w = mk("Width", "How wide the new map is, 0.5 to 10 km.");
   const h = mk("Height", "How tall the new map is, 0.5 to 10 km.");
+
+  // Image section (hidden until "Import image..." is pressed).
+  let image: ImportImage | undefined;
+  let mode: "km" | "mpp" = "km";
+  let imgKm = 6;
+  let imgMpp = 1;
+  const imgBox = document.createElement("div");
+  imgBox.hidden = true;
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/png,image/jpeg";
+  fileInput.dataset.tip = "Pick a PNG or JPEG road map. Dark pixels are treated as road.";
+  const readoutLine = readout("no image chosen");
+  const warnBox = document.createElement("div");
+  let kmStepper: StepperHandle | undefined;
+  let mppStepper: StepperHandle | undefined;
+
+  const planNow = (): ImportPlan | undefined =>
+    image === undefined
+      ? undefined
+      : planImportWorld(
+          mode === "km"
+            ? { imageW: image.w, imageH: image.h, widthKm: imgKm }
+            : { imageW: image.w, imageH: image.h, mPerPx: imgMpp },
+        );
+
+  const updatePlanUi = (): void => {
+    warnBox.replaceChildren();
+    if (image === undefined) {
+      readoutLine.set("no image chosen");
+      return;
+    }
+    let s: ImportScale | undefined;
+    try {
+      s =
+        mode === "km"
+          ? importScale({ imageW: image.w, imageH: image.h, widthKm: imgKm })
+          : importScale({ imageW: image.w, imageH: image.h, mPerPx: imgMpp });
+    } catch {
+      s = undefined;
+    }
+    if (s === undefined) {
+      readoutLine.set("enter a width or metres per pixel");
+      return;
+    }
+    if (mode === "km") mppStepper?.set(s.mPerPx);
+    else kmStepper?.set(s.widthM / 1000);
+    readoutLine.set(
+      `${image.w} x ${image.h} px -> ${fmt3(s.widthM / 1000)} x ${fmt3(s.heightM / 1000)} km at ${fmt3(s.mPerPx)} m/px`,
+    );
+    const plan = planNow();
+    const lines = plan === undefined ? [] : plan.ok ? plan.warnings : [plan.error];
+    for (const t of lines) {
+      const d = document.createElement("div");
+      d.className = "es-warn";
+      d.textContent = t;
+      warnBox.append(d);
+    }
+  };
+
+  kmStepper = createStepper({
+    label: "Image width",
+    tip: "How wide the image is in the real world. The height follows the image shape.",
+    unit: "km",
+    value: imgKm,
+    min: MIN_WORLD_KM,
+    max: MAX_WORLD_KM,
+    step: 0.1,
+    coarse: 1,
+    decimals: 3,
+    onChange: (v) => {
+      imgKm = v;
+      mode = "km";
+      updatePlanUi();
+    },
+  });
+  mppStepper = createStepper({
+    label: "Metres per pixel",
+    tip: "Alternative to Image width: how many metres one image pixel covers.",
+    value: imgMpp,
+    min: 0.01,
+    max: 100,
+    step: 0.05,
+    coarse: 10,
+    decimals: 3,
+    onChange: (v) => {
+      imgMpp = v;
+      mode = "mpp";
+      updatePlanUi();
+    },
+  });
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files?.[0];
+    if (f === undefined) return;
+    void decodeImportFile(f).then(
+      (img) => {
+        image = img;
+        if (!nameTouched) nameInput.value = suggestMapId(knownAreas, f.name);
+        imgKm = Math.min(MAX_WORLD_KM, Math.max(MIN_WORLD_KM, img.w / 1000));
+        mode = "km";
+        kmStepper?.set(imgKm);
+        updatePlanUi();
+      },
+      (err: unknown) => {
+        image = undefined;
+        updatePlanUi();
+        warnBox.replaceChildren();
+        const d = document.createElement("div");
+        d.className = "es-warn";
+        d.textContent = `Could not read image: ${errText(err)}`;
+        warnBox.append(d);
+      },
+    );
+  });
+  imgBox.append(fileInput, kmStepper.el, mppStepper.el, readoutLine.el, warnBox);
+  const importBtn = createButton({
+    label: "Import image...",
+    tip: "Make the new map from a road-map picture instead of a blank size",
+    onClick: () => {
+      imgBox.hidden = false;
+      importBtn.hidden = true;
+    },
+  });
+
   const body = document.createElement("div");
-  body.append(labelled("Id (a-z, 0-9, -)", idInput.dataset.tip ?? "", idInput), w.el, h.el);
+  body.append(
+    labelled("Name (a-z, 0-9, -)", nameInput.dataset.tip ?? "", nameInput),
+    w.el,
+    h.el,
+    importBtn,
+    imgBox,
+  );
   void shell.dialog({
-    title: "New world",
+    title: "New map",
     body,
     actions: [
       { id: "cancel", label: "Cancel", tip: "Close without creating anything" },
       {
-        id: "create",
-        label: "Create",
-        tip: "Create an empty map of this size and open it",
+        id: "blank",
+        label: "Create blank map",
+        tip: "Create an empty map of the Width and Height above and open it",
         primary: true,
         run: async () => {
-          const id = idInput.value.trim();
-          if (dirty) {
-            const ok = await shell.confirm({
-              title: "Discard changes?",
-              message: `Creating "${id}" will discard unsaved changes to ${area}.`,
-              okLabel: "Discard",
-            });
-            if (!ok) return "Not created: your unsaved changes were kept.";
-          }
-          try {
-            const out = await apiJson<{ register: string[] }>("/__editor/new-world", {
-              method: "POST",
-              body: JSON.stringify({ id, widthKm: w.get(), heightKm: h.get() }),
-            });
-            messageLog.add(
-              `Register "${id}" in tools/map-compiler/cli.ts:\n${out.register.join("\n")}`,
-            );
-            await refreshAreas(id);
-            await loadArea(id);
-            say(
-              `Created "${id}". To compile it, add its two lines to tools/map-compiler/cli.ts (Help > Show log has them).`,
-              "ok",
-              false,
-            );
-            return null;
-          } catch (err) {
-            return errText(err);
-          }
+          const id = nameInput.value.trim();
+          const wk = w.get();
+          const hk = h.get();
+          const bad = validateNewMapInput({ id, widthKm: wk, heightKm: hk }, knownAreas);
+          if (bad !== null) return bad;
+          const err = await createWorldOnServer(id, wk, hk);
+          if (err !== null) return err;
+          say(
+            `Created "${id}" (${fmt3(wk)} x ${fmt3(hk)} km). Saving works now; to compile or drive it, add its two lines to tools/map-compiler/cli.ts (Help > Show log).`,
+            "ok",
+          );
+          return null;
+        },
+      },
+      {
+        id: "image",
+        label: "Create from image",
+        tip: "Create a new map sized from the image, then trace its roads",
+        run: async () => {
+          if (image === undefined) return "Choose an image first.";
+          const plan = planNow();
+          if (plan === undefined) return "Choose an image first.";
+          if (!plan.ok) return plan.error;
+          const id = nameInput.value.trim();
+          const bad = validateNewMapInput(
+            { id, widthKm: plan.widthKm, heightKm: plan.heightKm },
+            knownAreas,
+          );
+          if (bad !== null) return bad;
+          const err = await createWorldOnServer(id, plan.widthKm, plan.heightKm);
+          if (err !== null) return err;
+          // loadArea cleared any pending import; set the image after the fresh map loads.
+          impImage = image;
+          impMPerPx = plan.mPerPx;
+          impGraph = undefined;
+          rebuildImportMask();
+          shell.setTool("import");
+          shell.refreshToolOptions();
+          say(
+            `New map "${id}" created from the image. Adjust the threshold, Preview, then Import roads.`,
+            "ok",
+          );
+          return null;
         },
       },
     ],
@@ -1443,10 +1555,16 @@ function driveCompile(): void {
   });
 }
 
+const newButton = createButton({
+  label: "New",
+  tip: "Create a blank map, or a map from an image",
+  onClick: openNewMap,
+});
+
 shell = createShell({
   root: document.getElementById("app") as HTMLElement,
   title: "Map editor",
-  topbarExtras: [areaSelect.el],
+  topbarExtras: [newButton, areaSelect.el],
   initialTool: "select",
   onToolChange,
   tools: [
@@ -1496,7 +1614,7 @@ shell = createShell({
       label: "File",
       tip: "Create, save and compile maps",
       items: [
-        { label: "New world...", tip: "Create a new empty map", run: openNewWorld },
+        { label: "New...", tip: "Create a blank map, or a map from an image", run: openNewMap },
         {
           label: "Save",
           tip: "Write the roads and buildings to disk",
@@ -1558,7 +1676,7 @@ shell = createShell({
       items: [
         {
           label: "Image trace...",
-          tip: "Open the image trace tool",
+          tip: "Open the image trace tool (start with File > New... > Import image)",
           run: () => shell.setTool("import"),
         },
       ],
@@ -1617,6 +1735,7 @@ installShortcuts(bindings, shell.isDialogOpen);
 async function main(): Promise<void> {
   resize();
   const areas = await apiJson<string[]>("/__editor/areas");
+  knownAreas = areas;
   areaSelect.setOptions(strOptions(areas));
   const initial = areas.includes("my-map") ? "my-map" : (areas[0] ?? "");
   areaSelect.set(initial);
