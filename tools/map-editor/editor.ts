@@ -54,7 +54,7 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
-import { checkRoads, fixFoldedRoads } from "./road-check.ts";
+import { checkRoads } from "./road-check.ts";
 import {
   type Box,
   buildingsInBox,
@@ -120,7 +120,7 @@ let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
   select:
-    "Click a road or building to edit it. Left-drag draws a selection box. Right- or middle-drag pans; Ctrl+arrows pan; F fits the world.",
+    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans; Ctrl+arrows pan; F fits the world.",
   road: "Click centre-line points; double-click or Enter to finish; Esc cancels. Clicking a road or node connects to it. [ ] change the width.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building. [ ] change the height.",
@@ -292,15 +292,28 @@ async function loadArea(id: string): Promise<boolean> {
   }
 }
 
+const DRAWING_PATH = (id: string): string => `tools/map-compiler/areas/${id}.*`;
+const PLAYABLE_PATH = (id: string): string => `public/maps/${id}.*`;
+const TERRAIN_EDITOR_URL = "/tools/terrain-editor/index.html";
+
+/** True when a map is open; otherwise points the user at the start screen. */
+function requireMap(): boolean {
+  if (roads !== undefined) return true;
+  setStatus("Open or create a map first (File > Start screen).", "error");
+  return false;
+}
+
 async function save(): Promise<boolean> {
+  if (!requireMap()) return false;
   try {
     const put = (kind: string, body: RawEnvelope) =>
       api(`/__editor/raw/${area}/${kind}`, { method: "PUT", body: JSON.stringify(body) });
     await put("roads", roads);
     await put("buildings", buildings);
     dirty = false;
-    refresh(`Saved ${area}.`);
-    shell.info.status(`Saved ${area}.`, "ok");
+    const msg = `Saved drawing to ${DRAWING_PATH(area)} (roads and buildings).`;
+    refresh(msg);
+    shell.info.status(msg, "ok");
     return true;
   } catch (err) {
     setStatus(`Save failed: ${errText(err)}`, "error");
@@ -309,24 +322,16 @@ async function save(): Promise<boolean> {
 }
 
 /**
- * Runs the compiler's road check here in the editor and repairs folded
- * (too-sharp) roads automatically, as one Undo step. Returns true when the
- * roads will pass the compiler's validation. Unfixable problems select the
- * first offending road and explain it in the info bar.
+ * Runs the compiler's road check here and only REPORTS (it never changes or
+ * deletes anything). Returns true when the roads will pass the compiler's
+ * validation. A problem selects the first offending road and explains it in
+ * the info bar.
  */
-function checkAndFixRoads(): boolean {
-  let { problems } = checkRoads(area, roads);
-  let fixedNote = "";
-  if (problems.some((p) => p.fixable)) {
-    snapshot();
-    const r = fixFoldedRoads(area, roads);
-    problems = r.remaining;
-    fixedNote = `Fixed ${r.changedWays.length} road(s) that bent back on themselves (removed ${r.removedPoints} kink point(s); Undo reverts). `;
-    geometryVersion++;
-  }
+function checkRoadsReport(): boolean {
+  const { problems } = checkRoads(area, roads);
   if (problems.length === 0) {
-    refresh(`${fixedNote}Roads OK - ready to compile.`);
-    shell.info.status(`${fixedNote}Roads OK - ready to compile.`, "ok");
+    refresh("Roads OK - ready to compile.");
+    shell.info.status("Roads OK - ready to compile.", "ok");
     return true;
   }
   const first = problems[0];
@@ -335,7 +340,7 @@ function checkAndFixRoads(): boolean {
   refresh("");
   const more = problems.length > 1 ? ` (+${problems.length - 1} more)` : "";
   setStatus(
-    `${fixedNote}${first.text}${way !== undefined ? " It is selected." : ""}${more} Fix it by hand, then try again.`,
+    `${first.text}${way !== undefined ? " It is selected." : ""}${more} Fix it by hand, then try again.`,
     "error",
   );
   $("log-text").textContent = problems
@@ -346,7 +351,7 @@ function checkAndFixRoads(): boolean {
 
 async function compile(): Promise<boolean> {
   try {
-    if (!checkAndFixRoads()) return false;
+    if (!requireMap() || !checkRoadsReport()) return false;
     if (!(await save())) return false;
     const logText = $("log-text");
     logText.textContent = "compiling...";
@@ -354,7 +359,10 @@ async function compile(): Promise<boolean> {
     const res = await fetch(`/__editor/compile/${area}`, { method: "POST" });
     logText.textContent = await res.text();
     if (res.ok && res.headers.get("X-Compile-Ok") === "1") {
-      setStatus(`Compiled ${area}. Reload the game tab to see it.`, "ok");
+      setStatus(
+        `Saved drawing to ${DRAWING_PATH(area)}; playable map to ${PLAYABLE_PATH(area)}. Reload the game tab to see it.`,
+        "ok",
+      );
       return true;
     }
     setStatus("Compile failed - see File > Show compile log.", "error");
@@ -366,6 +374,7 @@ async function compile(): Promise<boolean> {
 }
 
 async function compileAndDrive(): Promise<void> {
+  if (!requireMap()) return;
   const tab = window.open("about:blank", "_blank");
   const ok = await compile();
   if (ok && tab !== null) tab.location.href = `/?map=${encodeURIComponent(area)}`;
@@ -1013,6 +1022,7 @@ function eraseAt(p: { x: number; y: number }): void {
 
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("mousedown", (e) => {
+  if (roads === undefined) return;
   const wantsPan = e.button !== 0;
   dragging = { x: e.clientX, y: e.clientY, moved: false, pan: wantsPan };
   if (e.button === 0 && tool === "select") boxStart = worldOf(e);
@@ -1030,6 +1040,7 @@ canvas.addEventListener("mousedown", (e) => {
   } else if (e.button === 0 && tool === "building") rectStart = worldOf(e);
 });
 window.addEventListener("mousemove", (e) => {
+  if (roads === undefined) return;
   if (e.target === canvas) {
     hover = worldOf(e);
     shell.info.set("cursor", `x ${fmt3(Math.round(hover.x))}, y ${fmt3(Math.round(hover.y))} m`);
@@ -1057,6 +1068,7 @@ window.addEventListener("mousemove", (e) => {
   requestDraw();
 });
 window.addEventListener("mouseup", (e) => {
+  if (roads === undefined) return;
   const d = dragging;
   dragging = undefined;
   if (d === undefined || e.button !== 0) return;
@@ -1120,6 +1132,7 @@ window.addEventListener("mouseup", (e) => {
   refresh(selected ? "selected" : "nothing here");
 });
 canvas.addEventListener("dblclick", () => {
+  if (roads === undefined) return;
   if (tool !== "road") return;
   // The two clicks of the double-click each added a point; drop the duplicate.
   roadPoints.pop();
@@ -1129,6 +1142,7 @@ canvas.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
+    if (roads === undefined) return;
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -1145,6 +1159,7 @@ function panBy(dx: -1 | 0 | 1, dy: -1 | 0 | 1): void {
   requestDraw();
 }
 function doFit(): void {
+  if (roads === undefined) return;
   fitWorld();
   requestDraw();
 }
@@ -1222,7 +1237,7 @@ window.addEventListener("keydown", (e) => {
     cancelDrawing();
     return;
   }
-  if (typing || dialogOpen) return;
+  if (typing || dialogOpen || roads === undefined) return;
   if (ctrl) {
     const pan = ARROW_PAN[e.code];
     if (pan !== undefined) {
@@ -1300,6 +1315,7 @@ async function openAreaDialog(): Promise<void> {
 }
 
 async function clearAll(): Promise<void> {
+  if (!requireMap()) return;
   const n = roads.response.elements.length;
   const m = buildings.response.elements.length;
   if (n + m === 0) {
@@ -1326,6 +1342,178 @@ function zoomCentre(factor: number): void {
   requestDraw();
 }
 
+interface MapStatus {
+  registered: boolean;
+  format: "legacy" | "terrain" | null;
+  hasTerrain: boolean;
+  hasCompiled: boolean;
+}
+
+const para = (text: string): HTMLElement => {
+  const p = el("p", undefined, text);
+  p.style.margin = "6px 0";
+  return p;
+};
+
+/**
+ * The first thing the editor shows (nothing is loaded automatically): start a
+ * new map, import an image, or open one of your existing maps.
+ */
+async function openStartScreen(): Promise<void> {
+  let areas: string[] = [];
+  try {
+    areas = await api<string[]>("/__editor/areas");
+  } catch (err) {
+    setStatus(`Could not list maps: ${errText(err)}`, "error");
+  }
+  const pick = createSelect({
+    options: areas.map((a) => ({ value: a, label: a })),
+    value: areas.includes(area) ? area : (areas[0] ?? ""),
+    tip: "Choose which existing map to open",
+    onChange: () => {},
+  });
+  const body = el("div");
+  body.append(
+    para(
+      "Draw or import a road layout here. When it looks right, press Open in terrain editor to shape the ground and drive it.",
+    ),
+    para("Drag a box to select many roads and buildings, then press Delete (use the Select tool)."),
+    para("Nothing is opened automatically. Pick one:"),
+    createField("Open an existing map", pick.el),
+  );
+  const r = await openDialog({
+    title: "Heat Street map editor",
+    body,
+    actions: [
+      {
+        id: "open",
+        label: "Open existing map",
+        tip: "Open the map chosen above for editing",
+        primary: areas.length > 0,
+      },
+      { id: "new", label: "New map...", tip: "Create a new blank map" },
+      {
+        id: "import",
+        label: "Import image...",
+        tip: "Trace roads from a black-and-white road image into a new map",
+      },
+      {
+        id: "cancel",
+        label: "Close",
+        tip: "Close this screen without opening anything (File > Start screen brings it back)",
+      },
+    ],
+  });
+  if (r === "new") await openNewMapDialog("blank");
+  else if (r === "import") await openNewMapDialog("image");
+  else if (r === "open" && pick.get() !== "") {
+    if (await confirmDiscard()) await loadArea(pick.get());
+  } else if (roads === undefined) {
+    setStatus("No map open. Use File > Start screen to open or create one.");
+  }
+}
+
+/**
+ * Save, compile, convert to the terrain format and open the terrain editor.
+ * Reports in plain English what was written and where.
+ */
+async function openInTerrainEditor(): Promise<void> {
+  if (!requireMap()) return;
+  const id = area;
+  const go = (): void => {
+    window.location.href = `${TERRAIN_EDITOR_URL}?area=${encodeURIComponent(id)}`;
+  };
+  let status: MapStatus;
+  try {
+    status = await api<MapStatus>(`/__editor/status/${id}`);
+  } catch (err) {
+    setStatus(`Could not check ${id}: ${errText(err)}`, "error");
+    return;
+  }
+  if (!status.registered) {
+    setStatus(
+      `${id} is a built-in or imported map that cannot be converted here. Make a map with File > Start screen instead.`,
+      "error",
+    );
+    return;
+  }
+  if (status.hasTerrain) {
+    const choice = await openDialog({
+      title: "A terrain version already exists",
+      body: para(
+        "Opening it keeps every terrain edit you made. Replacing it converts this drawing again and throws those terrain edits away.",
+      ),
+      actions: [
+        {
+          id: "open",
+          label: "Open existing terrain map",
+          tip: "Keep the terrain version as it is (with all your terrain edits) and open it in the terrain editor",
+          primary: true,
+        },
+        {
+          id: "replace",
+          label: "Replace it from this drawing",
+          tip: "Convert this drawing again. This REPLACES the terrain version and throws away every terrain edit you made there.",
+        },
+        { id: "cancel", label: "Cancel", tip: "Do nothing" },
+      ],
+    });
+    if (choice === "cancel") return;
+    if (choice === "open") {
+      if (dirty && !(await save())) return;
+      go();
+      return;
+    }
+  }
+  if (!checkRoadsReport()) return;
+  if (!(await save())) return;
+  setStatus(`Compiling and converting ${id}... this can take a little while.`);
+  const logText = $("log-text");
+  logText.textContent = "compiling and converting...";
+  let out: {
+    ok: boolean;
+    log?: string;
+    error?: string;
+    summary?: { cols: number; rows: number; cellSizeM: number; vertices: number };
+  };
+  try {
+    const res = await fetch(`/__editor/to-terrain/${id}`, { method: "POST" });
+    out = (await res.json()) as typeof out;
+  } catch (err) {
+    setStatus(`Could not convert ${id}: ${errText(err)}`, "error");
+    return;
+  }
+  if (out.log !== undefined) logText.textContent = out.log;
+  if (!out.ok || out.summary === undefined) {
+    setStatus(`${out.error ?? "Conversion failed."} See File > Show compile log.`, "error");
+    return;
+  }
+  const g = out.summary;
+  const done = `Saved drawing to ${DRAWING_PATH(id)}; playable map to ${PLAYABLE_PATH(id)}; terrain map to public/maps/${id}.terrain.*`;
+  setStatus(done, "ok");
+  const body = el("div");
+  body.append(
+    para(`${done}.`),
+    para(
+      `The ground is a ${g.cols} x ${g.rows} grid of ${g.cellSizeM} m squares (${g.vertices.toLocaleString("en-GB")} points). Shape it in the terrain editor, then drive it in the game with ?map=${id}.`,
+    ),
+  );
+  const r = await openDialog({
+    title: "Ready for the terrain editor",
+    body,
+    actions: [
+      {
+        id: "go",
+        label: "Open terrain editor",
+        tip: "Go to the terrain editor with this map loaded",
+        primary: true,
+      },
+      { id: "stay", label: "Stay here", tip: "Keep editing the drawing in this editor" },
+    ],
+  });
+  if (r === "go") go();
+}
+
 function buildShell(): Shell {
   const run = (p: Promise<unknown>): void => void p;
   return createShell({
@@ -1335,6 +1523,12 @@ function buildShell(): Shell {
         label: "File/Area",
         tip: "Open, save and compile areas",
         items: [
+          {
+            id: "start",
+            label: "Start screen...",
+            tip: "Go back to the start screen: new map, import an image or open an existing map",
+            run: () => run(openStartScreen()),
+          },
           {
             id: "open",
             label: "Open area...",
@@ -1351,9 +1545,9 @@ function buildShell(): Shell {
           },
           {
             id: "fix-roads",
-            label: "Check & fix roads",
-            tip: "Run the compiler's road check now and automatically fix roads that bend back on themselves (one Undo step)",
-            run: () => void checkAndFixRoads(),
+            label: "Check roads",
+            tip: "Run the compiler's road check now and report any problem. It never changes your roads.",
+            run: () => void (requireMap() && checkRoadsReport()),
           },
           {
             id: "compile",
@@ -1362,9 +1556,15 @@ function buildShell(): Shell {
             run: () => run(compile()),
           },
           {
+            id: "to-terrain",
+            label: "Open in terrain editor",
+            tip: "Save, compile, turn this map into a terrain map and open it in the terrain editor, where you shape the ground and drive it",
+            run: () => run(openInTerrainEditor()),
+          },
+          {
             id: "drive",
-            label: "Compile & drive",
-            tip: "Save, compile, then open the game on this map in a new tab",
+            label: "Test drive (compile first)",
+            tip: "Save, compile, then drive the compiled map in the game in a new tab. Once a map has been opened in the terrain editor the game uses its terrain version.",
             run: () => run(compileAndDrive()),
           },
           {
@@ -1457,7 +1657,7 @@ function buildShell(): Shell {
         label: "Select",
         icon: "↖",
         keyLabel: "V",
-        tip: "Select: click a road or building to edit it, or drag a box to delete or disable what is inside",
+        tip: "Select: click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete.",
       },
       {
         id: "road",
@@ -1843,11 +2043,6 @@ async function openNewMapDialog(mode: "blank" | "image"): Promise<void> {
         roadOpts,
       );
       const junctions = g.nodes.filter((n) => n.degree >= 3).length;
-      // Traced lines often carry 1 m hooks that fold a wide road; fix them now
-      // so the fresh map compiles first time (same Undo step as the import).
-      const fix = fixFoldedRoads(id, roads);
-      if (fix.removedPoints > 0)
-        plan.warnings.push(`Smoothed ${fix.changedWays.length} road(s) with tight kinks.`);
       if (!(await save())) throw new Error("saving failed");
       const notes = [...plan.warnings, ...(made.registered ? [] : [made.warning ?? ""])].filter(
         (s) => s !== "",
@@ -1907,14 +2102,18 @@ async function main(): Promise<void> {
   );
   resize();
   switchTool("select");
-  const areas = await api<string[]>("/__editor/areas");
-  const initial = areas.includes("my-map") ? "my-map" : (areas[0] ?? "");
-  if (initial === "") {
-    setStatus("No areas found. Use File > New to create one.", "error");
-  } else {
-    await loadArea(initial);
-  }
+  const toTerrain = createButton({
+    label: "Open in terrain editor",
+    tip: "Save, compile, turn this map into a terrain map and open it in the terrain editor, where you shape the ground and drive it",
+    kind: "primary",
+    onClick: () => void openInTerrainEditor(),
+  });
+  toTerrain.id = "to-terrain-btn";
+  $("app").appendChild(toTerrain);
+  setStatus(HINTS.select);
   auditTips(document);
+  // Nothing is loaded automatically: the start screen decides what opens.
+  await openStartScreen();
 }
 
 main().catch((err: unknown) => {

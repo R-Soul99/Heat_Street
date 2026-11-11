@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addRoad, makeProjector, type RawEnvelope } from "./model.ts";
-import { checkRoads, fixFoldedRoads } from "./road-check.ts";
+import { checkRoads } from "./road-check.ts";
 
 const bbox = { south: 50, west: -3, north: 50.01, east: -2.98 };
 const proj = makeProjector(bbox);
@@ -40,23 +40,11 @@ describe("checkRoads", () => {
   });
 });
 
-describe("fixFoldedRoads", () => {
-  it("removes no points from a hooked road", () => {
+describe("checkRoads is report only", () => {
+  it("does not change the roads it checks", () => {
     const roads = hooked();
-    const way = roads.response.elements[0];
     const before = JSON.stringify(roads);
-    const r = fixFoldedRoads("t", roads);
-    expect(r.removedPoints).toBe(0);
-    expect(r.remaining).toEqual([]);
-    expect(JSON.stringify(roads)).toBe(before);
-    expect(way.nodes?.length).toBe(way.geometry.length);
-  });
-
-  it("changes nothing on a clean map", () => {
-    const roads = env();
-    addRoad(roads, proj, [free(100, 500), free(300, 500), free(300, 700)], TAGS);
-    const before = JSON.stringify(roads);
-    expect(fixFoldedRoads("t", roads).removedPoints).toBe(0);
+    checkRoads("t", roads);
     expect(JSON.stringify(roads)).toBe(before);
   });
 });

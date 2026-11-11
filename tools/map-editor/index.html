@@ -13,6 +13,10 @@
       dialog label { display: block; margin: 6px 0 2px; color: #9aa; }
       dialog select, dialog input[type="text"], dialog input[type="number"] { box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 4px; }
       .warn { color: #fb4; margin: 4px 0; }
+      .selection { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+      .selection .btn { width: 100%; }
+      .selection .toggle { display: flex; }
+      #to-terrain-btn { position: absolute; right: 220px; top: 36px; z-index: 12; padding: 8px 14px; font-weight: 600; }
       .ro { color: #9aa; margin: 2px 0; }
     </style>
   </head>
@@ -24,7 +28,7 @@
     <dialog id="log-dialog">
       <h3>Compile log</h3>
       <div id="log-text">No compile has run yet.</div>
-      <form method="dialog"><button type="submit">Close</button></form>
+      <form method="dialog"><button type="submit" data-tip="Close the compile log">Close</button></form>
     </dialog>
     <script type="module" src="./editor.ts"></script>
   </body>

@@ -8,6 +8,9 @@
  *   GET  /__editor/raw/<area>/<kind>      -> raw envelope (kind: roads|buildings)
  *   PUT  /__editor/raw/<area>/<kind>      -> overwrite it (body: envelope JSON)
  *   POST /__editor/compile/<area>         -> compile-map (+ route authoring), returns log
+ *   GET  /__editor/status/<area>          -> {registered, format, hasTerrain, hasCompiled}
+ *   POST /__editor/to-terrain/<area>      -> compile, convert to the terrain format, register
+ *                                            it as "terrain"; returns {ok, log, summary|error}
  *   POST /__editor/new-world              -> body {id,widthKm,heightKm}: writes a blank
  *                                            authored world and registers it; returns
  *                                            {ok,id,registered[,warning]} or {error}
@@ -18,7 +21,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
-import { authoredLegacyIds, registerAuthoredMap } from "../map-compiler/authored-registry.ts";
+import {
+  authoredLegacyIds,
+  readAuthoredManifest,
+  registerAuthoredMap,
+  setAuthoredFormat,
+} from "../map-compiler/authored-registry.ts";
+import { convertAuthoredMap } from "../map-compiler/terrain/convert-authored.ts";
 import { WorldExistsError, writeNewWorld } from "./new-world.ts";
 import { MAX_WORLD_KM, MIN_WORLD_KM } from "./world.ts";
 
@@ -75,6 +84,31 @@ function run(args: string[]): Promise<string> {
       },
     );
   });
+}
+
+/**
+ * Compiles an area. A registered map that is already in the terrain format is
+ * not on the compiler's list, so its format is flipped to "legacy" for the
+ * compile and put back afterwards (also when the compile fails).
+ */
+async function compileArea(area: string): Promise<{ log: string; ok: boolean }> {
+  const entry = readAuthoredManifest(ROOT).find((e) => e.id === area);
+  const restore = entry?.format === "terrain";
+  if (restore) await setAuthoredFormat(ROOT, area, "legacy");
+  try {
+    let log = await run(["tools/map-compiler/cli.ts", "--area", area]);
+    if (!log.includes("[exit")) {
+      const post = postCompileFor(area);
+      if (post !== undefined) log += await run(post);
+    }
+    if (log.includes("unknown area")) {
+      log +=
+        "\nThis map is not registered. Create it with File > New, or add it to tools/map-compiler/authored-maps.json.\n";
+    }
+    return { log, ok: !log.includes("[exit") };
+  } finally {
+    if (restore) await setAuthoredFormat(ROOT, area, "terrain");
+  }
 }
 
 export function mapEditorApi(): Plugin {
@@ -173,17 +207,62 @@ export function mapEditorApi(): Plugin {
             if (rawPath(parts[2], "roads") === undefined) {
               return send(res, 404, '{"error":"unknown area"}');
             }
-            let log = await run(["tools/map-compiler/cli.ts", "--area", parts[2]]);
-            if (!log.includes("[exit")) {
-              const post = postCompileFor(parts[2]);
-              if (post !== undefined) log += await run(post);
+            const out = await compileArea(parts[2]);
+            res.setHeader("X-Compile-Ok", out.ok ? "1" : "0");
+            return send(res, 200, out.log, "text/plain");
+          }
+          if (req.method === "GET" && parts[1] === "status" && parts[2] !== undefined) {
+            const entry = readAuthoredManifest(ROOT).find((e) => e.id === parts[2]);
+            const maps = path.join(ROOT, "public", "maps");
+            return send(
+              res,
+              200,
+              JSON.stringify({
+                registered: entry !== undefined,
+                format: entry?.format ?? null,
+                hasTerrain:
+                  entry !== undefined && existsSync(path.join(maps, `${entry.id}.terrain.json`)),
+                hasCompiled:
+                  entry !== undefined && existsSync(path.join(maps, `${entry.id}.map.json`)),
+              }),
+            );
+          }
+          if (req.method === "POST" && parts[1] === "to-terrain" && parts[2] !== undefined) {
+            const entry = readAuthoredManifest(ROOT).find((e) => e.id === parts[2]);
+            if (entry === undefined || rawPath(entry.id, "roads") === undefined) {
+              return send(
+                res,
+                404,
+                JSON.stringify({ ok: false, error: "That map is not one of your maps." }),
+              );
             }
-            if (log.includes("unknown area")) {
-              log +=
-                "\nThis map is not registered. Create it with File > New, or add it to tools/map-compiler/authored-maps.json.\n";
+            const compiled = await compileArea(entry.id);
+            if (!compiled.ok) {
+              return send(
+                res,
+                200,
+                JSON.stringify({
+                  ok: false,
+                  log: compiled.log,
+                  error: "The map did not compile, so nothing was converted. See the compile log.",
+                }),
+              );
             }
-            res.setHeader("X-Compile-Ok", log.includes("[exit") ? "0" : "1");
-            return send(res, 200, log, "text/plain");
+            try {
+              const summary = await convertAuthoredMap(ROOT, entry.id);
+              await setAuthoredFormat(ROOT, entry.id, "terrain");
+              return send(res, 200, JSON.stringify({ ok: true, log: compiled.log, summary }));
+            } catch (err) {
+              return send(
+                res,
+                200,
+                JSON.stringify({
+                  ok: false,
+                  log: compiled.log,
+                  error: `Converting to the terrain format failed: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+              );
+            }
           }
           return send(res, 404, '{"error":"not found"}');
         } catch (err) {

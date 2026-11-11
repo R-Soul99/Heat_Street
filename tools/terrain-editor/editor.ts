@@ -2298,7 +2298,17 @@ updateHistoryButtons();
 setHint(DEFAULT_HINT);
 setStatus("No area loaded. Use File > Open area or File > New.");
 auditTips(document);
-refreshAreaList().catch((err) => {
-  log(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
-});
+refreshAreaList()
+  .then(() => {
+    // ?area=<id> (from the map editor's "Open in terrain editor"): exact match against the saved list only.
+    const wanted = new URLSearchParams(location.search).get("area");
+    const match = knownAreas.find((id) => id === wanted);
+    if (match !== undefined) return loadArea(match);
+    if (wanted !== null)
+      setStatus(`There is no saved terrain map called "${wanted.slice(0, 64)}".`);
+    return undefined;
+  })
+  .catch((err) => {
+    log(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
+  });
 requestAnimationFrame(frame);

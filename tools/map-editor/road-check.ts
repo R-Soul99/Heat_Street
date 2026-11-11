@@ -1,16 +1,13 @@
 /**
- * Road check + auto-fix for the map editor.
+ * Road check for the map editor (report only: it never changes your roads).
  *
  * `checkRoads` runs the compiler's own pipeline (buildGraph -> flat elevation ->
  * buildRoadGeometry -> validateGraph) on the editor's raw roads, so "passes
  * here" means "compiles". Failures come back in plain English, tied to the
  * editor way they came from.
  *
- * `fixFoldedRoads` repairs GEOMETRY_SELF_INTERSECTION: a road whose centre line
- * kinks back on itself within less than its half-width (typical of traced
- * images: 1 m hooks on an 8 m road), so its ribbon folds over. It removes one
- * kink point per folded edge, re-checks, and repeats until clean. Junction
- * nodes and way ends are never removed.
+ * Folded road ribbons are repaired in the ribbon builder itself (plan 07.1-14), so
+ * nothing here deletes points any more.
  *
  * Layering: pure (no DOM, no fs) - safe in the browser and in vitest.
  */
@@ -19,7 +16,6 @@ import type { RoadGraph } from "../../src/core/road-graph.ts";
 import type { AreaConfig } from "../map-compiler/areas/juliette-ga.config.ts";
 import { buildGraph } from "../map-compiler/graph/build-graph.ts";
 import { applyFlatElevation } from "../map-compiler/graph/elevation.ts";
-import { makeProjector } from "../map-compiler/graph/project.ts";
 import {
   type ValidationFailure,
   type ValidationFailureCategory,
@@ -33,8 +29,6 @@ export interface RoadProblem {
   readonly wayId?: number;
   /** Plain-English explanation for the info bar / problems list. */
   readonly text: string;
-  /** True when "Fix roads" can repair this kind of problem. */
-  readonly fixable: boolean;
 }
 
 export interface RoadCheck {
@@ -92,7 +86,6 @@ export function checkRoads(id: string, roads: RawEnvelope): RoadCheck {
         category: f.category,
         wayId,
         text: `${wayId !== undefined ? "A road" : `Junction ${f.id}`} ${PLAIN[f.category]}.`,
-        fixable: f.category === "GEOMETRY_SELF_INTERSECTION",
       });
     }
     return { problems, graph };
@@ -102,104 +95,8 @@ export function checkRoads(id: string, roads: RawEnvelope): RoadCheck {
         {
           category: "BUILD_ERROR",
           text: `The road network could not be built: ${err instanceof Error ? err.message : String(err)}`,
-          fixable: false,
         },
       ],
     };
   }
-}
-
-export interface FixResult {
-  /** Interior points removed across all roads. */
-  readonly removedPoints: number;
-  /** Ways that were changed. */
-  readonly changedWays: number[];
-  /** Problems still present after fixing (fixable or not). */
-  readonly remaining: RoadProblem[];
-}
-
-const MATCH_TOL_M = 0.5;
-const MAX_PASSES = 200;
-
-/**
- * Removes kink points until no road ribbon folds. Mutates `roads` in place
- * (callers snapshot for undo first). Returns what changed and what is left.
- */
-export function fixFoldedRoads(id: string, roads: RawEnvelope): FixResult {
-  const changed = new Set<number>();
-  let removed = 0;
-  const proj = makeProjector({
-    lat: (roads.bbox.south + roads.bbox.north) / 2,
-    lon: (roads.bbox.west + roads.bbox.east) / 2,
-  });
-
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
-    let pipeline: ReturnType<typeof runPipeline>;
-    try {
-      pipeline = runPipeline(id, roads);
-    } catch {
-      break;
-    }
-    const folds = pipeline.failures.filter((f) => f.category === "GEOMETRY_SELF_INTERSECTION");
-    if (folds.length === 0) break;
-
-    // Node ids that must survive: shared between ways, or a way's end.
-    const useCount = new Map<number, number>();
-    for (const w of roads.response.elements) {
-      const ns = w.nodes ?? [];
-      ns.forEach((n, i) => {
-        const end = i === 0 || i === ns.length - 1;
-        useCount.set(n, (useCount.get(n) ?? 0) + (end ? 2 : 1));
-      });
-    }
-
-    let progress = false;
-    const doneEdges = new Set<number>();
-    for (const f of folds) {
-      if (doneEdges.has(f.id)) continue; // one removal per edge per pass, then re-check
-      doneEdges.add(f.id);
-      const edge = pipeline.graph.edges.find((e) => e.id === f.id);
-      const way = roads.response.elements.find((w) => w.id === edge?.osmWayId);
-      if (edge === undefined || way === undefined || way.nodes === undefined) continue;
-      const seg = Number(/segment (\d+)/.exec(f.message)?.[1] ?? Number.NaN);
-      if (!Number.isFinite(seg)) continue;
-      const pts = edge.points;
-      const segLen = (i: number) =>
-        i <= 0 || i >= pts.length
-          ? Number.POSITIVE_INFINITY
-          : Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][2] - pts[i - 1][2]);
-      // Interior candidates around the folding segment, shortest neighbouring segment first.
-      const candidates = [seg, seg + 1, seg - 1, seg + 2]
-        .filter((i) => i > 0 && i < pts.length - 1)
-        .sort((a, b) => Math.min(segLen(a), segLen(a + 1)) - Math.min(segLen(b), segLen(b + 1)));
-      for (const ci of candidates) {
-        const p = pts[ci];
-        let best = -1;
-        let bestD = MATCH_TOL_M;
-        way.geometry.forEach((g, gi) => {
-          const q = proj.project(g.lat, g.lon);
-          const d = Math.hypot(q.x - p[0], q.z - p[2]);
-          if (d < bestD) {
-            bestD = d;
-            best = gi;
-          }
-        });
-        if (best <= 0 || best >= way.nodes.length - 1) continue;
-        if ((useCount.get(way.nodes[best]) ?? 0) > 1) continue;
-        way.nodes.splice(best, 1);
-        way.geometry.splice(best, 1);
-        removed++;
-        changed.add(way.id);
-        progress = true;
-        break;
-      }
-    }
-    if (!progress) break;
-  }
-
-  return {
-    removedPoints: removed,
-    changedWays: [...changed],
-    remaining: checkRoads(id, roads).problems,
-  };
 }
