@@ -5,6 +5,7 @@ import {
   footprintWarnings,
   importScale,
   pixelToWorld,
+  planImportWorld,
 } from "./image-import.ts";
 import type { RoadGraphPx } from "./image-trace.ts";
 import { nextNodeId } from "./model.ts";
@@ -156,5 +157,45 @@ describe("appendImportedRoads", () => {
       surface: "gravel",
     });
     expect(ways[0]?.tags).toEqual({ highway: "tertiary", width: "12", surface: "gravel" });
+  });
+});
+
+describe("planImportWorld", () => {
+  it("plans the poppmap case", () => {
+    const p = planImportWorld(1960, 941, 1.96);
+    expect(p.widthKm).toBe(1.96);
+    expect(p.heightKm).toBeCloseTo(0.941, 6);
+    expect(p.mPerPx).toBeCloseTo(1, 6);
+    expect(p.errors).toEqual([]);
+  });
+
+  it("rejects a derived height that is too small and hints a wider width", () => {
+    const p = planImportWorld(2000, 400, 2);
+    expect(p.errors).toContain(
+      "Height from the image would be 0.4 km; maps must be 0.5 to 10 km. Use a wider Width (at least 2.5 km) or a taller image.",
+    );
+  });
+
+  it("rejects a derived height that is too large", () => {
+    const p = planImportWorld(400, 2000, 2.5);
+    expect(p.errors[0]).toContain("Use a narrower Width (at most 2 km)");
+  });
+
+  it("rejects a width over the limit", () => {
+    expect(planImportWorld(1000, 1000, 12).errors).toContain(
+      "Width must be between 0.5 and 10 km.",
+    );
+  });
+
+  it("passes the coarse warning through", () => {
+    const p = planImportWorld(1000, 1000, 5);
+    expect(p.mPerPx).toBe(5);
+    expect(p.errors).toEqual([]);
+    expect(p.warnings.length).toBe(1);
+  });
+
+  it("does not throw on bad width", () => {
+    expect(planImportWorld(100, 100, 0).errors).toEqual(["Enter a width in km."]);
+    expect(planImportWorld(100, 100, Number.NaN).errors).toEqual(["Enter a width in km."]);
   });
 });

@@ -10,7 +10,14 @@
 
 import type { RoadGraphPx } from "./image-trace.ts";
 import { nextNodeId, nextWayId, type Surface, setSurface } from "./model.ts";
-import type { LatLon, Projector, RawEnvelope, RawWay } from "./world.ts";
+import {
+  type LatLon,
+  MAX_WORLD_KM,
+  MIN_WORLD_KM,
+  type Projector,
+  type RawEnvelope,
+  type RawWay,
+} from "./world.ts";
 
 /** Above this many metres per pixel the picture is too coarse (plan: aim for 1 to 2). */
 export const COARSE_M_PER_PX = 2;
@@ -54,6 +61,51 @@ export function importScale(input: {
     );
   }
   return { widthM: imageW * mPerPx, heightM: imageH * mPerPx, mPerPx, coarse, warnings };
+}
+
+const num3 = (x: number): string => String(Number(x.toFixed(3)));
+
+/**
+ * Plans a fresh map for an imported image: width is chosen, height follows the
+ * image aspect. Never throws; problems come back as readable `errors`.
+ */
+export function planImportWorld(
+  imageW: number,
+  imageH: number,
+  widthKm: number,
+): { widthKm: number; heightKm: number; mPerPx: number; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  if (!(Number.isFinite(widthKm) && widthKm > 0)) {
+    return { widthKm: 0, heightKm: 0, mPerPx: 0, errors: ["Enter a width in km."], warnings: [] };
+  }
+  let scale: ImportScale;
+  try {
+    scale = importScale({ imageW, imageH, widthKm });
+  } catch (e) {
+    return {
+      widthKm,
+      heightKm: 0,
+      mPerPx: 0,
+      errors: [e instanceof Error ? e.message : String(e)],
+      warnings: [],
+    };
+  }
+  const heightKm = scale.heightM / 1000;
+  if (widthKm < MIN_WORLD_KM || widthKm > MAX_WORLD_KM) {
+    errors.push(`Width must be between ${MIN_WORLD_KM} and ${MAX_WORLD_KM} km.`);
+  }
+  if (heightKm < MIN_WORLD_KM) {
+    const need = Math.ceil(((MIN_WORLD_KM * imageW) / imageH) * 1000) / 1000;
+    errors.push(
+      `Height from the image would be ${num3(heightKm)} km; maps must be ${MIN_WORLD_KM} to ${MAX_WORLD_KM} km. Use a wider Width (at least ${num3(need)} km) or a taller image.`,
+    );
+  } else if (heightKm > MAX_WORLD_KM) {
+    const most = Math.floor(((MAX_WORLD_KM * imageW) / imageH) * 1000) / 1000;
+    errors.push(
+      `Height from the image would be ${num3(heightKm)} km; maps must be ${MIN_WORLD_KM} to ${MAX_WORLD_KM} km. Use a narrower Width (at most ${num3(most)} km) or a shorter image.`,
+    );
+  }
+  return { widthKm, heightKm, mPerPx: scale.mPerPx, errors, warnings: scale.warnings };
 }
 
 /** Warns when the placed image footprint does not fit inside the world. */
