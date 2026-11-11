@@ -17,8 +17,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { validateNewWorldBody } from "./new-map.ts";
 import { WorldExistsError, writeNewWorld } from "./new-world.ts";
-import { MAX_WORLD_KM, MIN_WORLD_KM } from "./world.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const AREAS_DIR = path.join(ROOT, "tools", "map-compiler", "areas");
@@ -102,22 +102,19 @@ export function mapEditorApi(): Plugin {
             }
           }
           if (req.method === "POST" && parts[1] === "new-world") {
-            const body = JSON.parse(await readBody(req)) as {
-              id?: unknown;
-              widthKm?: unknown;
-              heightKm?: unknown;
-            };
-            const { id, widthKm, heightKm } = body;
-            const okKm = (n: unknown): n is number =>
-              typeof n === "number" && Number.isFinite(n) && n >= MIN_WORLD_KM && n <= MAX_WORLD_KM;
-            if (
-              typeof id !== "string" ||
-              !/^[a-z0-9-]+$/.test(id) ||
-              !okKm(widthKm) ||
-              !okKm(heightKm)
-            ) {
-              return send(res, 400, '{"error":"bad id or size"}');
+            let body: unknown = null;
+            try {
+              body = JSON.parse(await readBody(req));
+            } catch {
+              body = null;
             }
+            const problem = validateNewWorldBody(body);
+            if (problem !== null) return send(res, 400, JSON.stringify({ error: problem }));
+            const { id, widthKm, heightKm } = body as {
+              id: string;
+              widthKm: number;
+              heightKm: number;
+            };
             try {
               const register = writeNewWorld(
                 AREAS_DIR,
@@ -129,9 +126,19 @@ export function mapEditorApi(): Plugin {
               return send(res, 200, JSON.stringify({ ok: true, register }));
             } catch (err) {
               if (err instanceof WorldExistsError) {
-                return send(res, 409, JSON.stringify({ error: String(err.message) }));
+                return send(
+                  res,
+                  409,
+                  JSON.stringify({
+                    error: `A map called "${id}" already exists (${err.message}). Pick another name.`,
+                  }),
+                );
               }
-              return send(res, 400, JSON.stringify({ error: String(err) }));
+              return send(
+                res,
+                400,
+                JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+              );
             }
           }
           if (req.method === "POST" && parts[1] === "compile" && parts[2] !== undefined) {
