@@ -23,12 +23,22 @@ import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
 
 export type Falloff = "linear" | "smooth";
 
+/** Footprint shape of a radius brush: a disc, or an axis-aligned square (radius = half side). */
+export type BrushShape = "round" | "square";
+
+/** Distance metric for a brush footprint: Euclidean for round, Chebyshev for square. */
+export function brushDistance(shape: BrushShape | undefined, dx: number, dz: number): number {
+  return shape === "square" ? Math.max(Math.abs(dx), Math.abs(dz)) : Math.hypot(dx, dz);
+}
+
 export interface BrushParams {
   x: number;
   z: number;
   radiusM: number;
   strength: number;
   falloff: Falloff;
+  /** Footprint shape; omitted = "round". */
+  shape?: BrushShape;
 }
 
 export interface PaintRect {
@@ -95,6 +105,27 @@ export interface HeightOpOptions {
 
 export const MIN_RADIUS_M = 0.5;
 export const MAX_RADIUS_M = 200;
+
+/**
+ * Steps a brush radius by whole terrain cells: radius = N x cellSizeM, N >= 1.
+ * A radius that is not a whole number of cells first snaps to the nearest N.
+ */
+export function stepRadiusCells(
+  radiusM: number,
+  cellSizeM: number,
+  dir: -1 | 1,
+  maxM: number = MAX_RADIUS_M,
+): number {
+  if (!Number.isFinite(radiusM) || !Number.isFinite(cellSizeM) || cellSizeM <= 0) {
+    return Math.min(
+      MAX_RADIUS_M,
+      Math.max(MIN_RADIUS_M, Number.isFinite(radiusM) ? radiusM : MIN_RADIUS_M),
+    );
+  }
+  const cells = Math.max(1, Math.round(radiusM / cellSizeM));
+  const maxCells = Math.max(1, Math.floor(maxM / cellSizeM));
+  return Math.min(maxCells, Math.max(1, cells + dir)) * cellSizeM;
+}
 const RELAX = 0.25;
 /** A pair only counts as pre-existing over-cap beyond this (Float32 / 0.01 m save quantisation noise). */
 const PREEXISTING_TOL_M = 0.02;
@@ -122,6 +153,7 @@ function sanitize(p: BrushParams): BrushParams | null {
     radiusM: Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, p.radiusM)),
     strength: Math.min(1, Math.max(0, p.strength)),
     falloff: p.falloff === "linear" ? "linear" : "smooth",
+    shape: p.shape === "square" ? "square" : "round",
   };
 }
 
@@ -320,7 +352,7 @@ export function raiseLower(
     grid,
     w,
     (x, z, h) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       return f > 0 ? h + sign * rateM * p.strength * f : h;
     },
     rec,
@@ -353,7 +385,7 @@ export function smoothBrush(
     grid,
     w,
     (x, z, h, snap) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       if (f <= 0) return h;
       const col = Math.round((x - grid.originX) / grid.cellSizeM);
       const row = Math.round((z - grid.originZ) / grid.cellSizeM);
@@ -594,7 +626,7 @@ export function flattenBrush(
     grid,
     w,
     (x, z, h) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       return f > 0 ? h + (targetM - h) * p.strength * f : h;
     },
     rec,
@@ -699,7 +731,13 @@ function paintDisc(
       const cx = paint.originX + (px + 0.5) * m;
       const dx = cx - p.x;
       const dz = cz - p.z;
-      if (dx * dx + dz * dz > r2) continue;
+      if (
+        p.shape === "square"
+          ? Math.max(Math.abs(dx), Math.abs(dz)) > p.radiusM
+          : dx * dx + dz * dz > r2
+      ) {
+        continue;
+      }
       const i = pz * paint.width + px;
       const v = write(paint.data[i]);
       if (v !== paint.data[i]) {

@@ -9,6 +9,7 @@
  * Layering: pure core, no three/rapier/DOM.
  */
 import type { RoadGraph } from "./road-graph.ts";
+import { type BrushShape, brushDistance } from "./terrain-brush.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import type { CellWindow } from "./terrain-slope.ts";
 
@@ -16,6 +17,12 @@ import type { CellWindow } from "./terrain-slope.ts";
 export const ZOOM_HINT_MIN_CELL_PX = 8;
 /** Lift of grid lines above the terrain surface so they do not z-fight. */
 const GRID_LIFT_M = 0.05;
+/** On-screen cell size (px) at which the contour interval equals the user's base interval. */
+export const CONTOUR_REF_CELL_PX = 16;
+/** Allowed contour intervals (m), finest to coarsest. */
+export const CONTOUR_LADDER_M: readonly number[] = [0.25, 0.5, 1, 2, 5, 10];
+/** Lift of the brush footprint (outline and grid) above the surface. */
+export const FOOTPRINT_LIFT_M = 0.15;
 /** Safety cap on contour levels a single cell can emit. */
 const MAX_LEVELS_PER_CELL = 64;
 
@@ -60,6 +67,128 @@ export function gridLineSegments(grid: TerrainGrid, window: CellWindow): Float32
     }
   }
   return out;
+}
+
+/**
+ * Cells overlapped by the brush footprint's bounding square [x-r, x+r] x [z-r, z+r],
+ * as a vertex window clipped to the grid. Centred on the true cursor point (not on a
+ * rounded cell), so the drawn grid cannot drift off the cursor. Null when off the grid.
+ */
+export function brushFootprintWindow(
+  grid: TerrainGrid,
+  x: number,
+  z: number,
+  r: number,
+  _shape: BrushShape = "round",
+): CellWindow | null {
+  if (![x, z, r].every(Number.isFinite) || !(grid.cellSizeM > 0)) return null;
+  const cs = grid.cellSizeM;
+  return clipWindow(grid, {
+    minCol: Math.floor((x - r - grid.originX) / cs),
+    maxCol: Math.ceil((x + r - grid.originX) / cs),
+    minRow: Math.floor((z - r - grid.originZ) / cs),
+    maxRow: Math.ceil((z + r - grid.originZ) / cs),
+  });
+}
+
+/**
+ * Cell edges under the brush footprint, y = vertex height + liftM. Square: every edge of
+ * the cells the square touches. Round: only edges whose midpoint lies inside the disc.
+ * Edges use the same vertex indexing as the rendered mesh so they sit exactly on it.
+ */
+export function footprintGridSegments(
+  grid: TerrainGrid,
+  x: number,
+  z: number,
+  r: number,
+  shape: BrushShape = "round",
+  liftM: number = FOOTPRINT_LIFT_M,
+): Float32Array {
+  const w = brushFootprintWindow(grid, x, z, r, shape);
+  if (!w) return new Float32Array(0);
+  const stride = grid.rows + 1;
+  const cs = grid.cellSizeM;
+  const out: number[] = [];
+  const inside = (row: number, col: number): boolean =>
+    brushDistance(shape, grid.originX + col * cs - x, grid.originZ + row * cs - z) <= r;
+  const put = (row: number, col: number): void => {
+    out.push(
+      grid.originX + col * cs,
+      grid.heights[row + col * stride] + liftM,
+      grid.originZ + row * cs,
+    );
+  };
+  const edge = (r0: number, c0: number, r1: number, c1: number): void => {
+    if (shape !== "square") {
+      const mr = (r0 + r1) / 2;
+      const mc = (c0 + c1) / 2;
+      if (!inside(mr, mc)) return;
+    }
+    put(r0, c0);
+    put(r1, c1);
+  };
+  for (let row = w.minRow; row <= w.maxRow; row++) {
+    for (let col = w.minCol; col < w.maxCol; col++) edge(row, col, row, col + 1);
+  }
+  for (let col = w.minCol; col <= w.maxCol; col++) {
+    for (let row = w.minRow; row < w.maxRow; row++) edge(row, col, row + 1, col);
+  }
+  return Float32Array.from(out);
+}
+
+/** Closed outline of the footprint as flat XZ pairs [x0,z0,x1,z1,...] centred exactly on (x, z). */
+export function footprintOutline(
+  x: number,
+  z: number,
+  r: number,
+  shape: BrushShape,
+  segments: number,
+): Float32Array {
+  const n = Math.max(3, Math.floor(segments));
+  if (shape === "square") {
+    const per = Math.max(1, Math.round(n / 4));
+    const pts: number[] = [];
+    const side = (ax: number, az: number, bx: number, bz: number): void => {
+      for (let i = 0; i < per; i++) {
+        const t = i / per;
+        pts.push(ax + (bx - ax) * t, az + (bz - az) * t);
+      }
+    };
+    side(x - r, z - r, x + r, z - r);
+    side(x + r, z - r, x + r, z + r);
+    side(x + r, z + r, x - r, z + r);
+    side(x - r, z + r, x - r, z - r);
+    return Float32Array.from(pts);
+  }
+  const out = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    out[i * 2] = x + Math.cos(a) * r;
+    out[i * 2 + 1] = z + Math.sin(a) * r;
+  }
+  return out;
+}
+
+/**
+ * Contour interval that follows zoom: equals the (ladder-snapped) base at
+ * CONTOUR_REF_CELL_PX, coarser when cells are smaller on screen, finer when larger.
+ */
+export function contourIntervalForZoom(cellPx: number, baseM: number): number {
+  const snap = (v: number): number => {
+    let best = CONTOUR_LADDER_M[0];
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const l of CONTOUR_LADDER_M) {
+      const d = Math.abs(Math.log(l) - Math.log(v));
+      if (d < bestD) {
+        bestD = d;
+        best = l;
+      }
+    }
+    return best;
+  };
+  const base = Number.isFinite(baseM) && baseM > 0 ? baseM : 1;
+  if (!Number.isFinite(cellPx) || cellPx <= 0) return snap(base);
+  return snap((base * CONTOUR_REF_CELL_PX) / cellPx);
 }
 
 /**

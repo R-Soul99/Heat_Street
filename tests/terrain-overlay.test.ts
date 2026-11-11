@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { RoadGraph } from "../src/core/road-graph.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import {
+  brushFootprintWindow,
+  CONTOUR_LADDER_M,
+  CONTOUR_REF_CELL_PX,
   cellPixelSize,
+  contourIntervalForZoom,
   contourSegments,
+  footprintGridSegments,
+  footprintOutline,
   gridLineSegments,
   needsZoomHint,
   roadLockSegments,
@@ -127,5 +133,78 @@ describe("roadLockSegments", () => {
     expect(s.locked[1]).toBeCloseTo(1.4);
     expect(s.unlocked[1]).toBeCloseTo(2.4);
     expect(s.selected[1]).toBeCloseTo(3.4);
+  });
+});
+
+describe("brush footprint overlays (quick 261111-x00)", () => {
+  const g = createTerrainGrid({ rows: 40, cols: 40, cellSizeM: 3, originX: -60, originZ: -60 });
+
+  it("window is centred on the true cursor point (grid-offset regression)", () => {
+    for (const shape of ["round", "square"] as const) {
+      for (const [x, z] of [
+        [g.originX + 10.4 * 3, g.originZ + 14.7 * 3],
+        [g.originX + 20.5 * 3, g.originZ + 9.01 * 3],
+      ]) {
+        const w = brushFootprintWindow(g, x, z, 9, shape);
+        expect(w).not.toBeNull();
+        if (!w) continue;
+        const cx = g.originX + ((w.minCol + w.maxCol) / 2) * 3;
+        const cz = g.originZ + ((w.minRow + w.maxRow) / 2) * 3;
+        expect(Math.abs(cx - x)).toBeLessThanOrEqual(1.5 + 1e-9);
+        expect(Math.abs(cz - z)).toBeLessThanOrEqual(1.5 + 1e-9);
+      }
+    }
+    expect(brushFootprintWindow(g, 5000, 5000, 9, "round")).toBeNull();
+  });
+
+  it("square grid equals gridLineSegments over the window; round is a strict subset", () => {
+    const x = 1.3;
+    const z = -2.2;
+    const w = brushFootprintWindow(g, x, z, 12, "square");
+    if (!w) throw new Error("window");
+    const sq = footprintGridSegments(g, x, z, 12, "square");
+    expect(sq.length).toBe(gridLineSegments(g, w).length);
+    const rd = footprintGridSegments(g, x, z, 12, "round");
+    expect(rd.length).toBeLessThan(sq.length);
+    expect(rd.length).toBeGreaterThan(0);
+    for (let i = 0; i < rd.length; i += 6) {
+      const mx = (rd[i] + rd[i + 3]) / 2 - x;
+      const mz = (rd[i + 2] + rd[i + 5]) / 2 - z;
+      expect(Math.hypot(mx, mz)).toBeLessThanOrEqual(12 + 1e-4);
+      expect(rd[i + 1]).toBeCloseTo(0.15, 5);
+    }
+    expect(footprintGridSegments(g, 9999, 9999, 12, "round").length).toBe(0);
+  });
+
+  it("outline is centred exactly and closed", () => {
+    const c = footprintOutline(5, -7, 4, "round", 32);
+    expect(c.length).toBe(64);
+    const q = footprintOutline(5, -7, 4, "square", 32);
+    const xs = Array.from(q).filter((_, i) => i % 2 === 0);
+    const zs = Array.from(q).filter((_, i) => i % 2 === 1);
+    expect(Math.min(...xs)).toBeCloseTo(1, 5);
+    expect(Math.max(...xs)).toBeCloseTo(9, 5);
+    expect(Math.min(...zs)).toBeCloseTo(-11, 5);
+    expect(Math.max(...zs)).toBeCloseTo(-3, 5);
+    let found = false;
+    for (let i = 0; i < q.length; i += 2) if (q[i] === 1 && q[i + 1] === -11) found = true;
+    expect(found).toBe(true);
+  });
+
+  it("contour interval follows zoom on the ladder", () => {
+    expect(contourIntervalForZoom(CONTOUR_REF_CELL_PX, 1)).toBe(1);
+    expect(contourIntervalForZoom(CONTOUR_REF_CELL_PX, 1.2)).toBe(1);
+    let prev = Number.POSITIVE_INFINITY;
+    for (const px of [1, 2, 4, 8, 16, 32, 64, 128, 512]) {
+      const v = contourIntervalForZoom(px, 1);
+      expect(CONTOUR_LADDER_M).toContain(v);
+      expect(v).toBeLessThanOrEqual(prev);
+      prev = v;
+    }
+    expect(contourIntervalForZoom(CONTOUR_REF_CELL_PX / 4, 1)).toBeGreaterThanOrEqual(2);
+    expect(contourIntervalForZoom(0.001, 10)).toBe(10);
+    expect(contourIntervalForZoom(1e6, 0.25)).toBe(0.25);
+    expect(contourIntervalForZoom(Number.NaN, 2)).toBe(2);
+    expect(contourIntervalForZoom(-1, 2)).toBe(2);
   });
 });

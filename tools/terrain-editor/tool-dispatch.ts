@@ -14,6 +14,7 @@ import {
   BLOCK_STEP_MIN_M,
   type BrushParams,
   type BrushResult,
+  type BrushShape,
   blockWindowAt,
   createStrokeRecorder,
   type Falloff,
@@ -81,6 +82,8 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
 
 export interface ToolOptions {
   radiusM: number;
+  /** Radius brush footprint: round disc or square (radius = half side). */
+  brushShape: BrushShape;
   strength: number;
   falloff: Falloff;
   surface: SurfaceType;
@@ -349,6 +352,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
   const presetDefaults = ROAD_PRESETS.street;
   const options: ToolOptions = {
     radiusM: 12,
+    brushShape: "round",
     strength: 1,
     falloff: "smooth",
     surface: "grass",
@@ -375,6 +379,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       radiusM: options.radiusM,
       strength: options.strength,
       falloff: options.falloff,
+      shape: options.brushShape,
     };
   }
 
@@ -604,6 +609,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
         if (v === undefined) continue;
         if (typeof v === "number" && !Number.isFinite(v)) continue;
         (options as unknown as Record<string, unknown>)[key] = v;
+      }
+      if (patch.brushShape !== undefined) {
+        options.brushShape = patch.brushShape === "square" ? "square" : "round";
       }
       if (patch.roadPreset !== undefined && ROAD_PRESETS[patch.roadPreset] === undefined) {
         options.roadPreset = "street";

@@ -3,6 +3,7 @@ import {
   BLOCK_CELLS_MAX,
   type BrushParams,
   blockWindowAt,
+  brushDistance,
   createStrokeRecorder,
   erasePaintDisc,
   flattenBrush,
@@ -15,6 +16,7 @@ import {
   smoothRegion,
   snapshotWindow,
   stampTerrain,
+  stepRadiusCells,
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../src/core/terrain-limits.ts";
@@ -573,5 +575,54 @@ describe("height reporting and window ops (07.1-03)", () => {
     setWindowFromBase(g, win, base, 0);
     expect(g.heights[terrainIndex(g, 30, 30)]).toBe(0);
     expect(g.heights[terrainIndex(g, 28, 28)]).toBe(0);
+  });
+});
+
+describe("brush shape and cell radius stepping (quick 261111-x00)", () => {
+  it("brushDistance: round is Euclidean, square is Chebyshev", () => {
+    expect(brushDistance("round", 3, 4)).toBe(5);
+    expect(brushDistance("square", 3, -4)).toBe(4);
+    expect(brushDistance(undefined, 3, 4)).toBe(5);
+  });
+
+  it("a square brush moves a corner vertex that the round brush leaves alone", () => {
+    const sq = grid();
+    raiseLower(sq, brush({ radiusM: 12, shape: "square" }), 1);
+    const rd = grid();
+    raiseLower(rd, brush({ radiusM: 12, shape: "round" }), 1);
+    expect(at(sq, 9, 9)).toBeGreaterThan(0);
+    expect(at(rd, 9, 9)).toBe(0);
+    const omitted = grid();
+    raiseLower(omitted, brush({ radiusM: 12 }), 1);
+    expect(Array.from(omitted.heights)).toEqual(Array.from(rd.heights));
+  });
+
+  it("a square paint brush paints the corners of its square", () => {
+    const mkp = () =>
+      createPaintMap({
+        originX: -30,
+        originZ: -30,
+        widthM: 60,
+        depthM: 60,
+        metresPerPixel: 0.5,
+        fill: "grass",
+      });
+    const sq = mkp();
+    paintSurface(sq, brush({ radiusM: 12, shape: "square" }), "gravel");
+    const rd = mkp();
+    paintSurface(rd, brush({ radiusM: 12 }), "gravel");
+    const idx = Math.floor((10 + 30) / 0.5) + Math.floor((10 + 30) / 0.5) * sq.width;
+    expect(decodePaintSurface(sq.data[idx])).toBe("gravel");
+    expect(decodePaintSurface(rd.data[idx])).toBe("grass");
+  });
+
+  it("stepRadiusCells steps whole cells and clamps", () => {
+    expect(stepRadiusCells(12, 3, 1)).toBe(15);
+    expect(stepRadiusCells(12, 3, -1)).toBe(9);
+    expect(stepRadiusCells(11, 3, 1)).toBe(15);
+    expect(stepRadiusCells(3, 3, -1)).toBe(3);
+    expect(stepRadiusCells(200, 3, 1)).toBe(Math.floor(200 / 3) * 3);
+    expect(stepRadiusCells(Number.NaN, 3, 1)).toBe(0.5);
+    expect(stepRadiusCells(12, Number.NaN, 1)).toBe(12);
   });
 });

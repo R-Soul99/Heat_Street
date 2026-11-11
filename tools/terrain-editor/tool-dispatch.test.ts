@@ -872,3 +872,29 @@ describe("applyRoadFix (07.1-15)", () => {
     expect(d.canUndo()).toBe(false);
   });
 });
+
+describe("brush shape option (quick 261111-x00)", () => {
+  it("defaults to round, accepts square, rejects anything else", () => {
+    const { d } = setup();
+    expect(d.getOptions().brushShape).toBe("round");
+    d.setOptions({ brushShape: "square" });
+    expect(d.getOptions().brushShape).toBe("square");
+    d.setOptions({ brushShape: "hexagon" as unknown as "round" });
+    expect(d.getOptions().brushShape).toBe("round");
+  });
+
+  it("raise honours the square shape", () => {
+    const sq = setup();
+    sq.d.setOptions({ brushShape: "square", radiusM: 12 });
+    sq.d.setTool("raise");
+    sq.d.pointerDown(0, 0, {});
+    sq.d.pointerUp(0, 0);
+    const rd = setup();
+    rd.d.setOptions({ radiusM: 12 });
+    rd.d.setTool("raise");
+    rd.d.pointerDown(0, 0, {});
+    rd.d.pointerUp(0, 0);
+    expect(sampleTerrainHeight(sq.area.grid, 9, 9)).toBeGreaterThan(0);
+    expect(sampleTerrainHeight(rd.area.grid, 9, 9)).toBe(0);
+  });
+});
