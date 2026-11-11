@@ -370,6 +370,19 @@ Plans:
 
 - [ ] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
 
+### Phase 07.1: Editor UX Overhaul (INSERTED)
+
+**Goal:** The map editor and the terrain editor share one editor shell that uses the screen well. Neither page has a scrolling right sidebar any more. Layout: a thin top bar with dropdown menus (File/Area, Import, View, Help); a full-screen canvas; a floating left tool rail with an options flyout for the active tool; zoom, fit and pan controls bottom-right; Undo, Redo and Clear (with a confirm) top-right; and a bottom info bar showing area, world size, tile size, cursor x/y, counts, unsaved changes and the last status or error, so nothing fails silently. Tooltips can be switched on and off and explain each control. Number inputs have large up/down steppers and step with the arrow keys (Shift for bigger steps). Dropdowns are sized to their content. Derived values such as Real width display to 3 dp while keeping full precision internally.
+**Map editor:** Select tool: drag a box, then tickboxes for Roads/Buildings/Objects delete or disable what's inside, per type or all at once. Draw road: click centre-line points, double-click or Enter to finish, with width (m) and surface options. Eraser (click or drag). Undo/Redo. Clear all. A **New** button opens a popup with Width and Height fields and a Create button, which creates and opens a blank canvas of that size with clear validation errors. The same popup has an **Import image** button with its own Width field (height derived from the image aspect). Import creates a fresh map instead of laying the image over the existing one.
+**Terrain editor:** Separate Raise and Lower tool buttons with no Alt modifier (and find out why the current raise/lower doesn't work for the user). Grid select: drag a rectangle of cells, then ▲/▼ buttons raise or lower the selection by a step set on a collapsible slider. Ctrl+drag up/down pushes or pulls the selection by hand. Brush options live in the tool flyout. Every tool has a keyboard shortcut, and [ ] and the arrow keys adjust values.
+**Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
+**Requirements**: Working IDs to be assigned during planning (no v1.0 REQUIREMENTS.md ID applies to this tooling phase)
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 07.1 to break down)
+
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
 **Goal**: The chase pillar lands — escapable pursuit with legible escalation, real consequences for taking hits, and the chase-movie framing that carries the story
@@ -404,6 +417,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
+| 7.1. Editor UX Overhaul (INSERTED) | 0/TBD | Not started | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes

@@ -96,6 +96,7 @@ Progress: [██████████] 99%
 - Phase 4.1 inserted after Phase 4: Flatten Terrain / Remove DEM Elevation — drop real-world DEM elevation in favor of hand-authored flat/near-flat terrain, fixing oversized road-shoulder skirts; supersedes part of ADR 0001 (URGENT)
 - Phase 04.2 inserted after Phase 4: Driveable Terrain: terrain-as-single-source-of-truth heightfield, paint map, road brush, 3D sculpt page. Absorbs and closes 4.1. See .planning/gsd-brief-driveable-terrain.md
 - Phase 04.3 inserted after Phase 4.2: Terrain and Feel Follow-ups: lift-off spin, terrain edge, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (URGENT)
+- Phase 07.1 inserted after Phase 7: Editor UX Overhaul. Unified editor shell for the map and terrain editors (top menus, floating tool rail, info bar, tooltips), map-editor select/draw/erase/clear and a New/Import popup, and terrain-editor separate raise/lower plus grid select. Raised by the user while importing poppmap (URGENT)
 
 ### Decisions
 
