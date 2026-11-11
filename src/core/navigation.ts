@@ -98,6 +98,11 @@ function edgePointDistance(
 export function validateCourseRoutes(routes: CourseData, roadGraph: RoadGraph): readonly string[] {
   const navigation = buildNavigationGraph(roadGraph);
   const failures: string[] = [];
+  // Courses must visit a gravel/dirt road only when the map has one to visit;
+  // an all-tarmac map (e.g. a traced editor map) is still a valid course map.
+  const mapHasDirt = roadGraph.edges.some(
+    (edge) => edge.surface === "gravel" || edge.surface === "dirt_road",
+  );
   for (const course of routes.courses) {
     const nodeIds = [
       course.start.nodeId,
@@ -129,11 +134,8 @@ export function validateCourseRoutes(routes: CourseData, roadGraph: RoadGraph): 
           );
       }
     }
-    for (const edgeId of pathEdgeIds) {
-      const edge = navigation.edgesById.get(edgeId);
-      if (edge?.surface === "gravel" || edge?.surface === "dirt_road") continue;
-    }
     if (
+      mapHasDirt &&
       ![...pathEdgeIds].some((edgeId) => {
         const surface = navigation.edgesById.get(edgeId)?.surface;
         return surface === "gravel" || surface === "dirt_road";

@@ -63,8 +63,16 @@ export function openDialog<R extends string>(opts: {
       dlg.remove();
       resolve(result);
     });
+    // Backdrop click closes - but only if the press STARTED on the backdrop too.
+    // A text selection dragged out past the dialog edge ends with a click whose
+    // target is the dialog element, and must not close it.
+    let downOnBackdrop = false;
+    dlg.addEventListener("pointerdown", (e) => {
+      downOnBackdrop = e.target === dlg;
+    });
     dlg.addEventListener("click", (e) => {
-      if (e.target === dlg) dlg.close(); // backdrop click
+      if (e.target === dlg && downOnBackdrop) dlg.close();
+      downOnBackdrop = false;
     });
     document.body.appendChild(dlg);
     dlg.showModal();
