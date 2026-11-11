@@ -54,6 +54,7 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
+import { checkRoads, fixFoldedRoads } from "./road-check.ts";
 import {
   type Box,
   buildingsInBox,
@@ -307,8 +308,45 @@ async function save(): Promise<boolean> {
   }
 }
 
+/**
+ * Runs the compiler's road check here in the editor and repairs folded
+ * (too-sharp) roads automatically, as one Undo step. Returns true when the
+ * roads will pass the compiler's validation. Unfixable problems select the
+ * first offending road and explain it in the info bar.
+ */
+function checkAndFixRoads(): boolean {
+  let { problems } = checkRoads(area, roads);
+  let fixedNote = "";
+  if (problems.some((p) => p.fixable)) {
+    snapshot();
+    const r = fixFoldedRoads(area, roads);
+    problems = r.remaining;
+    fixedNote = `Fixed ${r.changedWays.length} road(s) that bent back on themselves (removed ${r.removedPoints} kink point(s); Undo reverts). `;
+    geometryVersion++;
+  }
+  if (problems.length === 0) {
+    refresh(`${fixedNote}Roads OK - ready to compile.`);
+    shell.info.status(`${fixedNote}Roads OK - ready to compile.`, "ok");
+    return true;
+  }
+  const first = problems[0];
+  const way = roads.response.elements.find((w) => w.id === first.wayId);
+  if (way !== undefined) selected = { kind: "road", way };
+  refresh("");
+  const more = problems.length > 1 ? ` (+${problems.length - 1} more)` : "";
+  setStatus(
+    `${fixedNote}${first.text}${way !== undefined ? " It is selected." : ""}${more} Fix it by hand, then try again.`,
+    "error",
+  );
+  $("log-text").textContent = problems
+    .map((p) => `- ${p.text}${p.wayId ? ` (road ${p.wayId})` : ""}`)
+    .join("\n");
+  return false;
+}
+
 async function compile(): Promise<boolean> {
   try {
+    if (!checkAndFixRoads()) return false;
     if (!(await save())) return false;
     const logText = $("log-text");
     logText.textContent = "compiling...";
@@ -1312,6 +1350,12 @@ function buildShell(): Shell {
             run: () => run(save()),
           },
           {
+            id: "fix-roads",
+            label: "Check & fix roads",
+            tip: "Run the compiler's road check now and automatically fix roads that bend back on themselves (one Undo step)",
+            run: () => void checkAndFixRoads(),
+          },
+          {
             id: "compile",
             label: "Save & compile",
             tip: "Save, then run the map compiler so the game sees your edits",
@@ -1799,6 +1843,11 @@ async function openNewMapDialog(mode: "blank" | "image"): Promise<void> {
         roadOpts,
       );
       const junctions = g.nodes.filter((n) => n.degree >= 3).length;
+      // Traced lines often carry 1 m hooks that fold a wide road; fix them now
+      // so the fresh map compiles first time (same Undo step as the import).
+      const fix = fixFoldedRoads(id, roads);
+      if (fix.removedPoints > 0)
+        plan.warnings.push(`Smoothed ${fix.changedWays.length} road(s) with tight kinks.`);
       if (!(await save())) throw new Error("saving failed");
       const notes = [...plan.warnings, ...(made.registered ? [] : [made.warning ?? ""])].filter(
         (s) => s !== "",
