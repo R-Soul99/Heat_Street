@@ -535,7 +535,15 @@ describe("height reporting and window ops (07.1-03)", () => {
 
   it("raiseWindow raises every vertex by exactly the delta, one diff", () => {
     const g = grid();
-    const rec = createStrokeRecorder(g);
+    const p = createPaintMap({
+      originX: -90,
+      originZ: -90,
+      widthM: 180,
+      depthM: 180,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
+    const rec = createStrokeRecorder(g, p);
     const res = raiseWindow(g, win, 1, rec);
     expect(res.maxDeltaM).toBeCloseTo(1, 5);
     for (let c = 28; c <= 32; c++) {

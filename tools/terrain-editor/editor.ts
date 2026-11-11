@@ -58,7 +58,7 @@ const DEFAULT_HINT =
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
-const HEIGHT_TOOLS: readonly Tool[] = ["block", "raise", "smooth", "flatten", "smoothBox"];
+const HEIGHT_TOOLS: readonly Tool[] = ["block", "raise", "lower", "smooth", "flatten", "smoothBox"];
 /** Overlay window size in cells (T-04.3-28 cap) and re-centre threshold. */
 const OVERLAY_CELLS = 64;
 const OVERLAY_RECENTRE_CELLS = 16;
@@ -969,10 +969,10 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (phase === "down") {
     if (!hit) return;
     stroking = true;
-    res = dispatcher.pointerDown(hit.x, hit.z, { alt: e.altKey });
+    res = dispatcher.pointerDown(hit.x, hit.z, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
   } else if (phase === "move") {
     if (!hit) return;
-    res = dispatcher.pointerMove(hit.x, hit.z, { alt: e.altKey });
+    res = dispatcher.pointerMove(hit.x, hit.z, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
   } else {
     stroking = false;
     setPreview(null);
@@ -1128,6 +1128,11 @@ function wireBlockAndSmooth(): void {
     (v) => dispatcher.setOptions({ blockCells: v }),
     () => syncBlockLabel(),
   );
+  $<HTMLSelectElement>("opt-block-dir").addEventListener("change", () => {
+    dispatcher.setOptions({
+      blockDirection: $<HTMLSelectElement>("opt-block-dir").value === "-1" ? -1 : 1,
+    });
+  });
   bind(
     "opt-block-step",
     (v) => dispatcher.setOptions({ blockStepM: v }),

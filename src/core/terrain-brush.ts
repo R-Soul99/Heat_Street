@@ -488,7 +488,7 @@ export function setWindowFromBase(
   return runHeightOp(
     grid,
     w,
-    (x, z, h) => {
+    (x, z, _h) => {
       const col = Math.round((x - grid.originX) / grid.cellSizeM) - w.minCol;
       const row = Math.round((z - grid.originZ) / grid.cellSizeM) - w.minRow;
       return base[row + col * rowsN] + deltaM;

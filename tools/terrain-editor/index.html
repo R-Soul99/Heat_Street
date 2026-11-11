@@ -48,28 +48,29 @@
       <div id="side">
         <h3>Tool</h3>
         <div id="tools">
-          <button type="button" class="tool" data-tool="raise" aria-pressed="false">Raise/lower (H)</button>
+          <button type="button" class="tool" data-tool="raise" aria-pressed="false">Raise (H)</button>
+          <button type="button" class="tool" data-tool="lower" aria-pressed="false">Lower (J)</button>
           <button type="button" class="tool" data-tool="smooth" aria-pressed="false">Smooth (G)</button>
           <button type="button" class="tool" data-tool="flatten" aria-pressed="false">Flatten (F)</button>
           <button type="button" class="tool" data-tool="paint" aria-pressed="false">Surface paint (P)</button>
           <button type="button" class="tool" data-tool="road" aria-pressed="false">Road brush (R)</button>
           <button type="button" class="tool" data-tool="stamp" aria-pressed="false">Stamp (W)</button>
           <button type="button" class="tool danger" data-tool="erase" aria-pressed="false">Erase road (E)</button>
-          <button type="button" class="tool" data-tool="block" aria-pressed="false" title="Block raise/lower (B). Alt+click lowers.">Block (B)</button>
-          <button type="button" class="tool" data-tool="smoothBox" aria-pressed="false" title="Drag a box to smooth that area.">Smooth area (box)</button>
-          <button type="button" class="tool" data-tool="lock" aria-pressed="false" title="Click a road to lock or unlock it. Alt+click selects it.">Lock/unlock road (L)</button>
+          <button type="button" class="tool" data-tool="block" aria-pressed="false" title="Block raise/lower (B). Set the direction in the options.">Block (B)</button>
+          <button type="button" class="tool" data-tool="smoothBox" aria-pressed="false" title="Drag a box to smooth that area.">Smooth area (M)</button>
+          <button type="button" class="tool" data-tool="lock" aria-pressed="false" title="Click a road to lock or unlock it. Shift+click selects it.">Lock/unlock road (L)</button>
         </div>
         <h3>Brush options</h3>
         <div id="tool-opts">
-          <div data-for="raise smooth flatten paint erase lock">
+          <div data-for="raise lower smooth flatten paint erase lock">
             <label for="opt-radius">Radius (m)</label>
             <input type="number" id="opt-radius" value="12" min="0.5" max="200" step="0.5" />
             <input type="range" id="opt-radius-r" value="12" min="0.5" max="200" step="0.5" aria-label="Radius slider" />
           </div>
-          <div data-for="raise smooth flatten paint">
+          <div data-for="raise lower smooth flatten paint">
             <label for="opt-strength">Strength (0 to 1)</label>
-            <input type="number" id="opt-strength" value="0.5" min="0" max="1" step="0.05" />
-            <input type="range" id="opt-strength-r" value="0.5" min="0" max="1" step="0.05" aria-label="Strength slider" />
+            <input type="number" id="opt-strength" value="1" min="0" max="1" step="0.05" />
+            <input type="range" id="opt-strength-r" value="1" min="0" max="1" step="0.05" aria-label="Strength slider" />
             <label for="opt-falloff">Falloff</label>
             <select id="opt-falloff">
               <option value="smooth">Smooth</option>
@@ -101,7 +102,12 @@
             <label for="opt-block-step">Step (m)</label>
             <input type="range" id="opt-block-step" value="1" min="0.25" max="5" step="0.25" />
             <span id="opt-block-step-v">1 m</span>
-            <div class="muted">Click raises, Alt+click lowers. Drag paints blocks.</div>
+            <label for="opt-block-dir">Direction</label>
+            <select id="opt-block-dir">
+              <option value="1" selected>Raise</option>
+              <option value="-1">Lower</option>
+            </select>
+            <div class="muted">Click steps the block in the chosen direction. Drag paints blocks.</div>
           </div>
           <div data-for="smoothBox">
             <label for="opt-smooth-strength">Smooth strength (0 to 1)</label>

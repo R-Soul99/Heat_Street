@@ -13,9 +13,9 @@ function setup() {
   return { area: area as unknown as EditArea, d };
 }
 
-function drag(d: ReturnType<typeof setup>["d"], pts: [number, number][], alt = false) {
-  d.pointerDown(pts[0][0], pts[0][1], { alt });
-  for (let i = 1; i < pts.length; i++) d.pointerMove(pts[i][0], pts[i][1], { alt });
+function drag(d: ReturnType<typeof setup>["d"], pts: [number, number][]) {
+  d.pointerDown(pts[0][0], pts[0][1], {});
+  for (let i = 1; i < pts.length; i++) d.pointerMove(pts[i][0], pts[i][1], {});
   const last = pts[pts.length - 1];
   return d.pointerUp(last[0], last[1]);
 }
@@ -35,30 +35,74 @@ describe("TOOL_KEYS", () => {
 });
 
 describe("sculpt tools", () => {
-  it("raise stroke is one undo entry and raises terrain; alt lowers", () => {
+  it("raise stroke is one undo entry and raises terrain", () => {
     const { area, d } = setup();
     d.setTool("raise");
-    const down = d.pointerDown(0, 0, { alt: false });
+    const down = d.pointerDown(0, 0, {});
     expect(down.dirtyHeights).toBeDefined();
-    d.pointerMove(8, 0, { alt: false });
-    d.pointerMove(16, 0, { alt: false });
-    d.pointerMove(24, 0, { alt: false });
+    d.pointerMove(8, 0, {});
+    d.pointerMove(16, 0, {});
+    d.pointerMove(24, 0, {});
     d.pointerUp(24, 0);
     expect(sampleTerrainHeight(area.grid, 10, 0)).toBeGreaterThan(0);
     expect(d.canUndo()).toBe(true);
     d.undo();
     expect(d.canUndo()).toBe(false);
     expect(sampleTerrainHeight(area.grid, 10, 0)).toBe(0);
+  });
 
-    drag(
-      d,
-      [
-        [0, 0],
-        [10, 0],
-      ],
-      true,
-    );
+  it("lower stroke lowers; modifiers change nothing", () => {
+    const { area, d } = setup();
+    d.setTool("lower");
+    d.pointerDown(0, 0, { shift: true, ctrl: true });
+    d.pointerMove(10, 0, { shift: true });
+    d.pointerUp(10, 0);
     expect(sampleTerrainHeight(area.grid, 5, 0)).toBeLessThan(0);
+  });
+
+  it("raise and lower move by the same amount and report the delta", () => {
+    const a = setup();
+    a.d.setTool("raise");
+    const up = a.d.pointerDown(0, 0, {});
+    a.d.pointerUp(0, 0);
+    const b = setup();
+    b.d.setTool("lower");
+    const down = b.d.pointerDown(0, 0, {});
+    b.d.pointerUp(0, 0);
+    expect(up.heightDeltaM).toBeGreaterThan(0.5);
+    expect(down.heightDeltaM).toBeCloseTo(-(up.heightDeltaM as number), 5);
+    expect(up.heldVertices).toBe(0);
+  });
+
+  it("default strength is 1 and blockDirection is 1; setOptions clamps direction", () => {
+    const { d } = setup();
+    expect(d.getOptions().strength).toBe(1);
+    expect(d.getOptions().blockDirection).toBe(1);
+    d.setOptions({ blockDirection: -5 as unknown as -1 });
+    expect(d.getOptions().blockDirection).toBe(-1);
+    d.setOptions({ blockDirection: 7 as unknown as 1 });
+    expect(d.getOptions().blockDirection).toBe(1);
+  });
+
+  it("every tool has a key", () => {
+    expect(TOOL_KEYS.KeyJ).toBe("lower");
+    expect(TOOL_KEYS.KeyM).toBe("smoothBox");
+    expect(new Set(Object.values(TOOL_KEYS)).size).toBe(Object.keys(TOOL_KEYS).length);
+    expect(Object.values(TOOL_KEYS).sort()).toEqual(
+      [
+        "raise",
+        "lower",
+        "smooth",
+        "flatten",
+        "paint",
+        "road",
+        "stamp",
+        "erase",
+        "block",
+        "smoothBox",
+        "lock",
+      ].sort(),
+    );
   });
 
   it("undo then redo round trips; new stroke clears redo", () => {
@@ -120,7 +164,7 @@ describe("sculpt tools", () => {
   it("ignores non-finite pointer coordinates", () => {
     const { d } = setup();
     d.setTool("raise");
-    const r = d.pointerDown(Number.NaN, 0, { alt: false });
+    const r = d.pointerDown(Number.NaN, 0, {});
     expect(r.dirtyHeights).toBeUndefined();
     d.pointerMove(Number.POSITIVE_INFINITY, 0);
     d.pointerUp(0, 0);
@@ -131,8 +175,8 @@ describe("sculpt tools", () => {
     const { area, d } = setup();
     d.setTool("raise");
     d.setOptions({ radiusM: 8, strength: 0.2 });
-    d.pointerDown(-40, 0, { alt: false });
-    d.pointerMove(40, 0, { alt: false });
+    d.pointerDown(-40, 0, {});
+    d.pointerMove(40, 0, {});
     d.pointerUp(40, 0);
     // a long drag raises terrain along its whole length
     expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
@@ -147,9 +191,9 @@ describe("road and erase", () => {
     d.setOptions({ roadPreset: "street" });
     const before = Float32Array.from(area.grid.heights);
     const paintBefore = Uint8Array.from(area.paint.data);
-    const down = d.pointerDown(-60, 0, { alt: false });
+    const down = d.pointerDown(-60, 0, {});
     expect(down.previewPoints).toHaveLength(1);
-    const mv = d.pointerMove(-20, 0, { alt: false });
+    const mv = d.pointerMove(-20, 0, {});
     expect(mv.previewPoints?.length).toBe(2);
     expect(area.graph.edges).toHaveLength(0);
     expect(area.paint.data).toEqual(paintBefore);
@@ -232,7 +276,7 @@ describe("road and erase", () => {
     ]);
     d.setTool("erase");
     d.setOptions({ radiusM: 10 });
-    const r = d.pointerDown(0, 0, { alt: false });
+    const r = d.pointerDown(0, 0, {});
     expect(r.status).toBe("Road erased. Ctrl+Z to undo.");
     d.pointerUp(0, 0);
     d.undo();
@@ -250,13 +294,13 @@ describe("stamp", () => {
     d.rotateStamp(-1);
     expect(d.getOptions().stampRotationRad).toBeCloseTo((-15 * Math.PI) / 180, 9);
     d.rotateStamp(1);
-    d.pointerDown(0, 0, { alt: false });
+    d.pointerDown(0, 0, {});
     d.pointerUp(30, 0);
     expect(d.getOptions().stampLengthM).toBeCloseTo(30, 6);
     expect(sampleTerrainHeight(area.grid, 12, 0)).toBeGreaterThan(0.5);
     expect(d.canUndo()).toBe(true);
 
-    d.pointerDown(60, 60, { alt: false });
+    d.pointerDown(60, 60, {});
     d.pointerUp(61, 60);
     expect(d.getOptions().stampLengthM).toBeGreaterThanOrEqual(4);
   });
@@ -313,7 +357,7 @@ describe("block and smooth tools (04.3-07)", () => {
     const { area, d } = setup();
     const before = Float32Array.from(area.grid.heights);
     d.setTool("block");
-    d.pointerDown(1, 1, { alt: false });
+    d.pointerDown(1, 1, {});
     d.pointerUp(1, 1);
     expect(Math.max(...area.grid.heights)).toBeCloseTo(1, 5);
     expect(d.canUndo()).toBe(true);
@@ -322,10 +366,11 @@ describe("block and smooth tools (04.3-07)", () => {
     expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
   });
 
-  it("alt lowers the block", () => {
+  it("blockDirection -1 lowers the block", () => {
     const { area, d } = setup();
     d.setTool("block");
-    d.pointerDown(1, 1, { alt: true });
+    d.setOptions({ blockDirection: -1 });
+    d.pointerDown(1, 1, {});
     d.pointerUp(1, 1);
     expect(Math.min(...area.grid.heights)).toBeCloseTo(-1, 5);
   });
@@ -369,7 +414,7 @@ describe("block and smooth tools (04.3-07)", () => {
     drag(d, [[0, 0]]);
     d.setTool("smoothBox");
     expect(d.smoothBoxWindow(0, 0)).toBeNull();
-    d.pointerDown(-10, -10, { alt: false });
+    d.pointerDown(-10, -10, {});
     const g = area.grid;
     const col = (x: number) => (x - g.originX) / g.cellSizeM;
     const row = (z: number) => (z - g.originZ) / g.cellSizeM;
@@ -398,7 +443,7 @@ describe("block and smooth tools (04.3-07)", () => {
   it("cancelBoxDrag drops a smoothBox drag without an undo entry", () => {
     const { d } = setup();
     d.setTool("smoothBox");
-    d.pointerDown(0, 0, { alt: false });
+    d.pointerDown(0, 0, {});
     expect(d.cancelBoxDrag()).toBe(true);
     expect(d.isStroking()).toBe(false);
     expect(d.canUndo()).toBe(false);
@@ -464,7 +509,7 @@ describe("road lock tool (quick 261110-rdx)", () => {
   function raiseUnder(d: ReturnType<typeof setup>["d"], x: number, z: number) {
     d.setTool("block");
     d.setOptions({ blockStepM: 4, blockCells: 8 });
-    return d.pointerDown(x, z, { alt: false }) && d.pointerUp(x, z);
+    return d.pointerDown(x, z, {}) && d.pointerUp(x, z);
   }
 
   it("L selects the lock tool", () => {
@@ -474,13 +519,13 @@ describe("road lock tool (quick 261110-rdx)", () => {
   it("click unlocks a road, a second click locks it; each is one undo step", () => {
     const { area, d, id } = withRoad();
     d.setTool("lock");
-    const a = d.pointerDown(0, 1, { alt: false });
+    const a = d.pointerDown(0, 1, {});
     expect(a.lockChanged).toBe(true);
     expect(a.status).toContain("Unlocked");
     expect(a.status).toContain("Re-grade");
     expect(area.unlockedEdgeIds).toEqual([id]);
     expect(d.getSelectedEdgeId()).toBe(id);
-    const b = d.pointerDown(0, 1, { alt: false });
+    const b = d.pointerDown(0, 1, {});
     expect(b.status).toContain("Locked road");
     expect(area.unlockedEdgeIds).toEqual([]);
     d.undo();
@@ -493,15 +538,15 @@ describe("road lock tool (quick 261110-rdx)", () => {
   it("clicking empty ground says so and pushes nothing", () => {
     const { d } = withRoad();
     d.setTool("lock");
-    const r = d.pointerDown(0, 90, { alt: false });
+    const r = d.pointerDown(0, 90, {});
     expect(r.status).toBe("No road under the cursor.");
     expect(d.canUndo()).toBe(false);
   });
 
-  it("alt+click selects without toggling", () => {
+  it("Shift+click selects without toggling", () => {
     const { area, d, id } = withRoad();
     d.setTool("lock");
-    const r = d.pointerDown(0, 0, { alt: true });
+    const r = d.pointerDown(0, 0, { shift: true });
     expect(r.selectionChanged).toBe(true);
     expect(d.getSelectedEdgeId()).toBe(id);
     expect(area.unlockedEdgeIds ?? []).toEqual([]);
@@ -552,7 +597,7 @@ describe("road lock tool (quick 261110-rdx)", () => {
   it("re-grade selected warns on a locked road and pushes nothing", () => {
     const { d, id } = withRoad();
     d.setTool("lock");
-    d.pointerDown(0, 0, { alt: true });
+    d.pointerDown(0, 0, { shift: true });
     const r = d.regradeSelected();
     expect(r.warnings).toContain(`Road ${id} is locked; unlock it to re-grade.`);
     expect(d.canUndo()).toBe(false);
@@ -566,7 +611,7 @@ describe("road lock tool (quick 261110-rdx)", () => {
     d.clearHistory();
     d.setTool("erase");
     d.setOptions({ radiusM: 6 });
-    const r = d.pointerDown(0, 0, { alt: false });
+    const r = d.pointerDown(0, 0, {});
     d.pointerUp(0, 0);
     expect(r.graphChanged).toBe(true);
     expect(r.lockChanged).toBe(true);
