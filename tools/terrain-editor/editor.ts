@@ -16,7 +16,7 @@ import {
   serializeTerrainSidecar,
   type TerrainArea,
 } from "../../src/core/terrain-format.ts";
-import { sampleTerrainHeight, terrainTriangleNormal } from "../../src/core/terrain-grid.ts";
+import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { DEFAULT_CELL_SIZE_M, MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
 import {
   cellPixelSize,
@@ -34,6 +34,26 @@ import {
   TERRAIN_SURFACE_PALETTE,
   type TerrainView,
 } from "../../src/render/terrain-view.ts";
+import {
+  createButton,
+  createField,
+  createSection,
+  createSelect,
+  createStepper,
+  el,
+} from "../editor-shell/controls.ts";
+import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
+import { fmt3 } from "../editor-shell/format.ts";
+import {
+  adjustDirection,
+  type Binding,
+  isTextEntryFocused,
+  resolveShortcut,
+  STANDARD_BINDINGS,
+} from "../editor-shell/keys.ts";
+import { createShell, type ShellTool } from "../editor-shell/shell.ts";
+import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
+import { auditTips } from "../editor-shell/tooltips.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
@@ -75,12 +95,18 @@ let tool: Tool = "raise";
 let lastHit: { x: number; z: number } | null = null;
 let slopeAmber = false;
 let stroking = false;
-let lastEditMs: number | null = null;
 let topDown = false;
 let savedPose: { pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
 let knownAreas: string[] = [];
 let saving = false;
 let editCounter = 0;
+let gridOn = false;
+let contoursOn = false;
+let contourInterval = 1;
+let currentHint = "";
+const logLines: string[] = [];
+const LOG_MAX = 200;
+let activePointerId: number | null = null;
 
 // ---------------------------------------------------------------- three setup
 
@@ -254,42 +280,55 @@ resize();
 // ---------------------------------------------------------------- UI helpers
 
 function log(line: string): void {
-  const el = $("log");
-  el.textContent = `${el.textContent ?? ""}${line}\n`;
-  el.scrollTop = el.scrollHeight;
+  logLines.push(line);
+  if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
 }
 
-// WR-06: built from DOM nodes / textContent only. Status text can echo file
-// content (sidecar parse errors) and server error bodies, so it must never be
-// parsed as HTML.
-function setStatus(text: string): void {
-  const el = $("status");
-  el.replaceChildren(area ? area.areaId : "no area");
-  if (dirty) {
-    const marker = document.createElement("span");
-    marker.className = "dirty";
-    marker.textContent = "unsaved";
-    el.append(" ", marker);
-  }
-  el.append(document.createElement("br"), text);
+// WR-06: the info bar writes textContent only. Status text can echo file
+// content (sidecar parse errors) and server error bodies, so it is never HTML.
+function setStatus(text: string, kind: "info" | "ok" | "error" = "info"): void {
+  shell.info.status(text, kind);
 }
 
+/** Failures: info-bar error style plus the log. Nothing fails silently (D-03). */
+function fail(text: string): void {
+  setStatus(text, "error");
+  log(text);
+}
+
+/** Remembers the current hint; only the zoom hint is worth interrupting the status line for. */
 function setHint(text: string): void {
-  $("hint").textContent = text;
+  currentHint = text;
+  if (text === ZOOM_HINT) setStatus(text);
 }
 
 function setDirty(value: boolean): void {
   dirty = value;
+  shell.info.setDirty(value);
   // CR-01: every edit bumps the counter, so a save can tell whether anything
   // changed while its PUTs were in flight (and must then stay dirty).
   if (value) editCounter++;
 }
 
-function confirmDiscard(): boolean {
+async function confirmDiscard(): Promise<boolean> {
   if (!dirty || !area) return true;
-  return confirm(
-    `Discard unsaved edits?: You have unsaved changes to ${area.areaId}. Discard them and continue?`,
+  return confirmDialog(
+    "Discard unsaved edits?",
+    `You have unsaved changes to ${area.areaId}. Discard them and continue?`,
+    "Discard",
   );
+}
+
+function refreshInfo(): void {
+  if (!area) {
+    for (const k of ["area", "size", "cell", "cursor", "surface", "roads"]) shell.info.set(k, "");
+    return;
+  }
+  const g = area.grid;
+  shell.info.set("area", area.areaId);
+  shell.info.set("size", `${fmt3(g.cols * g.cellSizeM)} x ${fmt3(g.rows * g.cellSizeM)} m`);
+  shell.info.set("cell", `${fmt3(g.cellSizeM)} m`);
+  shell.info.set("roads", String(area.graph.edges.length));
 }
 
 async function api(url: string, init?: RequestInit): Promise<Response> {
@@ -318,19 +357,9 @@ function loadErrorMessage(file: string, err: unknown): string {
 
 // ---------------------------------------------------------------- area I/O
 
-async function refreshAreaList(selectId?: string): Promise<void> {
+async function refreshAreaList(): Promise<void> {
   const res = await api("/__terrain/areas");
   knownAreas = (await res.json()) as string[];
-  const select = $<HTMLSelectElement>("area");
-  select.innerHTML = "";
-  for (const id of knownAreas) {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = id;
-    select.appendChild(opt);
-  }
-  if (selectId !== undefined && knownAreas.includes(selectId)) select.value = selectId;
-  $<HTMLButtonElement>("load").disabled = knownAreas.length === 0;
 }
 
 function frameArea(a: TerrainArea): void {
@@ -346,8 +375,7 @@ function frameArea(a: TerrainArea): void {
   controls.update();
   topDown = false;
   savedPose = null;
-  $("topdown").setAttribute("aria-pressed", "false");
-  $("topdown").classList.remove("active");
+  shell.refreshMenus();
 }
 
 function installArea(next: TerrainArea): void {
@@ -372,10 +400,11 @@ function installArea(next: TerrainArea): void {
   refreshOverlays();
   syncBlockLabel();
   refreshRoadLockOverlay();
+  refreshInfo();
 }
 
 async function loadArea(id: string): Promise<void> {
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   try {
     const [bin, json] = await Promise.all([
       api(`/__terrain/${id}/bin`).then((r) => r.arrayBuffer()),
@@ -384,48 +413,149 @@ async function loadArea(id: string): Promise<void> {
     const loaded = await loadTerrainArea(bin, json, id, id);
     installArea(loaded);
     setDirty(false);
-    lastEditMs = null;
-    setStatus("Loaded.");
+    setStatus(`Loaded ${id}. ${DEFAULT_HINT}`, "ok");
     log(`loaded ${id}`);
   } catch (err) {
-    const text = loadErrorMessage(`${id}.terrain.bin`, err);
-    setStatus(text);
-    log(text);
+    fail(loadErrorMessage(`${id}.terrain.bin`, err));
   }
 }
 
-async function createArea(): Promise<void> {
-  const name = $<HTMLInputElement>("new-name").value.trim();
-  const widthM = Number($<HTMLInputElement>("new-w").value);
-  const depthM = Number($<HTMLInputElement>("new-d").value);
-  const cellSizeM = Number($<HTMLInputElement>("new-cell").value) || DEFAULT_CELL_SIZE_M;
-  if (!NAME_RE.test(name)) {
-    setStatus("Name must be 1-64 characters: a-z, 0-9 and -.");
-    return;
-  }
-  if (!(widthM > 0 && widthM <= MAX_AREA_SIZE_M) || !(depthM > 0 && depthM <= MAX_AREA_SIZE_M)) {
-    setStatus(`Width and depth must be between 0 and ${MAX_AREA_SIZE_M} m.`);
-    return;
-  }
-  if (!confirmDiscard()) return;
-  if (knownAreas.includes(name) && !confirm(`Area ${name} already exists: Overwrite it?`)) return;
+async function openAreaDialog(): Promise<void> {
   try {
-    const created = createEmptyTerrainArea({ areaId: name, widthM, depthM, cellSizeM });
-    installArea(created);
-    setDirty(true);
-    $("new-form").classList.remove("open");
-    setStatus("Created flat grass terrain. Press Save terrain to write it.");
-    log(`new ${name} ${created.grid.cols}x${created.grid.rows} cells`);
+    await refreshAreaList();
   } catch (err) {
-    setStatus(err instanceof Error ? err.message : String(err));
+    fail(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
+    return;
   }
+  if (knownAreas.length === 0) {
+    setStatus("There are no saved areas yet. Use File > New to start one.");
+    return;
+  }
+  const initial = area && knownAreas.includes(area.areaId) ? area.areaId : knownAreas[0];
+  const sel = createSelect({
+    options: knownAreas.map((id) => ({ value: id, label: id })),
+    value: initial,
+    tip: "Choose which saved terrain area to open",
+    onChange: () => {},
+  });
+  const r = await openDialog<"open" | "close">({
+    title: "Open area",
+    body: createField("Area", sel.el, "Saved terrain areas"),
+    actions: [
+      { id: "open", label: "Open", tip: "Open the chosen area", primary: true },
+      { id: "close", label: "Cancel", tip: "Close without opening anything" },
+    ],
+  });
+  if (r === "open") await loadArea(sel.get());
+}
+
+const SIZE_SPEC: StepperSpec = { step: 10, coarse: 10, min: 3, max: MAX_AREA_SIZE_M, decimals: 0 };
+const CELL_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 1, max: 10, decimals: 1 };
+
+async function newAreaDialog(): Promise<void> {
+  try {
+    await refreshAreaList();
+  } catch (err) {
+    log(`Cannot refresh the area list: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  let n = 1;
+  while (knownAreas.includes(`new-area-${n}`)) n++;
+  const nameInput = el("input", undefined, undefined, "Name for the new area: a-z, 0-9 and -");
+  nameInput.type = "text";
+  nameInput.maxLength = 64;
+  nameInput.value = `new-area-${n}`;
+  const width = createStepper({
+    value: 1000,
+    spec: SIZE_SPEC,
+    tip: "Width of the new area in metres",
+    unit: "m",
+    onChange: () => {},
+  });
+  const height = createStepper({
+    value: 1000,
+    spec: SIZE_SPEC,
+    tip: "Height (north-south depth) of the new area in metres",
+    unit: "m",
+    onChange: () => {},
+  });
+  const cell = createStepper({
+    value: DEFAULT_CELL_SIZE_M,
+    spec: CELL_SPEC,
+    tip: "Size of one terrain cell in metres. Smaller cells give finer detail and a bigger file.",
+    unit: "m",
+    onChange: () => {},
+  });
+  const body = el("div");
+  body.append(
+    createField("Name", nameInput, "Name of the new area"),
+    createField("Width (m)", width.el, "Width in metres"),
+    createField("Height (m)", height.el, "Height in metres"),
+    createSection("Advanced", "Optional settings", false, [
+      createField("Cell size (m)", cell.el, "Size of one terrain cell"),
+    ]),
+  );
+  let created: TerrainArea | null = null;
+  const r = await openDialog<"create" | "close">({
+    title: "New area",
+    body,
+    actions: [
+      {
+        id: "create",
+        label: "Create",
+        tip: "Create a flat grass area of this size",
+        primary: true,
+        run: () => {
+          const name = nameInput.value.trim();
+          if (!NAME_RE.test(name)) return "Name may only use a-z, 0-9 and -, 1-64 characters.";
+          if (knownAreas.includes(name)) {
+            return `An area called "${name}" already exists. Pick another name.`;
+          }
+          const widthM = width.get();
+          const depthM = height.get();
+          const cellSizeM = cell.get();
+          for (const [label, v] of [
+            ["Width", widthM],
+            ["Height", depthM],
+          ] as const) {
+            if (!(v >= SIZE_SPEC.min && v <= MAX_AREA_SIZE_M)) {
+              return `${label} must be between ${SIZE_SPEC.min} and ${MAX_AREA_SIZE_M} m.`;
+            }
+          }
+          if (!(cellSizeM >= CELL_SPEC.min && cellSizeM <= CELL_SPEC.max)) {
+            return `Cell size must be between ${CELL_SPEC.min} and ${CELL_SPEC.max} m.`;
+          }
+          try {
+            created = createEmptyTerrainArea({ areaId: name, widthM, depthM, cellSizeM });
+          } catch (err) {
+            return err instanceof Error ? err.message : String(err);
+          }
+          return undefined;
+        },
+      },
+      { id: "close", label: "Cancel", tip: "Close without creating anything" },
+    ],
+  });
+  const next = created as TerrainArea | null;
+  if (r !== "create" || !next) return;
+  if (!(await confirmDiscard())) {
+    setStatus("New area cancelled. Your unsaved changes were kept.");
+    return;
+  }
+  installArea(next);
+  setDirty(true);
+  const g = next.grid;
+  setStatus(
+    `Created flat grass terrain ${fmt3(g.cols * g.cellSizeM)} x ${fmt3(g.rows * g.cellSizeM)} m. Save (Ctrl+S) to write it.`,
+    "ok",
+  );
+  log(`new ${next.areaId} ${g.cols}x${g.rows} cells`);
 }
 
 async function save(): Promise<boolean> {
   // CR-01: one save at a time; a second Ctrl+S / Drive here while a save is
   // in flight is refused instead of racing the first one.
   if (!area || saving) {
-    if (saving) setStatus("Save already in progress.");
+    if (saving) setStatus("Save already in progress.", "error");
     return false;
   }
   saving = true;
@@ -436,8 +566,7 @@ async function save(): Promise<boolean> {
     // D-15: refuse to save a road graph with a hard validation failure; no PUT.
     const blockText = saveBlockMessage(blockingRoadFailures(target.graph));
     if (blockText !== null) {
-      setStatus(blockText);
-      log(blockText);
+      fail(blockText);
       return false;
     }
     // Quick 261110-rdx (DD-3): an unlocked road that no longer matches the terrain is not saved.
@@ -447,8 +576,7 @@ async function save(): Promise<boolean> {
       (target as unknown as EditArea).unlockedEdgeIds,
     );
     if (staleText !== null) {
-      setStatus(staleText);
-      log(staleText);
+      fail(staleText);
       return false;
     }
     // Snapshot synchronously: the sidecar text is serialised and the binary
@@ -477,19 +605,15 @@ async function save(): Promise<boolean> {
       editedDuringSave
         ? `Saved ${target.areaId} v1, ${kb} KB. Edits made during the save are not saved yet.`
         : `Saved ${target.areaId} v1, ${kb} KB`,
+      "ok",
     );
     log(`saved ${target.areaId} (${kb} KB)`);
-    if (registerWarning !== "") {
-      setStatus(registerWarning);
-      log(registerWarning);
-    }
-    await refreshAreaList(target.areaId);
+    if (registerWarning !== "") fail(registerWarning);
+    await refreshAreaList().catch(() => {});
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const text = `Save failed: ${msg}. Your edits are still in memory; fix the problem and press Save terrain again.`;
-    setStatus(text);
-    log(text);
+    fail(`Save failed: ${msg}. Your edits are still in memory; fix the problem and save again.`);
     return false;
   } finally {
     saving = false;
@@ -510,69 +634,29 @@ function setTopDown(on: boolean): void {
   }
   topDown = on;
   controls.update();
-  $("topdown").setAttribute("aria-pressed", String(on));
-  $("topdown").classList.toggle("active", on);
+  shell.refreshMenus();
 }
 
 // ---------------------------------------------------------------- tools
 
-function updateOptionVisibility(): void {
-  for (const el of document.querySelectorAll<HTMLElement>("#tool-opts [data-for]")) {
-    const tools = (el.dataset.for ?? "").split(" ");
-    el.classList.toggle("hidden", !tools.includes(tool));
-  }
-}
-
 function selectTool(next: Tool): void {
   tool = next;
   dispatcher.setTool(next);
-  updateOptionVisibility();
   if (tool !== "block") blockOutline.visible = false;
   if (tool !== "smoothBox") {
     dispatcher.cancelBoxDrag();
     stroking = stroking && dispatcher.isStroking();
     clearBoxOutline();
   }
+  buildFlyout(next);
   if (lastHit) paintRing(lastHit);
   updateZoomHint();
-  for (const b of document.querySelectorAll<HTMLButtonElement>("#tools .tool")) {
-    const on = b.dataset.tool === next;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-pressed", String(on));
-  }
-}
-
-for (const b of document.querySelectorAll<HTMLButtonElement>("#tools .tool")) {
-  b.addEventListener("click", () => selectTool(b.dataset.tool as Tool));
 }
 
 // ---------------------------------------------------------------- picking + readout
 
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
-const normalScratch = { x: 0, y: 1, z: 0 };
-
-function nearestEdgeId(a: TerrainArea, x: number, z: number): string {
-  let best = Number.POSITIVE_INFINITY;
-  let id = -1;
-  for (const e of a.graph.edges) {
-    const pts = e.points;
-    for (let i = 0; i + 1 < pts.length; i++) {
-      const [ax, , az] = pts[i];
-      const [bx, , bz] = pts[i + 1];
-      const abx = bx - ax;
-      const abz = bz - az;
-      const len2 = abx * abx + abz * abz;
-      const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * abx + (z - az) * abz) / len2)) : 0;
-      const d = Math.hypot(x - (ax + abx * t), z - (az + abz * t));
-      if (d < best) {
-        best = d;
-        id = e.id;
-      }
-    }
-  }
-  return id < 0 ? "none" : `${id} (${best.toFixed(1)} m)`;
-}
 
 function pickTerrain(clientX: number, clientY: number) {
   if (!area) return null;
@@ -717,9 +801,8 @@ function updateZoomHint(): void {
     show = needsZoomHint(px);
   }
   // Only swap between the default hint and ours, so other hints (slope clamp) win.
-  const current = $("hint").textContent;
-  if (show && current === DEFAULT_HINT) setHint(ZOOM_HINT);
-  else if (!show && current === ZOOM_HINT) setHint(DEFAULT_HINT);
+  if (show && currentHint === DEFAULT_HINT) setHint(ZOOM_HINT);
+  else if (!show && currentHint === ZOOM_HINT) setHint(DEFAULT_HINT);
 }
 
 // ---------------------------------------------------------------- grid / contour overlays (D-22)
@@ -783,11 +866,11 @@ function refreshRoadLockOverlay(): void {
 }
 
 function overlayOn(): boolean {
-  return $<HTMLInputElement>("opt-grid").checked || $<HTMLInputElement>("opt-contours").checked;
+  return gridOn || contoursOn;
 }
 
 function contourIntervalM(): number {
-  return Math.min(CONTOUR_MAX_M, Math.max(CONTOUR_MIN_M, readNum("opt-contour-interval", 1)));
+  return Math.min(CONTOUR_MAX_M, Math.max(CONTOUR_MIN_M, contourInterval));
 }
 
 function overlayWindow(row: number, col: number): CellWindow | null {
@@ -813,8 +896,6 @@ function setLines(target: THREE.LineSegments, data: Float32Array): void {
 function rebuildOverlays(x: number, z: number): void {
   if (!area) return;
   const g = area.grid;
-  const gridOn = $<HTMLInputElement>("opt-grid").checked;
-  const contoursOn = $<HTMLInputElement>("opt-contours").checked;
   gridLines.visible = gridOn;
   contourLines.visible = contoursOn;
   const row = Math.round((z - g.originZ) / g.cellSizeM);
@@ -866,17 +947,11 @@ function refreshOverlays(): void {
   rebuildOverlays(a.x, a.z);
 }
 
-function toggleOverlay(id: "opt-grid" | "opt-contours"): void {
-  const el = $<HTMLInputElement>(id);
-  el.checked = !el.checked;
+function toggleOverlay(which: "grid" | "contours"): void {
+  if (which === "grid") gridOn = !gridOn;
+  else contoursOn = !contoursOn;
   refreshOverlays();
-}
-
-function wireOverlays(): void {
-  for (const id of ["opt-grid", "opt-contours"] as const) {
-    $<HTMLInputElement>(id).addEventListener("change", refreshOverlays);
-  }
-  $<HTMLInputElement>("opt-contour-interval").addEventListener("input", refreshOverlays);
+  shell.refreshMenus();
 }
 
 function updateCursor(clientX: number, clientY: number): void {
@@ -887,33 +962,28 @@ function updateCursor(clientX: number, clientY: number): void {
     blockOutline.visible = false;
     if (!stroking) clearBoxOutline();
     lastHit = null;
-    $("sel").textContent = "Cursor is off the terrain.";
+    shell.info.set("cursor", "off the terrain");
+    shell.info.set("surface", "");
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
   maybeRebuildOverlays(hit.x, hit.z);
-
-  terrainTriangleNormal(area.grid, hit.x, hit.z, normalScratch);
-  const slopeDeg = (Math.acos(Math.min(1, normalScratch.y)) * 180) / Math.PI;
-  const g = area.grid;
-  $("sel").textContent = [
-    ...((tool === "block" || tool === "smoothBox") && blockReadoutLine ? [blockReadoutLine] : []),
-    `x ${hit.x.toFixed(1)}  z ${hit.z.toFixed(1)}`,
-    `height ${hit.y.toFixed(2)} m`,
-    `slope ${slopeDeg.toFixed(1)} deg`,
-    `surface ${surfaceAt(area.paint, hit.x, hit.z)}`,
-    `nearest edge ${nearestEdgeId(area, hit.x, hit.z)}`,
-    `vertices ${((g.rows + 1) * (g.cols + 1)).toLocaleString()}  chunks ${terrainView?.chunkMeshes.length ?? 0}`,
-    `last edit ${lastEditMs === null ? "-" : `${lastEditMs.toFixed(1)} ms`}`,
-  ].join("\n");
+  shell.info.set(
+    "cursor",
+    `x ${fmt3(hit.x)}  z ${fmt3(hit.z)}  h ${fmt3(sampleTerrainHeight(area.grid, hit.x, hit.z))} m`,
+  );
+  shell.info.set("surface", surfaceAt(area.paint, hit.x, hit.z));
+  if (flyoutReadout) {
+    flyoutReadout.textContent =
+      (tool === "block" || tool === "smoothBox") && blockReadoutLine ? blockReadoutLine : "";
+  }
 }
 
 // ---------------------------------------------------------------- stroke application
 
 function updateHistoryButtons(): void {
-  $<HTMLButtonElement>("undo").disabled = !dispatcher.canUndo();
-  $<HTMLButtonElement>("redo").disabled = !dispatcher.canRedo();
+  shell.setHistoryState(dispatcher.canUndo(), dispatcher.canRedo());
 }
 
 function rebuild(w: CellWindow | undefined, what: { heights?: boolean; paint?: boolean }): void {
@@ -934,16 +1004,13 @@ function validateRoads(): void {
       log(`info: ${selfX.length} self-intersection(s) ignored on terrain maps (no ribbon mesh).`);
     }
     const text = saveBlockMessage(blockingRoadFailures(area.graph));
-    if (text !== null) {
-      log(text);
-      setStatus(text);
-    }
+    if (text !== null) fail(text);
   } catch (err) {
     log(`Road graph check failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-function applyResult(res: ToolResult, ms: number): void {
+function applyResult(res: ToolResult, _ms: number): void {
   rebuild(res.dirtyHeights, { heights: true });
   rebuild(res.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(res.dirtyHeights);
@@ -953,10 +1020,7 @@ function applyResult(res: ToolResult, ms: number): void {
     res.graphChanged ||
     res.lockChanged;
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
-  if (edited) {
-    setDirty(true);
-    lastEditMs = ms;
-  }
+  if (edited) setDirty(true);
   slopeAmber = res.slopeClamped;
   if (res.previewPoints !== undefined) setPreview(res.previewPoints);
   for (const w of res.warnings) log(w);
@@ -966,7 +1030,10 @@ function applyResult(res: ToolResult, ms: number): void {
   } else if (edited) {
     setStatus("Edited.");
   }
-  if (res.graphChanged) validateRoads();
+  if (res.graphChanged) {
+    validateRoads();
+    refreshInfo();
+  }
 }
 
 function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
@@ -1000,6 +1067,7 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
 canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || !area) return;
   canvas.setPointerCapture(e.pointerId);
+  activePointerId = e.pointerId;
   strokeEvent(e, "down");
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -1009,10 +1077,12 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerup", (e) => {
   if (e.button !== 0 || !stroking) return;
   strokeEvent(e, "up");
+  activePointerId = null;
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointercancel", (e) => {
   if (stroking) strokeEvent(e, "up");
+  activePointerId = null;
 });
 canvas.addEventListener("pointerleave", () => {
   if (!stroking) {
@@ -1024,162 +1094,443 @@ canvas.addEventListener("pointerleave", () => {
 
 function undoRedo(kind: "undo" | "redo"): void {
   if (!area || stroking) return;
-  const t0 = performance.now();
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
   rebuild(r.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(r.dirtyHeights);
   setDirty(true);
-  lastEditMs = performance.now() - t0;
-  setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.");
+  setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.", "ok");
   updateHistoryButtons();
   if (r.graphChanged || r.lockChanged) refreshRoadLockOverlay();
-  if (r.graphChanged) validateRoads();
+  if (r.graphChanged) {
+    validateRoads();
+    refreshInfo();
+  }
 }
 
 // ---------------------------------------------------------------- tool options
 
-function readNum(id: string, fallback: number): number {
-  const v = Number($<HTMLInputElement>(id).value);
-  return Number.isFinite(v) ? v : fallback;
-}
+const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
+  {
+    id: "raise",
+    label: "Raise",
+    icon: "▲",
+    keyLabel: "H",
+    tip: "Raise the terrain under the brush. Hold the mouse button and drag to sculpt.",
+  },
+  {
+    id: "lower",
+    label: "Lower",
+    icon: "▼",
+    keyLabel: "J",
+    tip: "Lower the terrain under the brush. Hold the mouse button and drag to sculpt.",
+  },
+  {
+    id: "smooth",
+    label: "Smooth",
+    icon: "≈",
+    keyLabel: "G",
+    tip: "Smooth bumps out of the terrain under the brush.",
+  },
+  {
+    id: "flatten",
+    label: "Flatten",
+    icon: "▬",
+    keyLabel: "F",
+    tip: "Flatten the terrain to the height where you started the stroke.",
+  },
+  {
+    id: "paint",
+    label: "Surface paint",
+    icon: "◐",
+    keyLabel: "P",
+    tip: "Paint a surface type (tarmac, gravel, grass...) onto the terrain.",
+  },
+  {
+    id: "road",
+    label: "Road brush",
+    icon: "═",
+    keyLabel: "R",
+    tip: "Drag a road across the terrain. The ground is graded flat under it.",
+  },
+  {
+    id: "stamp",
+    label: "Stamp",
+    icon: "◭",
+    keyLabel: "W",
+    tip: "Stamp a wedge (ramp) or mound onto the terrain. Drag to set its length.",
+  },
+  {
+    id: "erase",
+    label: "Erase road",
+    icon: "✕",
+    keyLabel: "E",
+    tip: "Erase road segments under the brush.",
+  },
+  {
+    id: "block",
+    label: "Block",
+    icon: "▦",
+    keyLabel: "B",
+    tip: "Raise or lower a square block of cells. Click steps it; drag paints blocks.",
+  },
+  {
+    id: "smoothBox",
+    label: "Smooth area",
+    icon: "▒",
+    keyLabel: "M",
+    tip: "Drag a box to smooth that whole area. Roads never move.",
+  },
+  {
+    id: "lock",
+    label: "Lock/unlock road",
+    icon: "⚿",
+    keyLabel: "L",
+    tip: "Click a road to lock or unlock it. Shift+click selects it without toggling.",
+  },
+];
+const RAIL_TOOL_IDS = new Set<string>(RAIL_TOOLS.map((t) => t.id));
 
-function syncRoadControls(): void {
-  const o = dispatcher.getOptions();
-  const preset = ROAD_PRESETS[o.roadPreset];
-  $<HTMLInputElement>("opt-width").value = String(o.widthM);
-  $("opt-width-v").textContent = `${o.widthM} m`;
-  const bank = $<HTMLInputElement>("opt-bank");
-  bank.disabled = !(preset.maxBankDeg > 0);
-  bank.max = String(preset.maxBankDeg);
-  bank.value = String(o.maxBankDeg);
+interface ActiveValue {
+  get(): number;
+  set(v: number): void;
+  spec: StepperSpec;
 }
+/** The active tool's main value, adjusted by [ ] and the arrow keys (D-09). */
+let activeValue: ActiveValue | null = null;
+let flyoutReadout: HTMLElement | null = null;
+let blockLabelEl: HTMLElement | null = null;
+let rotationEl: HTMLElement | null = null;
 
-function linkNumberAndRange(numId: string, rangeId: string, apply: (v: number) => void): void {
-  const num = $<HTMLInputElement>(numId);
-  const range = $<HTMLInputElement>(rangeId);
-  num.addEventListener("input", () => {
-    range.value = num.value;
-    apply(readNum(numId, 0));
-  });
-  range.addEventListener("input", () => {
-    num.value = range.value;
-    apply(readNum(rangeId, 0));
-  });
-}
+const RADIUS_SPEC: StepperSpec = { step: 0.5, coarse: 10, min: 0.5, max: 200, decimals: 1 };
+const STRENGTH_SPEC: StepperSpec = { step: 0.05, coarse: 5, min: 0, max: 1, decimals: 2 };
+const ROAD_WIDTH_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 3, max: 20, decimals: 1 };
+const STAMP_HEIGHT_SPEC: StepperSpec = { step: 0.5, coarse: 4, min: -50, max: 50, decimals: 1 };
+const STAMP_WIDTH_SPEC: StepperSpec = { step: 1, coarse: 5, min: 1, max: 200, decimals: 0 };
+const BLOCK_CELLS_SPEC: StepperSpec = {
+  step: 1,
+  coarse: 4,
+  min: 1,
+  max: BLOCK_CELLS_MAX,
+  decimals: 0,
+};
+const BLOCK_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
+const PASSES_SPEC: StepperSpec = { step: 1, coarse: 3, min: 1, max: 10, decimals: 0 };
 
-function wireOptions(): void {
-  const surf = $<HTMLSelectElement>("opt-surface");
-  surf.innerHTML = SURFACE_TYPES.map((s) => `<option value="${s}">${s}</option>`).join("");
-  surf.value = dispatcher.getOptions().surface;
-  surf.addEventListener("change", () => {
-    dispatcher.setOptions({ surface: surf.value as SurfaceType });
-    surf.blur();
-  });
-  linkNumberAndRange("opt-radius", "opt-radius-r", (v) => {
-    dispatcher.setOptions({ radiusM: v });
-    if (lastHit) paintRing(lastHit);
-  });
-  linkNumberAndRange("opt-strength", "opt-strength-r", (v) =>
-    dispatcher.setOptions({ strength: v }),
-  );
-  const falloff = $<HTMLSelectElement>("opt-falloff");
-  falloff.addEventListener("change", () => {
-    dispatcher.setOptions({ falloff: falloff.value === "linear" ? "linear" : "smooth" });
-    falloff.blur();
-  });
-  const preset = $<HTMLSelectElement>("opt-preset");
-  preset.addEventListener("change", () => {
-    dispatcher.setOptions({ roadPreset: preset.value as RoadPresetId });
-    syncRoadControls();
-    preset.blur();
-  });
-  $<HTMLInputElement>("opt-width").addEventListener("input", () => {
-    dispatcher.setOptions({ widthM: readNum("opt-width", 8) });
-    $("opt-width-v").textContent = `${dispatcher.getOptions().widthM} m`;
-  });
-  $<HTMLInputElement>("opt-bank").addEventListener("input", () => {
-    dispatcher.setOptions({ maxBankDeg: readNum("opt-bank", 0) });
-  });
-  const kind = $<HTMLSelectElement>("opt-stamp-kind");
-  kind.addEventListener("change", () => {
-    dispatcher.setOptions({ stampKind: kind.value === "mound" ? "mound" : "wedge" });
-    kind.blur();
-  });
-  $<HTMLInputElement>("opt-stamp-height").addEventListener("input", () =>
-    dispatcher.setOptions({ stampHeightM: readNum("opt-stamp-height", 4) }),
-  );
-  $<HTMLInputElement>("opt-stamp-width").addEventListener("input", () =>
-    dispatcher.setOptions({ stampWidthM: readNum("opt-stamp-width", 12) }),
-  );
-  wireBlockAndSmooth();
-  syncRoadControls();
+function optStepper(
+  label: string,
+  tip: string,
+  spec: StepperSpec,
+  value: number,
+  unit: string | undefined,
+  apply: (v: number) => void,
+  main = false,
+): { field: HTMLElement; stepper: ReturnType<typeof createStepper> } {
+  const stepper = createStepper({ value, spec, tip, unit, onChange: apply });
+  if (main) {
+    activeValue = {
+      get: () => stepper.get(),
+      set: (v) => {
+        stepper.set(v);
+        apply(v);
+      },
+      spec,
+    };
+  }
+  return { field: createField(label, stepper.el, tip), stepper };
 }
 
 /** D-18: the block size label shows metres (N x cell size) for the loaded area. */
 function syncBlockLabel(): void {
+  if (!blockLabelEl) return;
   const n = dispatcher.getOptions().blockCells;
   const cell = area ? area.grid.cellSizeM : DEFAULT_CELL_SIZE_M;
-  const metres = Math.round(n * cell * 100) / 100;
-  $("opt-block-cells-v").textContent = `${n} x ${n} (${metres} m)`;
+  blockLabelEl.textContent = `${n} x ${n} (${fmt3(n * cell)} m)`;
 }
 
-function wireBlockAndSmooth(): void {
-  const bind = (id: string, apply: (v: number) => void, label: () => void) => {
-    $<HTMLInputElement>(id).addEventListener("input", () => {
-      apply(readNum(id, 0));
-      label();
-    });
-  };
-  bind(
-    "opt-block-cells",
-    (v) => dispatcher.setOptions({ blockCells: v }),
-    () => syncBlockLabel(),
-  );
-  $<HTMLSelectElement>("opt-block-dir").addEventListener("change", () => {
-    dispatcher.setOptions({
-      blockDirection: $<HTMLSelectElement>("opt-block-dir").value === "-1" ? -1 : 1,
-    });
-  });
-  bind(
-    "opt-block-step",
-    (v) => dispatcher.setOptions({ blockStepM: v }),
-    () => {
-      $("opt-block-step-v").textContent = `${dispatcher.getOptions().blockStepM} m`;
-    },
-  );
-  bind(
-    "opt-smooth-strength",
-    (v) => dispatcher.setOptions({ smoothStrength: v }),
-    () => {
-      $("opt-smooth-strength-v").textContent = String(dispatcher.getOptions().smoothStrength);
-    },
-  );
-  bind(
-    "opt-smooth-passes",
-    (v) => dispatcher.setOptions({ smoothPasses: v }),
-    () => {
-      $("opt-smooth-passes-v").textContent = String(dispatcher.getOptions().smoothPasses);
-    },
-  );
-  $("smooth-all").addEventListener("click", () => void smoothWholeMap());
-  syncBlockLabel();
-  wireLockButtons();
+function syncRotationLabel(): void {
+  if (!rotationEl) return;
+  const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
+  rotationEl.textContent = `Rotation ${deg} deg ([ ] rotate)`;
 }
 
-/** Quick 261110-rdx: Lock tool buttons. Logic lives in the dispatcher; this only wires. */
-function wireLockButtons(): void {
-  const run = (fn: () => ToolResult): void => {
-    if (!area || stroking) return;
-    const t0 = performance.now();
-    applyResult(fn(), performance.now() - t0);
-    updateHistoryButtons();
-  };
-  $("lock-all").addEventListener("click", () => run(() => dispatcher.lockAll(true)));
-  $("unlock-all").addEventListener("click", () => run(() => dispatcher.lockAll(false)));
-  $("regrade-selected").addEventListener("click", () => run(() => dispatcher.regradeSelected()));
-  $("regrade-all").addEventListener("click", () => run(() => dispatcher.regradeAllUnlocked()));
+function note(text: string): HTMLElement {
+  return el("div", "muted", text);
+}
+
+function runLockAction(fn: () => ToolResult): void {
+  if (!area || stroking) return;
+  const t0 = performance.now();
+  applyResult(fn(), performance.now() - t0);
+  updateHistoryButtons();
+}
+
+function buildFlyout(t: Tool): void {
+  activeValue = null;
+  flyoutReadout = null;
+  blockLabelEl = null;
+  rotationEl = null;
+  const o = dispatcher.getOptions();
+  const f = shell.flyout;
+  f.replaceChildren();
+  f.appendChild(el("div", "field-label", RAIL_TOOLS.find((x) => x.id === t)?.label ?? t));
+
+  const radius = (main: boolean): HTMLElement =>
+    optStepper(
+      "Radius",
+      "Brush radius in metres",
+      RADIUS_SPEC,
+      o.radiusM,
+      "m",
+      (v) => {
+        dispatcher.setOptions({ radiusM: v });
+        if (lastHit) paintRing(lastHit);
+      },
+      main,
+    ).field;
+  const strength = (): HTMLElement =>
+    optStepper(
+      "Strength",
+      "How strongly the brush acts, 0 to 1",
+      STRENGTH_SPEC,
+      o.strength,
+      "",
+      (v) => dispatcher.setOptions({ strength: v }),
+    ).field;
+  const falloff = (): HTMLElement =>
+    createField(
+      "Falloff",
+      createSelect({
+        options: [
+          { value: "smooth", label: "Smooth" },
+          { value: "linear", label: "Linear" },
+        ],
+        value: o.falloff,
+        tip: "How the brush fades towards its edge",
+        onChange: (v) => dispatcher.setOptions({ falloff: v === "linear" ? "linear" : "smooth" }),
+      }).el,
+      "Brush edge falloff",
+    );
+  const surface = (): HTMLElement =>
+    createField(
+      "Surface",
+      createSelect<SurfaceType>({
+        options: SURFACE_TYPES.map((s) => ({ value: s, label: s })),
+        value: o.surface,
+        tip: "Surface type that is painted (affects grip)",
+        onChange: (v) => dispatcher.setOptions({ surface: v }),
+      }).el,
+      "Surface type",
+    );
+
+  switch (t) {
+    case "raise":
+    case "lower":
+    case "smooth":
+    case "flatten":
+      f.append(radius(true), strength(), falloff());
+      break;
+    case "paint": {
+      f.append(radius(true), strength(), falloff(), surface());
+      const key = el("div", "legend");
+      for (const s of SURFACE_TYPES) {
+        const span = el("span");
+        const sw = el("i", "sw");
+        sw.style.background = `#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}`;
+        span.append(sw, s);
+        key.appendChild(span);
+      }
+      f.append(createField("Colour key", key, "Colours used for each surface type"));
+      break;
+    }
+    case "erase":
+      f.append(radius(true));
+      break;
+    case "lock":
+      f.append(
+        radius(true),
+        createButton({
+          label: "Lock all",
+          tip: "Lock every road so terrain edits cannot move it",
+          onClick: () => runLockAction(() => dispatcher.lockAll(true)),
+        }),
+        createButton({
+          label: "Unlock all",
+          tip: "Unlock every road so terrain edits can reshape the ground under it",
+          onClick: () => runLockAction(() => dispatcher.lockAll(false)),
+        }),
+        createButton({
+          label: "Re-grade selected",
+          tip: "Re-grade the ground under the selected road so it fits the terrain again",
+          onClick: () => runLockAction(() => dispatcher.regradeSelected()),
+        }),
+        createButton({
+          label: "Re-grade all unlocked",
+          tip: "Re-grade every unlocked road so it fits the terrain again",
+          onClick: () => runLockAction(() => dispatcher.regradeAllUnlocked()),
+        }),
+        note(
+          "Grey = locked, orange = unlocked, cyan = selected. Unlocked roads must be re-graded or locked before saving.",
+        ),
+      );
+      break;
+    case "road": {
+      const width = optStepper(
+        "Width",
+        "Road width in metres",
+        ROAD_WIDTH_SPEC,
+        o.widthM,
+        "m",
+        (v) => dispatcher.setOptions({ widthM: v }),
+        true,
+      );
+      const presetLabels: Record<string, string> = {
+        street: "Street",
+        highway: "Highway",
+        track: "Track",
+        dirt: "Dirt road",
+      };
+      f.append(
+        createField(
+          "Road class",
+          createSelect<RoadPresetId>({
+            options: (Object.keys(ROAD_PRESETS) as RoadPresetId[]).map((id) => ({
+              value: id,
+              label: presetLabels[id] ?? id,
+            })),
+            value: o.roadPreset,
+            tip: "Road class sets the default width and bank limit",
+            onChange: (v) => {
+              dispatcher.setOptions({ roadPreset: v });
+              width.stepper.set(dispatcher.getOptions().widthM);
+            },
+          }).el,
+          "Road class",
+        ),
+        surface(),
+        width.field,
+      );
+      break;
+    }
+    case "stamp": {
+      rotationEl = el("div", "muted");
+      syncRotationLabel();
+      f.append(
+        createField(
+          "Stamp",
+          createSelect({
+            options: [
+              { value: "wedge", label: "Wedge" },
+              { value: "mound", label: "Mound" },
+            ],
+            value: o.stampKind,
+            tip: "Wedge makes a ramp; mound makes a hill",
+            onChange: (v) =>
+              dispatcher.setOptions({ stampKind: v === "mound" ? "mound" : "wedge" }),
+          }).el,
+          "Stamp shape",
+        ),
+        optStepper(
+          "Height",
+          "Stamp height in metres",
+          STAMP_HEIGHT_SPEC,
+          o.stampHeightM,
+          "m",
+          (v) => dispatcher.setOptions({ stampHeightM: v }),
+          true,
+        ).field,
+        optStepper("Width", "Stamp width in metres", STAMP_WIDTH_SPEC, o.stampWidthM, "m", (v) =>
+          dispatcher.setOptions({ stampWidthM: v }),
+        ).field,
+        rotationEl,
+        note("Drag to set the stamp length."),
+      );
+      break;
+    }
+    case "block": {
+      blockLabelEl = el("div", "muted");
+      flyoutReadout = el("div", "muted");
+      const row = el("div", "seg");
+      const raiseBtn = createButton({
+        label: "Raise",
+        tip: "Each click raises the block by the step",
+        onClick: () => setDir(1),
+      });
+      const lowerBtn = createButton({
+        label: "Lower",
+        tip: "Each click lowers the block by the step",
+        onClick: () => setDir(-1),
+      });
+      const setDir = (d: 1 | -1): void => {
+        dispatcher.setOptions({ blockDirection: d });
+        raiseBtn.setAttribute("aria-pressed", String(d === 1));
+        lowerBtn.setAttribute("aria-pressed", String(d === -1));
+      };
+      setDir(o.blockDirection);
+      row.append(raiseBtn, lowerBtn);
+      f.append(
+        optStepper(
+          "Size (cells)",
+          "Block edge length in cells",
+          BLOCK_CELLS_SPEC,
+          o.blockCells,
+          undefined,
+          (v) => {
+            dispatcher.setOptions({ blockCells: v });
+            syncBlockLabel();
+            if (lastHit) paintRing(lastHit);
+          },
+          true,
+        ).field,
+        blockLabelEl,
+        optStepper(
+          "Step",
+          "Height change per click in metres",
+          BLOCK_STEP_SPEC,
+          o.blockStepM,
+          "m",
+          (v) => dispatcher.setOptions({ blockStepM: v }),
+        ).field,
+        createField("Direction", row, "Whether a click raises or lowers the block"),
+        flyoutReadout,
+        note("Click steps the block in the chosen direction. Drag paints blocks."),
+      );
+      syncBlockLabel();
+      break;
+    }
+    case "smoothBox":
+      flyoutReadout = el("div", "muted");
+      f.append(
+        optStepper(
+          "Strength",
+          "Smoothing strength, 0 to 1",
+          STRENGTH_SPEC,
+          o.smoothStrength,
+          "",
+          (v) => dispatcher.setOptions({ smoothStrength: v }),
+          true,
+        ).field,
+        optStepper(
+          "Passes",
+          "How many smoothing passes to run, 1 to 10",
+          PASSES_SPEC,
+          o.smoothPasses,
+          undefined,
+          (v) => dispatcher.setOptions({ smoothPasses: v }),
+        ).field,
+        flyoutReadout,
+        note("Drag a box to smooth it. Roads never move."),
+        createButton({
+          label: "Smooth whole map",
+          tip: "Smooth the entire map (Ctrl+Z undoes it)",
+          onClick: () => void smoothWholeMap(),
+        }),
+      );
+      break;
+    default:
+      break;
+  }
 }
 
 async function smoothWholeMap(): Promise<void> {
@@ -1195,9 +1546,6 @@ async function smoothWholeMap(): Promise<void> {
   applyResult(res, performance.now() - t0);
   updateHistoryButtons();
 }
-wireOptions();
-wireOverlays();
-
 // ---------------------------------------------------------------- drive here
 
 async function driveHere(): Promise<void> {
@@ -1214,8 +1562,7 @@ async function driveHere(): Promise<void> {
   }
   if (!drivable) {
     const text = "Drive here: this area is not registered yet. Save it once, then try again.";
-    setStatus(text);
-    log(text);
+    fail(text);
     return;
   }
   const url = `/?map=${id}&at=${spot.x.toFixed(1)},${spot.z.toFixed(1)}&debug`;
@@ -1225,84 +1572,289 @@ async function driveHere(): Promise<void> {
 
 // ---------------------------------------------------------------- wiring
 
-$("load").addEventListener("click", () => {
-  const id = $<HTMLSelectElement>("area").value;
-  if (id) void loadArea(id);
-});
-$("new").addEventListener("click", () => $("new-form").classList.toggle("open"));
-$("create").addEventListener("click", () => void createArea());
-$("save").addEventListener("click", () => void save());
-$("topdown").addEventListener("click", () => setTopDown(!topDown));
+function dolly(factor: number): void {
+  const off = camera.position.clone().sub(controls.target);
+  off.setLength(Math.min(20000, Math.max(5, off.length() * factor)));
+  camera.position.copy(controls.target).add(off);
+  controls.update();
+}
 
-$("undo").addEventListener("click", () => undoRedo("undo"));
-$("redo").addEventListener("click", () => undoRedo("redo"));
-$("drive").addEventListener("click", () => void driveHere());
+function panView(dx: number, dy: number): void {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const fwd = new THREE.Vector3(dir.x, 0, dir.z);
+  if (fwd.lengthSq() < 1e-8) fwd.set(0, 0, -1);
+  fwd.normalize();
+  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const dist = camera.position.distanceTo(controls.target);
+  const move = right
+    .multiplyScalar(dx)
+    .addScaledVector(fwd, -dy)
+    .multiplyScalar(dist * 0.15);
+  camera.position.add(move);
+  controls.target.add(move);
+  controls.update();
+}
+
+function showLogDialog(): void {
+  const box = el("div", "log-box");
+  box.textContent = logLines.length > 0 ? logLines.join("\n") : "(nothing logged yet)";
+  void openDialog({
+    title: "Log",
+    body: box,
+    actions: [{ id: "close", label: "Close", tip: "Close the log", primary: true }],
+  });
+}
+
+async function contourIntervalDialog(): Promise<void> {
+  const st = createStepper({
+    value: contourInterval,
+    spec: { step: 0.25, coarse: 4, min: CONTOUR_MIN_M, max: CONTOUR_MAX_M, decimals: 2 },
+    tip: "Height between contour lines in metres",
+    unit: "m",
+    onChange: () => {},
+  });
+  const r = await openDialog<"apply" | "close">({
+    title: "Contour interval",
+    body: createField("Interval (m)", st.el, "Height between contour lines"),
+    actions: [
+      { id: "apply", label: "Apply", tip: "Use this interval", primary: true },
+      { id: "close", label: "Cancel", tip: "Close without changing it" },
+    ],
+  });
+  if (r === "apply") {
+    contourInterval = st.get();
+    refreshOverlays();
+  }
+}
+
+function cancelActiveStroke(): void {
+  if (!stroking) return;
+  stroking = false;
+  setPreview(null);
+  const end = lastHit;
+  applyResult(dispatcher.pointerUp(end ? end.x : Number.NaN, end ? end.z : Number.NaN), 0);
+  slopeAmber = false;
+  updateHistoryButtons();
+  if (activePointerId !== null && canvas.hasPointerCapture(activePointerId)) {
+    canvas.releasePointerCapture(activePointerId);
+  }
+  activePointerId = null;
+}
+
+// ---------------------------------------------------------------- shell
+
+const shell = createShell({
+  root: $("app"),
+  menus: [
+    {
+      label: "File",
+      tip: "Open, create, save and drive the terrain area",
+      items: [
+        {
+          id: "open",
+          label: "Open area...",
+          tip: "Open a saved terrain area",
+          run: () => void openAreaDialog(),
+        },
+        {
+          id: "new",
+          label: "New...",
+          tip: "Create a new flat terrain area of a chosen size",
+          run: () => void newAreaDialog(),
+        },
+        {
+          id: "save",
+          label: "Save",
+          tip: "Write the terrain to disk",
+          shortcut: "Ctrl+S",
+          run: () => void save(),
+          enabled: () => area !== null,
+        },
+        {
+          id: "drive",
+          label: "Drive here",
+          tip: "Save, then open the game at the cursor position",
+          shortcut: "D",
+          run: () => void driveHere(),
+          enabled: () => area !== null,
+        },
+        { separator: true },
+        { id: "log", label: "Show log", tip: "Show the last 200 log lines", run: showLogDialog },
+      ],
+    },
+    {
+      label: "Import",
+      tip: "Import data into the terrain",
+      items: [
+        {
+          id: "import-heightmap",
+          label: "Heightmap import - not available yet",
+          tip: "Importing a heightmap image is planned for a later release",
+          run: () => {},
+          enabled: () => false,
+        },
+      ],
+    },
+    {
+      label: "View",
+      tip: "Overlays and camera",
+      items: [
+        {
+          id: "grid",
+          label: "Grid",
+          tip: "Show the cell grid around the cursor",
+          shortcut: "X",
+          run: () => toggleOverlay("grid"),
+          checked: () => gridOn,
+        },
+        {
+          id: "contours",
+          label: "Contours",
+          tip: "Show height contour lines around the cursor",
+          shortcut: "C",
+          run: () => toggleOverlay("contours"),
+          checked: () => contoursOn,
+        },
+        {
+          id: "contour-interval",
+          label: "Contour interval...",
+          tip: "Set the height between contour lines",
+          run: () => void contourIntervalDialog(),
+        },
+        { separator: true },
+        {
+          id: "topdown",
+          label: "Top-down",
+          tip: "Look straight down at the map",
+          shortcut: "T",
+          run: () => setTopDown(!topDown),
+          checked: () => topDown,
+        },
+      ],
+    },
+    { label: "Help", tip: "Help and preferences", items: [] },
+  ],
+  tools: RAIL_TOOLS,
+  onToolChange: (id) => selectTool(id as Tool),
+  history: {
+    undo: () => undoRedo("undo"),
+    redo: () => undoRedo("redo"),
+    clear: () => {
+      dispatcher.cancelBoxDrag();
+      dispatcher.clearSelection();
+      clearBoxOutline();
+    },
+    clearLabel: "Clear selection",
+    clearTip: "Clear the Grid selection or cancel a box drag (does not change terrain)",
+  },
+  view: {
+    zoomIn: () => dolly(0.8),
+    zoomOut: () => dolly(1.25),
+    fit: () => {
+      if (area) frameArea(area);
+    },
+    pan: (dx, dy) => panView(dx, dy),
+    extra: [
+      {
+        id: "topdown",
+        label: "Top-down",
+        tip: "Look straight down at the map (T)",
+        run: () => setTopDown(!topDown),
+        pressed: () => topDown,
+      },
+    ],
+  },
+  infoFields: [
+    { key: "area", label: "Area", tip: "Name of the open area" },
+    { key: "size", label: "Size", tip: "World size of the area" },
+    { key: "cell", label: "Cell", tip: "Size of one terrain cell" },
+    { key: "cursor", label: "Cursor", tip: "Cursor position and terrain height under it" },
+    { key: "surface", label: "Surface", tip: "Surface type under the cursor" },
+    { key: "roads", label: "Roads", tip: "Number of road segments in the area" },
+    { key: "change", label: "Change", tip: "Size of the last height edit" },
+  ],
+});
+
+// ---------------------------------------------------------------- keyboard
+
+const BINDINGS: Binding[] = [
+  ...STANDARD_BINDINGS,
+  { id: "topdown", code: "KeyT", label: "T" },
+  { id: "grid", code: "KeyX", label: "X" },
+  { id: "contours", code: "KeyC", label: "C" },
+  { id: "drive", code: "KeyD", label: "D" },
+];
+
+window.addEventListener("shell:dialog-open", () => cancelActiveStroke());
 
 window.addEventListener("keydown", (e) => {
-  const el = document.activeElement;
-  const typing =
-    (el instanceof HTMLInputElement && (el.type === "text" || el.type === "number")) ||
-    el instanceof HTMLTextAreaElement;
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod && e.code === "KeyS") {
+  const active = document.activeElement;
+  const textFocused = isTextEntryFocused(active);
+  const dialogOpen = shell.isDialogOpen();
+  if ((e.ctrlKey || e.metaKey) && e.code === "KeyS" && !e.altKey) {
     e.preventDefault();
-    void save();
+    if (!dialogOpen) void save();
     return;
   }
-  if (typing) return;
-  if (mod && e.code === "KeyZ") {
-    e.preventDefault();
-    undoRedo(e.shiftKey ? "redo" : "undo");
+  const id = resolveShortcut(e, BINDINGS, { textFocused, dialogOpen });
+  switch (id) {
+    case "undo":
+      e.preventDefault();
+      undoRedo("undo");
+      return;
+    case "redo":
+      e.preventDefault();
+      undoRedo("redo");
+      return;
+    case "escape":
+      if (!dialogOpen && dispatcher.cancelBoxDrag()) {
+        stroking = false;
+        clearBoxOutline();
+        if (lastHit) paintRing(lastHit);
+        setStatus("Smooth area cancelled.");
+      }
+      return;
+    case "topdown":
+      setTopDown(!topDown);
+      return;
+    case "grid":
+      toggleOverlay("grid");
+      return;
+    case "contours":
+      toggleOverlay("contours");
+      return;
+    case "drive":
+      void driveHere();
+      return;
+    default:
+      break;
+  }
+  if (textFocused || dialogOpen || e.altKey || e.ctrlKey || e.metaKey) return;
+  const next = TOOL_KEYS[e.code];
+  if (next && RAIL_TOOL_IDS.has(next)) {
+    shell.setActiveTool(next);
     return;
   }
-  if (mod && e.code === "KeyY") {
-    e.preventDefault();
-    undoRedo("redo");
-    return;
-  }
-  if (mod || e.altKey) return;
-  if (e.code === "Escape" && dispatcher.cancelBoxDrag()) {
-    stroking = false;
-    clearBoxOutline();
-    if (lastHit) paintRing(lastHit);
-    setStatus("Smooth area cancelled.");
-    return;
-  }
-  if (e.code === "KeyT") {
-    setTopDown(!topDown);
-    return;
-  }
-  if (e.code === "KeyX") {
-    toggleOverlay("opt-grid");
-    return;
-  }
-  if (e.code === "KeyC") {
-    toggleOverlay("opt-contours");
-    return;
-  }
-  if (e.code === "KeyD") {
-    void driveHere();
-    return;
-  }
-  if (e.code === "BracketLeft" || e.code === "BracketRight") {
+  if (e.code === "Escape") return;
+  if (tool === "stamp" && (e.code === "BracketLeft" || e.code === "BracketRight")) {
     dispatcher.rotateStamp(e.code === "BracketRight" ? 1 : -1);
+    syncRotationLabel();
     const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
     setStatus(`Stamp rotation ${deg} degrees.`);
     return;
   }
-  const next = TOOL_KEYS[e.code];
-  if (next) selectTool(next);
+  const adj = adjustDirection(e);
+  if (adj && activeValue && !(active instanceof HTMLSelectElement)) {
+    e.preventDefault();
+    activeValue.set(stepValue(activeValue.get(), adj.dir, activeValue.spec, adj.coarse));
+    if (lastHit) paintRing(lastHit);
+  }
 });
 
 window.addEventListener("beforeunload", (e) => {
   if (dirty) e.preventDefault();
 });
-
-// Legend
-$("legend").innerHTML = SURFACE_TYPES.map(
-  (s) =>
-    `<span><i class="sw" style="background:#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}"></i>${s}</span>`,
-).join("");
 
 // ---------------------------------------------------------------- frame loop
 
@@ -1314,10 +1866,11 @@ function frame(): void {
   requestAnimationFrame(frame);
 }
 
-selectTool(tool);
+shell.setActiveTool(tool);
 updateHistoryButtons();
 setHint(DEFAULT_HINT);
-setStatus("Pick an area or press New...");
+setStatus("No area loaded. Use File > Open area or File > New.");
+auditTips(document);
 refreshAreaList().catch((err) => {
   log(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
 });

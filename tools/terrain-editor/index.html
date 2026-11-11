@@ -3,183 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <title>Heat Street terrain editor (dev only)</title>
+    <link rel="stylesheet" href="../editor-shell/shell.css" />
     <style>
-      html, body { margin: 0; height: 100%; background: #14161a; color: #ddd; font: 400 13px system-ui, sans-serif; }
-      #app { display: flex; height: 100%; }
-      #wrap { flex: 1; min-width: 0; position: relative; }
       #view { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
-      #empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; pointer-events: none; color: #9aa; }
-      #empty h2 { margin: 0 0 8px; font: 600 13px system-ui, sans-serif; color: #fff; }
-      #empty p { margin: 0; max-width: 360px; }
-      #side { width: 300px; flex: none; padding: 8px; overflow-y: auto; background: #1d2026; border-left: 1px solid #333; box-sizing: border-box; }
-      h3 { margin: 16px 0 8px; font: 600 13px system-ui, sans-serif; color: #fff; }
-      h3:first-child { margin-top: 0; }
-      label { display: block; margin: 8px 0 4px; color: #9aa; }
-      select, input[type="text"], input[type="number"] { width: 100%; box-sizing: border-box; min-height: 28px; background: #111; color: #eee; border: 1px solid #444; padding: 4px; font: inherit; }
-      button { background: #2d3440; color: #eee; border: 1px solid #556; padding: 4px 8px; margin: 4px 4px 4px 0; min-height: 28px; cursor: pointer; font: inherit; }
-      button:hover { background: #3a4456; }
-      button:disabled { opacity: 0.5; cursor: default; }
-      button.danger { border-color: #a44; }
-      button.primary { border-color: #4a8; }
-      button.active { background: #2f6f55; border-color: #6c9; }
-      #status { margin-top: 8px; color: #9aa; }
-      #hint { color: #9aa; margin-top: 8px; min-height: 2.4em; }
-      #sel { font: 400 11px monospace; white-space: pre-wrap; color: #cde; }
-      #log { white-space: pre-wrap; font: 400 11px monospace; max-height: 224px; overflow-y: auto; background: #0c0d10; padding: 8px; margin-top: 8px; }
+      #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; pointer-events: none; color: #9aa; }
+      .muted { color: #9aa; margin: 4px 0; max-width: 220px; }
       .legend span { display: inline-block; margin: 0 8px 4px 0; }
       .sw { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
-      .muted { color: #9aa; margin-top: 4px; }
-      [data-for].hidden { display: none; }
-      button:disabled { pointer-events: none; }
-      .dirty { color: #fb4; }
-      #new-form { display: none; }
-      #new-form.open { display: block; }
+      .log-box { white-space: pre-wrap; font: 400 11px monospace; max-height: 320px; overflow-y: auto; background: #0c0d10; padding: 8px; min-width: 420px; }
+      .seg { display: flex; gap: 4px; }
+      .seg .btn[aria-pressed="true"] { background: #2f6f55; border-color: #6c9; }
     </style>
   </head>
   <body>
     <div id="app">
-      <div id="wrap">
+      <div id="wrap" class="shell-canvas">
         <canvas id="view"></canvas>
-        <div id="empty">
-          <h2>No area loaded</h2>
-          <p>Pick an area from the list or press New... to start a flat 1000 x 1000 m terrain.</p>
-        </div>
-      </div>
-      <div id="side">
-        <h3>Tool</h3>
-        <div id="tools">
-          <button type="button" class="tool" data-tool="raise" aria-pressed="false">Raise (H)</button>
-          <button type="button" class="tool" data-tool="lower" aria-pressed="false">Lower (J)</button>
-          <button type="button" class="tool" data-tool="smooth" aria-pressed="false">Smooth (G)</button>
-          <button type="button" class="tool" data-tool="flatten" aria-pressed="false">Flatten (F)</button>
-          <button type="button" class="tool" data-tool="paint" aria-pressed="false">Surface paint (P)</button>
-          <button type="button" class="tool" data-tool="road" aria-pressed="false">Road brush (R)</button>
-          <button type="button" class="tool" data-tool="stamp" aria-pressed="false">Stamp (W)</button>
-          <button type="button" class="tool danger" data-tool="erase" aria-pressed="false">Erase road (E)</button>
-          <button type="button" class="tool" data-tool="block" aria-pressed="false" title="Block raise/lower (B). Set the direction in the options.">Block (B)</button>
-          <button type="button" class="tool" data-tool="smoothBox" aria-pressed="false" title="Drag a box to smooth that area.">Smooth area (M)</button>
-          <button type="button" class="tool" data-tool="lock" aria-pressed="false" title="Click a road to lock or unlock it. Shift+click selects it.">Lock/unlock road (L)</button>
-        </div>
-        <h3>Brush options</h3>
-        <div id="tool-opts">
-          <div data-for="raise lower smooth flatten paint erase lock">
-            <label for="opt-radius">Radius (m)</label>
-            <input type="number" id="opt-radius" value="12" min="0.5" max="200" step="0.5" />
-            <input type="range" id="opt-radius-r" value="12" min="0.5" max="200" step="0.5" aria-label="Radius slider" />
-          </div>
-          <div data-for="raise lower smooth flatten paint">
-            <label for="opt-strength">Strength (0 to 1)</label>
-            <input type="number" id="opt-strength" value="1" min="0" max="1" step="0.05" />
-            <input type="range" id="opt-strength-r" value="1" min="0" max="1" step="0.05" aria-label="Strength slider" />
-            <label for="opt-falloff">Falloff</label>
-            <select id="opt-falloff">
-              <option value="smooth">Smooth</option>
-              <option value="linear">Linear</option>
-            </select>
-          </div>
-          <div data-for="paint road">
-            <label for="opt-surface">Surface</label>
-            <select id="opt-surface"></select>
-          </div>
-          <div data-for="road">
-            <label for="opt-preset">Road class</label>
-            <select id="opt-preset">
-              <option value="street">Street</option>
-              <option value="highway">Highway</option>
-              <option value="track">Track</option>
-              <option value="dirt">Dirt road</option>
-            </select>
-            <label for="opt-width">Width (m)</label>
-            <input type="range" id="opt-width" value="10" min="3" max="20" step="0.5" />
-            <span id="opt-width-v">10 m</span>
-            <label for="opt-bank">Bank max (deg)</label>
-            <input type="number" id="opt-bank" value="0" min="0" max="15" step="1" disabled />
-          </div>
-          <div data-for="block">
-            <label for="opt-block-cells">Block size (cells)</label>
-            <input type="range" id="opt-block-cells" value="2" min="1" max="64" step="1" />
-            <span id="opt-block-cells-v">2 x 2 (6 m)</span>
-            <label for="opt-block-step">Step (m)</label>
-            <input type="range" id="opt-block-step" value="1" min="0.25" max="5" step="0.25" />
-            <span id="opt-block-step-v">1 m</span>
-            <label for="opt-block-dir">Direction</label>
-            <select id="opt-block-dir">
-              <option value="1" selected>Raise</option>
-              <option value="-1">Lower</option>
-            </select>
-            <div class="muted">Click steps the block in the chosen direction. Drag paints blocks.</div>
-          </div>
-          <div data-for="smoothBox">
-            <label for="opt-smooth-strength">Smooth strength (0 to 1)</label>
-            <input type="range" id="opt-smooth-strength" value="0.5" min="0" max="1" step="0.05" />
-            <span id="opt-smooth-strength-v">0.5</span>
-            <label for="opt-smooth-passes">Passes (1 to 10)</label>
-            <input type="range" id="opt-smooth-passes" value="3" min="1" max="10" step="1" />
-            <span id="opt-smooth-passes-v">3</span>
-            <div class="muted">Drag a box to smooth it. Roads never move.</div>
-            <button type="button" id="smooth-all">Smooth whole map</button>
-          </div>
-          <div data-for="lock">
-            <button type="button" id="lock-all">Lock all</button>
-            <button type="button" id="unlock-all">Unlock all</button>
-            <button type="button" id="regrade-selected">Re-grade selected</button>
-            <button type="button" id="regrade-all">Re-grade all unlocked</button>
-            <div class="muted">Grey = locked, orange = unlocked, cyan = selected. Unlocked roads must be re-graded or locked before saving.</div>
-          </div>
-          <div data-for="stamp">
-            <label for="opt-stamp-kind">Stamp</label>
-            <select id="opt-stamp-kind">
-              <option value="wedge">Wedge</option>
-              <option value="mound">Mound</option>
-            </select>
-            <label for="opt-stamp-height">Height (m)</label>
-            <input type="number" id="opt-stamp-height" value="4" step="0.5" />
-            <label for="opt-stamp-width">Width (m)</label>
-            <input type="number" id="opt-stamp-width" value="12" min="1" step="1" />
-            <div class="muted">[ ] rotate 15 degrees. Drag to set length.</div>
-          </div>
-        </div>
-        <div>
-          <button type="button" id="undo" disabled>Undo (Ctrl+Z)</button>
-          <button type="button" id="redo" disabled>Redo (Ctrl+Shift+Z)</button>
-        </div>
-        <h3>Area</h3>
-        <select id="area" aria-label="Area"></select>
-        <div>
-          <button type="button" id="load">Load</button>
-          <button type="button" id="new">New...</button>
-          <button type="button" id="save" class="primary">Save terrain</button>
-          <button type="button" id="drive" class="primary">Drive here (D)</button>
-        </div>
-        <div id="new-form">
-          <label for="new-name">Name (a-z, 0-9, -)</label>
-          <input type="text" id="new-name" value="new-area" />
-          <label for="new-w">Width (m, max 2000)</label>
-          <input type="number" id="new-w" value="1000" min="3" max="2000" />
-          <label for="new-d">Depth (m, max 2000)</label>
-          <input type="number" id="new-d" value="1000" min="3" max="2000" />
-          <label for="new-cell">Cell size (m)</label>
-          <input type="number" id="new-cell" value="3" min="1" step="0.5" />
-          <button type="button" id="create" class="primary">Create</button>
-        </div>
-        <h3>View</h3>
-        <label><input type="checkbox" id="opt-grid" /> Grid (cells) (X)</label>
-        <label><input type="checkbox" id="opt-contours" /> Contours (C)</label>
-        <label for="opt-contour-interval">Contour interval (m)</label>
-        <input type="number" id="opt-contour-interval" value="1" min="0.25" max="10" step="0.25" />
-        <h3>Camera</h3>
-        <div>
-          <button type="button" id="topdown" aria-pressed="false">Top-down (T)</button>
-        </div>
-        <h3>Status</h3>
-        <div id="status"></div>
-        <div id="hint"></div>
-        <h3>Selection</h3>
-        <div id="sel">Move the cursor over the terrain.</div>
-        <h3>Legend</h3>
-        <div class="legend" id="legend"></div>
-        <h3>Log</h3>
-        <div id="log"></div>
+        <div id="empty">No area loaded. Use File &gt; Open area or File &gt; New.</div>
       </div>
     </div>
     <script type="module" src="./editor.ts"></script>
