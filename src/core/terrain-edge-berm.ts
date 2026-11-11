@@ -13,7 +13,11 @@
  *
  * Layering: pure data transform, no three/rapier/DOM.
  */
-import type { TerrainGrid } from "./terrain-grid.ts";
+import type { SampleableHeightfield } from "./heightfield-sample.ts";
+import type { RoadGraph } from "./road-graph.ts";
+
+/** Any heightfield grid: a terrain map's TerrainGrid or a compiled map's collision heightfield (cells may be non-square). */
+export type BermGrid = SampleableHeightfield;
 
 export interface BermBox {
   readonly cx: number;
@@ -74,7 +78,7 @@ function buildRuns(h: readonly number[], cell: number): Run[] {
 }
 
 export function buildEdgeBerm(
-  grid: TerrainGrid,
+  grid: BermGrid,
   opts: Partial<{ heightM: number; thicknessM: number; insetM: number }> = {},
 ): BermBox[] {
   const heightM = opts.heightM ?? BERM_HEIGHT_M;
@@ -82,7 +86,9 @@ export function buildEdgeBerm(
   const insetM = opts.insetM ?? BERM_INSET_M;
   const out = thicknessM - insetM; // how far the berm extends past the grid edge
   const stride = grid.rows + 1;
-  const cell = grid.cellSizeM;
+  // Per-axis cell size: x-edges step along X (cols), z-edges along Z (rows).
+  const cellX = grid.scaleX / grid.cols;
+  const cellZ = grid.scaleZ / grid.rows;
   const x0 = grid.originX;
   const z0 = grid.originZ;
   const x1 = x0 + grid.scaleX;
@@ -99,7 +105,7 @@ export function buildEdgeBerm(
   for (const row of [0, grid.rows]) {
     const h: number[] = [];
     for (let c = 0; c <= grid.cols; c++) h.push(grid.heights[row + c * stride]);
-    const runs = buildRuns(h, cell);
+    const runs = buildRuns(h, cellX);
     const lastIdx = runs.length - 1;
     const zLo = row === 0 ? z0 - out : z1 - insetM;
     const zHi = row === 0 ? z0 + insetM : z1 + out;
@@ -122,7 +128,7 @@ export function buildEdgeBerm(
   for (const col of [0, grid.cols]) {
     const h: number[] = [];
     for (let r = 0; r <= grid.rows; r++) h.push(grid.heights[r + col * stride]);
-    const runs = buildRuns(h, cell);
+    const runs = buildRuns(h, cellZ);
     const xLo = col === 0 ? x0 - out : x1 - insetM;
     const xHi = col === 0 ? x0 + insetM : x1 + out;
     for (const r of runs) {
@@ -140,4 +146,30 @@ export function buildEdgeBerm(
     }
   }
   return boxes;
+}
+
+/** Clear distance a road must keep from the grid edge for a compiled map to get a berm (m). */
+export const BERM_ROAD_CLEARANCE_M = 10;
+
+/**
+ * True when every road polyline point lies at least `clearanceM` inside the
+ * grid, so a berm around the grid can never cut across a road. Older compiled
+ * maps sized their ground to junction nodes only and have roads running off
+ * the edge; they get no berm (unchanged), recompiled/editor maps do.
+ */
+export function roadsClearOfGridEdge(
+  grid: BermGrid,
+  graph: RoadGraph,
+  clearanceM: number = BERM_ROAD_CLEARANCE_M,
+): boolean {
+  const x0 = grid.originX + clearanceM;
+  const z0 = grid.originZ + clearanceM;
+  const x1 = grid.originX + grid.scaleX - clearanceM;
+  const z1 = grid.originZ + grid.scaleZ - clearanceM;
+  for (const edge of graph.edges) {
+    for (const p of edge.points) {
+      if (p[0] < x0 || p[0] > x1 || p[2] < z0 || p[2] > z1) return false;
+    }
+  }
+  return true;
 }

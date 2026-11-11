@@ -154,6 +154,7 @@ import { createOcclusionProbe } from "./render/camera/occlusion-probe";
 import { createCarShadow } from "./render/car-shadow";
 import { createCarXray } from "./render/car-xray";
 import { shadeByHeight } from "./render/crest-shading";
+import { buildBermMesh } from "./render/edge-berm-mesh";
 import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView, type MapWorldView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
@@ -640,6 +641,13 @@ try {
     { includePhase2Ground: false, groundExtents, chassisColor: CAR_CLASS.chassisColor },
   );
   view.scene.add(mapView.group);
+  // Compiled-map edge berm (07.1): drawn from the very boxes the scene collides with.
+  // Terrain maps already add theirs inside buildTerrainView.
+  const compiledBermMesh =
+    terrainView === undefined && scene.edgeBerm !== undefined
+      ? buildBermMesh(scene.edgeBerm)
+      : undefined;
+  if (compiledBermMesh !== undefined) view.scene.add(compiledBermMesh);
   const gateView =
     gate === undefined || gatePhysicsGrid === undefined
       ? undefined
