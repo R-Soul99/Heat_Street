@@ -429,6 +429,65 @@ export function raiseBlock(
   );
 }
 
+function clipWindow(grid: TerrainGrid, w: CellWindow): CellWindow | null {
+  if (![w.minRow, w.minCol, w.maxRow, w.maxCol].every(Number.isFinite)) return null;
+  const out = {
+    minRow: Math.max(0, Math.floor(w.minRow)),
+    minCol: Math.max(0, Math.floor(w.minCol)),
+    maxRow: Math.min(grid.rows, Math.ceil(w.maxRow)),
+    maxCol: Math.min(grid.cols, Math.ceil(w.maxCol)),
+  };
+  return out.minRow > out.maxRow || out.minCol > out.maxCol ? null : out;
+}
+
+/**
+ * 07.1-06: raise (or lower, negative) every vertex of a window by an exact delta.
+ * Same pipeline as raiseBlock (road hold, 35 degree limiter, recorder), sharp edges.
+ * Non-finite or zero input and empty windows are no-ops.
+ */
+export function raiseWindow(
+  grid: TerrainGrid,
+  win: CellWindow,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM) || deltaM === 0) return NO_OP;
+  const w = clipWindow(grid, win);
+  if (!w) return NO_OP;
+  return runHeightOp(grid, w, (_x, _z, h) => h + deltaM, rec, false, opts);
+}
+
+/**
+ * 07.1-06: set every non-held vertex of a window to base[idx] + deltaM, where `base`
+ * is a full-grid snapshot (absolute push/pull: dragging back to 0 restores the base).
+ */
+export function offsetWindowFrom(
+  grid: TerrainGrid,
+  win: CellWindow,
+  base: Float32Array,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM) || base.length !== grid.heights.length) return NO_OP;
+  const w = clipWindow(grid, win);
+  if (!w) return NO_OP;
+  const stride = grid.rows + 1;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      return base[row + col * stride] + deltaM;
+    },
+    rec,
+    false,
+    opts,
+  );
+}
+
 /**
  * D-21: multi-pass 1-2-1 smoothing over a window (or the whole grid). All
  * passes are computed in a scratch buffer (heights outside the window are fixed
