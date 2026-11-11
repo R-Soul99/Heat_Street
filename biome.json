@@ -15,6 +15,8 @@
       "!.planning",
       "!docs",
       "!fixtures",
+      "!logs/_scratch",
+      "!**/*.generated.ts",
       "!tools/map-compiler/areas/*.raw-*.json",
       "!public/maps/*.json"
     ]
