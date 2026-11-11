@@ -813,3 +813,62 @@ describe("grid select (07.1)", () => {
     expect(d.getSelection()).toBeNull();
   });
 });
+
+describe("applyRoadFix (07.1-15)", () => {
+  function withDuplicate() {
+    const { area, d } = setup();
+    const pts = [
+      [0, 0, 0],
+      [10, 0, 0],
+      [10, 0, 0],
+      [20, 0, 0],
+    ] as [number, number, number][];
+    const e = {
+      id: 0,
+      from: 0,
+      to: 1,
+      points: pts,
+      lengthM: 20,
+      surface: "tarmac" as const,
+      roadClass: "residential",
+      lanes: 2,
+      widthM: 7,
+      oneway: false,
+      speedLimitKph: 50,
+      bridge: false,
+      tunnel: false,
+      layer: 0,
+      osmWayId: 0,
+    };
+    const node = (id: number, p: [number, number, number]) => ({
+      id,
+      x: p[0],
+      y: p[1],
+      z: p[2],
+      junction: false,
+      osmNodeId: 0,
+    });
+    area.graph = { ...area.graph, nodes: [node(0, pts[0]), node(1, pts[3])], edges: [e] };
+    area.nextEdgeId = 1;
+    return { area, d };
+  }
+
+  it("removes duplicate points as one undo step", () => {
+    const { area, d } = withDuplicate();
+    const before = JSON.stringify(area.graph);
+    const r = d.applyRoadFix("remove-duplicate-points", 0);
+    expect(r.graphChanged).toBe(true);
+    expect(area.graph.edges[0].points).toHaveLength(3);
+    d.undo();
+    expect(JSON.stringify(area.graph)).toBe(before);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("pushes nothing when no safe fix exists", () => {
+    const { d } = withDuplicate();
+    const r = d.applyRoadFix("smooth-heights", 0);
+    expect(r.graphChanged).toBe(false);
+    expect(r.status).toContain("no safe automatic fix");
+    expect(d.canUndo()).toBe(false);
+  });
+});

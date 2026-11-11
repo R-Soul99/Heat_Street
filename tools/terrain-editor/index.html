@@ -11,6 +11,18 @@
       .legend span { display: inline-block; margin: 0 8px 4px 0; }
       .sw { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: middle; }
       .log-box { white-space: pre-wrap; font: 400 11px monospace; max-height: 320px; overflow-y: auto; background: #0c0d10; padding: 8px; min-width: 420px; }
+      #road-problems { position: absolute; top: 84px; right: 8px; width: 340px; max-height: calc(100% - 220px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid #000; z-index: 12; pointer-events: auto; }
+      #road-problems[hidden] { display: none; }
+      #road-problems .rp-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid #000; font-weight: 600; }
+      #road-problems .rp-list { overflow-y: auto; padding: 4px; }
+      #road-problems .rp-empty { padding: 8px; color: var(--ok); }
+      #road-problems .rp-row { padding: 6px; margin-bottom: 4px; background: var(--panel-2); border-left: 4px solid var(--warn); cursor: pointer; }
+      #road-problems .rp-row.blocking { border-left-color: var(--error); }
+      #road-problems .rp-row:hover { background: #30353f; }
+      #road-problems .rp-tag { font-size: 11px; font-weight: 600; color: var(--warn); }
+      #road-problems .rp-row.blocking .rp-tag { color: var(--error); }
+      #road-problems .rp-hint { color: #9aa; font-size: 12px; margin-top: 2px; }
+      #road-problems .rp-actions { margin-top: 4px; display: flex; gap: 4px; }
       .seg { display: flex; gap: 4px; }
       .seg .btn[aria-pressed="true"] { background: #2f6f55; border-color: #6c9; }
     </style>
@@ -19,6 +31,10 @@
     <div id="app">
       <div id="wrap" class="shell-canvas">
         <canvas id="view"></canvas>
+        <aside id="road-problems" hidden>
+          <div class="rp-head"><span id="rp-title">Road problems</span></div>
+          <div id="rp-list" class="rp-list"></div>
+        </aside>
         <div id="empty">No area loaded. Use File &gt; Open area or File &gt; New.</div>
       </div>
     </div>

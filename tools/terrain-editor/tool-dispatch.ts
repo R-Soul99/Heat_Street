@@ -48,6 +48,7 @@ import {
 import { isUnlocked, nearestEdgeWithin, unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
+import { type FixKind, removeDuplicatePoints, smoothEdgeHeights } from "./road-problems.ts";
 
 export type Tool =
   | "raise"
@@ -647,6 +648,37 @@ export function createToolDispatcher(getArea: () => EditArea) {
     isStroking: (): boolean => stroke !== null,
 
     getSelectedEdgeId: (): number | null => currentSelection(),
+
+    /** Road problems panel: one automatic repair on one road, as ONE undo step. */
+    applyRoadFix(kind: FixKind, edgeId: number): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const area = getArea();
+      if (kind === "regrade") return regradeResult(area, regradeRoads(area, [edgeId]));
+      const before = area.graph;
+      const next =
+        kind === "remove-duplicate-points"
+          ? removeDuplicatePoints(before, edgeId)
+          : smoothEdgeHeights(before, edgeId);
+      const res = emptyResult();
+      if (!next) {
+        res.status = `Road ${edgeId}: no safe automatic fix; fix it by hand.`;
+        return res;
+      }
+      const rec = createStrokeRecorder(area.grid, area.paint);
+      area.graph = next;
+      rec.recordGraph(
+        JSON.stringify(before),
+        JSON.stringify(next),
+        area.nextEdgeId,
+        area.nextEdgeId,
+      );
+      mergeInto(res, commitLockDiff(area, rec.commit()));
+      res.status =
+        kind === "remove-duplicate-points"
+          ? `Removed duplicate points on road ${edgeId}.`
+          : `Smoothed the heights of road ${edgeId}.`;
+      return res;
+    },
 
     /** Lock (re-grading stale roads first) or unlock every road: one undo step. */
     lockAll(locked: boolean): ToolResult {

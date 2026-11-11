@@ -28,6 +28,7 @@ import {
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
 import { ROAD_PRESETS, type RoadPresetId } from "../../src/core/terrain-road.ts";
+import { staleUnlockedEdges } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import {
   buildTerrainView,
@@ -56,6 +57,7 @@ import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
+import { buildRoadProblems, type FixKind, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
 import {
@@ -396,6 +398,7 @@ function refreshInfo(): void {
   shell.info.set("size", `${fmt3(g.cols * g.cellSizeM)} x ${fmt3(g.rows * g.cellSizeM)} m`);
   shell.info.set("cell", `${fmt3(g.cellSizeM)} m`);
   shell.info.set("roads", String(area.graph.edges.length));
+  refreshRoadProblems();
 }
 
 async function api(url: string, init?: RequestInit): Promise<Response> {
@@ -638,6 +641,7 @@ async function save(): Promise<boolean> {
     const blockText = saveBlockMessage(blockingRoadFailures(target.graph));
     if (blockText !== null) {
       fail(blockText);
+      setRoadProblemsOpen(true);
       return false;
     }
     // Quick 261110-rdx (DD-3): an unlocked road that no longer matches the terrain is not saved.
@@ -648,6 +652,7 @@ async function save(): Promise<boolean> {
     );
     if (staleText !== null) {
       fail(staleText);
+      setRoadProblemsOpen(true);
       return false;
     }
     // Snapshot synchronously: the sidecar text is serialised and the binary
@@ -1090,6 +1095,165 @@ function validateRoads(): void {
   }
 }
 
+// ---------------------------------------------------------------- road problems panel
+
+const rpPanel = $("road-problems");
+const rpList = $("rp-list");
+const rpTitle = $("rp-title");
+let rpTimer: number | undefined;
+let rpHighlight: THREE.Group | null = null;
+let rpHighlightTimer: number | undefined;
+const RP_HIGHLIGHT_MS = 4000;
+const RP_HIGHLIGHT_RED = 0xff5555;
+
+const roadProblemsOpen = (): boolean => !rpPanel.hidden;
+
+function setRoadProblemsOpen(open: boolean): void {
+  rpPanel.hidden = !open;
+  if (open) refreshRoadProblemsNow();
+  else clearRoadProblemHighlight();
+  shell.refreshMenus();
+}
+
+/** Re-lists problems shortly after an edit (one pass per burst of edits). */
+function refreshRoadProblems(): void {
+  if (!roadProblemsOpen()) return;
+  window.clearTimeout(rpTimer);
+  rpTimer = window.setTimeout(refreshRoadProblemsNow, 120);
+}
+
+function refreshRoadProblemsNow(): void {
+  window.clearTimeout(rpTimer);
+  rpList.replaceChildren();
+  if (!area) {
+    rpTitle.textContent = "Road problems";
+    rpList.appendChild(el("div", "rp-empty", "No area loaded."));
+    return;
+  }
+  let rows: RoadProblemRow[];
+  try {
+    const target = area as unknown as EditArea;
+    const failures = validateGraph(area.graph, buildRoadGeometry(area.graph));
+    const stale = staleUnlockedEdges(area.grid, area.graph, target.unlockedEdgeIds);
+    rows = buildRoadProblems(area.graph, failures, stale, target.unlockedEdgeIds ?? []);
+  } catch (err) {
+    rpTitle.textContent = "Road problems";
+    rpList.appendChild(
+      el("div", "rp-hint", `The road check failed: ${err instanceof Error ? err.message : err}`),
+    );
+    return;
+  }
+  const blocking = rows.filter((r) => r.blocking).length;
+  rpTitle.textContent =
+    rows.length === 0
+      ? "Road problems"
+      : `Road problems (${rows.length}${blocking > 0 ? `, ${blocking} stop saving` : ""})`;
+  if (rows.length === 0) {
+    rpList.appendChild(el("div", "rp-empty", "No road problems found."));
+    return;
+  }
+  for (const row of rows) rpList.appendChild(roadProblemRow(row));
+  auditTips(rpPanel);
+}
+
+function roadProblemRow(row: RoadProblemRow): HTMLElement {
+  const box = el(
+    "div",
+    row.blocking ? "rp-row blocking" : "rp-row",
+    undefined,
+    `${row.tip} Click to look at it on the map.`,
+  );
+  box.appendChild(el("div", "rp-tag", row.blocking ? "Stops saving" : "Does not stop saving"));
+  box.appendChild(el("div", undefined, row.text));
+  if (row.fixKind === undefined && row.hint) box.appendChild(el("div", "rp-hint", row.hint));
+  const fixKind = row.fixKind;
+  if (fixKind !== undefined) {
+    const actions = el("div", "rp-actions");
+    actions.appendChild(
+      createButton({
+        label: row.fixLabel ?? "Fix",
+        tip: "Fix this automatically. Ctrl+Z undoes it.",
+        onClick: () => applyRoadProblemFix(fixKind, row.target.id),
+      }),
+    );
+    box.appendChild(actions);
+  }
+  box.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    showRoadProblem(row);
+  });
+  return box;
+}
+
+function clearRoadProblemHighlight(): void {
+  window.clearTimeout(rpHighlightTimer);
+  if (!rpHighlight) return;
+  scene.remove(rpHighlight);
+  rpHighlight.traverse((o) => {
+    if (o instanceof THREE.Line) {
+      o.geometry.dispose();
+      (o.material as THREE.Material).dispose();
+    }
+  });
+  rpHighlight = null;
+}
+
+/** Flies the camera to the problem and marks it for a few seconds. */
+function showRoadProblem(row: RoadProblemRow): void {
+  if (!area) return;
+  const { x, z } = row.at;
+  const y = sampleTerrainHeight(area.grid, x, z);
+  const off = camera.position.clone().sub(controls.target);
+  off.setLength(Math.min(120, Math.max(40, off.length())));
+  controls.target.set(x, y, z);
+  camera.position.copy(controls.target).add(off);
+  controls.update();
+
+  clearRoadProblemHighlight();
+  const group = new THREE.Group();
+  const mat = (): THREE.LineBasicMaterial =>
+    new THREE.LineBasicMaterial({ color: RP_HIGHLIGHT_RED, depthTest: false, transparent: true });
+  const ring: THREE.Vector3[] = [];
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * Math.PI * 2;
+    ring.push(new THREE.Vector3(x + Math.cos(a) * 10, y + 1, z + Math.sin(a) * 10));
+  }
+  group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ring), mat()));
+  group.add(
+    new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(x, y, z),
+        new THREE.Vector3(x, y + 60, z),
+      ]),
+      mat(),
+    ),
+  );
+  if (row.target.kind === "edge") {
+    const edge = area.graph.edges.find((e) => e.id === row.target.id);
+    if (edge) {
+      const grid = area.grid;
+      const pts = edge.points.map(
+        (p) => new THREE.Vector3(p[0], sampleTerrainHeight(grid, p[0], p[2]) + 1.5, p[2]),
+      );
+      if (pts.length >= 2)
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat()));
+    }
+  }
+  group.renderOrder = 999;
+  scene.add(group);
+  rpHighlight = group;
+  rpHighlightTimer = window.setTimeout(clearRoadProblemHighlight, RP_HIGHLIGHT_MS);
+  setStatus(`Looking at: ${row.text}`);
+}
+
+function applyRoadProblemFix(kind: FixKind, edgeId: number): void {
+  if (!area || stroking || pushPull) return;
+  clearRoadProblemHighlight();
+  applyResult(dispatcher.applyRoadFix(kind, edgeId), 0);
+  updateHistoryButtons();
+  refreshRoadProblemsNow();
+}
+
 function applyResult(res: ToolResult, _ms: number): void {
   rebuild(res.dirtyHeights, { heights: true });
   rebuild(res.dirtyPaint, { paint: true });
@@ -1138,6 +1302,7 @@ function applyResult(res: ToolResult, _ms: number): void {
     validateRoads();
     refreshInfo();
   }
+  if (edited || res.graphChanged || res.lockChanged) refreshRoadProblems();
 }
 
 function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
@@ -1273,6 +1438,7 @@ function undoRedo(kind: "undo" | "redo"): void {
     validateRoads();
     refreshInfo();
   }
+  refreshRoadProblems();
 }
 
 // ---------------------------------------------------------------- tool options
@@ -1961,6 +2127,13 @@ const shell = createShell({
           run: () => void contourIntervalDialog(),
         },
         { separator: true },
+        {
+          id: "road-problems",
+          label: "Road problems",
+          tip: "List every road problem, jump to it on the map, and fix it",
+          run: () => setRoadProblemsOpen(!roadProblemsOpen()),
+          checked: () => roadProblemsOpen(),
+        },
         {
           id: "topdown",
           label: "Top-down",
