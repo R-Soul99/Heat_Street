@@ -59,6 +59,15 @@ import {
   snapPoint,
 } from "./model.ts";
 import { type ImportPlan, planImportWorld, suggestMapId, validateNewMapInput } from "./new-map.ts";
+import {
+  applyBoxAction,
+  type Box,
+  buildingsInBox,
+  isRoadDisabled,
+  normaliseBox,
+  setRoadDisabled,
+  waysInBox,
+} from "./selection.ts";
 import { compileOutcome, countsText, worldSizeText } from "./ui-text.ts";
 import {
   DEFAULT_TILE_M,
@@ -103,8 +112,16 @@ let selected: { kind: "road" | "building"; way: RawWay } | undefined;
 const history = createSnapshotHistory<string>(100);
 const messageLog = createMessageLog();
 
-type Tool = "select" | "road" | "move" | "building" | "import";
+type Tool = "select" | "road" | "move" | "building" | "import" | "erase";
 let tool: Tool = "select";
+// Box select: boxDrag is the live drag (world metres), boxSel the finished box.
+let boxDrag: { a: { x: number; y: number }; b: { x: number; y: number } } | undefined;
+let boxSel: Box | undefined;
+const boxTypes = { roads: true, buildings: true };
+// Eraser: one drag = one undo step (snapshot on the first hit only).
+let erasing: { snapped: boolean; count: number } | undefined;
+let roadWidthStepper: StepperHandle | undefined;
+let buildingHeightStepper: StepperHandle | undefined;
 let roadPoints: Snap[] = [];
 let hover: { x: number; y: number } | undefined;
 let movingNode: number | undefined;
@@ -114,7 +131,9 @@ let drawSurface = "";
 let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
-  select: "Click a road or building to edit it. Drag to pan. F fits the world, arrows pan.",
+  select:
+    "Click a road or building to edit it, or drag a box to act on everything inside. Right-drag or middle-drag pans; arrows pan too. F fits the world.",
+  erase: "Click or drag over roads and buildings to delete them. One drag is one undo step.",
   road: "Click to add points; double-click or Enter to finish, Esc to cancel. Clicking on an existing road or node connects to it.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building.",
@@ -216,6 +235,7 @@ function snapshot(): void {
 function restore(json: string, message: string): void {
   [roads, buildings] = JSON.parse(json) as [RawEnvelope, RawEnvelope];
   selected = undefined;
+  boxSel = undefined;
   dirty = true;
   geometryVersion++;
   syncHistory();
@@ -244,6 +264,7 @@ async function loadArea(id: string): Promise<void> {
   syncHistory();
   dirty = false;
   selected = undefined;
+  boxSel = undefined;
   geometryVersion++;
   clearImport();
   fitWorld();
@@ -429,7 +450,18 @@ function draw(): void {
     ctx.lineJoin = "round";
     ctx.stroke();
   };
+  // Disabled roads first (grey, dashed) so enabled roads draw over them.
   for (const way of roads.response.elements) {
+    if (!isRoadDisabled(way)) continue;
+    const lw = localWay(way);
+    if (!visible(lw, DEFAULT_WIDTH_M + 20)) continue;
+    if (way === selected?.way) drawRoad(way, lw, "#ff6", 4);
+    ctx.setLineDash([6, 4]);
+    drawRoad(way, lw, "#666", 0);
+    ctx.setLineDash([]);
+  }
+  for (const way of roads.response.elements) {
+    if (isRoadDisabled(way)) continue;
     const lw = localWay(way);
     if (!visible(lw, DEFAULT_WIDTH_M + 20)) continue;
     if (way === selected?.way) drawRoad(way, lw, "#ff6", 4);
@@ -472,14 +504,39 @@ function draw(): void {
     ctx.fillStyle = "rgba(255,220,120,0.5)";
     ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
   }
+  const liveBox = boxDrag ? normaliseBox(boxDrag.a, boxDrag.b) : boxSel;
+  if (liveBox !== undefined) {
+    const p = toScreen({ x: liveBox.minX, y: liveBox.maxY });
+    const q = toScreen({ x: liveBox.maxX, y: liveBox.minY });
+    ctx.fillStyle = "rgba(60,220,255,0.10)";
+    ctx.fillRect(p.x, p.y, q.x - p.x, q.y - p.y);
+    ctx.strokeStyle = "#4df";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(p.x, p.y, q.x - p.x, q.y - p.y);
+    ctx.setLineDash([]);
+  }
+  if (tool === "erase" && hover !== undefined) {
+    const s = toScreen(hover);
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, eraseTol() * scale, 0, Math.PI * 2);
+    ctx.strokeStyle = "#f66";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
   drawHud();
 }
+
+const eraseTol = (): number => Math.max(3, 8 / scale);
 
 function onToolChange(next: string): void {
   tool = next as Tool;
   roadPoints = [];
   rectStart = undefined;
   movingNode = undefined;
+  boxSel = undefined;
+  boxDrag = undefined;
+  erasing = undefined;
   if (roads !== undefined) requestDraw();
 }
 
@@ -530,7 +587,13 @@ function renderRoadOptions(host: HTMLElement): void {
       drawWidth = v;
     },
   });
-  host.append(hintText(HINTS.road), hw.el, surf.el, width.el);
+  roadWidthStepper = width;
+  const more = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "More";
+  summary.dataset.tip = "Show or hide the less-used options (highway class).";
+  more.append(summary, hw.el);
+  host.append(hintText(HINTS.road), width.el, surf.el, more);
 }
 
 function renderBuildingOptions(host: HTMLElement): void {
@@ -547,12 +610,17 @@ function renderBuildingOptions(host: HTMLElement): void {
       buildingHeight = v;
     },
   });
+  buildingHeightStepper = height;
   host.append(hintText(HINTS.building), height.el);
 }
 
 /** Select tool flyout: hint plus the tag editor for the current selection. No markup strings. */
 function renderSelectOptions(host: HTMLElement): void {
   host.append(hintText(HINTS.select));
+  if (boxSel !== undefined) {
+    renderBoxOptions(host, boxSel);
+    return;
+  }
   if (selected === undefined) {
     host.append(hintText("Nothing selected."));
     return;
@@ -566,7 +634,24 @@ function renderSelectOptions(host: HTMLElement): void {
     fn();
     refresh("edited", false);
   };
-  if (kind === "road") {
+  if (kind === "road" && isRoadDisabled(way)) {
+    heading.textContent = `Road way ${way.id} (${way.geometry.length} pts)`;
+    host.append(
+      heading,
+      hintText("Disabled (not compiled). It stays in the file and shows grey and dashed."),
+      createButton({
+        label: "Enable road",
+        tip: "Put this road back into the compiled map.",
+        onClick: () => edit(() => setRoadDisabled(way, false)),
+      }),
+      createButton({
+        label: "Delete road (Del)",
+        tip: "Remove this road from the map. Undo brings it back.",
+        kind: "danger",
+        onClick: deleteSelected,
+      }),
+    );
+  } else if (kind === "road") {
     heading.textContent = `Road way ${way.id} (${way.geometry.length} pts)`;
     const hw = createSelect<string>({
       label: "Highway",
@@ -618,6 +703,11 @@ function renderSelectOptions(host: HTMLElement): void {
       labelled("Name", "Street name of this road.", name),
       oneway.el,
       createButton({
+        label: "Disable road",
+        tip: "Hide this road from the compiled map but keep it in the file. Shows grey and dashed; can be enabled again.",
+        onClick: () => edit(() => setRoadDisabled(way, true)),
+      }),
+      createButton({
         label: "Delete road (Del)",
         tip: "Remove this road from the map. Undo brings it back.",
         kind: "danger",
@@ -647,6 +737,175 @@ function renderSelectOptions(host: HTMLElement): void {
         onClick: deleteSelected,
       }),
     );
+  }
+}
+
+function boxCounts(box: Box): { roads: number; disabled: number; buildings: number } {
+  const r = waysInBox(roads.response.elements, proj, box);
+  return {
+    roads: r.length,
+    disabled: r.filter(isRoadDisabled).length,
+    buildings: buildingsInBox(buildings.response.elements, proj, box).length,
+  };
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function runBoxAction(box: Box, action: "delete" | "disable" | "enable"): void {
+  const types = { roads: boxTypes.roads, buildings: boxTypes.buildings };
+  // Dry run on counts so an empty action does not create an undo step.
+  const c = boxCounts(box);
+  const wouldRoads = types.roads
+    ? action === "delete"
+      ? c.roads
+      : action === "disable"
+        ? c.roads - c.disabled
+        : c.disabled
+    : 0;
+  const wouldBuildings = types.buildings && action === "delete" ? c.buildings : 0;
+  if (wouldRoads + wouldBuildings === 0) {
+    say(
+      action === "delete" || types.roads
+        ? "Nothing ticked in the box."
+        : "Tick Roads to disable or enable them.",
+      "info",
+    );
+    return;
+  }
+  snapshot();
+  const n = applyBoxAction({ roads, buildings, proj, box, types, action });
+  selected = undefined;
+  const verb = action === "delete" ? "Deleted" : action === "disable" ? "Disabled" : "Enabled";
+  const parts: string[] = [];
+  if (n.roads > 0) parts.push(plural(n.roads, "road"));
+  if (n.buildings > 0) parts.push(plural(n.buildings, "building"));
+  refresh("");
+  say(`${verb} ${parts.join(", ")}.`, "ok");
+}
+
+function renderBoxOptions(host: HTMLElement, box: Box): void {
+  const c = boxCounts(box);
+  host.append(
+    readout(
+      `In box: ${plural(c.roads, "road")} (${c.disabled} disabled), ${plural(c.buildings, "building")}`,
+    ).el,
+    createCheckbox({
+      label: "Roads",
+      tip: "Include roads in the next Delete or Disable.",
+      checked: boxTypes.roads,
+      onChange: (b) => {
+        boxTypes.roads = b;
+      },
+    }).el,
+    createCheckbox({
+      label: "Buildings",
+      tip: "Include buildings in the next Delete. (Buildings cannot be disabled.)",
+      checked: boxTypes.buildings,
+      onChange: (b) => {
+        boxTypes.buildings = b;
+      },
+    }).el,
+    createCheckbox({
+      label: "Objects",
+      tip: "Placeable objects (trees, hedges, fences) come in a later phase.",
+      checked: false,
+      disabled: true,
+      onChange: () => {},
+    }).el,
+    createButton({
+      label: "Delete ticked",
+      tip: "Delete the ticked types inside the box. Undo brings them back.",
+      kind: "danger",
+      onClick: () => runBoxAction(box, "delete"),
+    }),
+    createButton({
+      label: "Disable roads",
+      tip: "Hide the ticked roads from the compiled map but keep them in the file. Buildings cannot be disabled; delete them instead.",
+      onClick: () => runBoxAction(box, "disable"),
+    }),
+    createButton({
+      label: "Enable roads",
+      tip: "Put disabled roads inside the box back into the compiled map.",
+      onClick: () => runBoxAction(box, "enable"),
+    }),
+    createButton({
+      label: "Clear box",
+      tip: "Forget the box (Esc). Nothing is changed.",
+      onClick: clearBox,
+    }),
+  );
+}
+
+function clearBox(): void {
+  boxSel = undefined;
+  boxDrag = undefined;
+  requestDraw();
+  if (tool === "select") shell.refreshToolOptions();
+}
+
+/** Delete key: the box (ticked types) when one exists, else the single selection. */
+function deleteKey(): void {
+  if (tool === "select" && boxSel !== undefined) runBoxAction(boxSel, "delete");
+  else deleteSelected();
+}
+
+function eraseAt(p: { x: number; y: number }): void {
+  if (erasing === undefined) return;
+  const road = pickRoad(p, roads.response.elements, proj, eraseTol());
+  const building = road ? undefined : pickBuilding(p, buildings.response.elements, proj);
+  const hit = road ?? building;
+  if (hit === undefined) return;
+  if (!erasing.snapped) {
+    snapshot();
+    erasing.snapped = true;
+  }
+  const env = road ? roads : buildings;
+  env.response.elements = env.response.elements.filter((w) => w !== hit);
+  if (selected?.way === hit) selected = undefined;
+  erasing.count++;
+  geometryVersion++;
+  updateInfo();
+  requestDraw();
+}
+
+async function clearAll(): Promise<void> {
+  const r = roads.response.elements.length;
+  const b = buildings.response.elements.length;
+  if (r + b === 0) {
+    say("Nothing to clear.", "info");
+    return;
+  }
+  const ok = await shell.confirm({
+    title: "Clear all?",
+    message: `Delete all ${plural(r, "road")} and ${plural(b, "building")} in ${area}? You can undo this.`,
+    okLabel: "Clear all",
+  });
+  if (!ok) return;
+  snapshot();
+  roads.response.elements = [];
+  buildings.response.elements = [];
+  selected = undefined;
+  boxSel = undefined;
+  refresh("");
+  say("Cleared. Ctrl+Z brings everything back.", "ok");
+}
+
+/** [ and ] adjust the active tool's main value. */
+function adjustValue(dir: 1 | -1, shift: boolean): void {
+  if (tool === "road") {
+    const s = roadWidthStepper;
+    if (s === undefined) return;
+    const v = Math.min(40, Math.max(2, s.get() + dir * (shift ? 2 : 0.5)));
+    s.set(v, true);
+  } else if (tool === "building") {
+    const s = buildingHeightStepper;
+    if (s === undefined) return;
+    const v = Math.min(200, Math.max(2, s.get() + dir * (shift ? 5 : 1)));
+    s.set(v, true);
+  } else {
+    say("This tool has no adjustable value.", "info");
   }
 }
 
@@ -682,9 +941,15 @@ canvas.addEventListener("mouseleave", () => {
   requestDraw();
 });
 canvas.addEventListener("mousedown", (e) => {
-  const wantsPan = e.button !== 0 || tool === "select" || tool === "import";
+  const wantsPan = e.button !== 0 || tool === "import";
   dragging = { x: e.clientX, y: e.clientY, moved: false, pan: wantsPan };
-  if (e.button === 0 && tool === "move") {
+  if (e.button === 0 && tool === "select") {
+    const a = worldOf(e);
+    boxDrag = { a, b: a };
+  } else if (e.button === 0 && tool === "erase") {
+    erasing = { snapped: false, count: 0 };
+    eraseAt(worldOf(e));
+  } else if (e.button === 0 && tool === "move") {
     const n = pickNode(worldOf(e), roads, proj, snapTol());
     if (n !== undefined) {
       snapshot();
@@ -697,6 +962,11 @@ window.addEventListener("mousemove", (e) => {
   if (e.target === canvas) {
     hover = worldOf(e);
     shell.info.set("cursor", fmtXY(hover.x, hover.y));
+    requestDraw();
+  }
+  if (erasing !== undefined) eraseAt(worldOf(e));
+  if (boxDrag !== undefined) {
+    boxDrag.b = worldOf(e);
     requestDraw();
   }
   if (dragging === undefined) return;
@@ -719,6 +989,25 @@ window.addEventListener("mouseup", (e) => {
   const d = dragging;
   dragging = undefined;
   if (d === undefined || e.button !== 0) return;
+  if (erasing !== undefined) {
+    const n = erasing.count;
+    erasing = undefined;
+    if (n > 0) say(`Erased ${plural(n, "item")}.`, "ok");
+    return;
+  }
+  if (boxDrag !== undefined) {
+    const drag = boxDrag;
+    boxDrag = undefined;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) {
+      boxSel = normaliseBox(drag.a, drag.b);
+      selected = undefined;
+      requestDraw();
+      shell.refreshToolOptions();
+      return;
+    }
+    // A plain click falls through to the single pick below.
+    d.moved = false;
+  }
   if (movingNode !== undefined) {
     movingNode = undefined;
     dirty = true;
@@ -745,6 +1034,7 @@ window.addEventListener("mouseup", (e) => {
     return;
   }
   if (tool !== "select") return;
+  boxSel = undefined;
   const road = pickRoad(p, roads.response.elements, proj, Math.max(3, 8 / scale));
   const building = road ? undefined : pickBuilding(p, buildings.response.elements, proj);
   selected = road
@@ -1515,12 +1805,27 @@ const bindings: Binding[] = [
   { code: "KeyB", label: "B", description: "Building tool", run: () => shell.setTool("building") },
   { code: "KeyI", label: "I", description: "Image trace tool", run: () => shell.setTool("import") },
   { code: "KeyF", label: "F", description: "Fit the whole world", run: fit },
-  { code: "Delete", label: "Delete", description: "Delete the selection", run: deleteSelected },
+  { code: "KeyE", label: "E", description: "Eraser tool", run: () => shell.setTool("erase") },
+  { code: "Delete", label: "Delete", description: "Delete the selection or box", run: deleteKey },
   {
     code: "Backspace",
     label: "Backspace",
-    description: "Delete the selection",
-    run: deleteSelected,
+    description: "Delete the selection or box",
+    run: deleteKey,
+  },
+  {
+    code: "BracketLeft",
+    shift: "any",
+    label: "[",
+    description: "Decrease the tool value (Shift = bigger step)",
+    run: (e) => adjustValue(-1, e.shiftKey),
+  },
+  {
+    code: "BracketRight",
+    shift: "any",
+    label: "]",
+    description: "Increase the tool value (Shift = bigger step)",
+    run: (e) => adjustValue(1, e.shiftKey),
   },
   {
     code: "Enter",
@@ -1532,11 +1837,12 @@ const bindings: Binding[] = [
   {
     code: "Escape",
     label: "Esc",
-    description: "Cancel the road or rectangle being drawn",
+    description: "Cancel the road, rectangle or box",
     run: () => {
       roadPoints = [];
       rectStart = undefined;
-      requestDraw();
+      if (boxSel !== undefined || boxDrag !== undefined) clearBox();
+      else requestDraw();
     },
   },
   { code: "ArrowLeft", label: "Arrow keys", description: "Pan the view", run: () => panBy(-1, 0) },
@@ -1572,7 +1878,7 @@ shell = createShell({
       id: "select",
       label: "Select",
       icon: "▭",
-      tip: "Click a road or building to edit it",
+      tip: "Click a road or building to edit it, or drag a box to delete or disable what is inside",
       shortcut: "V",
       renderOptions: renderSelectOptions,
     },
@@ -1599,6 +1905,14 @@ shell = createShell({
       tip: "Drag a rectangle to add a building",
       shortcut: "B",
       renderOptions: renderBuildingOptions,
+    },
+    {
+      id: "erase",
+      label: "Eraser",
+      icon: "⌫",
+      tip: "Click or drag to delete roads and buildings",
+      shortcut: "E",
+      renderOptions: (host) => host.append(hintText(HINTS.erase)),
     },
     {
       id: "import",
@@ -1713,7 +2027,13 @@ shell = createShell({
       ],
     },
   ],
-  history: { onUndo: undo, onRedo: redo },
+  history: {
+    onUndo: undo,
+    onRedo: redo,
+    onClear: () => void clearAll(),
+    clearLabel: "Clear all",
+    clearTip: "Delete every road and building in this map (asks first; Undo brings them back)",
+  },
   view: {
     onZoomIn: () => zoomBy(1.25),
     onZoomOut: () => zoomBy(0.8),
