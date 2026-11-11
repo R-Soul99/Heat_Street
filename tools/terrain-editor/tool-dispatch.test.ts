@@ -90,6 +90,7 @@ describe("sculpt tools", () => {
     expect(new Set(Object.values(TOOL_KEYS)).size).toBe(Object.keys(TOOL_KEYS).length);
     expect(Object.values(TOOL_KEYS).sort()).toEqual(
       [
+        "gridSelect",
         "raise",
         "lower",
         "smooth",
@@ -636,7 +637,10 @@ describe("grid select (07.1)", () => {
     return s;
   }
 
-  function winHeights(area: EditArea, win: NonNullable<ReturnType<ReturnType<typeof setup>["d"]["getSelection"]>>) {
+  function winHeights(
+    area: EditArea,
+    win: NonNullable<ReturnType<ReturnType<typeof setup>["d"]["getSelection"]>>,
+  ) {
     const out: number[] = [];
     const stride = area.grid.rows + 1;
     for (let c = win.minCol; c <= win.maxCol; c++) {
@@ -713,8 +717,8 @@ describe("grid select (07.1)", () => {
     const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
     const base = winHeights(area, sel);
     expect(d.beginPushPull()).toBe(true);
-    d.pushPullTo(2.5);
-    expect(winHeights(area, sel)).toEqual(base.map((h) => h + 2.5));
+    d.pushPullTo(2);
+    expect(winHeights(area, sel)).toEqual(base.map((h) => h + 2));
     d.pushPullTo(-1);
     expect(winHeights(area, sel)).toEqual(base.map((h) => h - 1));
     d.pushPullTo(0);
@@ -784,7 +788,8 @@ describe("grid select (07.1)", () => {
     const stride = area.grid.rows + 1;
     const held: number[] = [];
     for (let c = sel.minCol; c <= sel.maxCol; c++) {
-      for (let r = sel.minRow; r <= sel.maxRow; r++) if (mask[r + c * stride]) held.push(r + c * stride);
+      for (let r = sel.minRow; r <= sel.maxRow; r++)
+        if (mask[r + c * stride]) held.push(r + c * stride);
     }
     expect(held.length).toBeGreaterThan(0);
     const before = held.map((i) => area.grid.heights[i]);

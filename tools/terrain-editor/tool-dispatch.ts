@@ -22,11 +22,14 @@ import {
   paintSurface,
   raiseBlock,
   raiseLower,
+  raiseWindow,
   SMOOTH_PASSES_MAX,
   type StrokeDiff,
   type StrokeRecorder,
+  setWindowFromBase,
   smoothBrush,
   smoothRegion,
+  snapshotWindow,
   stampTerrain,
 } from "../../src/core/terrain-brush.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
@@ -57,7 +60,8 @@ export type Tool =
   | "erase"
   | "block"
   | "smoothBox"
-  | "lock";
+  | "lock"
+  | "gridSelect";
 
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyH: "raise",
@@ -71,6 +75,7 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyB: "block",
   KeyM: "smoothBox",
   KeyL: "lock",
+  KeyS: "gridSelect",
 };
 
 export interface ToolOptions {
@@ -94,6 +99,8 @@ export interface ToolOptions {
   blockDirection: 1 | -1;
   smoothStrength: number;
   smoothPasses: number;
+  /** Grid select raise/lower step in metres (0.25..5, multiples of 0.25). */
+  selectStepM: number;
 }
 
 export interface ToolResult {
@@ -111,6 +118,8 @@ export interface ToolResult {
   heightDeltaM?: number;
   /** Vertices held by roads so far this stroke. */
   heldVertices?: number;
+  /** Grid select: Ctrl+pointerDown on a selection; the editor should now drive push/pull. */
+  pushPullStarted?: boolean;
   warnings: string[];
   status?: string;
   /** Road tool: polyline to draw while dragging. */
@@ -133,6 +142,8 @@ export type EditArea = RoadEditTarget & UndoTarget;
 
 const MIN_STAMP_LENGTH_M = 4;
 const STAMP_ROTATE_STEP_RAD = (15 * Math.PI) / 180;
+const PUSH_PULL_MAX_M = 50;
+const NO_SELECTION_MSG = "Select some cells first (Grid select, S).";
 const ERASE_MSG = "Road erased. Ctrl+Z to undo.";
 
 export const heldStatus = (n: number): string =>
@@ -181,6 +192,7 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.slopeClamped ||= r.slopeClamped;
   if (r.heightDeltaM !== undefined) into.heightDeltaM = r.heightDeltaM;
   if (r.heldVertices !== undefined) into.heldVertices = r.heldVertices;
+  if (r.pushPullStarted) into.pushPullStarted = true;
   into.warnings.push(...r.warnings);
   if (r.status !== undefined) into.status = r.status;
   if (r.previewPoints !== undefined) into.previewPoints = r.previewPoints;
@@ -352,6 +364,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     blockDirection: 1,
     smoothStrength: 0.5,
     smoothPasses: 3,
+    selectStepM: 1,
   };
 
   function params(x: number, z: number): BrushParams {
@@ -495,6 +508,26 @@ export function createToolDispatcher(getArea: () => EditArea) {
     };
   }
 
+  /** Grid select (07.1): persistent vertex window and the active push/pull drag. */
+  let selection: CellWindow | null = null;
+  let pushPull: {
+    base: Float32Array;
+    win: CellWindow;
+    recorder: StrokeRecorder;
+    lastDelta: number;
+  } | null = null;
+
+  function heightResult(r: BrushResult): ToolResult {
+    const res = emptyResult();
+    res.dirtyHeights = r.window;
+    res.slopeClamped = r.slopeClamped;
+    res.heightDeltaM = r.maxDeltaM;
+    res.heldVertices = r.heldCount;
+    if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+    if (r.maxDeltaM === 0 && r.heldCount > 0) res.status = heldStatus(r.heldCount);
+    return res;
+  }
+
   /** Quick 261110-rdx: selected road (Lock tool); null once the edge is gone. */
   let selectedEdgeId: number | null = null;
 
@@ -597,6 +630,13 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (patch.blockDirection !== undefined) {
         options.blockDirection = options.blockDirection < 0 ? -1 : 1;
       }
+      if (patch.selectStepM !== undefined) {
+        options.selectStepM = clamp(
+          Math.round(options.selectStepM * 4) / 4,
+          BLOCK_STEP_MIN_M,
+          BLOCK_STEP_MAX_M,
+        );
+      }
       if (patch.smoothStrength !== undefined) {
         options.smoothStrength = clamp(options.smoothStrength, 0, 1);
       }
@@ -663,6 +703,101 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return windowBetween(getArea(), s.start, { x, z });
     },
 
+    getSelection: (): CellWindow | null => selection,
+    setSelection(win: CellWindow | null): void {
+      selection = win ? { ...win } : null;
+    },
+    clearSelection(): void {
+      selection = null;
+    },
+
+    /** Live Grid select rubber-band window from the drag start to (x, z); null when not dragging. */
+    selectionPreview(x: number, z: number): CellWindow | null {
+      const s = stroke;
+      if (s?.tool !== "gridSelect" || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+      return windowBetween(getArea(), s.start, { x, z });
+    },
+
+    /** Steps every non-road vertex in the selection by +/- selectStepM: one undo entry. */
+    raiseSelection(sign: 1 | -1): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (!selection) {
+        const res = emptyResult();
+        res.status = NO_SELECTION_MSG;
+        return res;
+      }
+      const area = getArea();
+      const rec = createStrokeRecorder(area.grid, area.paint);
+      const r = raiseWindow(
+        area.grid,
+        selection,
+        sign * options.selectStepM,
+        rec,
+        heightOpOptions(area),
+      );
+      const diff = rec.commit();
+      if (diff) stack.push(diff);
+      return heightResult(r);
+    },
+
+    /** Starts a push/pull on the selection (snapshot taken now). False with no selection. */
+    beginPushPull(): boolean {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (!selection) return false;
+      const area = getArea();
+      pushPull = {
+        base: snapshotWindow(area.grid, selection),
+        win: { ...selection },
+        recorder: createStrokeRecorder(area.grid, area.paint),
+        lastDelta: 0,
+      };
+      return true;
+    },
+
+    /** Absolute push/pull: heights = snapshot + deltaM (clamped to 50 m). */
+    pushPullTo(deltaM: number): ToolResult {
+      const pp = pushPull;
+      if (!pp || !Number.isFinite(deltaM)) return emptyResult();
+      const area = getArea();
+      const delta = Math.min(PUSH_PULL_MAX_M, Math.max(-PUSH_PULL_MAX_M, deltaM));
+      pp.lastDelta = delta;
+      const r = setWindowFromBase(
+        area.grid,
+        pp.win,
+        pp.base,
+        delta,
+        pp.recorder,
+        heightOpOptions(area),
+      );
+      return heightResult(r);
+    },
+
+    /** Commits the push/pull as ONE undo entry. */
+    endPushPull(): ToolResult {
+      const pp = pushPull;
+      if (!pp) return emptyResult();
+      pushPull = null;
+      const res = emptyResult();
+      const diff = pp.recorder.commit();
+      if (diff) {
+        stack.push(diff);
+        res.dirtyHeights = windowsOfDiff(getArea(), diff).heights;
+      }
+      return res;
+    },
+
+    /** Restores the snapshot heights; no undo entry. */
+    cancelPushPull(): ToolResult {
+      const pp = pushPull;
+      if (!pp) return emptyResult();
+      const area = getArea();
+      const r = setWindowFromBase(area.grid, pp.win, pp.base, 0, undefined, heightOpOptions(area));
+      pushPull = null;
+      const res = emptyResult();
+      res.dirtyHeights = r.window;
+      return res;
+    },
+
     /** Drops an in-progress smoothBox drag without editing anything (Escape). */
     cancelBoxDrag(): boolean {
       if (stroke?.tool !== "smoothBox") return false;
@@ -674,6 +809,12 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       if (stroke) this.pointerUp(x, z);
       if (tool === "lock") return lockClick(x, z, mods);
+      if (tool === "gridSelect" && mods.ctrl && selection) {
+        const res = emptyResult();
+        res.pushPullStarted = true;
+        res.status = "Push/pull the selection: drag up or down.";
+        return res;
+      }
       const area = getArea();
       const s: Stroke = {
         tool,
@@ -721,6 +862,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
           res,
           dabAlong(s, x, z, (px, pz) => doErase(s, px, pz)),
         );
+      } else if (s.tool === "gridSelect") {
+        s.last = { x, z };
       } else if (s.tool !== "stamp" && s.tool !== "smoothBox") {
         mergeInto(
           res,
@@ -795,6 +938,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
         finish(s.recorder.commit());
         return res;
       }
+      if (s.tool === "gridSelect") {
+        const end = finite ? { x, z } : s.last;
+        selection = windowBetween(area, s.start, end);
+        res.selectionChanged = true;
+        const cols = selection.maxCol - selection.minCol;
+        const rows = selection.maxRow - selection.minRow;
+        res.status = `Selected ${cols} x ${rows} cells. Raise/lower with the arrows in the panel, or Ctrl+drag to push/pull.`;
+        finish(undefined);
+        return res;
+      }
       if (s.tool === "smoothBox") {
         const end = finite ? { x, z } : s.start;
         const r = smoothRegion(
@@ -854,6 +1007,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
       stack.clear();
       stroke = null;
       selectedEdgeId = null;
+      selection = null;
+      pushPull = null;
     },
   };
 }
