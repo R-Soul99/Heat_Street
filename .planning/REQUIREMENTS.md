@@ -82,11 +82,15 @@ Deferred to future release. Tracked but not in current roadmap.
 - **MODE-01**: VR challenge-mission mode (Metal Gear Solid VR-missions style) — short self-contained challenges (reach A before being caught, escape, survive N seconds) with bronze/silver/gold scoring, presented as a neon-wireframe training suite. Builds on the existing medal system, pursuit/bust rules and plain-shape test maps; needs the art pass first or alongside. Keep mission rules separate from rendering so the reskin is a layer, not a rewrite (added 2026-11-07)
 - **MODE-02**: Launch-pad arena — a large flat tarmac arena with ramps round the edges; the aim is to lure the attackers up the ramps so they fly off the map, with a count of attackers remaining and a fell-off-the-map check. Reuses the pursuit AI and the plain-shape test-map approach (GitHub issue #22, added 2026-11-08)
 - **MODE-03**: Demolition derby — a field of cars that damage each other, last car running wins. Needs a vehicle damage model first (degrade engine force / steering / suspension, damaged states, disabled end-state); AI would need to pick targets other than the player (GitHub issue #23, added 2026-11-08)
+- **MODE-04**: Off-road point-to-point stages — hand-authored dirt/desert/dune courses built in the world builder, raced start-to-finish across open terrain with checkpoint gates that do not depend on the road graph. Stage terrain must be locked or versioned once medal times are set. See `seeds/offroad-point-to-point-stages.md` (added 2026-11-11)
 
 ### Replay & Content
 
 - **MEDAL-05**: Personal-best ghost playback during runs
 - **VEH-05**: Second and third car with genuinely distinct handling profiles
+- **VEH-06**: Off-road vehicle class (e.g. dune buggy, Baja truck, rally coupe; original designs) with long-travel soft suspension, bigger wheels, higher ride height and loose-surface grip. Needs per-car drivetrain (RWD/FWD/AWD, see pending todo) (added 2026-11-11)
+- **VEH-07**: Heavy vehicle class: trucks and monster trucks (e.g. 4x4 pickup, big-rig cab, lifted crew-cab, monster truck; original designs). High mass, high centre of mass with real body roll and rollover risk, big torque, very long suspension travel and oversized wheels that soak up big landings and drive over obstacles. Needs Rapier stability checks for heavy, tall bodies and large wheel radii (added 2026-11-11)
+- **SURF-03**: Surface FX upgrade beyond the SURF-02 first version: soft textured particles instead of square points, continuous dust trails on dry loose ground, roost behind driven wheels, mud spray, water splash, landing-impact dust bursts, and smooth terrain-following tyre-track ribbons and ruts instead of blocky skid decals. Effects scale with vehicle size and stay within a particle budget (added 2026-11-11)
 - **WORLD-01**: Light rails-based ambient traffic (moving obstacles with simple braking/panic-swerve)
 - **MEDAL-06**: Post-run chopper-cam replay of the run
 
