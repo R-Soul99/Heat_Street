@@ -160,7 +160,16 @@ function requestDraw(): void {
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`${url}: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text) as { error?: unknown };
+      if (typeof json.error === "string") throw new Error(json.error);
+    } catch (e) {
+      if (e instanceof Error && e.message !== "" && !(e instanceof SyntaxError)) throw e;
+    }
+    throw new Error(`${url}: ${res.status} ${text}`);
+  }
   return (await res.json()) as T;
 }
 
@@ -742,16 +751,19 @@ $("nw-create").onclick = async () => {
   const widthKm = Number($<HTMLInputElement>("nw-w").value);
   const heightKm = Number($<HTMLInputElement>("nw-h").value);
   try {
-    const out = await api<{ register: string[] }>("/__editor/new-world", {
+    const out = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
       method: "POST",
       body: JSON.stringify({ id, widthKm, heightKm }),
     });
     await refreshAreas(id);
     await loadArea(id);
-    $("log").textContent =
-      `Created "${id}". To compile it, add to tools/map-compiler/cli.ts:\n${out.register.join("\n")}`;
+    $("log").textContent = out.registered
+      ? `Created and registered "${id}".`
+      : (out.warning ?? `Created "${id}".`);
   } catch (err) {
-    $("log").textContent = String(err);
+    const msg = err instanceof Error ? err.message : String(err);
+    $("log").textContent = msg;
+    $("status").textContent = msg;
   }
 };
 

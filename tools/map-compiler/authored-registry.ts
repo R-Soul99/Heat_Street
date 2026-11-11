@@ -6,7 +6,7 @@
  * Ids are validated against ID_RE and labels are derived from the id, so no
  * free text ever reaches generated source. Node-only.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { configExportName } from "../map-editor/world.ts";
@@ -27,6 +27,17 @@ const BUILTIN_IDS: readonly string[] = [
   "newton-poppleford",
   "skidders-and-popp",
   "my-map",
+  "demo-hills",
+  "playground",
+  "straight-test",
+  "arena-test",
+];
+
+/** Built-in ids whose format is "terrain" (kept in sync with map-select by a test). */
+export const BUILTIN_TERRAIN_IDS: readonly string[] = [
+  "juliette-ga",
+  "grid-test",
+  "feel-test",
   "demo-hills",
   "playground",
   "straight-test",
@@ -165,4 +176,24 @@ export async function registerAuthoredMap(
   await atomicWrite(p.compiler, compilerRegistrySource(entries));
   await atomicWrite(p.runtime, runtimeRegistrySource(entries));
   return { added: true };
+}
+
+/** Manifest entries, or [] when the manifest does not exist yet. */
+export function readAuthoredManifest(root: string): AuthoredMap[] {
+  const file = paths(root).manifest;
+  if (!existsSync(file)) return [];
+  return parseAuthoredManifest(readFileSync(file, "utf8"));
+}
+
+/** True when `?map=<id>` resolves to a terrain-format map (built-in or registered). */
+export function isDrivableTerrain(root: string, id: string): boolean {
+  if (BUILTIN_TERRAIN_IDS.includes(id)) return true;
+  return readAuthoredManifest(root).some((e) => e.id === id && e.format === "terrain");
+}
+
+/** Ids of registered legacy-format authored worlds. */
+export function authoredLegacyIds(root: string): string[] {
+  return readAuthoredManifest(root)
+    .filter((e) => e.format === "legacy")
+    .map((e) => e.id);
 }

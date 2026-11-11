@@ -1,28 +1,30 @@
 /**
  * Writes a blank authored world: `<id>.raw-osm.json`, `<id>.raw-buildings.json`
  * (empty raw-OSM envelopes with a synthetic bbox, like the synthetic generators)
- * and `<id>.config.ts`. The map compiler is unchanged; the caller must add the
- * two returned lines to `tools/map-compiler/cli.ts` (import + KNOWN_AREAS).
+ * and `<id>.config.ts`. The map compiler is unchanged; the caller registers
+ * the world via `registerAuthoredMap` (authored-maps.json -> generated registries).
  *
  * Shared by the editor's `POST /__editor/new-world` endpoint and this CLI:
  *   node tools/map-editor/new-world.ts --id world-test --km 6 [--km-north 4]
  */
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { blankWorld, configExportName, worldConfigSource } from "./world.ts";
+import { registerAuthoredMap } from "../map-compiler/authored-registry.ts";
+import { blankWorld, worldConfigSource } from "./world.ts";
 
+const ROOT = path.resolve(import.meta.dirname, "..", "..");
 export const AREAS_DIR = path.resolve(import.meta.dirname, "..", "map-compiler", "areas");
 
 export class WorldExistsError extends Error {}
 
-/** Writes the three files (refusing to overwrite) and returns the cli.ts registry lines. */
+/** Writes the three files, refusing to overwrite. */
 export function writeNewWorld(
   areasDir: string,
   id: string,
   widthKm: number,
   heightKm: number,
   now: string,
-): string[] {
+): void {
   // blankWorld validates id and sizes before any path is built.
   const { roads, buildings } = blankWorld(id, widthKm, heightKm, now);
   const roadsFile = path.join(areasDir, `${id}.raw-osm.json`);
@@ -35,11 +37,6 @@ export function writeNewWorld(
   writeFileSync(roadsFile, json(roads), "utf8");
   writeFileSync(buildingsFile, json(buildings), "utf8");
   writeFileSync(configFile, worldConfigSource(id, roads.bbox, now), "utf8");
-  const name = configExportName(id);
-  return [
-    `import { ${name} } from "./areas/${id}.config.ts";`,
-    `  "${id}": ${name},   // in KNOWN_AREAS`,
-  ];
 }
 
 function arg(name: string): string | undefined {
@@ -52,8 +49,9 @@ if (import.meta.filename === path.resolve(process.argv[1] ?? "")) {
   const widthKm = Number(arg("--km"));
   const heightKm = arg("--km-north") === undefined ? widthKm : Number(arg("--km-north"));
   try {
-    const lines = writeNewWorld(AREAS_DIR, id, widthKm, heightKm, new Date().toISOString());
-    console.log(`Wrote world "${id}". Add to tools/map-compiler/cli.ts:\n${lines.join("\n")}`);
+    writeNewWorld(AREAS_DIR, id, widthKm, heightKm, new Date().toISOString());
+    await registerAuthoredMap(ROOT, { id, format: "legacy" });
+    console.log(`Wrote and registered world ${id}`);
   } catch (err) {
     console.error(`new-world: ${String(err)}`);
     process.exit(1);

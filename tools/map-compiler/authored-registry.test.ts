@@ -2,10 +2,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { BUILTIN_MAP_IDS, MAP_FORMATS } from "../../src/core/map-select.ts";
 import {
   authoredLabel,
+  authoredLegacyIds,
+  BUILTIN_TERRAIN_IDS,
   compilerRegistrySource,
+  isDrivableTerrain,
   parseAuthoredManifest,
+  readAuthoredManifest,
   registerAuthoredMap,
   runtimeRegistrySource,
 } from "./authored-registry.ts";
@@ -86,5 +91,32 @@ describe("registerAuthoredMap", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("manifest helpers", () => {
+  it("returns [] for a missing manifest and reads entries otherwise", async () => {
+    const root = await mkdtemp(join(tmpdir(), "reg-helpers-"));
+    try {
+      expect(readAuthoredManifest(root)).toEqual([]);
+      await mkdir(join(root, "tools", "map-compiler"), { recursive: true });
+      await writeFile(
+        join(root, "tools", "map-compiler", "authored-maps.json"),
+        '[{"id":"a-map","format":"legacy"},{"id":"a-hill","format":"terrain"}]',
+      );
+      expect(readAuthoredManifest(root)).toHaveLength(2);
+      expect(authoredLegacyIds(root)).toEqual(["a-map"]);
+      expect(isDrivableTerrain(root, "a-hill")).toBe(true);
+      expect(isDrivableTerrain(root, "a-map")).toBe(false);
+      expect(isDrivableTerrain(root, "demo-hills")).toBe(true);
+      expect(isDrivableTerrain(root, "my-map")).toBe(false);
+      expect(isDrivableTerrain(root, "nope")).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("BUILTIN_TERRAIN_IDS matches map-select", () => {
+    const expected = BUILTIN_MAP_IDS.filter((id) => MAP_FORMATS[id] === "terrain");
+    expect([...BUILTIN_TERRAIN_IDS].sort()).toEqual([...expected].sort());
   });
 });

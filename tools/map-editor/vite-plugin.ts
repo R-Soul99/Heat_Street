@@ -9,7 +9,8 @@
  *   PUT  /__editor/raw/<area>/<kind>      -> overwrite it (body: envelope JSON)
  *   POST /__editor/compile/<area>         -> compile-map (+ route authoring), returns log
  *   POST /__editor/new-world              -> body {id,widthKm,heightKm}: writes a blank
- *                                            authored world; returns {ok,register:[cli.ts lines]}
+ *                                            authored world and registers it; returns
+ *                                            {ok,id,registered[,warning]} or {error}
  */
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -17,6 +18,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { authoredLegacyIds, registerAuthoredMap } from "../map-compiler/authored-registry.ts";
 import { WorldExistsError, writeNewWorld } from "./new-world.ts";
 import { MAX_WORLD_KM, MIN_WORLD_KM } from "./world.ts";
 
@@ -32,6 +34,11 @@ const POST_COMPILE: Record<string, string[]> = {
   // Terrain-format flat maps: rebuild the terrain from the freshly compiled graph.
   "arena-test": ["tools/map-compiler/terrain/cli.ts", "--area", "arena-test"],
 };
+
+function postCompileFor(area: string): string[] | undefined {
+  if (POST_COMPILE[area] !== undefined) return POST_COMPILE[area];
+  return authoredLegacyIds(ROOT).includes(area) ? [ROUTE_SCRIPT, "--area", area] : undefined;
+}
 
 function rawPath(area: string, kind: string): string | undefined {
   const suffix = FILE_FOR_KIND[kind];
@@ -108,30 +115,58 @@ export function mapEditorApi(): Plugin {
               heightKm?: unknown;
             };
             const { id, widthKm, heightKm } = body;
-            const okKm = (n: unknown): n is number =>
-              typeof n === "number" && Number.isFinite(n) && n >= MIN_WORLD_KM && n <= MAX_WORLD_KM;
+            const bad = (error: string) => send(res, 400, JSON.stringify({ error }));
+            if (typeof id !== "string" || id === "") return bad("Name is required.");
+            if (!/^[a-z0-9-]+$/.test(id)) {
+              return bad(`Name may only use a-z, 0-9 and - (got "${id.slice(0, 64)}").`);
+            }
             if (
-              typeof id !== "string" ||
-              !/^[a-z0-9-]+$/.test(id) ||
-              !okKm(widthKm) ||
-              !okKm(heightKm)
+              typeof widthKm !== "number" ||
+              typeof heightKm !== "number" ||
+              !Number.isFinite(widthKm) ||
+              !Number.isFinite(heightKm)
             ) {
-              return send(res, 400, '{"error":"bad id or size"}');
+              return bad("Width and height must be numbers in km.");
+            }
+            for (const [label, km] of [
+              ["Width", widthKm],
+              ["Height", heightKm],
+            ] as const) {
+              if (km < MIN_WORLD_KM || km > MAX_WORLD_KM) {
+                return bad(
+                  `${label} must be between ${MIN_WORLD_KM} and ${MAX_WORLD_KM} km (got ${Number(km.toFixed(3))}).`,
+                );
+              }
             }
             try {
-              const register = writeNewWorld(
-                AREAS_DIR,
-                id,
-                widthKm,
-                heightKm,
-                new Date().toISOString(),
-              );
-              return send(res, 200, JSON.stringify({ ok: true, register }));
+              writeNewWorld(AREAS_DIR, id, widthKm, heightKm, new Date().toISOString());
             } catch (err) {
               if (err instanceof WorldExistsError) {
-                return send(res, 409, JSON.stringify({ error: String(err.message) }));
+                return send(
+                  res,
+                  409,
+                  JSON.stringify({
+                    error: `A map called "${id}" already exists. Pick another name.`,
+                  }),
+                );
               }
-              return send(res, 400, JSON.stringify({ error: String(err) }));
+              return bad(err instanceof Error ? err.message : String(err));
+            }
+            try {
+              await registerAuthoredMap(ROOT, { id, format: "legacy" });
+              return send(res, 200, JSON.stringify({ ok: true, id, registered: true }));
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              return send(
+                res,
+                200,
+                JSON.stringify({
+                  ok: true,
+                  id,
+                  registered: false,
+                  warning: `Created, but could not register for compiling: ${msg}`,
+                }),
+              );
             }
           }
           if (req.method === "POST" && parts[1] === "compile" && parts[2] !== undefined) {
@@ -140,13 +175,14 @@ export function mapEditorApi(): Plugin {
             }
             let log = await run(["tools/map-compiler/cli.ts", "--area", parts[2]]);
             if (!log.includes("[exit")) {
-              const post = POST_COMPILE[parts[2]];
+              const post = postCompileFor(parts[2]);
               if (post !== undefined) log += await run(post);
             }
             if (log.includes("unknown area")) {
               log +=
-                "\nNew world? Add its import and KNOWN_AREAS line (shown when it was created) to tools/map-compiler/cli.ts, then compile again.\n";
+                "\nThis map is not registered. Create it with File > New, or add it to tools/map-compiler/authored-maps.json.\n";
             }
+            res.setHeader("X-Compile-Ok", log.includes("[exit") ? "0" : "1");
             return send(res, 200, log, "text/plain");
           }
           return send(res, 404, '{"error":"not found"}');
