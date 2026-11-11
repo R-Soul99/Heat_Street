@@ -229,7 +229,28 @@ function updateInfo(): void {
   );
 }
 
+/** Every status message, timestamped, for File > Show log. Bounded. */
+const logLines: string[] = [];
+const LOG_MAX = 200;
+
+function log(text: string, kind: "info" | "ok" | "error"): void {
+  const t = new Date().toTimeString().slice(0, 8);
+  logLines.push(`${t}  ${kind === "error" ? "ERROR " : ""}${text}`);
+  if (logLines.length > LOG_MAX) logLines.splice(0, logLines.length - LOG_MAX);
+}
+
+function showLogDialog(): void {
+  const box = el("div", "log-box");
+  box.textContent = logLines.length > 0 ? logLines.join("\n") : "(nothing logged yet)";
+  void openDialog({
+    title: "Log",
+    body: box,
+    actions: [{ id: "close", label: "Close", tip: "Close the log", primary: true }],
+  });
+}
+
 function setStatus(text: string, kind: "info" | "ok" | "error" = "info"): void {
+  if (text !== "") log(text, kind);
   if (shell === undefined) return;
   updateInfo();
   shell.info.setDirty(dirty);
@@ -1572,6 +1593,12 @@ function buildShell(): Shell {
             label: "Show compile log",
             tip: "Show the output of the last compile",
             run: () => openDialogEl("log-dialog"),
+          },
+          {
+            id: "statuslog",
+            label: "Show log",
+            tip: "Show the last 200 status and error messages, with times",
+            run: showLogDialog,
           },
           { separator: true },
           {
