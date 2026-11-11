@@ -101,3 +101,52 @@ export function createEmptyTerrainArea(opts: NewAreaOptions): TerrainArea {
     buildings: [],
   };
 }
+
+const NAME_RULE = /^[a-z0-9-]{1,64}$/;
+
+/**
+ * Pure validation for the New popup. Returns a readable message or null.
+ * The real builder is tried last so its own limits (vertex cap, paint cap)
+ * are reported verbatim.
+ */
+export function validateNewTerrainArea(
+  input: { name: string; widthM: number; depthM: number; cellSizeM: number },
+  existingNames: readonly string[],
+): string | null {
+  if (!NAME_RULE.test(input.name)) {
+    return "Give the area a name: 1-64 characters, a-z, 0-9 and - only.";
+  }
+  const sizeOk = (v: number) => Number.isFinite(v) && v > 0 && v <= MAX_AREA_SIZE_M;
+  if (!sizeOk(input.widthM)) {
+    return `Width must be more than 0 and at most ${MAX_AREA_SIZE_M} m.`;
+  }
+  if (!sizeOk(input.depthM)) {
+    return `Height (north-south) must be more than 0 and at most ${MAX_AREA_SIZE_M} m.`;
+  }
+  if (!Number.isFinite(input.cellSizeM) || input.cellSizeM <= 0) {
+    return "Cell size must be a positive number of metres.";
+  }
+  if (existingNames.includes(input.name)) {
+    return `An area called "${input.name}" already exists. Pick another name or load it from the list.`;
+  }
+  try {
+    createEmptyTerrainArea({
+      areaId: input.name,
+      widthM: input.widthM,
+      depthM: input.depthM,
+      cellSizeM: input.cellSizeM,
+    });
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  return null;
+}
+
+/** First free "new-area", "new-area-2", ... name. */
+export function suggestAreaName(existingNames: readonly string[]): string {
+  if (!existingNames.includes("new-area")) return "new-area";
+  for (let i = 2; ; i++) {
+    const n = `new-area-${i}`;
+    if (!existingNames.includes(n)) return n;
+  }
+}

@@ -4,7 +4,7 @@ import {
   loadTerrainArea,
   serializeTerrainSidecar,
 } from "../../src/core/terrain-format.ts";
-import { createEmptyTerrainArea } from "./new-area.ts";
+import { createEmptyTerrainArea, suggestAreaName, validateNewTerrainArea } from "./new-area.ts";
 
 describe("createEmptyTerrainArea", () => {
   const area = createEmptyTerrainArea({ areaId: "x", widthM: 600, depthM: 400, cellSizeM: 3 });
@@ -63,5 +63,55 @@ describe("createEmptyTerrainArea", () => {
     const big = createEmptyTerrainArea({ areaId: "x", widthM: 1998, depthM: 1998, cellSizeM: 1 });
     expect((big.grid.rows + 1) * (big.grid.cols + 1)).toBeLessThanOrEqual(4_000_000);
     await expect(encodeTerrainBinary(big)).resolves.toBeInstanceOf(Uint8Array);
+  });
+});
+
+describe("validateNewTerrainArea", () => {
+  const ok = { name: "hills", widthM: 1000, depthM: 1000, cellSizeM: 3 };
+  const nameRule = "Give the area a name: 1-64 characters, a-z, 0-9 and - only.";
+
+  it("accepts valid input", () => {
+    expect(validateNewTerrainArea(ok, [])).toBeNull();
+  });
+  it("rejects bad names", () => {
+    expect(validateNewTerrainArea({ ...ok, name: "" }, [])).toBe(nameRule);
+    expect(validateNewTerrainArea({ ...ok, name: "Hills!" }, [])).toBe(nameRule);
+    expect(validateNewTerrainArea({ ...ok, name: "a".repeat(65) }, [])).toBe(nameRule);
+  });
+  it("rejects bad sizes", () => {
+    expect(validateNewTerrainArea({ ...ok, widthM: 0 }, [])).toBe(
+      "Width must be more than 0 and at most 2000 m.",
+    );
+    expect(validateNewTerrainArea({ ...ok, widthM: 2500 }, [])).toBe(
+      "Width must be more than 0 and at most 2000 m.",
+    );
+    expect(validateNewTerrainArea({ ...ok, depthM: 0 }, [])).toBe(
+      "Height (north-south) must be more than 0 and at most 2000 m.",
+    );
+  });
+  it("rejects bad cell size", () => {
+    expect(validateNewTerrainArea({ ...ok, cellSizeM: 0 }, [])).toBe(
+      "Cell size must be a positive number of metres.",
+    );
+    expect(validateNewTerrainArea({ ...ok, cellSizeM: Number.NaN }, [])).toBe(
+      "Cell size must be a positive number of metres.",
+    );
+  });
+  it("rejects an existing name", () => {
+    expect(validateNewTerrainArea(ok, ["hills"])).toBe(
+      'An area called "hills" already exists. Pick another name or load it from the list.',
+    );
+  });
+  it("reports the builder's vertex cap verbatim", () => {
+    const err = validateNewTerrainArea({ ...ok, widthM: 2000, depthM: 2000, cellSizeM: 0.5 }, []);
+    expect(err).toMatch(/vertices, max/);
+  });
+});
+
+describe("suggestAreaName", () => {
+  it("picks the first free name", () => {
+    expect(suggestAreaName([])).toBe("new-area");
+    expect(suggestAreaName(["new-area"])).toBe("new-area-2");
+    expect(suggestAreaName(["new-area", "new-area-2"])).toBe("new-area-3");
   });
 });
