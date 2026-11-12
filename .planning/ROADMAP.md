@@ -19,8 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [x] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001 (closed 2026-11-02: absorbed by Phase 4.2)
 - [x] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1 (completed 2026-11-02)
-- [ ] **Phase 4.3: Terrain and Feel Follow-ups** (INSERTED) - Lift-off spin fix, terrain-edge boundary, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record
-- [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
+- [x] **Phase 4.3: Terrain and Feel Follow-ups** (INSERTED) - Lift-off spin fix, terrain-edge boundary, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (completed 2026-11-04)
+- [x] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI) (completed 2026-09-21)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
@@ -42,7 +42,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A profiler HUD toggled by a single key shows physics ms, draw calls, triangles and body count against a written frame budget
   5. The map-data decision (OpenStreetMap + open DEM, zero Google-sourced bytes) and the road-graph schema are recorded in the repo before any map work starts
 
-**Plans**: 7 plans
+**Plans**: 6/7 plans complete (07-07 open). Pursuit prototype (?pursuers=N chase cars + bust meter) merged 2026-11-07 as groundwork for Phase 8
 
 Plans:
 **Wave 1**
@@ -378,35 +378,35 @@ Plans:
 **Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
 **Requirements**: Working IDs EDUX-01 (shell layout, D-01/D-02), EDUX-02 (info bar, no silent failures, D-03), EDUX-03 (tooltips toggle, D-04), EDUX-04 (steppers, content-sized selects, 3 dp, D-05), EDUX-05 (New/Import popup, fresh map, D-06), EDUX-06 (map tools + Redo, D-07), EDUX-07 (terrain Raise/Lower, Grid select, push/pull, D-08), EDUX-08 (shortcuts, D-09), EDUX-09 (new maps register themselves). Tooling phase; not in v1.0 REQUIREMENTS.md
 **Depends on:** Phase 7
-**Plans:** 13 plans
+**Plans:** 14/16 plans complete (07.1-12 and 07.1-13 are human verification, still open)
 
 Plans:
 
 **Wave 1**
 
-- [ ] 07.1-01-PLAN.md — Shared shell pure logic: fmt3, prefs, snapshot undo/redo, stepper maths, shortcut resolution (+ tests) (wave 1)
-- [ ] 07.1-02-PLAN.md — Authored-map registry: manifest + generated compiler/runtime registries; cli.ts and map-select consume them; popp registered (wave 1)
-- [ ] 07.1-03-PLAN.md — Terrain core: separate Raise/Lower, no Alt, Block direction, Shift+click lock, height/held reporting, window ops (wave 1)
+- [x] 07.1-01-PLAN.md — Shared shell pure logic: fmt3, prefs, snapshot undo/redo, stepper maths, shortcut resolution (+ tests) (wave 1)
+- [x] 07.1-02-PLAN.md — Authored-map registry: manifest + generated compiler/runtime registries; cli.ts and map-select consume them; popp registered (wave 1)
+- [x] 07.1-03-PLAN.md — Terrain core: separate Raise/Lower, no Alt, Block direction, Shift+click lock, height/held reporting, window ops (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07.1-04-PLAN.md — Shared shell DOM: layout CSS, menubar, tool rail + flyout, info bar, dialog, tooltips toggle, steppers/selects (wave 2)
-- [ ] 07.1-05-PLAN.md — Dev-server wiring: precise New-world errors, auto-registration on create/save, compile status, Drive here via server (wave 2)
-- [ ] 07.1-06-PLAN.md — TDD: Grid select in the terrain dispatcher (selection, step raise/lower, Ctrl+drag push/pull) (wave 2)
+- [x] 07.1-04-PLAN.md — Shared shell DOM: layout CSS, menubar, tool rail + flyout, info bar, dialog, tooltips toggle, steppers/selects (wave 2)
+- [x] 07.1-05-PLAN.md — Dev-server wiring: precise New-world errors, auto-registration on create/save, compile status, Drive here via server (wave 2)
+- [x] 07.1-06-PLAN.md — TDD: Grid select in the terrain dispatcher (selection, step raise/lower, Ctrl+drag push/pull) (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07.1-07-PLAN.md — Map editor onto the shell: menus, rail, flyouts, info bar, Redo, Ctrl shortcuts, Clear all, 3 dp display (wave 3)
-- [ ] 07.1-08-PLAN.md — Terrain editor onto the shell: rail with Raise/Lower, flyout brush options, New popup, info bar, keyboard (wave 3)
+- [x] 07.1-07-PLAN.md — Map editor onto the shell: menus, rail, flyouts, info bar, Redo, Ctrl shortcuts, Clear all, 3 dp display (wave 3)
+- [x] 07.1-08-PLAN.md — Terrain editor onto the shell: rail with Raise/Lower, flyout brush options, New popup, info bar, keyboard (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 07.1-09-PLAN.md — Map New popup: blank map or Import image (own Width) into a fresh map; inline validation (wave 4)
-- [ ] 07.1-10-PLAN.md — Terrain Grid select UI + Ctrl+drag push/pull + raise/lower feedback fixes (wave 4)
+- [x] 07.1-09-PLAN.md — Map New popup: blank map or Import image (own Width) into a fresh map; inline validation (wave 4)
+- [x] 07.1-10-PLAN.md — Terrain Grid select UI + Ctrl+drag push/pull + raise/lower feedback fixes (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 07.1-11-PLAN.md — Map Select box (Roads/Buildings/Objects, delete/disable) and Eraser (wave 5)
+- [x] 07.1-11-PLAN.md — Map Select box (Roads/Buildings/Objects, delete/disable) and Eraser (wave 5)
 - [ ] 07.1-12-PLAN.md — Human verification: terrain editor incl. raise/lower diagnosis (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
@@ -433,7 +433,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6 -> 7 -> 7.1 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -443,11 +443,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | Closed (absorbed by 4.2) | 2026-11-02 |
 | 4.2. Driveable Terrain (INSERTED) | 15/15 | Complete | 2026-11-03 |
-| 4.3. Terrain and Feel Follow-ups (INSERTED) | 10/12 | In Progress|  |
-| 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
+| 4.3. Terrain and Feel Follow-ups (INSERTED) | 12/12 | Complete | 2026-11-04 |
+| 5. Objectives, Navigation & Race Modes | 4/4 | Complete | 2026-09-21 |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
-| 7.1. Editor UX Overhaul (INSERTED) | 0/13 | Planned | - |
+| 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes
