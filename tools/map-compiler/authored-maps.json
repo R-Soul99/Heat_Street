@@ -34,5 +34,9 @@
   {
     "id": "map-4",
     "format": "legacy"
+  },
+  {
+    "id": "new-area-1",
+    "format": "terrain"
   }
 ]
