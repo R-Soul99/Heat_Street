@@ -66,6 +66,8 @@ import { createShell, type ShellTool } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
+import { wheelZoomFactor } from "../map-editor/world.ts";
+import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
@@ -86,7 +88,7 @@ const wrap = $("wrap");
 
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT =
-  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+right-drag or Ctrl+wheel to pan, wheel to zoom, Alt+wheel = brush size in cells.";
+  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+middle-drag (or Shift+right-drag) to pan, Ctrl+wheel to zoom to the cursor, Alt+wheel = brush size in cells.";
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
@@ -154,8 +156,9 @@ camera.position.set(200, 250, 200);
 
 const controls = new OrbitControls(camera, canvas);
 // LEFT is reserved for brushes. Shift + right-drag pans (OrbitControls default).
-// MIDDLE is handled below: vertical drag tilts, horizontal drag spins.
-// Ctrl + wheel pans the view up/down on screen (plain wheel still zooms).
+// MIDDLE is handled below: drag orbits about the ground point under the cursor at
+// button-down (horizontal spins, vertical tilts); Shift + middle-drag pans.
+// Ctrl/Meta + wheel zooms toward the cursor; plain wheel does nothing; Alt + wheel is brush size.
 controls.mouseButtons = {
   LEFT: null,
   MIDDLE: null,
@@ -163,13 +166,33 @@ controls.mouseButtons = {
 } as unknown as typeof controls.mouseButtons;
 controls.enableDamping = false;
 controls.maxPolarAngle = Math.PI / 2 - 0.02;
+const NAV_MIN_DIST_M = 2;
+const NAV_MAX_DIST_M = camera.far * 0.5;
+controls.enableZoom = false; // zoom is Ctrl+wheel toward the cursor, handled below
+controls.minDistance = NAV_MIN_DIST_M;
+controls.maxDistance = NAV_MAX_DIST_M;
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
-let middleDrag: { id: number; x: number; y: number } | null = null;
+let middleDrag: {
+  id: number;
+  x: number;
+  y: number;
+  mode: "orbit" | "pan";
+  pivot: THREE.Vector3;
+  panDist: number;
+} | null = null;
 canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 1) return;
   e.preventDefault(); // suppress browser middle-click autoscroll
-  middleDrag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  const pivot = pickPivot(e.clientX, e.clientY) ?? controls.target.clone();
+  middleDrag = {
+    id: e.pointerId,
+    x: e.clientX,
+    y: e.clientY,
+    mode: e.shiftKey ? "pan" : "orbit",
+    pivot,
+    panDist: camera.position.distanceTo(pivot),
+  };
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -179,12 +202,28 @@ canvas.addEventListener("pointermove", (e) => {
   middleDrag.x = e.clientX;
   middleDrag.y = e.clientY;
   const h = canvas.clientHeight || 1;
-  // Same sense as OrbitControls: horizontal drag spins, vertical drag tilts.
-  const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
-  sph.theta -= (2 * Math.PI * dx) / h;
-  sph.phi = Math.min(controls.maxPolarAngle, Math.max(0.01, sph.phi - (2 * Math.PI * dy) / h));
-  camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
-  camera.lookAt(controls.target);
+  if (middleDrag.mode === "orbit") {
+    // Same sense as OrbitControls: horizontal drag spins, vertical drag tilts.
+    const r = orbitAboutPivot(
+      camera.position,
+      controls.target,
+      middleDrag.pivot,
+      -(2 * Math.PI * dx) / h,
+      -(2 * Math.PI * dy) / h,
+      0.01,
+      controls.maxPolarAngle,
+    );
+    camera.position.copy(r.position);
+    controls.target.copy(r.target);
+    camera.lookAt(controls.target);
+  } else {
+    const wpp = worldPerPixel(middleDrag.panDist, camera.fov, h);
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+    const offset = panByPixels(right, up, dx, dy, wpp);
+    camera.position.add(offset);
+    controls.target.add(offset);
+  }
   controls.update();
 });
 canvas.addEventListener(
@@ -198,17 +237,21 @@ canvas.addEventListener(
       if (raw !== 0) altWheelStep(raw < 0 ? 1 : -1);
       return;
     }
-    if (!e.ctrlKey) return;
-    e.preventDefault(); // also stops browser page-zoom
-    e.stopImmediatePropagation(); // keep OrbitControls from zooming
-    const dist = camera.position.distanceTo(controls.target);
-    const worldPerPx =
-      (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / (canvas.clientHeight || 1);
-    const move = new THREE.Vector3()
-      .setFromMatrixColumn(camera.matrix, 1)
-      .multiplyScalar(-Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) * worldPerPx);
-    camera.position.add(move);
-    controls.target.add(move);
+    e.preventDefault(); // plain wheel does nothing; Ctrl+wheel must not page-zoom
+    e.stopImmediatePropagation();
+    const factor = wheelZoomFactor(e, canvas.clientHeight);
+    if (factor === null) return;
+    const point = pickPivot(e.clientX, e.clientY) ?? controls.target.clone();
+    const r = zoomTowardPoint(
+      camera.position,
+      controls.target,
+      point,
+      factor,
+      NAV_MIN_DIST_M,
+      NAV_MAX_DIST_M,
+    );
+    camera.position.copy(r.position);
+    controls.target.copy(r.target);
     controls.update();
   },
   { capture: true, passive: false },
@@ -793,6 +836,22 @@ function pickTerrain(clientX: number, clientY: number) {
   raycaster.setFromCamera(ndc, camera);
   const r = raycaster.ray;
   return raycastTerrain(area.grid, r.origin, r.direction, camera.far * 2);
+}
+
+/** Ground point under the cursor (terrain, else the horizontal plane through the orbit target). */
+function pickPivot(clientX: number, clientY: number): THREE.Vector3 | null {
+  const hit = pickTerrain(clientX, clientY);
+  if (hit) return new THREE.Vector3(hit.x, hit.y, hit.z);
+  if (!area) {
+    const rect = canvas.getBoundingClientRect();
+    ndc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(ndc, camera);
+  }
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y);
+  return raycaster.ray.intersectPlane(plane, new THREE.Vector3());
 }
 
 /** Footprint shape of the active tool: the Shape option for the five radius brushes, else round. */

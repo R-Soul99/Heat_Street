@@ -50,8 +50,7 @@ export function orbitAboutPivot(
   maxPhi: number,
 ): CameraPose {
   const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), dTheta);
-  const rot = (p: THREE.Vector3) =>
-    pivot.clone().add(p.clone().sub(pivot).applyQuaternion(yawQ));
+  const rot = (p: THREE.Vector3) => pivot.clone().add(p.clone().sub(pivot).applyQuaternion(yawQ));
   const pos1 = rot(position);
   const tgt1 = rot(target);
 

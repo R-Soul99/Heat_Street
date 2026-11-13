@@ -76,6 +76,7 @@ import {
   type View,
   visibleRect,
   type World,
+  wheelZoomFactor,
   worldFromBbox,
   zoomAt,
 } from "./world.ts";
@@ -121,7 +122,7 @@ let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
   select:
-    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans; Ctrl+arrows pan; F fits the world.",
+    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans (Shift+middle too); Ctrl+wheel zooms to the cursor; Ctrl+arrows pan; F fits the world.",
   road: "Click centre-line points; double-click or Enter to finish; Esc cancels. Clicking a road or node connects to it. [ ] change the width.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building. [ ] change the height.",
@@ -1204,8 +1205,8 @@ canvas.addEventListener(
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.height : 1;
-    const factor = Math.exp(-e.deltaY * unit * 0.0015);
+    const factor = wheelZoomFactor(e, canvas.height);
+    if (factor === null) return;
     setView(zoomAt(currentView(), factor, sx, sy, fitScale / 4, MAX_SCALE));
     requestDraw();
   },

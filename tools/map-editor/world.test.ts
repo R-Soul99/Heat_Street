@@ -9,9 +9,9 @@ import {
   TILE_SIZES_M,
   tileLines,
   visibleRect,
+  wheelZoomFactor,
   worldConfigSource,
   worldFromBbox,
-  wheelZoomFactor,
   zoomAt,
 } from "./world.ts";
 
