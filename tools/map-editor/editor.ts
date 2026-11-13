@@ -28,6 +28,7 @@ import {
 } from "../editor-shell/shell.ts";
 import type { StepperSpec } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
+import { RESUME_KEY, resumeMarker, shouldResume, terrainListed, waitUntil } from "./handoff.ts";
 import {
   appendImportedRoads,
   DEFAULT_IMPORT_ROAD,
@@ -54,7 +55,6 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
-import { RESUME_KEY, resumeMarker, shouldResume, terrainListed, waitUntil } from "./handoff.ts";
 import { checkRoads } from "./road-check.ts";
 import {
   type Box,
@@ -1481,20 +1481,40 @@ async function openStartScreen(): Promise<void> {
 async function openInTerrainEditor(): Promise<void> {
   if (!requireMap()) return;
   const id = area;
-  const go = (): void => {
+  /** Every failure is a dialog (plus the info bar), never only a status line. */
+  const fail = async (reason: string): Promise<void> => {
+    setStatus(reason, "error");
+    await openDialog({
+      title: "Could not open in terrain editor",
+      body: para(reason),
+      actions: [{ id: "ok", label: "OK", tip: "Close this message and stay here", primary: true }],
+    });
+  };
+  /** The one place that leaves this page: only once the server lists the terrain map. */
+  const go = async (): Promise<void> => {
+    setStatus("Checking that the terrain map is ready...");
+    const listed = await waitUntil(
+      async () => terrainListed(await api<string[]>("/__terrain/areas"), id),
+      { tries: 20, delayMs: 500, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) },
+    );
+    if (!listed) {
+      await fail(
+        `The terrain map public/maps/${id}.terrain.json was not found on the server, so the terrain editor would open empty. Nothing was lost: your drawing is saved in ${DRAWING_PATH(id)}.`,
+      );
+      return;
+    }
     window.location.href = `${TERRAIN_EDITOR_URL}?area=${encodeURIComponent(id)}`;
   };
   let status: MapStatus;
   try {
     status = await api<MapStatus>(`/__editor/status/${id}`);
   } catch (err) {
-    setStatus(`Could not check ${id}: ${errText(err)}`, "error");
+    await fail(`Could not check ${id}: ${errText(err)}`);
     return;
   }
   if (!status.registered) {
-    setStatus(
+    await fail(
       `${id} is a built-in or imported map that cannot be converted here. Make a map with File > Start screen instead.`,
-      "error",
     );
     return;
   }
@@ -1521,13 +1541,30 @@ async function openInTerrainEditor(): Promise<void> {
     });
     if (choice === "cancel") return;
     if (choice === "open") {
-      if (dirty && !(await save())) return;
-      go();
+      if (dirty && !(await save())) {
+        await fail("Your drawing could not be saved, so nothing was opened. See the info bar.");
+        return;
+      }
+      await go();
       return;
     }
   }
-  if (!checkRoadsReport()) return;
-  if (!(await save())) return;
+  if (roads.response.elements.length === 0) {
+    await fail(
+      "This map has no roads yet, so it cannot be turned into a terrain map. Draw at least one road (R), then try again. To start from bare ground instead, use File > New in the terrain editor.",
+    );
+    return;
+  }
+  if (!checkRoadsReport()) {
+    await fail(
+      "The road check found a problem, so the map was not converted. The road is selected and explained in the info bar; fix it, then try again.",
+    );
+    return;
+  }
+  if (!(await save())) {
+    await fail("Your drawing could not be saved, so nothing was converted. See the info bar.");
+    return;
+  }
   setStatus(`Compiling and converting ${id}... this can take a little while.`);
   const logText = $("log-text");
   logText.textContent = "compiling and converting...";
@@ -1537,16 +1574,23 @@ async function openInTerrainEditor(): Promise<void> {
     error?: string;
     summary?: { cols: number; rows: number; cellSizeM: number; vertices: number };
   };
+  markResume(id);
+  setConverting(true);
   try {
     const res = await fetch(`/__editor/to-terrain/${id}`, { method: "POST" });
     out = (await res.json()) as typeof out;
   } catch (err) {
-    setStatus(`Could not convert ${id}: ${errText(err)}`, "error");
+    await fail(`Could not convert ${id}: ${errText(err)}`);
     return;
+  } finally {
+    setConverting(false);
   }
   if (out.log !== undefined) logText.textContent = out.log;
   if (!out.ok || out.summary === undefined) {
-    setStatus(`${out.error ?? "Conversion failed."} See File > Show compile log.`, "error");
+    const said = out.log === undefined ? "" : lastCompilerLine(out.log);
+    await fail(
+      `${out.error ?? "Conversion failed."}${said === "" ? "" : ` The compiler said: ${said}`} See File > Show compile log.`,
+    );
     return;
   }
   const g = out.summary;
@@ -1572,7 +1616,46 @@ async function openInTerrainEditor(): Promise<void> {
       { id: "stay", label: "Stay here", tip: "Keep editing the drawing in this editor" },
     ],
   });
-  if (r === "go") go();
+  if (r === "go") await go();
+}
+
+/** The last real line of a compile log (the error), without the "[exit N]" footer. */
+function lastCompilerLine(log: string): string {
+  const lines = log
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("[exit"));
+  return (lines[lines.length - 1] ?? "").slice(0, 300);
+}
+
+const CONVERTING_KEY = "heat-street:map-editor:converting";
+/** Set while a conversion request is in flight, so a reload mid-conversion can say so. */
+function setConverting(on: boolean): void {
+  try {
+    if (on) sessionStorage.setItem(CONVERTING_KEY, "1");
+    else sessionStorage.removeItem(CONVERTING_KEY);
+  } catch {
+    // storage unavailable
+  }
+}
+
+/** After a reload that interrupted a conversion: tell the user how it ended. */
+async function reportInterruptedConversion(id: string): Promise<void> {
+  try {
+    if (sessionStorage.getItem(CONVERTING_KEY) === null) return;
+    sessionStorage.removeItem(CONVERTING_KEY);
+    const st = await api<MapStatus>(`/__editor/status/${id}`);
+    if (st.hasTerrain) {
+      setStatus("Conversion finished; use Open in terrain editor to continue.", "ok");
+    } else {
+      setStatus(
+        "The page reloaded during conversion and no terrain map was written. Use Open in terrain editor to try again.",
+        "error",
+      );
+    }
+  } catch {
+    // best effort only
+  }
 }
 
 function buildShell(): Shell {
@@ -2184,7 +2267,10 @@ async function main(): Promise<void> {
   // A dev-server reload (file edit, restart) must not throw the user back to the
   // start screen: reopen the map that was open a moment ago.
   const resumeId = takeResume();
-  if (resumeId !== undefined && (await loadArea(resumeId))) return;
+  if (resumeId !== undefined && (await loadArea(resumeId))) {
+    await reportInterruptedConversion(resumeId);
+    return;
+  }
   // Otherwise nothing is loaded automatically: the start screen decides what opens.
   await openStartScreen();
 }
