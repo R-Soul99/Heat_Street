@@ -521,8 +521,9 @@ function installArea(next: TerrainArea): void {
   refreshInfo();
 }
 
-async function loadArea(id: string): Promise<void> {
-  if (!(await confirmDiscard())) return;
+/** Loads a saved area. Resolves to the error text on failure, null on success or cancel. */
+async function loadArea(id: string): Promise<string | null> {
+  if (!(await confirmDiscard())) return null;
   try {
     const [bin, json] = await Promise.all([
       api(`/__terrain/${id}/bin`).then((r) => r.arrayBuffer()),
@@ -533,8 +534,11 @@ async function loadArea(id: string): Promise<void> {
     setDirty(false);
     setStatus(`Loaded ${id}. ${DEFAULT_HINT}`, "ok");
     log(`loaded ${id}`);
+    return null;
   } catch (err) {
-    fail(loadErrorMessage(`${id}.terrain.bin`, err));
+    const text = loadErrorMessage(`${id}.terrain.bin`, err);
+    fail(text);
+    return text;
   }
 }
 
@@ -2648,17 +2652,103 @@ updateHistoryButtons();
 setHint(DEFAULT_HINT);
 setStatus("No area loaded. Use File > Open area or File > New.");
 auditTips(document);
-refreshAreaList()
-  .then(() => {
-    // ?area=<id> (from the map editor's "Open in terrain editor"): exact match against the saved list only.
-    const wanted = new URLSearchParams(location.search).get("area");
-    const match = knownAreas.find((id) => id === wanted);
-    if (match !== undefined) return loadArea(match);
-    if (wanted !== null)
-      setStatus(`There is no saved terrain map called "${wanted.slice(0, 64)}".`);
-    return undefined;
-  })
-  .catch((err) => {
-    log(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
+const MAP_EDITOR_URL = "/tools/map-editor/index.html";
+const SAFE_AREA_ID = /^[a-z0-9-]{1,64}$/;
+
+/** Area id as shown to the user: only names the server could have saved, else "(invalid name)". */
+function displayAreaId(raw: string): string {
+  return SAFE_AREA_ID.test(raw) ? raw : "(invalid name)";
+}
+
+const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** Lists saved areas, retrying (0.5 s, 1 s, 2 s) so a dev-server restart racing the navigation recovers. */
+async function refreshAreaListWithRetry(): Promise<void> {
+  const delays = [500, 1000, 2000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await refreshAreaList();
+      return;
+    } catch (err) {
+      if (attempt >= delays.length) throw err;
+      log(`Cannot list areas yet (${errText(err)}); retrying.`);
+      await new Promise((r) => window.setTimeout(r, delays[attempt]));
+    }
+  }
+}
+
+/** GD-SCOPE-2: a failed ?area handoff is always explained on screen with a way back. */
+async function showAreaOpenFailure(rawId: string, reason: string): Promise<void> {
+  const id = displayAreaId(rawId);
+  const message = `Could not open ${id}: ${reason}`;
+  setStatus(message, "error");
+  log(message);
+  const body = el("div");
+  body.appendChild(el("p", undefined, reason));
+  body.appendChild(
+    el(
+      "p",
+      undefined,
+      "Your drawing is safe in the map editor: nothing there was changed or lost.",
+    ),
+  );
+  body.appendChild(
+    el(
+      "p",
+      undefined,
+      "Next step: go back to the map editor and use Open in terrain editor again.",
+    ),
+  );
+  const r = await openDialog<"back" | "stay">({
+    title: `Could not open ${id}`,
+    body,
+    actions: [
+      {
+        id: "back",
+        label: "Back to map editor",
+        tip: "Return to the map editor to try the handoff again",
+        primary: true,
+      },
+      { id: "stay", label: "Stay here", tip: "Close this message and stay in the terrain editor" },
+    ],
   });
+  if (r === "back") location.href = MAP_EDITOR_URL;
+}
+
+async function startupOpen(): Promise<void> {
+  // ?area=<id> (from the map editor's "Open in terrain editor"): exact match against the saved list only.
+  const wanted = new URLSearchParams(location.search).get("area");
+  if (wanted === null) {
+    try {
+      await refreshAreaList();
+    } catch (err) {
+      log(`Cannot list areas: ${errText(err)}`);
+    }
+    return;
+  }
+  try {
+    await refreshAreaListWithRetry();
+  } catch (err) {
+    await showAreaOpenFailure(
+      wanted,
+      `The editor could not reach the dev server to list saved terrain maps (${errText(err)}).`,
+    );
+    return;
+  }
+  const match = knownAreas.find((id) => id === wanted);
+  if (match === undefined) {
+    const id = displayAreaId(wanted);
+    await showAreaOpenFailure(
+      wanted,
+      `There is no saved terrain map called ${id}${id === wanted ? ` (expected public/maps/${id}.terrain.json)` : ""}.`,
+    );
+    return;
+  }
+  const error = await loadArea(match);
+  if (error !== null || area?.areaId !== match) {
+    await showAreaOpenFailure(wanted, error ?? "The saved terrain map did not load.");
+  }
+}
+
+void startupOpen();
 requestAnimationFrame(frame);
