@@ -41,13 +41,7 @@ export interface RoadProblemRow {
   readonly tip: string;
   /** True when this problem stops the map being saved. */
   readonly blocking: boolean;
-  /** Present when the panel can repair it with one click. */
-  readonly fixKind?: FixKind;
-  readonly fixLabel?: string;
-  /**
-   * Every fix the panel can offer, including the legacy one. New kinds
-   * (make-two-way, connect-ends, close-loop) appear ONLY here, never in fixKind.
-   */
+  /** Every one-click repair the panel offers for this row (one button each). */
   readonly fixes?: readonly RoadFix[];
   /** What to do by hand, shown when there is no automatic fix. */
   readonly hint?: string;
@@ -134,7 +128,10 @@ function joinAnd(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-type RowCore = Pick<RoadProblemRow, "text" | "tip" | "fixKind" | "fixLabel" | "hint">;
+/** Row text plus at most one repair, before it becomes a RoadFix button. */
+type RowCore = Pick<RoadProblemRow, "text" | "tip" | "hint"> & {
+  readonly fix?: { readonly kind: FixKind; readonly label: string };
+};
 
 /**
  * Builds the panel rows. Blocking rows come first. One row per (problem kind,
@@ -180,8 +177,7 @@ export function buildRoadProblems(
       case "GEOMETRY_DEGENERATE_POINT":
         row = {
           text: `${name} has ${n === 1 ? "two points" : `${n} pairs of points`} sitting on top of each other.`,
-          fixKind: "remove-duplicate-points",
-          fixLabel: "Remove duplicate points",
+          fix: { kind: "remove-duplicate-points", label: "Remove duplicate points" },
           tip: `Duplicate points can make the road fold or drive badly. ${code}`,
         };
         break;
@@ -192,15 +188,13 @@ export function buildRoadProblems(
         if (edge && unlockedSet.has(f.id) && isStale) {
           row = {
             text: `${name} is steeper than a car can climb, and no longer matches the ground.`,
-            fixKind: "regrade",
-            fixLabel: "Re-grade to the ground",
+            fix: { kind: "regrade", label: "Re-grade to the ground" },
             tip: `Re-grading lays the road back onto the ground under it. ${code}`,
           };
         } else if (edge && !unlockedSet.has(f.id)) {
           row = {
             text: `${name} is steeper than a car can climb.`,
-            fixKind: "smooth-heights",
-            fixLabel: "Smooth the road's heights",
+            fix: { kind: "smooth-heights", label: "Smooth the road's heights" },
             tip: `Evens out the road's recorded heights to a drivable slope. The ground is not changed. ${code}`,
           };
         } else {
@@ -235,25 +229,34 @@ export function buildRoadProblems(
         break;
     }
     const fixes: RoadFix[] =
-      row.fixKind && row.fixLabel
-        ? [{ kind: row.fixKind, label: row.fixLabel, tip: row.tip, edgeId: f.id }]
+      row.fix !== undefined
+        ? [{ kind: row.fix.kind, label: row.fix.label, tip: row.tip, edgeId: f.id }]
         : [];
-    rows.push({ ...row, ...(fixes.length > 0 ? { fixes } : {}), blocking, target, at });
+    rows.push({
+      text: row.text,
+      tip: row.tip,
+      ...(row.hint !== undefined ? { hint: row.hint } : {}),
+      ...(fixes.length > 0 ? { fixes } : {}),
+      blocking,
+      target,
+      at,
+    });
   }
 
   for (const s of stale) {
     const edge = edgeById.get(s.edgeId);
     if (!edge) continue;
     const covered = rows.some(
-      (r) => r.fixKind === "regrade" && r.target.kind === "edge" && r.target.id === s.edgeId,
+      (r) =>
+        r.fixes?.some((f) => f.kind === "regrade") === true &&
+        r.target.kind === "edge" &&
+        r.target.id === s.edgeId,
     );
     if (covered) continue;
     rows.push({
       text: `${roadName(s.edgeId)} no longer matches the ground (off by up to ${s.maxDeltaM.toFixed(1)} m).`,
       tip: "An unlocked road was left behind after sculpting the ground under it. Re-grading lays it back onto the ground.",
       blocking: true,
-      fixKind: "regrade",
-      fixLabel: "Re-grade to the ground",
       fixes: [
         {
           kind: "regrade",

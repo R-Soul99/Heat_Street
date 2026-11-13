@@ -23,6 +23,10 @@
       #road-problems .rp-row:hover { background: #30353f; }
       #road-problems .rp-tag { font-size: 11px; font-weight: 600; color: var(--warn); }
       #road-problems .rp-row.blocking .rp-tag { color: var(--error); }
+      #road-problems .rp-tag.rp-badge-warn, #road-problems .rp-tag.rp-badge-block { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+      #road-problems .rp-tag.rp-badge-warn { color: #aab; background: #3a3f4a; }
+      #road-problems .rp-tag.rp-badge-block { color: #fff; background: var(--error); }
+      #road-problems .rp-row.blocking .rp-tag.rp-badge-block { color: #fff; }
       #road-problems .rp-hint { color: #9aa; font-size: 12px; margin-top: 2px; }
       #road-problems .rp-actions { margin-top: 4px; display: flex; gap: 4px; }
       .seg { display: flex; gap: 4px; }

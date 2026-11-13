@@ -11,6 +11,7 @@ import {
   mergeEndNodes,
   planCloseLoop,
   planConnectEnds,
+  type RoadProblemRow,
   removeDuplicatePoints,
   roadPieces,
   smoothEdgeHeights,
@@ -71,6 +72,7 @@ function graphWith(edges: { id: number; points: P[]; from?: number; to?: number 
 }
 
 const failuresOf = (g: RoadGraph) => validateGraph(g, buildRoadGeometry(g));
+const fixKindsOf = (r: RoadProblemRow) => (r.fixes ?? []).map((f) => f.kind);
 const joined = (rows: { text: string }[]) => rows.map((r) => r.text).join("\n");
 
 describe("buildRoadProblems", () => {
@@ -87,7 +89,7 @@ describe("buildRoadProblems", () => {
       },
     ]);
     const rows = buildRoadProblems(g, failuresOf(g));
-    const row = rows.find((r) => r.fixKind === "remove-duplicate-points");
+    const row = rows.find((r) => fixKindsOf(r)[0] === "remove-duplicate-points");
     expect(row).toBeDefined();
     expect(row?.blocking).toBe(true);
     expect(row?.at).toEqual({ x: 10, z: 0 });
@@ -166,7 +168,7 @@ describe("buildRoadProblems", () => {
     ]);
     const rows = buildRoadProblems(g, failuresOf(g));
     const row = rows.find((r) => r.text.includes("steeper"));
-    expect(row?.fixKind).toBe("smooth-heights");
+    expect(row && fixKindsOf(row)[0]).toBe("smooth-heights");
     expect(row?.at).toEqual({ x: 55, z: 0 });
   });
 
@@ -182,10 +184,10 @@ describe("buildRoadProblems", () => {
     ]);
     const f = failuresOf(g);
     const stale = buildRoadProblems(g, f, [{ edgeId: 0, maxDeltaM: 2 }], [0]);
-    expect(stale.filter((r) => r.fixKind === "regrade")).toHaveLength(1);
+    expect(stale.filter((r) => fixKindsOf(r)[0] === "regrade")).toHaveLength(1);
     const fresh = buildRoadProblems(g, f, [], [0]);
     const steep = fresh.find((r) => r.text.includes("steeper"));
-    expect(steep?.fixKind).toBeUndefined();
+    expect(steep?.fixes).toBeUndefined();
     expect(steep?.hint).toBeTruthy();
   });
 
@@ -202,7 +204,7 @@ describe("buildRoadProblems", () => {
     const rows = buildRoadProblems(g, [], [{ edgeId: 0, maxDeltaM: 1.234 }], [0]);
     expect(rows).toHaveLength(1);
     expect(rows[0].blocking).toBe(true);
-    expect(rows[0].fixKind).toBe("regrade");
+    expect(fixKindsOf(rows[0])[0]).toBe("regrade");
     expect(rows[0].text).toBe("Road 0 no longer matches the ground (off by up to 1.2 m).");
     expect(rows[0].at).toEqual({ x: 15, z: 0 });
   });
@@ -246,7 +248,7 @@ describe("buildRoadProblems", () => {
     ]);
     expect(rows[0].at).toEqual({ x: 10, z: 7 });
     expect(rows[0].blocking).toBe(false);
-    expect(rows[0].fixKind).toBeUndefined();
+    expect(rows[0].fixes).toBeUndefined();
   });
 });
 
@@ -508,7 +510,7 @@ describe("cut-off rows", () => {
     expect(row?.fixes?.map((f) => f.kind)).toContain("close-loop");
   });
 
-  it("legacy fixKind never carries the new kinds, and old rows also list fixes", () => {
+  it("every row lists its repairs in fixes (old and new kinds), no legacy single-fix field", () => {
     const g = cutOffGraph();
     const trap = trapGraph();
     const dup = graphWith([{ id: 0, points: seg([0, 0, 0], [10, 0, 0], [10, 0, 0], [20, 0, 0]) }]);
@@ -518,9 +520,13 @@ describe("cut-off rows", () => {
       ...buildRoadProblems(dup, failuresOf(dup)),
     ];
     for (const r of all) {
-      expect(["make-two-way", "connect-ends", "close-loop"]).not.toContain(r.fixKind);
+      expect(Object.keys(r)).not.toContain("fixKind");
+      expect(Object.keys(r)).not.toContain("fixLabel");
     }
-    const dupRow = all.find((r) => r.fixKind === "remove-duplicate-points");
+    const kinds = all.flatMap((r) => (r.fixes ?? []).map((f) => f.kind));
+    expect(kinds).toContain("make-two-way");
+    expect(kinds).toContain("connect-ends");
+    const dupRow = all.find((r) => fixKindsOf(r)[0] === "remove-duplicate-points");
     expect(dupRow?.fixes?.[0]?.kind).toBe("remove-duplicate-points");
     expect(dupRow?.fixes?.[0]?.edgeId).toBe(0);
   });

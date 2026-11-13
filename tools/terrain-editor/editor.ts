@@ -67,7 +67,7 @@ import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { buildRoadProblems, type FixKind, type RoadProblemRow } from "./road-problems.ts";
+import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
 import {
@@ -1336,10 +1336,15 @@ function validateRoads(): void {
   if (!area) return;
   try {
     const failures = validateGraph(area.graph, buildRoadGeometry(area.graph));
-    const reach = failures.filter((f) => f.category === "UNDIRECTED_REACHABILITY");
     const selfX = failures.filter((f) => f.category === "GEOMETRY_SELF_INTERSECTION");
-    if (reach.length > 0) {
-      log(`info: ${reach.length} disconnected road piece(s); fine while the map is mid-build.`);
+    // Count warnings the way the panel lists them: one per cut-off piece / trapped junction.
+    const warnings = buildRoadProblems(area.graph, failures).filter(
+      (r) => !r.blocking && /(UNDIRECTED_REACHABILITY|DIRECTED_PATHABILITY)/.test(r.tip),
+    ).length;
+    if (warnings > 0) {
+      log(
+        `info: ${warnings} road warning(s): cut-off pieces or one-way traps. Saving still works; see View > Road problems.`,
+      );
     }
     if (selfX.length > 0) {
       log(`info: ${selfX.length} self-intersection(s) ignored on terrain maps (no ribbon mesh).`);
@@ -1400,10 +1405,7 @@ function refreshRoadProblemsNow(): void {
     return;
   }
   const blocking = rows.filter((r) => r.blocking).length;
-  rpTitle.textContent =
-    rows.length === 0
-      ? "Road problems"
-      : `Road problems (${rows.length}${blocking > 0 ? `, ${blocking} stop saving` : ""})`;
+  rpTitle.textContent = `Road problems: ${rows.length} (${blocking} block saving)`;
   if (rows.length === 0) {
     rpList.appendChild(el("div", "rp-empty", "No road problems found."));
     return;
@@ -1419,19 +1421,27 @@ function roadProblemRow(row: RoadProblemRow): HTMLElement {
     undefined,
     `${row.tip} Click to look at it on the map.`,
   );
-  box.appendChild(el("div", "rp-tag", row.blocking ? "Stops saving" : "Does not stop saving"));
+  box.appendChild(
+    el(
+      "div",
+      row.blocking ? "rp-tag rp-badge-block" : "rp-tag rp-badge-warn",
+      row.blocking ? "blocks saving" : "warning",
+    ),
+  );
   box.appendChild(el("div", undefined, row.text));
-  if (row.fixKind === undefined && row.hint) box.appendChild(el("div", "rp-hint", row.hint));
-  const fixKind = row.fixKind;
-  if (fixKind !== undefined) {
+  const fixes = row.fixes ?? [];
+  if (fixes.length === 0 && row.hint) box.appendChild(el("div", "rp-hint", row.hint));
+  if (fixes.length > 0) {
     const actions = el("div", "rp-actions");
-    actions.appendChild(
-      createButton({
-        label: row.fixLabel ?? "Fix",
-        tip: "Fix this automatically. Ctrl+Z undoes it.",
-        onClick: () => applyRoadProblemFix(fixKind, row.target.id),
-      }),
-    );
+    for (const f of fixes) {
+      actions.appendChild(
+        createButton({
+          label: f.label,
+          tip: `${f.tip} One click is one undo step (Ctrl+Z).`,
+          onClick: () => applyRoadProblemFix(f),
+        }),
+      );
+    }
     box.appendChild(actions);
   }
   box.addEventListener("click", (e) => {
@@ -1502,10 +1512,10 @@ function showRoadProblem(row: RoadProblemRow): void {
   setStatus(`Looking at: ${row.text}`);
 }
 
-function applyRoadProblemFix(kind: FixKind, edgeId: number): void {
+function applyRoadProblemFix(f: RoadFix): void {
   if (!area || stroking || pushPull) return;
   clearRoadProblemHighlight();
-  applyResult(dispatcher.applyRoadFix(kind, edgeId), 0);
+  applyResult(dispatcher.applyRoadFix(f.kind, f.edgeId, f.nodeId), 0);
   updateHistoryButtons();
   refreshRoadProblemsNow();
 }
