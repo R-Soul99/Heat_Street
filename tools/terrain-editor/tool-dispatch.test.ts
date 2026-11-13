@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
+import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
 import { roadVertexMask } from "../../src/core/terrain-road.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { createToolDispatcher, type EditArea, TOOL_KEYS } from "./tool-dispatch.ts";
+import { createToolDispatcher, type EditArea, slopeClampHint, TOOL_KEYS } from "./tool-dispatch.ts";
 
 function setup() {
   const area = {
@@ -896,5 +897,46 @@ describe("brush shape option (quick 261111-x00)", () => {
     rd.d.pointerUp(0, 0);
     expect(sampleTerrainHeight(sq.area.grid, 9, 9)).toBeGreaterThan(0);
     expect(sampleTerrainHeight(rd.area.grid, 9, 9)).toBe(0);
+  });
+});
+
+describe("slope limit option", () => {
+  it("defaults to MAX_SLOPE_DEG and clamps to 5..80 integers", () => {
+    const { d } = setup();
+    expect(d.getOptions().slopeLimitDeg).toBe(MAX_SLOPE_DEG);
+    d.setOptions({ slopeLimitDeg: 100 });
+    expect(d.getOptions().slopeLimitDeg).toBe(80);
+    d.setOptions({ slopeLimitDeg: 1 });
+    expect(d.getOptions().slopeLimitDeg).toBe(5);
+    d.setOptions({ slopeLimitDeg: 42.6 });
+    expect(d.getOptions().slopeLimitDeg).toBe(43);
+    d.setOptions({ slopeLimitDeg: Number.NaN });
+    expect(d.getOptions().slopeLimitDeg).toBe(43);
+  });
+
+  it("hint mentions the chosen degrees", () => {
+    expect(slopeClampHint(50)).toContain("50 degrees");
+  });
+
+  it("a steeper limit lets a raise stroke build a steeper hill", () => {
+    const peak = (deg: number) => {
+      const { area, d } = setup();
+      d.setOptions({ slopeLimitDeg: deg, radiusM: 6, strength: 1 });
+      d.setTool("raise");
+      for (let i = 0; i < 40; i++) {
+        d.pointerDown(0, 0, {});
+        d.pointerUp(0, 0);
+      }
+      return sampleTerrainHeight(area.grid, 0, 0);
+    };
+    expect(peak(60)).toBeGreaterThan(peak(20));
+  });
+
+  it("rotateStamp steps 15 degrees, or 45 with coarse", () => {
+    const { d } = setup();
+    d.rotateStamp(1, true);
+    expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4, 9);
+    d.rotateStamp(-1);
+    expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4 - Math.PI / 12, 9);
   });
 });

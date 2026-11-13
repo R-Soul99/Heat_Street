@@ -104,6 +104,22 @@ describe("raiseLower", () => {
     expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
   });
 
+  it("honours opts.maxSlopeDeg (60 allows steeper than the default 35)", () => {
+    const run = (opts?: { maxSlopeDeg: number }) => {
+      const g = grid();
+      for (let i = 0; i < 40; i++) {
+        raiseLower(g, brush({ radiusM: 4, strength: 1 }), 1, 5, undefined, opts);
+      }
+      return maxSlopeDegIn(g, whole(g));
+    };
+    const def = run();
+    const steep = run({ maxSlopeDeg: 60 });
+    expect(def).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
+    expect(steep).toBeGreaterThan(def + 5);
+    expect(steep).toBeLessThanOrEqual(60 + 1e-3);
+    expect(run({ maxSlopeDeg: MAX_SLOPE_DEG })).toBeCloseTo(def, 9);
+  });
+
   it("WR-03: a tiny dab on pre-existing over-cap terrain changes nothing outside its radius", () => {
     // Converted-DEM style: a uniform 45 degree slope, already steeper than the cap.
     const g = grid();

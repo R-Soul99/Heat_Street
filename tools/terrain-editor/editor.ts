@@ -67,7 +67,8 @@ import { putTerrainPair } from "./save-pair.ts";
 import {
   createToolDispatcher,
   type EditArea,
-  SLOPE_CLAMP_HINT,
+  SLOPE_LIMIT_MAX_DEG,
+  SLOPE_LIMIT_MIN_DEG,
   TOOL_KEYS,
   type Tool,
   type ToolResult,
@@ -1410,7 +1411,7 @@ function applyResult(res: ToolResult, _ms: number): void {
   const heldNoChange = delta === 0 && held > 0;
   if (res.status !== undefined) {
     setStatus(res.status, res.slopeClamped || heldNoChange ? "error" : "info");
-    if (res.status === SLOPE_CLAMP_HINT) setHint(SLOPE_CLAMP_HINT);
+    if (res.slopeClamped && res.status.startsWith("Slope limit reached")) setHint(res.status);
   } else if (edited) {
     if (delta !== undefined) {
       const sign = delta > 0 ? "+" : "";
@@ -1683,6 +1684,13 @@ const BLOCK_CELLS_SPEC: StepperSpec = {
 };
 const BLOCK_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
 const SELECT_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
+const SLOPE_LIMIT_SPEC: StepperSpec = {
+  step: 1,
+  coarse: 5,
+  min: SLOPE_LIMIT_MIN_DEG,
+  max: SLOPE_LIMIT_MAX_DEG,
+  decimals: 0,
+};
 const PASSES_SPEC: StepperSpec = { step: 1, coarse: 3, min: 1, max: 10, decimals: 0 };
 
 function optStepper(
@@ -1780,6 +1788,15 @@ function buildFlyout(t: Tool): void {
       }).el,
       "Brush edge falloff",
     );
+  const slope = (): HTMLElement =>
+    optStepper(
+      "Slope limit",
+      "Steepest ground slope sculpting may leave, in degrees. Default 35. Roads keep their own grade limit.",
+      SLOPE_LIMIT_SPEC,
+      o.slopeLimitDeg,
+      "deg",
+      (v) => dispatcher.setOptions({ slopeLimitDeg: v }),
+    ).field;
   const shapeSel = (): HTMLElement =>
     createField(
       "Shape",
@@ -1814,7 +1831,7 @@ function buildFlyout(t: Tool): void {
     case "lower":
     case "smooth":
     case "flatten":
-      f.append(radius(true), strength(), falloff(), shapeSel());
+      f.append(radius(true), strength(), falloff(), shapeSel(), slope());
       break;
     case "paint": {
       f.append(radius(true), strength(), falloff(), shapeSel(), surface());
@@ -1929,6 +1946,7 @@ function buildFlyout(t: Tool): void {
           dispatcher.setOptions({ stampWidthM: v }),
         ).field,
         rotationEl,
+        slope(),
         note("Drag to set the stamp length."),
       );
       break;
@@ -1978,6 +1996,7 @@ function buildFlyout(t: Tool): void {
           (v) => dispatcher.setOptions({ blockStepM: v }),
         ).field,
         createField("Direction", row, "Whether a click raises or lowers the block"),
+        slope(),
         flyoutReadout,
         note("Click steps the block in the chosen direction. Drag paints blocks."),
       );
@@ -2041,6 +2060,7 @@ function buildFlyout(t: Tool): void {
           rangeLabel,
           stepField.field,
         ]),
+        slope(),
         note("Ctrl+drag up/down pushes or pulls the selection. Esc cancels."),
       );
       refreshSelectionOutline();
@@ -2066,6 +2086,7 @@ function buildFlyout(t: Tool): void {
           undefined,
           (v) => dispatcher.setOptions({ smoothPasses: v }),
         ).field,
+        slope(),
         flyoutReadout,
         note("Drag a box to smooth it. Roads never move."),
         createButton({

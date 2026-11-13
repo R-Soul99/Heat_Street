@@ -101,6 +101,8 @@ export interface HeightOpOptions {
    * for the op's own window: masked vertices are held by every height op (WR-03).
    */
   roadMask?: (win: CellWindow) => Uint8Array;
+  /** Steepest slope (degrees) the limiter may leave. Defaults to MAX_SLOPE_DEG. */
+  maxSlopeDeg?: number;
 }
 
 export const MIN_RADIUS_M = 0.5;
@@ -184,10 +186,11 @@ function freezePreexistingSteep(
   win: CellWindow,
   opChanged: (r: number, c: number) => boolean,
   into: Uint8Array | undefined,
+  maxSlopeDeg: number = MAX_SLOPE_DEG,
 ): Uint8Array | undefined {
   const stride = grid.rows + 1;
   const h = grid.heights;
-  const axis = Math.tan((MAX_SLOPE_DEG * Math.PI) / 180) * grid.cellSizeM;
+  const axis = Math.tan((maxSlopeDeg * Math.PI) / 180) * grid.cellSizeM;
   const d = axis + PREEXISTING_TOL_M;
   const dd = axis * Math.SQRT2 + PREEXISTING_TOL_M;
   let mask = into;
@@ -226,6 +229,7 @@ function runHeightOp(
   relax: boolean,
   opts: HeightOpOptions = {},
 ): BrushResult {
+  const slopeDeg = opts.maxSlopeDeg ?? MAX_SLOPE_DEG;
   const stride = grid.rows + 1;
   const rowsN = touched.maxRow - touched.minRow + 1;
   const colsN = touched.maxCol - touched.minCol + 1;
@@ -271,7 +275,7 @@ function runHeightOp(
     },
     grid,
     maxDelta,
-    MAX_SLOPE_DEG,
+    slopeDeg,
   );
   rec?.beforeHeightsWrite(dirty);
 
@@ -283,7 +287,13 @@ function runHeightOp(
     const kk = r - touched.minRow + (c - touched.minCol) * rowsN;
     return Math.fround(next[kk]) !== old[kk];
   };
-  const limiterMask = freezePreexistingSteep(grid, dirty, opChanged, opts.roadMask?.(dirty));
+  const limiterMask = freezePreexistingSteep(
+    grid,
+    dirty,
+    opChanged,
+    opts.roadMask?.(dirty),
+    slopeDeg,
+  );
 
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
@@ -324,7 +334,7 @@ function runHeightOp(
     }
   }
 
-  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: limiterMask });
+  const res = limitSlope(grid, dirty, { maxSlopeDeg: slopeDeg, mask: limiterMask });
   let signed = 0;
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {

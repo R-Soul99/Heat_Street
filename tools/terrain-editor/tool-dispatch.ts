@@ -105,6 +105,8 @@ export interface ToolOptions {
   smoothPasses: number;
   /** Grid select raise/lower step in metres (0.25..5, multiples of 0.25). */
   selectStepM: number;
+  /** Steepest ground slope (degrees) sculpting may leave. Default MAX_SLOPE_DEG. */
+  slopeLimitDeg: number;
 }
 
 export interface ToolResult {
@@ -146,6 +148,9 @@ export type EditArea = RoadEditTarget & UndoTarget;
 
 const MIN_STAMP_LENGTH_M = 4;
 const STAMP_ROTATE_STEP_RAD = (15 * Math.PI) / 180;
+const STAMP_ROTATE_COARSE_RAD = (45 * Math.PI) / 180;
+export const SLOPE_LIMIT_MIN_DEG = 5;
+export const SLOPE_LIMIT_MAX_DEG = 80;
 const PUSH_PULL_MAX_M = 50;
 const NO_SELECTION_MSG = "Select some cells first (Grid select, S).";
 const ERASE_MSG = "Road erased. Ctrl+Z to undo.";
@@ -153,17 +158,24 @@ const ERASE_MSG = "Road erased. Ctrl+Z to undo.";
 export const heldStatus = (n: number): string =>
   `Held by roads: ${n} vertices did not move. Unlock the road (Lock tool, L) to sculpt under it.`;
 
-export const SLOPE_CLAMP_HINT = `Slope limit reached (${MAX_SLOPE_DEG} degrees). Lower the radius or flatten the area first.`;
+export const slopeClampHint = (deg: number): string =>
+  `Slope limit reached (${deg} degrees). Lower the radius or flatten the area first.`;
+
+/** Hint at the default slope limit. */
+export const SLOPE_CLAMP_HINT = slopeClampHint(MAX_SLOPE_DEG);
 
 /**
  * WR-02: sculpt height ops hand the slope limiter every existing road vertex
  * (road paint + the graph's levelled radius) so the limiter never moves road
  * terrain and graph y stays equal to the terrain (D-16).
  */
-function heightOpOptions(area: EditArea): HeightOpOptions {
+function heightOpOptions(area: EditArea, options: ToolOptions): HeightOpOptions {
   // Quick 261110-rdx: unlocked roads are not held; undefined when none, so the old path runs.
   const free = unlockedSet(area.unlockedEdgeIds);
-  return { roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win, free) };
+  return {
+    roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win, free),
+    maxSlopeDeg: options.slopeLimitDeg,
+  };
 }
 
 function emptyResult(): ToolResult {
@@ -361,6 +373,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     maxBankDeg: presetDefaults.maxBankDeg,
     stampKind: "wedge",
     stampRotationRad: 0,
+    slopeLimitDeg: MAX_SLOPE_DEG,
     stampLengthM: 20,
     stampWidthM: 12,
     stampHeightM: 4,
@@ -393,7 +406,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     }
     let r: BrushResult;
-    const hop = heightOpOptions(area);
+    const hop = heightOpOptions(area, options);
     if (s.tool === "block") {
       const win = blockWindowAt(area.grid, x, z, options.blockCells);
       if (!win) return res;
@@ -426,7 +439,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
     res.dirtyHeights = r.window;
     res.slopeClamped = r.slopeClamped;
-    if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+    if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
     if (Math.abs(r.maxDeltaM) > Math.abs(s.maxDeltaM)) s.maxDeltaM = r.maxDeltaM;
     s.heldTotal += r.heldCount;
     res.heightDeltaM = s.maxDeltaM;
@@ -529,7 +542,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     res.slopeClamped = r.slopeClamped;
     res.heightDeltaM = r.maxDeltaM;
     res.heldVertices = r.heldCount;
-    if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+    if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
     if (r.maxDeltaM === 0 && r.heldCount > 0) res.status = heldStatus(r.heldCount);
     return res;
   }
@@ -622,6 +635,13 @@ export function createToolDispatcher(getArea: () => EditArea) {
         if (patch.maxBankDeg === undefined) options.maxBankDeg = preset.maxBankDeg;
       }
       const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+      if (patch.slopeLimitDeg !== undefined) {
+        options.slopeLimitDeg = clamp(
+          Math.round(options.slopeLimitDeg),
+          SLOPE_LIMIT_MIN_DEG,
+          SLOPE_LIMIT_MAX_DEG,
+        );
+      }
       if (patch.blockCells !== undefined) {
         options.blockCells = clamp(
           Math.round(options.blockCells),
@@ -773,7 +793,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         selection,
         sign * options.selectStepM,
         rec,
-        heightOpOptions(area),
+        heightOpOptions(area, options),
       );
       const diff = rec.commit();
       if (diff) stack.push(diff);
@@ -807,7 +827,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         pp.base,
         delta,
         pp.recorder,
-        heightOpOptions(area),
+        heightOpOptions(area, options),
       );
       return heightResult(r);
     },
@@ -831,7 +851,14 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const pp = pushPull;
       if (!pp) return emptyResult();
       const area = getArea();
-      const r = setWindowFromBase(area.grid, pp.win, pp.base, 0, undefined, heightOpOptions(area));
+      const r = setWindowFromBase(
+        area.grid,
+        pp.win,
+        pp.base,
+        0,
+        undefined,
+        heightOpOptions(area, options),
+      );
       pushPull = null;
       const res = emptyResult();
       res.dirtyHeights = r.window;
@@ -970,11 +997,11 @@ export function createToolDispatcher(getArea: () => EditArea) {
             heightM: options.stampHeightM,
           },
           s.recorder,
-          heightOpOptions(area),
+          heightOpOptions(area, options),
         );
         res.dirtyHeights = r.window;
         res.slopeClamped = r.slopeClamped;
-        if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+        if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
         finish(s.recorder.commit());
         return res;
       }
@@ -995,11 +1022,11 @@ export function createToolDispatcher(getArea: () => EditArea) {
           windowBetween(area, s.start, end),
           { strength: options.smoothStrength, passes: options.smoothPasses },
           s.recorder,
-          heightOpOptions(area),
+          heightOpOptions(area, options),
         );
         res.dirtyHeights = r.window;
         res.slopeClamped = r.slopeClamped;
-        if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+        if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
         finish(s.recorder.commit());
         return res;
       }
@@ -1022,16 +1049,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
         { minRow: 0, minCol: 0, maxRow: area.grid.rows, maxCol: area.grid.cols },
         { strength: options.smoothStrength, passes: options.smoothPasses },
         rec,
-        heightOpOptions(area),
+        heightOpOptions(area, options),
       );
       res.dirtyHeights = r.window;
       res.slopeClamped = r.slopeClamped;
-      if (r.slopeClamped) res.status = SLOPE_CLAMP_HINT;
+      if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
       finish(rec.commit());
       return res;
     },
-    rotateStamp(sign: 1 | -1): void {
-      options.stampRotationRad += sign * STAMP_ROTATE_STEP_RAD;
+    rotateStamp(sign: 1 | -1, coarse = false): void {
+      options.stampRotationRad += sign * (coarse ? STAMP_ROTATE_COARSE_RAD : STAMP_ROTATE_STEP_RAD);
     },
     undo(): UndoRedoResult | false {
       const area = getArea();
