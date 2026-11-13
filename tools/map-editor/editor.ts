@@ -54,6 +54,7 @@ import {
   setTag,
   snapPoint,
 } from "./model.ts";
+import { RESUME_KEY, resumeMarker, shouldResume, terrainListed, waitUntil } from "./handoff.ts";
 import { checkRoads } from "./road-check.ts";
 import {
   type Box,
@@ -290,8 +291,28 @@ function redo(): void {
   refresh("redone");
 }
 
+/** Remembers the open map for a few seconds so a dev-server reload comes back to it. */
+function markResume(id: string): void {
+  try {
+    sessionStorage.setItem(RESUME_KEY, JSON.stringify(resumeMarker(id, Date.now())));
+  } catch {
+    // storage unavailable: the marker is only a convenience
+  }
+}
+
+function takeResume(): string | undefined {
+  try {
+    const raw = sessionStorage.getItem(RESUME_KEY);
+    sessionStorage.removeItem(RESUME_KEY);
+    return raw === null ? undefined : shouldResume(JSON.parse(raw) as unknown, Date.now());
+  } catch {
+    return undefined;
+  }
+}
+
 async function loadArea(id: string): Promise<boolean> {
   try {
+    resize();
     const r = await api<RawEnvelope>(`/__editor/raw/${id}/roads`);
     const b = await api<RawEnvelope>(`/__editor/raw/${id}/buildings`);
     area = id;
@@ -305,6 +326,7 @@ async function loadArea(id: string): Promise<boolean> {
     selected = undefined;
     geometryVersion++;
     fitWorld();
+    markResume(id);
     refresh(`Loaded ${id}.`);
     return true;
   } catch (err) {
@@ -327,6 +349,7 @@ function requireMap(): boolean {
 async function save(): Promise<boolean> {
   if (!requireMap()) return false;
   try {
+    markResume(area);
     const put = (kind: string, body: RawEnvelope) =>
       api(`/__editor/raw/${area}/${kind}`, { method: "PUT", body: JSON.stringify(body) });
     await put("roads", roads);
@@ -377,6 +400,7 @@ async function compile(): Promise<boolean> {
     const logText = $("log-text");
     logText.textContent = "compiling...";
     setStatus(`Compiling ${area}...`);
+    markResume(area);
     const res = await fetch(`/__editor/compile/${area}`, { method: "POST" });
     logText.textContent = await res.text();
     if (res.ok && res.headers.get("X-Compile-Ok") === "1") {
@@ -506,11 +530,11 @@ function draw(): void {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const wTL = toScreen({ x: 0, y: world.heightM });
   const wBR = toScreen({ x: world.widthM, y: 0 });
-  ctx.fillStyle = "#14161a";
+  ctx.fillStyle = "#1c2026";
   ctx.fillRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
   if (showGrid) drawGrid(vis);
-  ctx.strokeStyle = "#667";
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#8ab";
+  ctx.lineWidth = 2;
   ctx.strokeRect(wTL.x, wTL.y, wBR.x - wTL.x, wBR.y - wTL.y);
   if (showTiles) drawTiles(vis);
   const visible = (lw: LocalWay, padM: number) =>
@@ -614,6 +638,19 @@ function draw(): void {
     ctx.strokeStyle = erasing ? "#f55" : "#fa8";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+  if (roads.response.elements.length === 0 && buildings.response.elements.length === 0) {
+    ctx.save();
+    ctx.fillStyle = "#cde";
+    ctx.font = "16px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      `Empty map ${fmt3(world.widthM / 1000)} x ${fmt3(world.heightM / 1000)} km. Press R to draw a road.`,
+      (wTL.x + wBR.x) / 2,
+      (wTL.y + wBR.y) / 2,
+    );
+    ctx.restore();
   }
   drawHud();
 }
@@ -1290,8 +1327,11 @@ window.addEventListener("beforeunload", (e) => {
 });
 
 function resize(): void {
+  // Still on the fit view (or never had a usable one, e.g. a 0 px canvas): refit.
+  const wasFit = roads !== undefined && (scale === fitScale || fitScale <= 1e-6);
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
+  if (wasFit && canvas.width > 0 && canvas.height > 0) fitWorld();
   if (roads !== undefined) requestDraw();
 }
 window.addEventListener("resize", resize);
@@ -2010,6 +2050,7 @@ async function openNewMapDialog(mode: "blank" | "image"): Promise<void> {
       return `Height must be between ${MIN_WORLD_KM} and ${MAX_WORLD_KM} km.`;
     if (!(await discardOk())) return "Cancelled - your unsaved edits are still open.";
     const id = nameInput.value.trim();
+    markResume(id);
     const out = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
       method: "POST",
       body: JSON.stringify({ id, widthKm, heightKm }),
@@ -2050,6 +2091,7 @@ async function openNewMapDialog(mode: "blank" | "image"): Promise<void> {
       surface: surface.get() as Surface,
     };
     // Step 1: the new world. Failure here stays inline in the popup.
+    markResume(id);
     const made = await api<{ registered: boolean; warning?: string }>("/__editor/new-world", {
       method: "POST",
       body: JSON.stringify({ id, widthKm: plan.widthKm, heightKm: plan.heightKm }),
@@ -2139,7 +2181,11 @@ async function main(): Promise<void> {
   $("app").appendChild(toTerrain);
   setStatus(HINTS.select);
   auditTips(document);
-  // Nothing is loaded automatically: the start screen decides what opens.
+  // A dev-server reload (file edit, restart) must not throw the user back to the
+  // start screen: reopen the map that was open a moment ago.
+  const resumeId = takeResume();
+  if (resumeId !== undefined && (await loadArea(resumeId))) return;
+  // Otherwise nothing is loaded automatically: the start screen decides what opens.
   await openStartScreen();
 }
 
