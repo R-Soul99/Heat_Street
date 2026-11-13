@@ -13,6 +13,7 @@ import {
   footprintOutline,
   gridLineSegments,
   needsZoomHint,
+  roadLockCounts,
   roadLockSegments,
   stampOutline,
   ZOOM_HINT_MIN_CELL_PX,
@@ -279,5 +280,16 @@ describe("stampOutline", () => {
     for (let i = 0; i < o.outline.length; i += 2) {
       expect(Math.hypot(o.outline[i] - 2, o.outline[i + 1] - 3)).toBeCloseTo(5, 6);
     }
+  });
+});
+
+describe("roadLockCounts", () => {
+  const graph = { edges: [{ id: 1 }, { id: 2 }, { id: 3 }] } as unknown as RoadGraph;
+  it("counts all locked when nothing is unlocked", () => {
+    expect(roadLockCounts(graph, undefined)).toEqual({ locked: 3, unlocked: 0 });
+    expect(roadLockCounts(graph, [])).toEqual({ locked: 3, unlocked: 0 });
+  });
+  it("counts unlocked edges and ignores ids not in the graph", () => {
+    expect(roadLockCounts(graph, [2, 3, 99])).toEqual({ locked: 1, unlocked: 2 });
   });
 });

@@ -27,13 +27,18 @@ import {
   footprintOutline,
   gridLineSegments,
   needsZoomHint,
+  roadLockCounts,
   roadLockSegments,
   stampOutline,
 } from "../../src/core/terrain-overlay.ts";
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
 import { ROAD_PRESETS, type RoadPresetId } from "../../src/core/terrain-road.ts";
-import { staleUnlockedEdges } from "../../src/core/terrain-road-lock.ts";
+import {
+  isUnlocked,
+  nearestEdgeWithin,
+  staleUnlockedEdges,
+} from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import {
   buildTerrainView,
@@ -432,7 +437,10 @@ function refreshInfo(): void {
   shell.info.set("area", area.areaId);
   shell.info.set("size", `${fmt3(g.cols * g.cellSizeM)} x ${fmt3(g.rows * g.cellSizeM)} m`);
   shell.info.set("cell", `${fmt3(g.cellSizeM)} m`);
-  shell.info.set("roads", String(area.graph.edges.length));
+  shell.info.set(
+    "roads",
+    roadsInfoText(roadLockCounts(area.graph, (area as unknown as EditArea).unlockedEdgeIds)),
+  );
   refreshRoadProblems();
 }
 
@@ -1037,9 +1045,15 @@ const lockedLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
   new THREE.LineBasicMaterial({ color: 0xcfd4da, depthTest: false }),
 );
+// Dashed so unlocked reads differently from locked even without colour.
 const unlockedLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: 0xff8a1f, depthTest: false }),
+  new THREE.LineDashedMaterial({
+    color: 0xff8a1f,
+    dashSize: 3,
+    gapSize: 2,
+    depthTest: false,
+  }),
 );
 const selectedLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
@@ -1067,11 +1081,46 @@ function refreshRoadLockOverlay(): void {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(data, 3));
     target.geometry = g;
+    if (target === unlockedLines) target.computeLineDistances();
     target.visible = data.length > 0;
   };
   set(lockedLines, segs.locked);
   set(unlockedLines, segs.unlocked);
   set(selectedLines, segs.selected);
+  const counts = roadLockCounts(area.graph, (area as unknown as EditArea).unlockedEdgeIds);
+  shell.info.set("roads", roadsInfoText(counts));
+}
+
+function roadsInfoText(c: { locked: number; unlocked: number }): string {
+  return `${c.locked + c.unlocked} roads: ${c.locked} locked, ${c.unlocked} unlocked`;
+}
+
+/** Lock tool hover: names the lock state of the road under the cursor (click behaviour unchanged). */
+let lockHoverShown = false;
+function updateLockHover(x: number, z: number): void {
+  if (!area) return;
+  if (tool !== "lock") {
+    if (lockHoverShown) {
+      lockHoverShown = false;
+      setStatus(currentHint);
+    }
+    return;
+  }
+  const near = nearestEdgeWithin(area.graph, x, z, dispatcher.getOptions().radiusM);
+  if (!near) {
+    if (lockHoverShown) {
+      lockHoverShown = false;
+      setStatus(currentHint);
+    }
+    return;
+  }
+  lockHoverShown = true;
+  const free = isUnlocked(area as unknown as EditArea, near.edgeId);
+  setStatus(
+    free
+      ? `Road ${near.edgeId} is UNLOCKED (terrain edits can move it). Click to lock.`
+      : `Road ${near.edgeId} is LOCKED (terrain edits cannot move it). Click to unlock.`,
+  );
 }
 
 function contourIntervalM(): number {
@@ -1259,6 +1308,7 @@ function updateCursor(clientX: number, clientY: number): void {
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
+  updateLockHover(hit.x, hit.z);
   maybeRebuildContours(hit.x, hit.z);
   shell.info.set(
     "cursor",
@@ -1815,6 +1865,32 @@ function note(text: string): HTMLElement {
   return el("div", "muted", text);
 }
 
+/** Lock tool colour key: solid grey, dashed orange, cyan, matching the map overlay. */
+function lockKey(): HTMLElement {
+  const key = el("div", "legend lock-key");
+  const row = (cls: string, color: string, text: string, tip: string): void => {
+    const line = el("div", "muted", undefined, tip);
+    const sw = el("i", `sw ${cls}`);
+    sw.style.background = color;
+    line.append(sw, text);
+    key.appendChild(line);
+  };
+  row(
+    "solid",
+    "#cfd4da",
+    "Locked: terrain edits cannot move it",
+    "Light grey solid line on the map",
+  );
+  row(
+    "dash",
+    "repeating-linear-gradient(90deg, #ff8a1f 0 4px, transparent 4px 6px)",
+    "Unlocked: must be re-graded or locked before saving",
+    "Orange dashed line on the map",
+  );
+  row("solid", "#44ddff", "Selected", "Cyan line on the map: the road picked with the Lock tool");
+  return key;
+}
+
 function runLockAction(fn: () => ToolResult): void {
   if (!area || stroking) return;
   const t0 = performance.now();
@@ -1953,9 +2029,7 @@ function buildFlyout(t: Tool): void {
           tip: "Re-grade every unlocked road so it fits the terrain again",
           onClick: () => runLockAction(() => dispatcher.regradeAllUnlocked()),
         }),
-        note(
-          "Grey = locked, orange = unlocked, cyan = selected. Unlocked roads must be re-graded or locked before saving.",
-        ),
+        lockKey(),
       );
       break;
     case "road": {
