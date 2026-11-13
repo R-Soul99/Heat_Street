@@ -266,6 +266,19 @@ export function zoomAt(
   return { scale, panX: sx - wx * scale, panY: sy + wy * scale };
 }
 
+/**
+ * Wheel zoom factor for the editors: null for a plain wheel (does nothing), otherwise the
+ * zoom factor for Ctrl/Meta+wheel (> 1 zooms in).
+ */
+export function wheelZoomFactor(
+  e: { deltaY: number; deltaMode: number; ctrlKey: boolean; metaKey: boolean },
+  pageHeightPx: number,
+): number | null {
+  if (!e.ctrlKey && !e.metaKey) return null;
+  const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? pageHeightPx : 1;
+  return Math.exp(-e.deltaY * unit * 0.0015);
+}
+
 export function visibleRect(
   view: View,
   canvasW: number,
