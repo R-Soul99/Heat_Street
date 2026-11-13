@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 Phase: 07.1 (Editor UX Overhaul), with Phase 07 NPC driving AI / pursuit prototype in parallel
 Plan: 14/16 summarised
 Next: re-run /gsd-verify-work 07.1 against gap plans 17-22, then 07-07
-Last activity: 2026-11-12
+Last activity: 2026-11-13 - Completed quick task 261113-vei: Ctrl+wheel zoom to cursor and middle-drag orbit at cursor in both editors
 
 Progress: [█████████▊] 97% (107 of 110 known plans have summaries)
 
@@ -249,6 +249,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261104-o1l | Playground map step 2: dome field, gap jumps with landing ramps, ovals | 2026-11-04 | ec9d016 | [261104-o1l-playground-map-step-2-dome-field-big-ram](./quick/261104-o1l-playground-map-step-2-dome-field-big-ram/) |
 | 261104-vdb | Playground map step 3: five surface strips (grass, sand, mud, gravel, dirt road) | 2026-11-04 | 0c3d810 | [261104-vdb-playground-map-step-3-terrain-surface-gr](./quick/261104-vdb-playground-map-step-3-terrain-surface-gr/) |
 | 261111-x00 | Terrain editor gap closure: yellow round/square brush footprint, grid only under the brush (grid-offset root cause fixed), separate Grid/Contours buttons, Alt+wheel radius in cells, zoom-scaled contours, opt-in dock layout | 2026-11-11 | 64c8570 | [261111-x00-terrain-editor-gap-closure-brush-overlay](./quick/261111-x00-terrain-editor-gap-closure-brush-overlay/) |
+| 261113-vei | Ctrl+wheel zooms to cursor in both editors; plain wheel inert; terrain middle-drag orbits about cursor point, Shift+middle-drag pans | 2026-11-13 | eb48aab | [261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra](./quick/261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra/) |
 
 ## Session Continuity
 
