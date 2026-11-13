@@ -5,9 +5,16 @@ import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import {
   buildRoadProblems,
+  describeNodeEnds,
   edgeMidpoint,
+  makeTwoWay,
+  mergeEndNodes,
+  planCloseLoop,
+  planConnectEnds,
   removeDuplicatePoints,
+  roadPieces,
   smoothEdgeHeights,
+  twoWayCandidates,
 } from "./road-problems.ts";
 
 type P = [number, number, number];
@@ -238,7 +245,7 @@ describe("buildRoadProblems", () => {
       { category: "DIRECTED_PATHABILITY", kind: "node", id: 1, message: "cannot be reached" },
     ]);
     expect(rows[0].at).toEqual({ x: 10, z: 7 });
-    expect(rows[0].blocking).toBe(true);
+    expect(rows[0].blocking).toBe(false);
     expect(rows[0].fixKind).toBeUndefined();
   });
 });
@@ -388,5 +395,251 @@ describe("smoothEdgeHeights", () => {
         0,
       ),
     ).toBeNull();
+  });
+});
+
+// ------------------------------------------------- 07.1-18 pieces, names, fixes
+
+const seg = (...pts: P[]): P[] => pts;
+
+/** Root piece (edge 0, nodes 0-1) plus a cut-off piece (edges 4 and 6) 100 m away. */
+function cutOffGraph(): RoadGraph {
+  return graphWith([
+    { id: 0, points: seg([0, 0, 0], [50, 0, 0]) },
+    { id: 4, from: 10, to: 11, points: seg([150, 0, 0], [200, 0, 0]) },
+    { id: 6, from: 11, to: 12, points: seg([200, 0, 0], [250, 0, 0]) },
+  ]);
+}
+
+/** Edge 0 two-way (0-1), edge 1 oneway into dead end node 2. */
+function trapGraph(): RoadGraph {
+  const g = graphWith([
+    { id: 0, from: 0, to: 1, points: seg([0, 0, 0], [50, 0, 0]) },
+    { id: 1, from: 1, to: 2, points: seg([50, 0, 0], [100, 0, 0]) },
+  ]);
+  return { ...g, edges: g.edges.map((e) => (e.id === 1 ? { ...e, oneway: true } : e)) };
+}
+
+/** Open loop: node 0 at (0,0), node 2 at (0,1); ends 1 m apart. */
+function openLoop(): RoadGraph {
+  return graphWith([
+    { id: 0, from: 0, to: 1, points: seg([0, 0, 0], [100, 0, 0]) },
+    { id: 1, from: 1, to: 2, points: seg([100, 0, 0], [100, 0, 1], [0, 0, 1]) },
+  ]);
+}
+
+describe("roadPieces", () => {
+  it("separates the root piece from cut-off pieces and lists open ends", () => {
+    const pieces = roadPieces(cutOffGraph());
+    expect([...pieces.root].sort((a, b) => a - b)).toEqual([0, 1]);
+    expect(pieces.cutOff).toHaveLength(1);
+    const piece = pieces.cutOff[0];
+    expect([...piece.edgeIds].sort((a, b) => a - b)).toEqual([4, 6]);
+    expect(piece.openEnds).toEqual([
+      { nodeId: 10, edgeId: 4, end: "start" },
+      { nodeId: 12, edgeId: 6, end: "end" },
+    ]);
+  });
+
+  it("a self-loop counts two, so a lone loop has no open ends", () => {
+    const g = graphWith([
+      { id: 0, from: 0, to: 1, points: seg([0, 0, 0], [50, 0, 0]) },
+      { id: 1, from: 5, to: 5, points: seg([200, 0, 0], [250, 0, 0], [200, 0, 0]) },
+    ]);
+    const piece = roadPieces(g).cutOff[0];
+    expect(piece.nodeIds).toEqual([5]);
+    expect(piece.openEnds).toEqual([]);
+  });
+});
+
+describe("describeNodeEnds", () => {
+  it("names a single road end or start, and a junction", () => {
+    const g = cutOffGraph();
+    expect(describeNodeEnds(g, 10)).toBe("the start of Road 4");
+    expect(describeNodeEnds(g, 12)).toBe("the end of Road 6");
+    expect(describeNodeEnds(g, 11)).toBe("the junction of Roads 4 and 6");
+  });
+
+  it("lists three roads with a plain and", () => {
+    const g = graphWith([
+      { id: 3, from: 0, to: 1, points: seg([0, 0, 0], [10, 0, 0]) },
+      { id: 4, from: 0, to: 2, points: seg([0, 0, 0], [0, 0, 10]) },
+      { id: 7, from: 0, to: 3, points: seg([0, 0, 0], [-10, 0, 0]) },
+    ]);
+    expect(describeNodeEnds(g, 0)).toBe("the junction of Roads 3, 4 and 7");
+  });
+});
+
+describe("cut-off rows", () => {
+  it("is ONE row per piece, naming roads and ends, with no one-way rows", () => {
+    const g = cutOffGraph();
+    const rows = buildRoadProblems(g, failuresOf(g));
+    expect(failuresOf(g).some((f) => f.category === "DIRECTED_PATHABILITY")).toBe(true);
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    expect(row.blocking).toBe(false);
+    expect(row.text).toContain("Road 4");
+    expect(row.text).toContain("Road 6");
+    expect(row.text).toContain("the start of Road 4");
+    expect(row.text).toContain("the end of Road 6");
+    expect(row.text).toContain("saving still works");
+    expect(joined(rows)).not.toMatch(/one-way/i);
+    expect(row.tip).toContain("UNDIRECTED_REACHABILITY");
+    expect(row.fixes?.map((f) => f.kind)).toContain("connect-ends");
+  });
+
+  it("gives a hint when neither connect nor close-loop is possible", () => {
+    const g = graphWith([
+      { id: 0, points: seg([0, 0, 0], [50, 0, 0]) },
+      { id: 1, points: seg([5000, 0, 0], [5050, 0, 0]) },
+    ]);
+    const row = buildRoadProblems(g, failuresOf(g))[0];
+    expect(row.fixes ?? []).toEqual([]);
+    expect(row.hint).toBeTruthy();
+  });
+
+  it("offers close-loop for a piece with two close open ends", () => {
+    const g = graphWith([
+      { id: 0, points: seg([0, 0, 0], [10, 0, 0]) },
+      { id: 4, from: 10, to: 11, points: seg([300, 0, 0], [400, 0, 0]) },
+      { id: 5, from: 11, to: 12, points: seg([400, 0, 0], [400, 0, 100], [300, 0, 100]) },
+    ]);
+    const row = buildRoadProblems(g, failuresOf(g)).find((r) => r.text.includes("cut off"));
+    expect(row?.fixes?.map((f) => f.kind)).toContain("close-loop");
+  });
+
+  it("legacy fixKind never carries the new kinds, and old rows also list fixes", () => {
+    const g = cutOffGraph();
+    const trap = trapGraph();
+    const dup = graphWith([{ id: 0, points: seg([0, 0, 0], [10, 0, 0], [10, 0, 0], [20, 0, 0]) }]);
+    const all = [
+      ...buildRoadProblems(g, failuresOf(g)),
+      ...buildRoadProblems(trap, failuresOf(trap)),
+      ...buildRoadProblems(dup, failuresOf(dup)),
+    ];
+    for (const r of all) {
+      expect(["make-two-way", "connect-ends", "close-loop"]).not.toContain(r.fixKind);
+    }
+    const dupRow = all.find((r) => r.fixKind === "remove-duplicate-points");
+    expect(dupRow?.fixes?.[0]?.kind).toBe("remove-duplicate-points");
+    expect(dupRow?.fixes?.[0]?.edgeId).toBe(0);
+  });
+});
+
+describe("one-way trap rows", () => {
+  it("names the road end and offers make-two-way, never Junction N", () => {
+    const g = trapGraph();
+    const rows = buildRoadProblems(g, failuresOf(g));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].blocking).toBe(false);
+    expect(rows[0].text).toContain("the end of Road 1");
+    expect(rows[0].text).not.toMatch(/Junction \d/);
+    expect(rows[0].target).toEqual({ kind: "node", id: 2 });
+    expect(rows[0].at).toEqual({ x: 100, z: 0 });
+    expect(rows[0].fixes).toEqual([
+      expect.objectContaining({ kind: "make-two-way", nodeId: 2, edgeId: 1 }),
+    ]);
+  });
+});
+
+describe("twoWayCandidates and makeTwoWay", () => {
+  it("lists incident oneway edges, falling back to the piece", () => {
+    const g = trapGraph();
+    expect(twoWayCandidates(g, 2)).toEqual([1]);
+    expect(twoWayCandidates(g, 0)).toEqual([1]);
+    expect(twoWayCandidates(cutOffGraph(), 0)).toEqual([]);
+  });
+
+  it("clears the trap without mutating the input", () => {
+    const g = trapGraph();
+    const next = makeTwoWay(g, twoWayCandidates(g, 2)) as RoadGraph;
+    expect(next).not.toBeNull();
+    expect(g.edges[1].oneway).toBe(true);
+    expect(next.edges[1].oneway).toBe(false);
+    expect(failuresOf(next).some((f) => f.category === "DIRECTED_PATHABILITY")).toBe(false);
+    expect(makeTwoWay(next, [1])).toBeNull();
+    expect(makeTwoWay(g, [])).toBeNull();
+  });
+});
+
+describe("planConnectEnds", () => {
+  it("pairs an open end with the nearest root node and the plan fixes reachability", () => {
+    const g = cutOffGraph();
+    const plan = planConnectEnds(g, 4);
+    expect(plan).not.toBeNull();
+    expect(plan?.from).toEqual({ x: 150, z: 0, nodeId: 10 });
+    expect(plan?.to.nodeId).toBe(1);
+    expect(plan?.distanceM).toBeCloseTo(100);
+    const bridge: RoadGraphEdge = {
+      ...g.edges[0],
+      id: 99,
+      from: plan?.from.nodeId as number,
+      to: plan?.to.nodeId as number,
+      points: [
+        [50, 0, 0],
+        [150, 0, 0],
+      ],
+      lengthM: 100,
+    };
+    const next = { ...g, edges: [...g.edges, bridge] };
+    expect(failuresOf(next).some((f) => f.category === "UNDIRECTED_REACHABILITY")).toBe(false);
+  });
+
+  it("can target a point on a root edge, and is null for root edges or too far", () => {
+    const g = graphWith([
+      { id: 0, points: seg([0, 0, 0], [400, 0, 0]) },
+      { id: 4, points: seg([200, 0, 60], [200, 0, 120]) },
+    ]);
+    const plan = planConnectEnds(g, 4);
+    expect(plan?.to.edgeId).toBe(0);
+    expect(plan?.to.x).toBeCloseTo(200);
+    expect(plan?.distanceM).toBeCloseTo(60);
+    expect(planConnectEnds(g, 0)).toBeNull();
+    const far = graphWith([
+      { id: 0, points: seg([0, 0, 0], [10, 0, 0]) },
+      { id: 1, points: seg([5000, 0, 0], [5010, 0, 0]) },
+    ]);
+    expect(planConnectEnds(far, 1)).toBeNull();
+  });
+});
+
+describe("planCloseLoop and mergeEndNodes", () => {
+  it("plans the gap between the two open ends", () => {
+    const plan = planCloseLoop(openLoop(), 0);
+    expect(plan).not.toBeNull();
+    expect(plan?.gapM).toBeCloseTo(1);
+    expect([plan?.a, plan?.b].sort()).toEqual([0, 2]);
+  });
+
+  it("is null with more than two open ends or a wide gap", () => {
+    const wide = graphWith([{ id: 0, from: 0, to: 1, points: seg([0, 0, 0], [500, 0, 0]) }]);
+    expect(planCloseLoop(wide, 0)).toBeNull();
+    const fork = graphWith([
+      { id: 0, from: 0, to: 1, points: seg([0, 0, 0], [10, 0, 0]) },
+      { id: 1, from: 1, to: 2, points: seg([10, 0, 0], [20, 0, 0]) },
+      { id: 2, from: 1, to: 3, points: seg([10, 0, 0], [10, 0, 10]) },
+    ]);
+    expect(planCloseLoop(fork, 0)).toBeNull();
+  });
+
+  it("merging the ends of a 1 m gap leaves no reachability or degenerate failures", () => {
+    const g = openLoop();
+    const next = mergeEndNodes(g, 0, 2) as RoadGraph;
+    expect(next).not.toBeNull();
+    expect(next.nodes.some((n) => n.id === 2)).toBe(false);
+    expect(next.edges[1].to).toBe(0);
+    expect(next.edges[1].points[next.edges[1].points.length - 1]).toEqual([0, 0, 0]);
+    const cats = failuresOf(next).map((f) => f.category);
+    expect(cats).not.toContain("UNDIRECTED_REACHABILITY");
+    expect(cats).not.toContain("GEOMETRY_DEGENERATE_POINT");
+    expect(g.nodes.some((n) => n.id === 2)).toBe(true);
+  });
+
+  it("returns null for missing ids, the same id, or a zero-length result", () => {
+    const g = openLoop();
+    expect(mergeEndNodes(g, 0, 99)).toBeNull();
+    expect(mergeEndNodes(g, 0, 0)).toBeNull();
+    const tiny = graphWith([{ id: 0, from: 0, to: 1, points: seg([0, 0, 0], [0, 0, 0.5]) }]);
+    expect(mergeEndNodes(tiny, 0, 1)).toBeNull();
   });
 });
