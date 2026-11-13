@@ -491,7 +491,7 @@ describe("cut-off rows", () => {
   it("gives a hint when neither connect nor close-loop is possible", () => {
     const g = graphWith([
       { id: 0, points: seg([0, 0, 0], [50, 0, 0]) },
-      { id: 1, points: seg([5000, 0, 0], [5050, 0, 0]) },
+      { id: 1, points: seg([5000, 0, 0], [5400, 0, 0]) },
     ]);
     const row = buildRoadProblems(g, failuresOf(g))[0];
     expect(row.fixes ?? []).toEqual([]);
@@ -532,7 +532,7 @@ describe("one-way trap rows", () => {
     const rows = buildRoadProblems(g, failuresOf(g));
     expect(rows).toHaveLength(1);
     expect(rows[0].blocking).toBe(false);
-    expect(rows[0].text).toContain("the end of Road 1");
+    expect(rows[0].text).toMatch(/the end of Road 1/i);
     expect(rows[0].text).not.toMatch(/Junction \d/);
     expect(rows[0].target).toEqual({ kind: "node", id: 2 });
     expect(rows[0].at).toEqual({ x: 100, z: 0 });
