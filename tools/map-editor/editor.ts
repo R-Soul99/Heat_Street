@@ -507,7 +507,9 @@ function drawTiles(vis: ReturnType<typeof visibleRect>): void {
 
 function drawHud(): void {
   const bar = scaleBar(scale, 160);
-  const bx = 16;
+  // Dock layout: the tool row covers the canvas's bottom-left corner, so start right of it.
+  const toolRow = document.querySelector(".shell-toolbar-bottom");
+  const bx = toolRow === null ? 16 : toolRow.getBoundingClientRect().right + 16;
   const by = canvas.height - 20;
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 2;
@@ -658,8 +660,6 @@ function draw(): void {
 let widthStepper: ReturnType<typeof createStepper> | undefined;
 let heightStepper: ReturnType<typeof createStepper> | undefined;
 let selBox: HTMLElement | undefined;
-
-const hintEl = (text: string): HTMLElement => el("div", "flyout-hint", text);
 
 function setTool(next: Tool): void {
   tool = next;
@@ -1658,10 +1658,38 @@ async function reportInterruptedConversion(id: string): Promise<void> {
   }
 }
 
+// View toggles shared by the View menu and the view pad buttons. Each refreshes
+// the shell so the menu tick and the pad button's pressed state stay in step.
+function toggleGrid(): void {
+  showGrid = !showGrid;
+  requestDraw();
+  shell.refreshMenus();
+}
+
+function toggleTiles(): void {
+  showTiles = !showTiles;
+  requestDraw();
+  shell.refreshMenus();
+}
+
+/** Read from the DOM: the pad asks for this while the shell is still being built. */
+function legendShown(): boolean {
+  return document.getElementById("legend")?.style.display === "block";
+}
+
+function toggleLegend(): void {
+  const legend = $("legend");
+  legend.style.display = legendShown() ? "none" : "block";
+  shell.refreshMenus();
+}
+
 function buildShell(): Shell {
   const run = (p: Promise<unknown>): void => void p;
   return createShell({
     root: $("app"),
+    // GD-LAYOUT: same dock as the terrain editor. All tools sit in the bottom row
+    // (none are dock: "top") because the Select flyout is a column panel.
+    layout: "dock",
     menus: [
       {
         label: "File/Area",
@@ -1773,29 +1801,21 @@ function buildShell(): Shell {
             label: "Show grid",
             tip: "Show or hide the metre grid",
             checked: () => showGrid,
-            run: () => {
-              showGrid = !showGrid;
-              requestDraw();
-            },
+            run: toggleGrid,
           },
           {
             id: "tiles",
             label: "Show tiles",
             tip: "Show or hide the tile boundaries and labels",
             checked: () => showTiles,
-            run: () => {
-              showTiles = !showTiles;
-              requestDraw();
-            },
+            run: toggleTiles,
           },
           {
             id: "legend",
             label: "Surface legend",
             tip: "Show or hide the colour key for road surfaces",
-            checked: () => legendEl.style.display === "block",
-            run: () => {
-              legendEl.style.display = legendEl.style.display === "block" ? "none" : "block";
-            },
+            checked: legendShown,
+            run: toggleLegend,
           },
         ],
       },
@@ -1851,6 +1871,29 @@ function buildShell(): Shell {
       zoomOut: () => zoomCentre(0.8),
       fit: doFit,
       pan: panBy,
+      extra: [
+        {
+          id: "grid",
+          label: "Grid",
+          tip: "Show or hide the metre grid (also View > Show grid)",
+          run: toggleGrid,
+          pressed: () => showGrid,
+        },
+        {
+          id: "tiles",
+          label: "Tiles",
+          tip: "Show or hide the streaming tile boundaries and labels (also View > Show tiles)",
+          run: toggleTiles,
+          pressed: () => showTiles,
+        },
+        {
+          id: "legend",
+          label: "Legend",
+          tip: "Show or hide the colour key for road surfaces (also View > Surface legend)",
+          run: toggleLegend,
+          pressed: legendShown,
+        },
+      ],
     },
     infoFields: [
       { key: "area", label: "Area", tip: "The area being edited" },

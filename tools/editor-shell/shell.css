@@ -395,6 +395,10 @@ dialog button {
   padding: 4px;
   max-width: calc(100% - 520px);
 }
+/* An editor with no top tools (map editor) shows no empty bar. */
+.shell-topbar:empty {
+  display: none;
+}
 .shell-topbar .rail-btn {
   width: 36px;
   height: 36px;
