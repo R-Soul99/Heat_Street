@@ -59,6 +59,17 @@ describe("adjustDirection", () => {
     expect(adjustDirection({ code: "x", key: "ArrowDown" })?.dir).toBe(-1);
     expect(adjustDirection({ code: "x", key: "ArrowLeft" })?.dir).toBe(-1);
   });
+  it("Shift+bracket is coarse even when key becomes { or }", () => {
+    expect(adjustDirection({ code: "BracketRight", key: "}", shiftKey: true })).toEqual({
+      dir: 1,
+      coarse: true,
+    });
+    expect(adjustDirection({ code: "BracketLeft", key: "{", shiftKey: true })).toEqual({
+      dir: -1,
+      coarse: true,
+    });
+    expect(adjustDirection({ code: "BracketLeft", key: "[", altKey: true })).toBeUndefined();
+  });
   it("shift is coarse; ctrl+arrow reserved", () => {
     expect(adjustDirection({ code: "x", key: "ArrowUp", shiftKey: true })).toEqual({
       dir: 1,

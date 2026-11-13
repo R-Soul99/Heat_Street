@@ -76,6 +76,9 @@ export function resolveShortcut(
 export function adjustDirection(e: KeyLike): { dir: 1 | -1; coarse: boolean } | undefined {
   if (e.altKey) return undefined;
   const coarse = Boolean(e.shiftKey);
+  // e.code first: with Shift held e.key becomes "{" / "}" on US/UK layouts.
+  if (e.code === "BracketRight") return { dir: 1, coarse };
+  if (e.code === "BracketLeft") return { dir: -1, coarse };
   switch (e.key) {
     case "]":
       return { dir: 1, coarse };

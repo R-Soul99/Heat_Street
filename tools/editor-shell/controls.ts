@@ -49,7 +49,11 @@ export function createStepper(o: {
     const changed = v !== value;
     value = v;
     show();
-    if (changed && notify) o.onChange(v);
+    if (changed && notify) {
+      o.onChange(v);
+      // Let a containing dialog hear user edits (clears its inline error).
+      root.dispatchEvent(new Event("change", { bubbles: true }));
+    }
   };
   show();
   root.append(minus, input);

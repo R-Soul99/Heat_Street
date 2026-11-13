@@ -59,6 +59,12 @@ export function openDialog<R extends string>(opts: {
     }
 
     dlg.append(h, opts.body, err, bar);
+    // Any edit inside the dialog dismisses a stale inline error.
+    const clearErr = (): void => {
+      err.textContent = "";
+    };
+    dlg.addEventListener("input", clearErr);
+    dlg.addEventListener("change", clearErr);
     dlg.addEventListener("close", () => {
       dlg.remove();
       resolve(result);
