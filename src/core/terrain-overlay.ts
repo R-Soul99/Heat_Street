@@ -314,3 +314,74 @@ export function roadLockSegments(
     selected: Float32Array.from(lists.selected),
   };
 }
+
+export interface StampOutlineSpec {
+  kind: "wedge" | "mound";
+  x: number;
+  z: number;
+  rotationRad: number;
+  lengthM: number;
+  widthM: number;
+}
+
+/**
+ * The area stampTerrain changes, for the cursor overlay. Same local axes as
+ * stampTerrain: local +X = (cos r, sin r) in world XZ, the wedge rises along
+ * +X over lengthM and spans widthM across. `outline` is a closed polygon of
+ * flat XZ pairs; `arrow` is flat XZ segment pairs [ax,az,bx,bz,...] (shaft +
+ * two head strokes) pointing the way the wedge rises (empty for a mound).
+ */
+export function stampOutline(
+  s: StampOutlineSpec,
+  circleSegments = 48,
+): { outline: number[]; arrow: number[] } {
+  const cos = Math.cos(s.rotationRad);
+  const sin = Math.sin(s.rotationRad);
+  const toWorld = (lx: number, lz: number): [number, number] => [
+    s.x + lx * cos - lz * sin,
+    s.z + lx * sin + lz * cos,
+  ];
+  if (s.kind === "mound") {
+    const R = s.widthM / 2;
+    const n = Math.max(3, Math.floor(circleSegments));
+    const outline: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      outline.push(s.x + Math.cos(a) * R, s.z + Math.sin(a) * R);
+    }
+    return { outline, arrow: [] };
+  }
+  const hl = s.lengthM / 2;
+  const hw = s.widthM / 2;
+  const outline: number[] = [];
+  for (const [lx, lz] of [
+    [-hl, -hw],
+    [hl, -hw],
+    [hl, hw],
+    [-hl, hw],
+  ] as const) {
+    outline.push(...toWorld(lx, lz));
+  }
+  const tail = -hl * 0.7;
+  const tip = hl * 0.7;
+  const head = Math.min(hw * 0.5, Math.abs(tip - tail) * 0.3);
+  const arrow: number[] = [];
+  const seg = (ax: number, az: number, bx: number, bz: number): void => {
+    arrow.push(...toWorld(ax, az), ...toWorld(bx, bz));
+  };
+  seg(tail, 0, tip, 0);
+  seg(tip, 0, tip - head, head);
+  seg(tip, 0, tip - head, -head);
+  return { outline, arrow };
+}
+
+/** Counts of locked and unlocked roads; unlocked ids that are not in the graph are ignored. */
+export function roadLockCounts(
+  graph: RoadGraph,
+  unlocked: readonly number[] | undefined,
+): { locked: number; unlocked: number } {
+  const free = new Set(unlocked ?? []);
+  let open = 0;
+  for (const e of graph.edges) if (free.has(e.id)) open++;
+  return { locked: graph.edges.length - open, unlocked: open };
+}

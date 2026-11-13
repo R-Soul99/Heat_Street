@@ -28,6 +28,7 @@ import {
   gridLineSegments,
   needsZoomHint,
   roadLockSegments,
+  stampOutline,
 } from "../../src/core/terrain-overlay.ts";
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
@@ -230,6 +231,22 @@ cursorRing.renderOrder = 999;
 cursorRing.frustumCulled = false;
 cursorRing.visible = false;
 scene.add(cursorRing);
+
+// Stamp rise arrow: shaft + two head strokes along the wedge's rising (+X) direction.
+const STAMP_ARROW_POINTS = 6;
+const stampArrowGeometry = new THREE.BufferGeometry();
+stampArrowGeometry.setAttribute(
+  "position",
+  new THREE.BufferAttribute(new Float32Array(STAMP_ARROW_POINTS * 3), 3),
+);
+const stampArrow = new THREE.LineSegments(
+  stampArrowGeometry,
+  new THREE.LineBasicMaterial({ color: FOOTPRINT_YELLOW, depthTest: false, transparent: true }),
+);
+stampArrow.renderOrder = 999;
+stampArrow.frustumCulled = false;
+stampArrow.visible = false;
+scene.add(stampArrow);
 
 // D-22 block preview: closed rectangle on the exact cells the next click changes.
 // BLOCK_CELLS_MAX cells per side x 4 sides, with headroom.
@@ -485,6 +502,7 @@ function installArea(next: TerrainArea): void {
   $("empty").style.display = "none";
   frameArea(next);
   cursorRing.visible = false;
+  stampArrow.visible = false;
   blockOutline.visible = false;
   clearBoxOutline();
   refreshSelectionOutline();
@@ -859,6 +877,7 @@ function paintRingShapes(hit: { x: number; z: number }): void {
   if (!area) return;
   if (tool === "gridSelect") {
     cursorRing.visible = false;
+    stampArrow.visible = false;
     blockOutline.visible = false;
     const w = pushPull ? null : dispatcher.selectionPreview(hit.x, hit.z);
     if (w) setOutline(boxOutline, w, 0.12);
@@ -871,6 +890,7 @@ function paintRingShapes(hit: { x: number; z: number }): void {
     const dragging = dispatcher.smoothBoxWindow(hit.x, hit.z) !== null;
     if (dragging) {
       cursorRing.visible = false;
+      stampArrow.visible = false;
       return;
     }
   } else {
@@ -878,11 +898,17 @@ function paintRingShapes(hit: { x: number; z: number }): void {
   }
   if (tool === "block") {
     cursorRing.visible = false;
+    stampArrow.visible = false;
     blockReadoutLine = paintBlockOutline(hit);
     return;
   }
   blockOutline.visible = false;
   if (tool !== "smoothBox") blockReadoutLine = null;
+  if (tool === "stamp") {
+    paintStampOutline(hit);
+    return;
+  }
+  stampArrow.visible = false;
   const radius = ringRadius();
   const outline = footprintOutline(hit.x, hit.z, radius, footprintShape(), RING_SEGMENTS);
   const n = Math.min(RING_SEGMENTS, outline.length / 2);
@@ -901,6 +927,59 @@ function paintRingShapes(hit: { x: number; z: number }): void {
       : RING_GREEN;
   (cursorRing.material as THREE.LineBasicMaterial).color.setHex(slopeAmber ? RING_AMBER : base);
   cursorRing.visible = true;
+}
+
+/** Stamp tool: the real rotated footprint plus the rise arrow, in place of the round ring. */
+function paintStampOutline(hit: { x: number; z: number }): void {
+  if (!area) return;
+  const o = dispatcher.getOptions();
+  const shape = stampOutline({
+    kind: o.stampKind,
+    x: hit.x,
+    z: hit.z,
+    rotationRad: o.stampRotationRad,
+    lengthM: o.stampLengthM,
+    widthM: o.stampWidthM,
+  });
+  const n = Math.min(RING_SEGMENTS, shape.outline.length / 2);
+  const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
+  // Sample along each edge too: a long straight edge over hills should hug the ground.
+  const pts: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = shape.outline[i * 2];
+    const az = shape.outline[i * 2 + 1];
+    const bx = shape.outline[j * 2];
+    const bz = shape.outline[j * 2 + 1];
+    const sub = o.stampKind === "wedge" ? Math.max(1, Math.floor(RING_SEGMENTS / n)) : 1;
+    for (let k = 0; k < sub; k++) {
+      const t = k / sub;
+      pts.push(ax + (bx - ax) * t, az + (bz - az) * t);
+    }
+  }
+  const count = Math.min(RING_SEGMENTS, pts.length / 2);
+  for (let i = 0; i < count; i++) {
+    const px = pts[i * 2];
+    const pz = pts[i * 2 + 1];
+    pos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + FOOTPRINT_LIFT_M, pz);
+  }
+  ringGeometry.setDrawRange(0, count);
+  pos.needsUpdate = true;
+  (cursorRing.material as THREE.LineBasicMaterial).color.setHex(
+    slopeAmber ? RING_AMBER : FOOTPRINT_YELLOW,
+  );
+  cursorRing.visible = true;
+
+  const apos = stampArrowGeometry.getAttribute("position") as THREE.BufferAttribute;
+  const an = Math.min(STAMP_ARROW_POINTS, shape.arrow.length / 2);
+  for (let i = 0; i < an; i++) {
+    const px = shape.arrow[i * 2];
+    const pz = shape.arrow[i * 2 + 1];
+    apos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + FOOTPRINT_LIFT_M * 1.5, pz);
+  }
+  stampArrowGeometry.setDrawRange(0, an);
+  apos.needsUpdate = true;
+  stampArrow.visible = an > 0;
 }
 
 /** On-screen size (px) of one terrain cell at the cursor hit point (or the orbit target). */
@@ -1169,6 +1248,7 @@ function updateCursor(clientX: number, clientY: number): void {
   const hit = pickTerrain(clientX, clientY);
   if (!hit) {
     cursorRing.visible = false;
+    stampArrow.visible = false;
     blockOutline.visible = false;
     gridLines.visible = false;
     if (!stroking) clearBoxOutline();
@@ -1543,6 +1623,7 @@ canvas.addEventListener("pointercancel", (e) => {
 canvas.addEventListener("pointerleave", () => {
   if (!stroking) {
     cursorRing.visible = false;
+    stampArrow.visible = false;
     blockOutline.visible = false;
     clearBoxOutline();
   }
@@ -1727,7 +1808,7 @@ function syncBlockLabel(): void {
 function syncRotationLabel(): void {
   if (!rotationEl) return;
   const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
-  rotationEl.textContent = `Rotation ${deg} deg ([ ] rotate)`;
+  rotationEl.textContent = `Rotation ${deg} deg ([ ] rotate, Shift = 45)`;
 }
 
 function note(text: string): HTMLElement {
@@ -2449,8 +2530,9 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.code === "Escape") return;
   if (tool === "stamp" && (e.code === "BracketLeft" || e.code === "BracketRight")) {
-    dispatcher.rotateStamp(e.code === "BracketRight" ? 1 : -1);
+    dispatcher.rotateStamp(e.code === "BracketRight" ? 1 : -1, e.shiftKey);
     syncRotationLabel();
+    if (lastHit) paintRing(lastHit);
     const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
     setStatus(`Stamp rotation ${deg} degrees.`);
     return;

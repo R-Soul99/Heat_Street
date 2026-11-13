@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoadGraph } from "../src/core/road-graph.ts";
+import { stampTerrain } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import {
   brushFootprintWindow,
@@ -13,6 +14,7 @@ import {
   gridLineSegments,
   needsZoomHint,
   roadLockSegments,
+  stampOutline,
   ZOOM_HINT_MIN_CELL_PX,
 } from "../src/core/terrain-overlay.ts";
 
@@ -206,5 +208,76 @@ describe("brush footprint overlays (quick 261111-x00)", () => {
     expect(contourIntervalForZoom(1e6, 0.25)).toBe(0.25);
     expect(contourIntervalForZoom(Number.NaN, 2)).toBe(2);
     expect(contourIntervalForZoom(-1, 2)).toBe(2);
+  });
+});
+
+describe("stampOutline", () => {
+  const big = () =>
+    createTerrainGrid({ rows: 60, cols: 60, cellSizeM: 1, originX: -30, originZ: -30 });
+  const hAt = (g: ReturnType<typeof big>, x: number, z: number) =>
+    g.heights[terrainIndex(g, Math.round(z + 30), Math.round(x + 30))];
+  // Inside test: point in the outline polygon's local frame.
+  const local = (x: number, z: number, rot: number) => ({
+    lx: x * Math.cos(rot) + z * Math.sin(rot),
+    lz: -x * Math.sin(rot) + z * Math.cos(rot),
+  });
+
+  for (const deg of [0, 90, 30]) {
+    it(`matches the area stampTerrain raises at ${deg} degrees`, () => {
+      const rot = (deg * Math.PI) / 180;
+      const spec = { kind: "wedge" as const, x: 0, z: 0, rotationRad: rot, lengthM: 12, widthM: 6 };
+      const g = big();
+      stampTerrain(g, { ...spec, heightM: 3 });
+      const o = stampOutline(spec);
+      expect(o.outline.length).toBe(8);
+      // Corners lie on the local rectangle.
+      for (let i = 0; i < 4; i++) {
+        const { lx, lz } = local(o.outline[i * 2], o.outline[i * 2 + 1], rot);
+        expect(Math.abs(lx)).toBeCloseTo(6, 6);
+        expect(Math.abs(lz)).toBeCloseTo(3, 6);
+      }
+      // Well inside the high end: raised. 2 cells outside the footprint: untouched.
+      const inside = { x: 3.5 * Math.cos(rot), z: 3.5 * Math.sin(rot) };
+      expect(hAt(g, inside.x, inside.z)).toBeGreaterThan(0.5);
+      const out = { x: 8.5 * Math.cos(rot), z: 8.5 * Math.sin(rot) };
+      expect(hAt(g, out.x, out.z)).toBe(0);
+      const side = { x: -5 * Math.sin(rot), z: 5 * Math.cos(rot) };
+      expect(hAt(g, side.x, side.z)).toBe(0);
+    });
+  }
+
+  it("arrow points along the rise direction (local +X)", () => {
+    const rot = Math.PI / 2;
+    const o = stampOutline({ kind: "wedge", x: 5, z: 5, rotationRad: rot, lengthM: 10, widthM: 4 });
+    expect(o.arrow.length).toBe(3 * 4);
+    // Shaft goes from (5, 5-3.5) to (5, 5+3.5).
+    expect(o.arrow[0]).toBeCloseTo(5, 6);
+    expect(o.arrow[1]).toBeCloseTo(1.5, 6);
+    expect(o.arrow[2]).toBeCloseTo(5, 6);
+    expect(o.arrow[3]).toBeCloseTo(8.5, 6);
+  });
+
+  it("rotating by 90 degrees rotates the outline about the anchor", () => {
+    const a = stampOutline({ kind: "wedge", x: 0, z: 0, rotationRad: 0, lengthM: 12, widthM: 6 });
+    const b = stampOutline({
+      kind: "wedge",
+      x: 0,
+      z: 0,
+      rotationRad: Math.PI / 2,
+      lengthM: 12,
+      widthM: 6,
+    });
+    for (let i = 0; i < 4; i++) {
+      expect(b.outline[i * 2]).toBeCloseTo(-a.outline[i * 2 + 1], 6);
+      expect(b.outline[i * 2 + 1]).toBeCloseTo(a.outline[i * 2], 6);
+    }
+  });
+
+  it("mound is a circle of radius widthM/2 with no arrow", () => {
+    const o = stampOutline({ kind: "mound", x: 2, z: 3, rotationRad: 1, lengthM: 20, widthM: 10 });
+    expect(o.arrow).toEqual([]);
+    for (let i = 0; i < o.outline.length; i += 2) {
+      expect(Math.hypot(o.outline[i] - 2, o.outline[i + 1] - 3)).toBeCloseTo(5, 6);
+    }
   });
 });
