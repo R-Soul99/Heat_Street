@@ -6,6 +6,8 @@
  * no three: the editor feeds world-space cursor hits in and rebuilds only the
  * dirty regions that come back out.
  */
+
+import type { RoadGraph, RoadGraphEdge } from "../../src/core/road-graph.ts";
 import type { SurfaceType } from "../../src/core/surface-types.ts";
 import {
   BLOCK_CELLS_MAX,
@@ -49,7 +51,24 @@ import {
 import { isUnlocked, nearestEdgeWithin, unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
-import { type FixKind, removeDuplicatePoints, smoothEdgeHeights } from "./road-problems.ts";
+import {
+  CONNECT_MAX_M,
+  type FixKind,
+  makeTwoWay,
+  mergeEndNodes,
+  planCloseLoop,
+  planConnectEnds,
+  removeDuplicatePoints,
+  smoothEdgeHeights,
+  twoWayCandidates,
+} from "./road-problems.ts";
+
+/** Road preset whose class matches the edge (fix strokes look like the road they extend). */
+function presetIdForEdge(edge: RoadGraphEdge | undefined): RoadPresetId {
+  if (!edge) return "street";
+  const ids = Object.keys(ROAD_PRESETS) as RoadPresetId[];
+  return ids.find((id) => ROAD_PRESETS[id].roadClass === edge.roadClass) ?? "street";
+}
 
 export type Tool =
   | "raise"
@@ -571,6 +590,50 @@ export function createToolDispatcher(getArea: () => EditArea) {
     return res;
   }
 
+  /**
+   * Records a pure graph change (no heights or paint) as ONE undo entry. A null
+   * `next` pushes nothing and reports graphChanged false.
+   */
+  function commitGraphChange(area: EditArea, next: RoadGraph | null): ToolResult {
+    if (!next) return emptyResult();
+    const before = area.graph;
+    const rec = createStrokeRecorder(area.grid, area.paint);
+    area.graph = next;
+    rec.recordGraph(JSON.stringify(before), JSON.stringify(next), area.nextEdgeId, area.nextEdgeId);
+    return commitLockDiff(area, rec.commit());
+  }
+
+  /**
+   * Draws a fix road from `from` to `to` through the Road tool pipeline (paint,
+   * level, join onto existing junctions/roads) as ONE undo entry. Never replaces
+   * roads it crosses. On failure pushes nothing and reports why in status.
+   */
+  function fixStroke(
+    area: EditArea,
+    edge: RoadGraphEdge | undefined,
+    from: { x: number; z: number },
+    to: { x: number; z: number },
+  ): ToolResult {
+    const r = applyRoadStroke(
+      area,
+      [
+        { x: from.x, z: from.z },
+        { x: to.x, z: to.z },
+      ],
+      presetIdForEdge(edge),
+      { ...(edge ? { widthM: edge.widthM } : {}), replace: false },
+    );
+    if (!r.diff) {
+      const res = emptyResult();
+      res.warnings.push(...r.warnings);
+      res.status = `Could not draw the joining road: ${r.warnings.join(" ") || "no change"}`;
+      return res;
+    }
+    const res = commitLockDiff(area, r.diff);
+    res.warnings.push(...r.warnings);
+    return res;
+  }
+
   function regradeResult(area: EditArea, r: RegradeResult): ToolResult {
     const res = commitLockDiff(area, r.diff);
     res.warnings.push(...r.warnings);
@@ -677,35 +740,73 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
     getSelectedEdgeId: (): number | null => currentSelection(),
 
-    /** Road problems panel: one automatic repair on one road, as ONE undo step. */
-    applyRoadFix(kind: FixKind, edgeId: number): ToolResult {
+    /**
+     * Road problems panel: one automatic repair as ONE undo step (07.1-15, 07.1-21).
+     * `nodeId` names the trapped junction for make-two-way.
+     */
+    applyRoadFix(kind: FixKind, edgeId: number, nodeId?: number): ToolResult {
       if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       const area = getArea();
-      if (kind === "regrade") return regradeResult(area, regradeRoads(area, [edgeId]));
-      const before = area.graph;
-      const next =
-        kind === "remove-duplicate-points"
-          ? removeDuplicatePoints(before, edgeId)
-          : smoothEdgeHeights(before, edgeId);
-      const res = emptyResult();
-      if (!next) {
-        res.status = `Road ${edgeId}: no safe automatic fix; fix it by hand.`;
+      const graph = area.graph;
+      const edge = graph.edges.find((e) => e.id === edgeId);
+      const noFix = (why: string): ToolResult => {
+        const res = emptyResult();
+        res.status = `Road ${edgeId}: ${why}`;
         return res;
+      };
+      switch (kind) {
+        case "regrade":
+          return regradeResult(area, regradeRoads(area, [edgeId]));
+        case "remove-duplicate-points": {
+          const res = commitGraphChange(area, removeDuplicatePoints(graph, edgeId));
+          res.status = res.graphChanged
+            ? `Removed duplicate points on road ${edgeId}.`
+            : `Road ${edgeId}: no safe automatic fix; fix it by hand.`;
+          return res;
+        }
+        case "smooth-heights": {
+          const res = commitGraphChange(area, smoothEdgeHeights(graph, edgeId));
+          res.status = res.graphChanged
+            ? `Smoothed the heights of road ${edgeId}.`
+            : `Road ${edgeId}: no safe automatic fix; fix it by hand.`;
+          return res;
+        }
+        case "make-two-way": {
+          const ids = twoWayCandidates(graph, nodeId ?? edge?.from ?? -1);
+          const next = ids.length > 0 ? makeTwoWay(graph, ids) : null;
+          if (!next) return noFix("no one-way roads here to make two-way.");
+          const res = commitGraphChange(area, next);
+          res.status = `Made ${ids.length} road(s) two-way: ${ids.map((id) => `Road ${id}`).join(", ")}.`;
+          return res;
+        }
+        case "connect-ends": {
+          const plan = planConnectEnds(graph, edgeId);
+          if (!plan) {
+            return noFix(
+              `nothing within ${CONNECT_MAX_M} m to connect to; draw a road to it by hand.`,
+            );
+          }
+          const res = fixStroke(area, edge, plan.from, plan.to);
+          if (res.graphChanged) {
+            res.status = `Connected Road ${edgeId} to the road network (${Math.round(plan.distanceM)} m).`;
+          }
+          return res;
+        }
+        case "close-loop": {
+          const plan = planCloseLoop(graph, edgeId);
+          if (!plan) {
+            return noFix("its two open ends are not close enough to join; draw the gap by hand.");
+          }
+          const res =
+            plan.gapM < 2 * area.grid.cellSizeM
+              ? commitGraphChange(area, mergeEndNodes(graph, plan.a, plan.b))
+              : fixStroke(area, edge, plan.from, plan.to);
+          if (res.graphChanged) res.status = `Closed the loop on Road ${edgeId}.`;
+          else if (!res.status)
+            res.status = `Road ${edgeId}: could not close the loop; draw the gap by hand.`;
+          return res;
+        }
       }
-      const rec = createStrokeRecorder(area.grid, area.paint);
-      area.graph = next;
-      rec.recordGraph(
-        JSON.stringify(before),
-        JSON.stringify(next),
-        area.nextEdgeId,
-        area.nextEdgeId,
-      );
-      mergeInto(res, commitLockDiff(area, rec.commit()));
-      res.status =
-        kind === "remove-duplicate-points"
-          ? `Removed duplicate points on road ${edgeId}.`
-          : `Smoothed the heights of road ${edgeId}.`;
-      return res;
     },
 
     /** Lock (re-grading stale roads first) or unlock every road: one undo step. */

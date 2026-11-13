@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
+import type { RoadGraph, RoadGraphEdge } from "../../src/core/road-graph.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
 import { roadVertexMask } from "../../src/core/terrain-road.ts";
+import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { createToolDispatcher, type EditArea, slopeClampHint, TOOL_KEYS } from "./tool-dispatch.ts";
+
+type P = [number, number, number];
 
 function setup() {
   const area = {
@@ -871,6 +876,179 @@ describe("applyRoadFix (07.1-15)", () => {
     expect(r.graphChanged).toBe(false);
     expect(r.status).toContain("no safe automatic fix");
     expect(d.canUndo()).toBe(false);
+  });
+});
+
+describe("applyRoadFix connectivity fixes (07.1-21)", () => {
+  const failuresOf = (g: RoadGraph) => validateGraph(g, buildRoadGeometry(g));
+  const has = (g: RoadGraph, category: string) =>
+    failuresOf(g).some((f) => f.category === category);
+
+  function edgeOf(id: number, from: number, to: number, pts: P[], oneway = false): RoadGraphEdge {
+    let lengthM = 0;
+    for (let i = 1; i < pts.length; i++) {
+      lengthM += Math.hypot(
+        pts[i][0] - pts[i - 1][0],
+        pts[i][1] - pts[i - 1][1],
+        pts[i][2] - pts[i - 1][2],
+      );
+    }
+    return {
+      id,
+      from,
+      to,
+      points: pts,
+      lengthM,
+      surface: "tarmac",
+      roadClass: "residential",
+      lanes: 2,
+      widthM: 7,
+      oneway,
+      speedLimitKph: 50,
+      bridge: false,
+      tunnel: false,
+      layer: 0,
+      osmWayId: 0,
+    };
+  }
+  const nodeOf = (id: number, p: P) => ({
+    id,
+    x: p[0],
+    y: p[1],
+    z: p[2],
+    junction: false,
+    osmNodeId: 0,
+  });
+
+  function snapshot(area: EditArea) {
+    return {
+      graph: JSON.stringify(area.graph),
+      heights: Array.from(area.grid.heights),
+      paint: Array.from(area.paint.data),
+      nextEdgeId: area.nextEdgeId,
+    };
+  }
+
+  it("make-two-way flips the trap's one-way road and undoes in one step", () => {
+    const { area, d } = setup();
+    const a: P = [0, 0, 0];
+    const b: P = [20, 0, 0];
+    const c: P = [40, 0, 0];
+    area.graph = {
+      ...area.graph,
+      nodes: [nodeOf(0, a), nodeOf(1, b), nodeOf(2, c)],
+      edges: [edgeOf(0, 0, 1, [a, b]), edgeOf(1, 1, 2, [b, c], true)],
+    };
+    area.nextEdgeId = 2;
+    expect(has(area.graph, "DIRECTED_PATHABILITY")).toBe(true);
+    const before = JSON.stringify(area.graph);
+    const r = d.applyRoadFix("make-two-way", 1, 2);
+    expect(r.graphChanged).toBe(true);
+    expect(r.status).toContain("two-way");
+    expect(area.graph.edges.every((e) => !e.oneway)).toBe(true);
+    expect(has(area.graph, "DIRECTED_PATHABILITY")).toBe(false);
+    d.undo();
+    expect(JSON.stringify(area.graph)).toBe(before);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("connect-ends draws a real road to the network and undoes in one step", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadPreset: "street" });
+    drag(d, [
+      [-80, -60],
+      [80, -60],
+    ]);
+    drag(d, [
+      [-80, 40],
+      [80, 40],
+    ]);
+    expect(has(area.graph, "UNDIRECTED_REACHABILITY")).toBe(true);
+    const cutOff = area.graph.edges.find((e) => e.points[0][2] > 0) as RoadGraphEdge;
+    const rootEdge = area.graph.edges.find((e) => e.points[0][2] < 0) as RoadGraphEdge;
+    // Whichever piece holds graph.nodes[0] is the network; fix the other one.
+    const rootNode = area.graph.nodes[0].id;
+    const fixId = cutOff.from === rootNode || cutOff.to === rootNode ? rootEdge.id : cutOff.id;
+    const before = snapshot(area);
+    const r = d.applyRoadFix("connect-ends", fixId);
+    expect(r.graphChanged).toBe(true);
+    expect(r.status).toContain("Connected Road");
+    expect(has(area.graph, "UNDIRECTED_REACHABILITY")).toBe(false);
+    expect(area.nextEdgeId).toBeGreaterThan(before.nextEdgeId);
+    expect(Array.from(area.paint.data)).not.toEqual(before.paint);
+    d.undo();
+    expect(snapshot(area)).toEqual(before);
+  });
+
+  it("close-loop with a wide gap draws a joining road; one undo restores", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadPreset: "street" });
+    drag(d, [
+      [-60, -60],
+      [60, -60],
+      [60, 60],
+      [-60, 60],
+    ]);
+    const ids = area.graph.edges.map((e) => e.id);
+    const before = snapshot(area);
+    const r = d.applyRoadFix("close-loop", ids[0]);
+    expect(r.graphChanged).toBe(true);
+    expect(r.status).toContain("Closed the loop");
+    const degree = new Map<number, number>();
+    for (const e of area.graph.edges) {
+      degree.set(e.from, (degree.get(e.from) ?? 0) + 1);
+      degree.set(e.to, (degree.get(e.to) ?? 0) + 1);
+    }
+    expect([...degree.values()].some((v) => v === 1)).toBe(false);
+    d.undo();
+    expect(snapshot(area)).toEqual(before);
+  });
+
+  it("close-loop with a tiny gap merges the two ends; one undo restores", () => {
+    const { area, d } = setup();
+    const pts: P[] = [
+      [0, 0, 0],
+      [40, 0, 0],
+      [40, 0, 40],
+      [0, 0, 40],
+      [0, 0, 3],
+    ];
+    area.graph = {
+      ...area.graph,
+      nodes: [nodeOf(0, pts[0]), nodeOf(1, pts[4])],
+      edges: [edgeOf(0, 0, 1, pts)],
+    };
+    area.nextEdgeId = 1;
+    const before = snapshot(area);
+    const r = d.applyRoadFix("close-loop", 0);
+    expect(r.graphChanged).toBe(true);
+    expect(area.graph.nodes.map((n) => n.id)).toEqual([0]);
+    expect(area.graph.edges[0].to).toBe(0);
+    expect(Array.from(area.paint.data)).toEqual(before.paint);
+    d.undo();
+    expect(snapshot(area)).toEqual(before);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("pushes nothing and explains when the planner finds no fix", () => {
+    const { area, d } = setup();
+    const a: P = [0, 0, 0];
+    const b: P = [20, 0, 0];
+    area.graph = {
+      ...area.graph,
+      nodes: [nodeOf(0, a), nodeOf(1, b)],
+      edges: [edgeOf(0, 0, 1, [a, b])],
+    };
+    area.nextEdgeId = 1;
+    const before = JSON.stringify(area.graph);
+    const r = d.applyRoadFix("connect-ends", 0);
+    expect(r.graphChanged).toBe(false);
+    expect(r.status).toBe("Road 0: nothing within 250 m to connect to; draw a road to it by hand.");
+    expect(d.applyRoadFix("make-two-way", 0, 1).graphChanged).toBe(false);
+    expect(d.canUndo()).toBe(false);
+    expect(JSON.stringify(area.graph)).toBe(before);
   });
 });
 
