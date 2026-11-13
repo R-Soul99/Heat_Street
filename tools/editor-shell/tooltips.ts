@@ -1,5 +1,7 @@
 /** Single delegated tooltip element driven by data-tip (D-04). Not title= (cannot be toggled). */
+import type { Rect } from "./dock.ts";
 import { getBoolPref, setBoolPref } from "./prefs.ts";
+import { placeTip } from "./tip-place.ts";
 
 const DELAY_MS = 400;
 let installed = false;
@@ -33,13 +35,21 @@ function show(target: HTMLElement, text: string): void {
   const r = target.getBoundingClientRect();
   const w = tipEl.offsetWidth;
   const h = tipEl.offsetHeight;
-  let x = r.left + r.width / 2 - w / 2;
-  let y = r.bottom + 8;
-  if (y + h > window.innerHeight - 4) y = r.top - h - 8;
-  x = Math.max(4, Math.min(window.innerWidth - w - 4, x));
-  y = Math.max(4, y);
-  tipEl.style.left = `${x}px`;
-  tipEl.style.top = `${y}px`;
+  const avoid: Rect[] = [];
+  for (const o of document.querySelectorAll("button, input, select, summary, [data-tip]")) {
+    if (o === target || target.contains(o) || o.contains(target) || o === tipEl) continue;
+    const b = o.getBoundingClientRect();
+    if (b.width === 0 || b.height === 0) continue;
+    avoid.push(b);
+  }
+  const p = placeTip(
+    r,
+    { width: w, height: h },
+    { width: window.innerWidth, height: window.innerHeight },
+    avoid,
+  );
+  tipEl.style.left = `${p.x}px`;
+  tipEl.style.top = `${p.y}px`;
 }
 
 export function installTooltips(doc: Document): void {
