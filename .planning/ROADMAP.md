@@ -378,7 +378,7 @@ Plans:
 **Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
 **Requirements**: Working IDs EDUX-01 (shell layout, D-01/D-02), EDUX-02 (info bar, no silent failures, D-03), EDUX-03 (tooltips toggle, D-04), EDUX-04 (steppers, content-sized selects, 3 dp, D-05), EDUX-05 (New/Import popup, fresh map, D-06), EDUX-06 (map tools + Redo, D-07), EDUX-07 (terrain Raise/Lower, Grid select, push/pull, D-08), EDUX-08 (shortcuts, D-09), EDUX-09 (new maps register themselves). Tooling phase; not in v1.0 REQUIREMENTS.md
 **Depends on:** Phase 7
-**Plans:** 14/16 plans complete (07.1-12 and 07.1-13 are human verification, still open)
+**Plans:** 14/22 plans complete (07.1-12 and 07.1-13 are human verification, still open; 07.1-17..22 are UAT gap closure)
 
 Plans:
 
@@ -412,6 +412,15 @@ Plans:
 **Wave 6** *(blocked on Wave 5 completion)*
 
 - [ ] 07.1-13-PLAN.md — Human verification: map editor incl. poppmap import into a fresh map (wave 6)
+
+**Gap closure (UAT 2026-11-13)**
+
+- [ ] 07.1-17-PLAN.md — Shell: popup errors clear on edit, Shift+[ ] coarse, tooltips avoid other controls, registry-derived map-select test (wave 1)
+- [ ] 07.1-18-PLAN.md — TDD: connectivity never blocks saving; road problems name road ends; fix planners (two-way, connect ends, close loop) (wave 1)
+- [ ] 07.1-19-PLAN.md — Terrain: slope-limit setting (default 35), stamp rotation outline + Shift rotation, clear locked/unlocked roads (wave 1)
+- [ ] 07.1-20-PLAN.md — Map editor: reproduce + fix blank map, start screen returning, Open in terrain editor handoff with visible errors (wave 1)
+- [ ] 07.1-21-PLAN.md — Terrain: road fix buttons wired as one-step undos, quiet saves for warnings, visible ?area errors (wave 2)
+- [ ] 07.1-22-PLAN.md — Map editor adopts the dock layout with visible view toggles (wave 2)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
