@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 07.1 (Editor UX Overhaul) 14/16 plans done; 07.1-12 and 07.1-13 human verification open; 07-07 open
-last_updated: 2026-11-12T00:00:00.000Z
-last_activity: 2026-11-12 -- Reconciled STATE/ROADMAP with plans on disk; terrain editor gap-closure (quick 261111-x00) done
+stopped_at: Phase 07.1 gap closure 07.1-17..22 executed (UAT 2026-11-13); re-verify editors, then 07-07
+last_updated: 2026-11-13T00:00:00.000Z
+last_activity: 2026-11-13 -- UAT 07.1 (10 pass, 4 issues) and gap plans 17-22 executed
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 110
-  completed_plans: 107
+  total_plans: 116
+  completed_plans: 113
   percent: 97
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 Phase: 07.1 (Editor UX Overhaul), with Phase 07 NPC driving AI / pursuit prototype in parallel
 Plan: 14/16 summarised
-Next: 07.1-12 and 07.1-13 human verification (terrain and map editors), then 07-07
+Next: re-run /gsd-verify-work 07.1 against gap plans 17-22, then 07-07
 Last activity: 2026-11-12
 
 Progress: [█████████▊] 97% (107 of 110 known plans have summaries)
