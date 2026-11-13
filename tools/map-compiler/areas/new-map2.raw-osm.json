@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-12T23:50:37.117Z",
+  "endpoint": "authored://heat-street/new-map2",
+  "bbox": {
+    "south": 32.99098322817199,
+    "west": -84.0535027258497,
+    "north": 33.00901677182801,
+    "east": -83.9464972741503
+  },
+  "query": "authored new-map2 (map editor, not OSM)",
+  "response": {
+    "elements": []
+  }
+}

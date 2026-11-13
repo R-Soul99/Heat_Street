@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-12T23:53:23.444Z",
+  "endpoint": "authored://heat-street/uat-map",
+  "bbox": {
+    "south": 32.997745807042996,
+    "west": -84.00267513629248,
+    "north": 33.002254192957004,
+    "east": -83.99732486370752
+  },
+  "query": "authored uat-map buildings (none)",
+  "response": {
+    "elements": []
+  }
+}

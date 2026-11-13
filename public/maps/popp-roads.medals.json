@@ -1,0 +1,144 @@
+{
+  "kind": "heat-street.medal-reference",
+  "version": 1,
+  "areaId": "popp-roads",
+  "contractVersion": 1,
+  "handlingContentVersion": "260920-sm2",
+  "courses": [
+    {
+      "courseId": "popp-roads-valley-run",
+      "mode": "p2p",
+      "laps": 1,
+      "totalTimeSec": 148,
+      "splits": [
+        {
+          "checkpointId": "p2p-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 28
+        },
+        {
+          "checkpointId": "p2p-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 55
+        },
+        {
+          "checkpointId": "p2p-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 102
+        },
+        {
+          "checkpointId": "p2p-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 131
+        },
+        {
+          "checkpointId": "p2p-05",
+          "lap": 1,
+          "authoredIndex": 4,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 148
+        }
+      ]
+    },
+    {
+      "courseId": "popp-roads-village-loop",
+      "mode": "circuit",
+      "laps": 3,
+      "totalTimeSec": 777,
+      "splits": [
+        {
+          "checkpointId": "circuit-01",
+          "lap": 1,
+          "authoredIndex": 0,
+          "hitOrder": 0,
+          "cumulativeTimeSec": 77
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 1,
+          "authoredIndex": 1,
+          "hitOrder": 1,
+          "cumulativeTimeSec": 103
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 1,
+          "authoredIndex": 2,
+          "hitOrder": 2,
+          "cumulativeTimeSec": 124
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 1,
+          "authoredIndex": 3,
+          "hitOrder": 3,
+          "cumulativeTimeSec": 216
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 2,
+          "authoredIndex": 0,
+          "hitOrder": 4,
+          "cumulativeTimeSec": 357
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 2,
+          "authoredIndex": 1,
+          "hitOrder": 5,
+          "cumulativeTimeSec": 384
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 2,
+          "authoredIndex": 2,
+          "hitOrder": 6,
+          "cumulativeTimeSec": 405
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 2,
+          "authoredIndex": 3,
+          "hitOrder": 7,
+          "cumulativeTimeSec": 497
+        },
+        {
+          "checkpointId": "circuit-01",
+          "lap": 3,
+          "authoredIndex": 0,
+          "hitOrder": 8,
+          "cumulativeTimeSec": 638
+        },
+        {
+          "checkpointId": "circuit-02",
+          "lap": 3,
+          "authoredIndex": 1,
+          "hitOrder": 9,
+          "cumulativeTimeSec": 664
+        },
+        {
+          "checkpointId": "circuit-03",
+          "lap": 3,
+          "authoredIndex": 2,
+          "hitOrder": 10,
+          "cumulativeTimeSec": 685
+        },
+        {
+          "checkpointId": "circuit-04",
+          "lap": 3,
+          "authoredIndex": 3,
+          "hitOrder": 11,
+          "cumulativeTimeSec": 777
+        }
+      ]
+    }
+  ]
+}

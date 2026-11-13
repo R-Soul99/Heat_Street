@@ -38,5 +38,21 @@
   {
     "id": "new-area-1",
     "format": "terrain"
+  },
+  {
+    "id": "uat-test",
+    "format": "terrain"
+  },
+  {
+    "id": "new-map2",
+    "format": "legacy"
+  },
+  {
+    "id": "uat-map",
+    "format": "legacy"
+  },
+  {
+    "id": "popp-roads",
+    "format": "terrain"
   }
 ]

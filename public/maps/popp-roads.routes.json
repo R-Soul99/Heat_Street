@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "areaId": "popp-roads",
+  "courses": [
+    {
+      "id": "popp-roads-valley-run",
+      "name": "Valley Run",
+      "mode": "p2p",
+      "checkpoints": [
+        {
+          "id": "p2p-01",
+          "nodeId": 17,
+          "edgeId": 35,
+          "position": [
+            -606.8074834037611,
+            0,
+            111.1888955937187
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-02",
+          "nodeId": 29,
+          "edgeId": 45,
+          "position": [
+            -242.48642124390958,
+            0,
+            204.63488231672804
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-03",
+          "nodeId": 9,
+          "edgeId": 20,
+          "position": [
+            353.6753168375377,
+            0,
+            -70.97163548598948
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-04",
+          "nodeId": 5,
+          "edgeId": 11,
+          "position": [
+            753.4821967402061,
+            0,
+            -104.09173204622299
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "p2p-05",
+          "nodeId": 35,
+          "edgeId": 12,
+          "position": [
+            973.4942667462014,
+            0,
+            -193.98913699509046
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 48,
+        "headingRad": -1.2145766713997217
+      },
+      "authoring": "West-to-east run along the main road through the village."
+    },
+    {
+      "id": "popp-roads-village-loop",
+      "name": "Village Loop",
+      "mode": "circuit",
+      "laps": 3,
+      "checkpoints": [
+        {
+          "id": "circuit-01",
+          "nodeId": 28,
+          "edgeId": 48,
+          "position": [
+            30.75437537631107,
+            0,
+            196.35485817706368
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-02",
+          "nodeId": 27,
+          "edgeId": 28,
+          "position": [
+            -214.09776705018737,
+            0,
+            188.0748340373993
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-03",
+          "nodeId": 7,
+          "edgeId": 18,
+          "position": [
+            -126.56608328377573,
+            0,
+            -81.61738080920311
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        },
+        {
+          "id": "circuit-04",
+          "nodeId": 37,
+          "edgeId": 9,
+          "position": [
+            158.5033192507172,
+            0,
+            -159.68617984347634
+          ],
+          "sensor": {
+            "widthM": 20,
+            "depthM": 20,
+            "heightM": 10
+          }
+        }
+      ],
+      "start": {
+        "nodeId": 44,
+        "headingRad": -2.8842689386219513
+      },
+      "authoring": "Loop through five points around the village."
+    }
+  ]
+}
