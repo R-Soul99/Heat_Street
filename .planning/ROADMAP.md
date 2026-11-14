@@ -474,7 +474,7 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 12/15 plans complete (13-15: UAT round 1 gap closure)
+**Plans:** 14/15 plans executed
 
 Plans:
 
@@ -504,8 +504,8 @@ Plans:
 
 **Gap closure (UAT round 1 layout, D-32..D-38)**
 
-- [ ] 07.1.2-13-PLAN.md — Shell: one slim top bar with groups and drop-down menus; Undo/Redo and Clear selection/Clear all in the bar; history pad removed; sidebar View section host (wave 1)
-- [ ] 07.1.2-14-PLAN.md — Terrain editor: D-32 bar order, Road ▾ and Terrain ▾ drop-downs, brush Shape/Size in the sidebar, no surfaces in the Brush panel, Grid/Contours toggles with View section; hotkeys unchanged (wave 2)
+- [x] 07.1.2-13-PLAN.md — Shell: one slim top bar with groups and drop-down menus; Undo/Redo and Clear selection/Clear all in the bar; history pad removed; sidebar View section host (wave 1)
+- [x] 07.1.2-14-PLAN.md — Terrain editor: D-32 bar order, Road ▾ and Terrain ▾ drop-downs, brush Shape/Size in the sidebar, no surfaces in the Brush panel, Grid/Contours toggles with View section; hotkeys unchanged (wave 2)
 - [ ] 07.1.2-15-PLAN.md — Map editor top bar (D-38), npm run check gate, HUMAN-UAT layout checks updated (wave 3)
 
 ### Phase 07.1.3: Editor feature palette (INSERTED)
