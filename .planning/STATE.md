@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
 stopped_at: Phase 07.1.1 executed + verified at code level; awaiting human UAT (07.1.1-HUMAN-UAT.md)
-last_updated: "2026-11-14T02:22:42.610Z"
+last_updated: "2026-11-14T11:22:34.340Z"
 last_activity: 2026-11-14
 progress:
-  total_phases: 13
+  total_phases: 15
   completed_phases: 10
   total_plans: 122
   completed_plans: 119
-  percent: 77
+  percent: 67
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 07.1.1 — editor-controls-polish
+**Current focus:** Phase 07.1.2 — selection-based-editor-tools
 
 ## Current Position
 
-Phase: 07.1.1 (editor-controls-polish) — EXECUTING
+Phase: 07.1.2 (selection-based-editor-tools) — DISCUSS
 Plan: 6 of 6
-Next: /gsd-discuss-phase 07.1.1 (or /gsd-plan-phase 07.1.1); 07-07 still open
+Next: /gsd-discuss-phase 07.1.2 (07.1.1 built, UAT superseded by 07.1.2 redesign); 07-07 still open
 Last activity: 2026-11-14
 
 Progress: [██████████] 98%
@@ -98,6 +98,8 @@ Progress: [██████████] 98%
 - Phase 04.3 inserted after Phase 4.2: Terrain and Feel Follow-ups: lift-off spin, terrain edge, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (URGENT)
 - Phase 07.1 inserted after Phase 7: Editor UX Overhaul. Unified editor shell for the map and terrain editors (top menus, floating tool rail, info bar, tooltips), map-editor select/draw/erase/clear and a New/Import popup, and terrain-editor separate raise/lower plus grid select. Raised by the user while importing poppmap (URGENT)
 - Phase 07.1.1 inserted after Phase 07.1: Editor Controls Polish: logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls; unified editor layout (URGENT)
+- Phase 07.1.2 inserted after Phase 07.1.1: Selection-based editor tools (select-then-act, from user mockup) (URGENT)
+- Phase 07.1.3 inserted after Phase 07.1.2: Editor feature palette (buildings, ramps, scenery)
 
 ### Decisions
 

@@ -26,6 +26,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
 - [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
+- [ ] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix
+- [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 
 ## Phase Details
@@ -456,6 +458,36 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 07.1.1-06-PLAN.md — Phase gate (tsc, full vitest, biome, structural audit) + morning human UAT checklist (wave 4)
+
+### Phase 07.1.2: Selection-based editor tools (INSERTED)
+
+**Goal:** The terrain editor works select-then-act, like SketchUp: a mode (Select or Brush) says *where* an edit applies, and one set of operation buttons says *what* it does, replacing the overlapping single-purpose tools.
+**Requirements**: TBD
+**Scope (user, 2026-11-14, mockup `screenshots/ToolsLayout.png`, supersedes 07.1.1's bottom-toolbar arrangement):**
+- Layout: keep the left sidebar (large active-tool name + options). Tool buttons float over the top-left of the view; the bottom toolbar goes. Undo/Redo top-right with **Clear selection beside Clear all**; view pad and info panel stay right.
+- **Select** (renamed from Grid select): drag a box; operations act on it. **Brush**: separate button next to Select; operations act under the cursor, with brush size and shape (square / circle) controls.
+- **Grid** and **Contour** controls next to Brush: toggle visibility and set granularity (grid spacing, contour interval).
+- Operations: **Raise / Lower** (big ▲▼ pair with labels; click steps, hold repeats), **Smooth**, **Flatten**, and new **Terrain** (set the selected area to a surface type).
+- **Paint Terrain** (renamed from Paint): the surface brush.
+- Roads as separate controls: **Paint** (road brush), **Erase** (road eraser), **Lock/unlock** (every road inside the selection), new **Delete road** (every road inside the selection).
+- Removed: Block, Smooth box (covered by Select + operations), Stamp/Wedge (dropped by user; other tools cover it).
+- Map editor follows the same conventions wherever the same control applies to both editors.
+- Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
+**Depends on:** Phase 07.1.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 07.1.2 to break down)
+
+### Phase 07.1.3: Editor feature palette (INSERTED)
+
+**Goal:** A palette for placing map features: buildings, ramps, and scenery such as trees, hedges, bushes and fences, built to take more feature types later.
+**Requirements**: TBD
+**Depends on:** Phase 07.1.2
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 07.1.3 to break down)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
