@@ -94,7 +94,14 @@ describe("circuit race view models (07-07)", () => {
     const withRecord = buildRaceCardModel(
       circuit,
       "circuit.race",
-      { "circuit.race": { courseId: "circuit.race", bestTimeSec: 483.12, medal: "none", bestFinish: 2 } },
+      {
+        "circuit.race": {
+          courseId: "circuit.race",
+          bestTimeSec: 483.12,
+          medal: "none",
+          bestFinish: 2,
+        },
+      },
       "circuit.race",
       4,
     );

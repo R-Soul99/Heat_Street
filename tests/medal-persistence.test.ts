@@ -383,7 +383,10 @@ describe("circuit race persistence (07-07, D-05/D-06)", () => {
       medal: "none",
       bestFinish: 2,
     });
-    expect(afterSolo["juliette-three-lap-loop"]).toMatchObject({ bestTimeSec: 470, medal: "silver" });
+    expect(afterSolo["juliette-three-lap-loop"]).toMatchObject({
+      bestTimeSec: 470,
+      medal: "silver",
+    });
 
     expect(
       saveRaceResult(
@@ -394,7 +397,10 @@ describe("circuit race persistence (07-07, D-05/D-06)", () => {
       ),
     ).toBe(true);
     const afterRace = loadMedalProgress(storage, known).courses;
-    expect(afterRace["juliette-three-lap-loop"]).toMatchObject({ bestTimeSec: 470, medal: "silver" });
+    expect(afterRace["juliette-three-lap-loop"]).toMatchObject({
+      bestTimeSec: 470,
+      medal: "silver",
+    });
     expect(afterRace[RACE_ID]).toMatchObject({ bestTimeSec: 478, bestFinish: 1 });
   });
 });

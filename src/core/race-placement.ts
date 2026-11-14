@@ -126,6 +126,42 @@ export function computeStandings(inputs: readonly StandingInput[]): readonly Sta
   );
 }
 
+export interface ClassificationInput extends StandingInput {
+  readonly isPlayer: boolean;
+}
+
+export interface ClassificationRow {
+  readonly position: number;
+  readonly racerIndex: number;
+  readonly isPlayer: boolean;
+  /** Finish elapsed + penalty, or `null` for a racer whose place is projected from progress. */
+  readonly effectiveSec: number | null;
+  /** True when the racer had not finished and its place was projected from race progress (D-07). */
+  readonly projected: boolean;
+}
+
+/**
+ * Race classification (D-07): the `computeStandings` order, with finished
+ * racers carrying their effective time and unfinished racers flagged
+ * `projected`. Frozen result.
+ */
+export function classifyRace(inputs: readonly ClassificationInput[]): readonly ClassificationRow[] {
+  const byIndex = new Map<number, ClassificationInput>();
+  for (const input of inputs) byIndex.set(input.racerIndex, input);
+  return Object.freeze(
+    computeStandings(inputs).map((standing) => {
+      const input = byIndex.get(standing.racerIndex) as ClassificationInput;
+      return Object.freeze({
+        position: standing.position,
+        racerIndex: standing.racerIndex,
+        isPlayer: input.isPlayer,
+        effectiveSec: standing.finished ? input.finishEffectiveSec : null,
+        projected: !standing.finished,
+      });
+    }),
+  );
+}
+
 export interface GapTracker {
   /** Records the first-pass elapsed time for every milestone index `0..floor(progressM / stepM)` not yet stored. No-op for negative `progressM`. */
   record(racerIndex: number, progressM: number, elapsedSec: number): void;
