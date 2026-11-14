@@ -1,6 +1,6 @@
 /**
  * Sculpt brushes for the terrain editor (phase 04.2, D-10 minus the road
- * brush): raise/lower, smooth, flatten, wedge/mound stamps, surface paint and
+ * brush): raise/lower, smooth, flatten, surface paint and
  * paint erase, plus the stroke recorder that produces changed-cell diffs for
  * undo (D-11).
  *
@@ -419,6 +419,8 @@ export function smoothBrush(
   );
 }
 
+// raiseBlock / blockWindowAt / BLOCK_* are no longer used by the editor; they are kept because the
+// road-lock golden tests (tests/terrain-road-lock*.test.ts) pin their behaviour.
 export const BLOCK_CELLS_MIN = 1;
 export const BLOCK_CELLS_MAX = 64;
 export const BLOCK_STEP_MIN_M = 0.25;
@@ -731,71 +733,6 @@ export function flattenBrush(
     },
     rec,
     false,
-    opts,
-  );
-}
-
-export interface StampParams {
-  kind: "wedge" | "mound";
-  x: number;
-  z: number;
-  rotationRad: number;
-  lengthM: number;
-  widthM: number;
-  heightM: number;
-}
-
-/** Wedge: ramp rising along local +X over lengthM then dropping. Mound: cosine dome of radius widthM/2. Max-blended onto existing terrain. */
-export function stampTerrain(
-  grid: TerrainGrid,
-  s: StampParams,
-  rec?: StrokeRecorder,
-  opts?: HeightOpOptions,
-): BrushResult {
-  if (
-    !Number.isFinite(s.x) ||
-    !Number.isFinite(s.z) ||
-    !Number.isFinite(s.rotationRad) ||
-    !Number.isFinite(s.lengthM) ||
-    !Number.isFinite(s.widthM) ||
-    !Number.isFinite(s.heightM)
-  ) {
-    return noOp();
-  }
-  const clampSize = (v: number): number => Math.min(MAX_RADIUS_M * 2, Math.max(1, v));
-  const length = clampSize(s.lengthM);
-  const width = clampSize(s.widthM);
-  const height = Math.min(200, Math.max(-200, s.heightM));
-  const reach = s.kind === "wedge" ? Math.hypot(length / 2, width / 2) : width / 2;
-  const w = circleWindow(grid, s.x, s.z, reach);
-  if (!w) return noOp();
-  const cos = Math.cos(s.rotationRad);
-  const sin = Math.sin(s.rotationRad);
-  const base = sampleTerrainHeight(grid, s.x, s.z);
-  return runHeightOp(
-    grid,
-    w,
-    (x, z, h) => {
-      const dx = x - s.x;
-      const dz = z - s.z;
-      const lx = dx * cos + dz * sin;
-      const lz = -dx * sin + dz * cos;
-      let offset = 0;
-      if (s.kind === "wedge") {
-        if (Math.abs(lx) <= length / 2 && Math.abs(lz) <= width / 2) {
-          offset = (height * (lx + length / 2)) / length;
-        }
-      } else {
-        const R = width / 2;
-        const d = Math.hypot(lx, lz);
-        if (d < R) offset = height * 0.5 * (1 + Math.cos((Math.PI * d) / R));
-      }
-      if (offset === 0) return h;
-      const target = base + offset;
-      return height >= 0 ? Math.max(h, target) : Math.min(h, target);
-    },
-    rec,
-    true,
     opts,
   );
 }

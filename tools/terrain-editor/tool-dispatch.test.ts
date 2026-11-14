@@ -5,9 +5,10 @@ import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
 import { roadVertexMask } from "../../src/core/terrain-road.ts";
+import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { createToolDispatcher, type EditArea, slopeClampHint, TOOL_KEYS } from "./tool-dispatch.ts";
+import { createToolDispatcher, type EditArea, slopeClampHint } from "./tool-dispatch.ts";
 
 type P = [number, number, number];
 
@@ -26,19 +27,21 @@ function drag(d: ReturnType<typeof setup>["d"], pts: [number, number][]) {
   return d.pointerUp(last[0], last[1]);
 }
 
-describe("TOOL_KEYS", () => {
-  it("maps the UI-SPEC keys", () => {
-    expect(TOOL_KEYS).toMatchObject({
-      KeyH: "raise",
-      KeyG: "smooth",
-      KeyF: "flatten",
-      KeyP: "paint",
-      KeyR: "road",
-      KeyW: "stamp",
-      KeyE: "erase",
-    });
-  });
-});
+/** Raises a (2 * halfM) square of cells by stepM through a Select-mode selection. */
+function raiseBox(
+  d: ReturnType<typeof setup>["d"],
+  x: number,
+  z: number,
+  halfM: number,
+  stepM: number,
+) {
+  d.setMode("select");
+  d.pointerDown(x - halfM, z - halfM, {});
+  d.pointerUp(x + halfM, z + halfM);
+  d.setOptions({ selectStepM: stepM });
+  d.applyOperation("raise");
+  d.clearSelection();
+}
 
 describe("sculpt tools", () => {
   it("raise stroke is one undo entry and raises terrain", () => {
@@ -80,36 +83,9 @@ describe("sculpt tools", () => {
     expect(up.heldVertices).toBe(0);
   });
 
-  it("default strength is 1 and blockDirection is 1; setOptions clamps direction", () => {
+  it("default strength is 1", () => {
     const { d } = setup();
     expect(d.getOptions().strength).toBe(1);
-    expect(d.getOptions().blockDirection).toBe(1);
-    d.setOptions({ blockDirection: -5 as unknown as -1 });
-    expect(d.getOptions().blockDirection).toBe(-1);
-    d.setOptions({ blockDirection: 7 as unknown as 1 });
-    expect(d.getOptions().blockDirection).toBe(1);
-  });
-
-  it("every tool has a key", () => {
-    expect(TOOL_KEYS.KeyJ).toBe("lower");
-    expect(TOOL_KEYS.KeyM).toBe("smoothBox");
-    expect(new Set(Object.values(TOOL_KEYS)).size).toBe(Object.keys(TOOL_KEYS).length);
-    expect(Object.values(TOOL_KEYS).sort()).toEqual(
-      [
-        "select",
-        "raise",
-        "lower",
-        "smooth",
-        "flatten",
-        "paint",
-        "road",
-        "stamp",
-        "erase",
-        "block",
-        "smoothBox",
-        "lock",
-      ].sort(),
-    );
   });
 
   it("undo then redo round trips; new stroke clears redo", () => {
@@ -290,29 +266,6 @@ describe("road and erase", () => {
   });
 });
 
-describe("stamp", () => {
-  it("click places a stamp; rotate steps 15 degrees; drag sets length (min 4 m)", () => {
-    const { area, d } = setup();
-    d.setTool("stamp");
-    d.setOptions({ stampKind: "wedge", stampHeightM: 3, stampWidthM: 10, stampLengthM: 20 });
-    d.rotateStamp(1);
-    expect(d.getOptions().stampRotationRad).toBeCloseTo((15 * Math.PI) / 180, 9);
-    d.rotateStamp(-1);
-    d.rotateStamp(-1);
-    expect(d.getOptions().stampRotationRad).toBeCloseTo((-15 * Math.PI) / 180, 9);
-    d.rotateStamp(1);
-    d.pointerDown(0, 0, {});
-    d.pointerUp(30, 0);
-    expect(d.getOptions().stampLengthM).toBeCloseTo(30, 6);
-    expect(sampleTerrainHeight(area.grid, 12, 0)).toBeGreaterThan(0.5);
-    expect(d.canUndo()).toBe(true);
-
-    d.pointerDown(60, 60, {});
-    d.pointerUp(61, 60);
-    expect(d.getOptions().stampLengthM).toBeGreaterThanOrEqual(4);
-  });
-});
-
 describe("history", () => {
   it("keeps 50 entries and clearHistory empties", () => {
     const { d } = setup();
@@ -333,145 +286,30 @@ describe("history", () => {
   });
 });
 
-describe("block and smooth tools (04.3-07)", () => {
-  it("maps KeyB to block", () => {
-    expect(TOOL_KEYS.KeyB).toBe("block");
-  });
-
-  it("has block/smooth defaults and clamps setOptions", () => {
+describe("smooth options and drags (04.3-07)", () => {
+  it("has smooth defaults and clamps setOptions", () => {
     const { d } = setup();
-    expect(d.getOptions()).toMatchObject({
-      blockCells: 2,
-      blockStepM: 1,
-      smoothStrength: 0.5,
-      smoothPasses: 3,
-    });
-    d.setOptions({ blockCells: 999, blockStepM: 0.1, smoothStrength: 5, smoothPasses: 99 });
-    expect(d.getOptions()).toMatchObject({
-      blockCells: 64,
-      blockStepM: 0.25,
-      smoothStrength: 1,
-      smoothPasses: 10,
-    });
-    d.setOptions({ blockCells: 2.6, blockStepM: 1.3 });
-    expect(d.getOptions().blockCells).toBe(3);
-    expect(d.getOptions().blockStepM).toBe(1.25);
-    d.setOptions({ blockCells: Number.NaN, blockStepM: Number.NaN, smoothPasses: Number.NaN });
-    expect(d.getOptions()).toMatchObject({ blockCells: 3, blockStepM: 1.25, smoothPasses: 10 });
+    expect(d.getOptions()).toMatchObject({ smoothStrength: 0.5, smoothPasses: 3 });
+    d.setOptions({ smoothStrength: 5, smoothPasses: 99 });
+    expect(d.getOptions()).toMatchObject({ smoothStrength: 1, smoothPasses: 10 });
+    d.setOptions({ smoothPasses: Number.NaN });
+    expect(d.getOptions()).toMatchObject({ smoothPasses: 10 });
   });
 
-  it("block click raises one block by the step, one undo entry, bit-exact undo", () => {
-    const { area, d } = setup();
-    const before = Float32Array.from(area.grid.heights);
-    d.setTool("block");
-    d.pointerDown(1, 1, {});
-    d.pointerUp(1, 1);
-    expect(Math.max(...area.grid.heights)).toBeCloseTo(1, 5);
-    expect(d.canUndo()).toBe(true);
-    d.undo();
-    expect(d.canUndo()).toBe(false);
-    expect(Array.from(area.grid.heights)).toEqual(Array.from(before));
-  });
-
-  it("blockDirection -1 lowers the block", () => {
-    const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockDirection: -1 });
-    d.pointerDown(1, 1, {});
-    d.pointerUp(1, 1);
-    expect(Math.min(...area.grid.heights)).toBeCloseTo(-1, 5);
-  });
-
-  it("a drag steps each block exactly once, one undo entry", () => {
-    const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockCells: 1 });
-    const pts: [number, number][] = [];
-    for (let x = 1; x <= 10; x += 0.5) pts.push([x, 1]);
-    drag(d, pts);
-    expect(Math.max(...area.grid.heights)).toBeLessThanOrEqual(1.0001);
-    expect(Math.max(...area.grid.heights)).toBeGreaterThan(0.5);
-    d.undo();
-    expect(d.canUndo()).toBe(false);
-    expect(Math.max(...area.grid.heights)).toBe(0);
-  });
-
-  it("smoothBox smooths a box as one undo step", () => {
-    const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockCells: 2, blockStepM: 3 });
-    drag(d, [[0, 0]]);
-    const afterBlock = Float32Array.from(area.grid.heights);
-    d.setTool("smoothBox");
-    drag(d, [
-      [-12, -12],
-      [12, 12],
-    ]);
-    expect(Array.from(area.grid.heights)).not.toEqual(Array.from(afterBlock));
-    d.undo();
-    expect(Array.from(area.grid.heights)).toEqual(Array.from(afterBlock));
-    d.undo();
-    expect(d.canUndo()).toBe(false);
-  });
-
-  it("smoothBox is a corner-to-corner drag rectangle; preview matches the edit", () => {
-    const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockCells: 2, blockStepM: 3 });
-    drag(d, [[0, 0]]);
-    d.setTool("smoothBox");
-    expect(d.smoothBoxWindow(0, 0)).toBeNull();
-    d.pointerDown(-10, -10, {});
-    const g = area.grid;
-    const col = (x: number) => (x - g.originX) / g.cellSizeM;
-    const row = (z: number) => (z - g.originZ) / g.cellSizeM;
-    const w = d.smoothBoxWindow(14, 8);
-    expect(w).toEqual({
-      minCol: Math.floor(col(-10)),
-      maxCol: Math.ceil(col(14)),
-      minRow: Math.floor(row(-10)),
-      maxRow: Math.ceil(row(8)),
-    });
-    // Dragging the other way gives the same window (true corner-to-corner).
-    expect(d.smoothBoxWindow(-30, -20)).toEqual({
-      minCol: Math.floor(col(-30)),
-      maxCol: Math.ceil(col(-10)),
-      minRow: Math.floor(row(-20)),
-      maxRow: Math.ceil(row(-10)),
-    });
-    const up = d.pointerUp(14, 8);
-    expect(up.dirtyHeights).toBeDefined();
-    // The dirty rebuild window may pad the box by up to two cells for normals, never more.
-    expect(up.dirtyHeights?.minCol).toBeGreaterThanOrEqual((w?.minCol ?? 0) - 2);
-    expect(up.dirtyHeights?.maxCol).toBeLessThanOrEqual((w?.maxCol ?? 0) + 2);
-    expect(d.smoothBoxWindow(14, 8)).toBeNull();
-  });
-
-  it("cancelBoxDrag drops a smoothBox drag without an undo entry", () => {
-    const { d } = setup();
-    d.setTool("smoothBox");
-    d.pointerDown(0, 0, {});
-    expect(d.cancelBoxDrag()).toBe(true);
-    expect(d.isStroking()).toBe(false);
-    expect(d.canUndo()).toBe(false);
-    expect(d.cancelBoxDrag()).toBe(false);
-  });
-
-  it("cancelBoxDrag abandons a selection drag and leaves the selection untouched", () => {
+  it("cancelSelectDrag abandons a selection drag and leaves the selection untouched", () => {
     const { d } = setup();
     d.setMode("select");
     d.pointerDown(0, 0, {});
     d.pointerMove(20, 20);
-    expect(d.cancelBoxDrag()).toBe(true);
+    expect(d.cancelSelectDrag()).toBe(true);
     expect(d.isStroking()).toBe(false);
     expect(d.selectionCellCount()).toBe(0);
+    expect(d.cancelSelectDrag()).toBe(false);
   });
 
   it("smoothAll is one undo entry", () => {
     const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockStepM: 3 });
-    drag(d, [[0, 0]]);
+    raiseBox(d, 0, 0, 3, 3);
     const afterBlock = Float32Array.from(area.grid.heights);
     const peak = Math.max(...afterBlock);
     const r = d.smoothAll();
@@ -485,9 +323,7 @@ describe("block and smooth tools (04.3-07)", () => {
 
   it("smoothAll never moves road vertices", () => {
     const { area, d } = setup();
-    d.setTool("block");
-    d.setOptions({ blockStepM: 3 });
-    drag(d, [[30, 30]]);
+    raiseBox(d, 30, 30, 3, 3);
     d.setTool("road");
     drag(d, [
       [0, 0],
@@ -506,7 +342,7 @@ describe("block and smooth tools (04.3-07)", () => {
   });
 });
 
-describe("road lock tool (quick 261110-rdx)", () => {
+describe("road lock (quick 261110-rdx)", () => {
   /** Area 240 m, cell 3: one street along z = 0. Returns the edge id. */
   function withRoad() {
     const s = setup();
@@ -524,51 +360,8 @@ describe("road lock tool (quick 261110-rdx)", () => {
   }
 
   function raiseUnder(d: ReturnType<typeof setup>["d"], x: number, z: number) {
-    d.setTool("block");
-    d.setOptions({ blockStepM: 4, blockCells: 8 });
-    return d.pointerDown(x, z, {}) && d.pointerUp(x, z);
+    raiseBox(d, x, z, 12, 4);
   }
-
-  it("L selects the lock tool", () => {
-    expect(TOOL_KEYS.KeyL).toBe("lock");
-  });
-
-  it("click unlocks a road, a second click locks it; each is one undo step", () => {
-    const { area, d, id } = withRoad();
-    d.setTool("lock");
-    const a = d.pointerDown(0, 1, {});
-    expect(a.lockChanged).toBe(true);
-    expect(a.status).toContain("Unlocked");
-    expect(a.status).toContain("Re-grade");
-    expect(area.unlockedEdgeIds).toEqual([id]);
-    expect(d.getSelectedEdgeId()).toBe(id);
-    const b = d.pointerDown(0, 1, {});
-    expect(b.status).toContain("Locked road");
-    expect(area.unlockedEdgeIds).toEqual([]);
-    d.undo();
-    expect(area.unlockedEdgeIds).toEqual([id]);
-    d.undo();
-    expect(area.unlockedEdgeIds).toEqual([]);
-    expect(d.canUndo()).toBe(false);
-  });
-
-  it("clicking empty ground says so and pushes nothing", () => {
-    const { d } = withRoad();
-    d.setTool("lock");
-    const r = d.pointerDown(0, 90, {});
-    expect(r.status).toBe("No road under the cursor.");
-    expect(d.canUndo()).toBe(false);
-  });
-
-  it("Shift+click selects without toggling", () => {
-    const { area, d, id } = withRoad();
-    d.setTool("lock");
-    const r = d.pointerDown(0, 0, { shift: true });
-    expect(r.selectionChanged).toBe(true);
-    expect(d.getSelectedEdgeId()).toBe(id);
-    expect(area.unlockedEdgeIds ?? []).toEqual([]);
-    expect(d.canUndo()).toBe(false);
-  });
 
   it("unlock all then undo restores the previous list", () => {
     const { area, d, id } = withRoad();
@@ -611,17 +404,6 @@ describe("road lock tool (quick 261110-rdx)", () => {
     expect(d.regradeAllUnlocked().status).toBeDefined();
   });
 
-  it("re-grade selected warns on a locked road and pushes nothing", () => {
-    const { d, id } = withRoad();
-    d.setTool("lock");
-    d.pointerDown(0, 0, { shift: true });
-    const r = d.regradeSelected();
-    expect(r.warnings).toContain(`Road ${id} is locked; unlock it to re-grade.`);
-    expect(d.canUndo()).toBe(false);
-    d.clearHistory();
-    expect(d.regradeSelected().status).toContain("Select a road first");
-  });
-
   it("an erase stroke that carries locks merges the lock into its single undo entry", () => {
     const { area, d, id } = withRoad();
     d.lockAll(false);
@@ -640,6 +422,9 @@ describe("road lock tool (quick 261110-rdx)", () => {
   });
 });
 
+const selBounds = (d: ReturnType<typeof setup>["d"]): CellWindow | null =>
+  d.getSelectionMask()?.bounds() ?? null;
+
 describe("grid select (07.1)", () => {
   const A = { x: -30, z: -30 };
   const B = { x: -9, z: -9 };
@@ -653,10 +438,7 @@ describe("grid select (07.1)", () => {
     return s;
   }
 
-  function winHeights(
-    area: EditArea,
-    win: NonNullable<ReturnType<ReturnType<typeof setup>["d"]["getSelection"]>>,
-  ) {
+  function winHeights(area: EditArea, win: CellWindow) {
     const out: number[] = [];
     const stride = area.grid.rows + 1;
     for (let c = win.minCol; c <= win.maxCol; c++) {
@@ -665,10 +447,6 @@ describe("grid select (07.1)", () => {
     return out;
   }
 
-  it("KeyS selects the gridSelect tool", () => {
-    expect(TOOL_KEYS.KeyS).toBe("select");
-  });
-
   it("dragging selects a window without editing or undo entry", () => {
     const { area, d } = setup();
     d.setTool("select");
@@ -676,7 +454,7 @@ describe("grid select (07.1)", () => {
     const live = d.selectionPreview(B.x, B.z);
     d.pointerMove(B.x, B.z, {});
     const up = d.pointerUp(B.x, B.z);
-    const sel = d.getSelection();
+    const sel = selBounds(d);
     expect(sel).toEqual({ minCol: 30, maxCol: 37, minRow: 30, maxRow: 37 });
     expect(live).toEqual(sel);
     expect(up.selectionChanged).toBe(true);
@@ -689,21 +467,21 @@ describe("grid select (07.1)", () => {
     d.setTool("select");
     d.pointerDown(-29, -29, {});
     d.pointerUp(-29, -29);
-    const w = d.getSelection();
+    const w = selBounds(d);
     expect(w).toBeTruthy();
     expect((w?.maxCol as number) - (w?.minCol as number)).toBe(1);
     expect((w?.maxRow as number) - (w?.minRow as number)).toBe(1);
   });
 
-  it("raiseSelection steps by selectStepM as one undo entry and keeps the selection", () => {
+  it("applyOperation raise/lower steps by selectStepM as one undo entry and keeps the selection", () => {
     const { area, d } = selected();
-    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const sel = selBounds(d) as CellWindow;
     const before = winHeights(area, sel);
-    const r = d.raiseSelection(1);
+    const r = d.applyOperation("raise");
     expect(r.dirtyHeights).toBeDefined();
     expect(winHeights(area, sel)).toEqual(before.map((h) => h + 1));
-    expect(d.getSelection()).toEqual(sel);
-    d.raiseSelection(-1);
+    expect(selBounds(d)).toEqual(sel);
+    d.applyOperation("lower");
     expect(winHeights(area, sel)).toEqual(before);
     d.undo();
     expect(winHeights(area, sel)).toEqual(before.map((h) => h + 1));
@@ -721,16 +499,16 @@ describe("grid select (07.1)", () => {
     expect(d.getOptions().selectStepM).toBeGreaterThan(0);
   });
 
-  it("raiseSelection without a selection reports and pushes nothing", () => {
+  it("applyOperation raise/lower without a selection reports and pushes nothing", () => {
     const { d } = setup();
-    const r = d.raiseSelection(1);
+    const r = d.applyOperation("raise");
     expect(r.status).toBe("Select an area first (drag on the map)");
     expect(d.canUndo()).toBe(false);
   });
 
   it("push/pull is absolute from the snapshot and one undo entry", () => {
     const { area, d } = selected();
-    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const sel = selBounds(d) as CellWindow;
     const base = winHeights(area, sel);
     expect(d.beginPushPull()).toBe(true);
     d.pushPullTo(2);
@@ -750,7 +528,7 @@ describe("grid select (07.1)", () => {
     const empty = setup();
     expect(empty.d.beginPushPull()).toBe(false);
     const { area, d } = selected();
-    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const sel = selBounds(d) as CellWindow;
     const base = winHeights(area, sel);
     d.beginPushPull();
     d.pushPullTo(3);
@@ -761,7 +539,7 @@ describe("grid select (07.1)", () => {
 
   it("pushPullTo clamps delta to 50 m", () => {
     const { area, d } = selected();
-    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const sel = selBounds(d) as CellWindow;
     d.beginPushPull();
     d.pushPullTo(500);
     const max = Math.max(...winHeights(area, sel));
@@ -771,16 +549,16 @@ describe("grid select (07.1)", () => {
 
   it("Alt+pointerDown on an existing selection starts push/pull, not a new band", () => {
     const { d } = selected();
-    const sel = d.getSelection();
+    const sel = selBounds(d);
     const r = d.pointerDown(60, 60, { alt: true });
     expect(r.pushPullStarted).toBe(true);
     d.pointerMove(90, 90, {});
     d.pointerUp(90, 90);
-    expect(d.getSelection()).toEqual(sel);
+    expect(selBounds(d)).toEqual(sel);
     d.cancelPushPull();
   });
 
-  it("road-held vertices keep their height under raiseSelection and pushPullTo", () => {
+  it("road-held vertices keep their height under applyOperation raise/lower and pushPullTo", () => {
     const { area, d } = setup();
     d.setTool("road");
     drag(d, [
@@ -800,7 +578,7 @@ describe("grid select (07.1)", () => {
     d.setTool("select");
     d.pointerDown(-20, -20, {});
     d.pointerUp(20, 20);
-    const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
+    const sel = selBounds(d) as CellWindow;
     const stride = area.grid.rows + 1;
     const held: number[] = [];
     for (let c = sel.minCol; c <= sel.maxCol; c++) {
@@ -809,7 +587,7 @@ describe("grid select (07.1)", () => {
     }
     expect(held.length).toBeGreaterThan(0);
     const before = held.map((i) => area.grid.heights[i]);
-    const r1 = d.raiseSelection(1);
+    const r1 = d.applyOperation("raise");
     expect(r1.heldVertices).toBeGreaterThan(0);
     expect(held.map((i) => area.grid.heights[i])).toEqual(before);
     d.beginPushPull();
@@ -824,9 +602,9 @@ describe("grid select (07.1)", () => {
     d.setTool("select");
     d.pointerDown(-1000, -1000, {});
     d.pointerUp(1000, 1000);
-    expect(d.getSelection()).toEqual({ minRow: 0, minCol: 0, maxRow: 80, maxCol: 80 });
+    expect(selBounds(d)).toEqual({ minRow: 0, minCol: 0, maxRow: 80, maxCol: 80 });
     d.clearSelection();
-    expect(d.getSelection()).toBeNull();
+    expect(selBounds(d)).toBeNull();
   });
 });
 
@@ -1119,14 +897,6 @@ describe("slope limit option", () => {
     };
     expect(peak(60)).toBeGreaterThan(peak(20));
   });
-
-  it("rotateStamp steps 15 degrees, or 45 with coarse", () => {
-    const { d } = setup();
-    d.rotateStamp(1, true);
-    expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4, 9);
-    d.rotateStamp(-1);
-    expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4 - Math.PI / 12, 9);
-  });
 });
 
 describe("selection road actions (07.1.2-08)", () => {
@@ -1248,7 +1018,7 @@ describe("modes and mask selection (07.1.2-07)", () => {
     expect(d.selectionCellCount()).toBe(49);
     box(d, [30, 30], [51, 51], { ctrl: true });
     expect(d.getSelectionMask()).toBeNull();
-    expect(d.getSelection()).toBeNull();
+    expect(selBounds(d)).toBeNull();
     expect(d.canUndo()).toBe(false);
   });
 

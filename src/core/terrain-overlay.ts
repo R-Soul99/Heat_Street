@@ -301,13 +301,13 @@ export function needsZoomHint(cellPx: number): boolean {
 
 /**
  * Quick 261110-rdx: road centreline segments split by lock state for the editor
- * overlay. `selectedEdgeId` goes only into `selected`; unlocked edges into
+ * overlay. `highlightEdgeId` goes only into `selected`; unlocked edges into
  * `unlocked`; everything else into `locked`. y = point y + liftM.
  */
 export function roadLockSegments(
   graph: RoadGraph,
   unlocked: readonly number[] | undefined,
-  selectedEdgeId: number | null,
+  highlightEdgeId: number | null,
   liftM: number,
 ): { locked: Float32Array; unlocked: Float32Array; selected: Float32Array } {
   const free = new Set(unlocked ?? []);
@@ -318,7 +318,7 @@ export function roadLockSegments(
   };
   for (const e of graph.edges) {
     const bucket =
-      e.id === selectedEdgeId ? lists.selected : free.has(e.id) ? lists.unlocked : lists.locked;
+      e.id === highlightEdgeId ? lists.selected : free.has(e.id) ? lists.unlocked : lists.locked;
     for (let k = 0; k + 1 < e.points.length; k++) {
       const a = e.points[k];
       const b = e.points[k + 1];
@@ -330,66 +330,6 @@ export function roadLockSegments(
     unlocked: Float32Array.from(lists.unlocked),
     selected: Float32Array.from(lists.selected),
   };
-}
-
-export interface StampOutlineSpec {
-  kind: "wedge" | "mound";
-  x: number;
-  z: number;
-  rotationRad: number;
-  lengthM: number;
-  widthM: number;
-}
-
-/**
- * The area stampTerrain changes, for the cursor overlay. Same local axes as
- * stampTerrain: local +X = (cos r, sin r) in world XZ, the wedge rises along
- * +X over lengthM and spans widthM across. `outline` is a closed polygon of
- * flat XZ pairs; `arrow` is flat XZ segment pairs [ax,az,bx,bz,...] (shaft +
- * two head strokes) pointing the way the wedge rises (empty for a mound).
- */
-export function stampOutline(
-  s: StampOutlineSpec,
-  circleSegments = 48,
-): { outline: number[]; arrow: number[] } {
-  const cos = Math.cos(s.rotationRad);
-  const sin = Math.sin(s.rotationRad);
-  const toWorld = (lx: number, lz: number): [number, number] => [
-    s.x + lx * cos - lz * sin,
-    s.z + lx * sin + lz * cos,
-  ];
-  if (s.kind === "mound") {
-    const R = s.widthM / 2;
-    const n = Math.max(3, Math.floor(circleSegments));
-    const outline: number[] = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      outline.push(s.x + Math.cos(a) * R, s.z + Math.sin(a) * R);
-    }
-    return { outline, arrow: [] };
-  }
-  const hl = s.lengthM / 2;
-  const hw = s.widthM / 2;
-  const outline: number[] = [];
-  for (const [lx, lz] of [
-    [-hl, -hw],
-    [hl, -hw],
-    [hl, hw],
-    [-hl, hw],
-  ] as const) {
-    outline.push(...toWorld(lx, lz));
-  }
-  const tail = -hl * 0.7;
-  const tip = hl * 0.7;
-  const head = Math.min(hw * 0.5, Math.abs(tip - tail) * 0.3);
-  const arrow: number[] = [];
-  const seg = (ax: number, az: number, bx: number, bz: number): void => {
-    arrow.push(...toWorld(ax, az), ...toWorld(bx, bz));
-  };
-  seg(tail, 0, tip, 0);
-  seg(tip, 0, tip - head, head);
-  seg(tip, 0, tip - head, -head);
-  return { outline, arrow };
 }
 
 /** Counts of locked and unlocked roads; unlocked ids that are not in the graph are ignored. */

@@ -15,7 +15,6 @@ import {
   smoothBrush,
   smoothRegion,
   snapshotWindow,
-  stampTerrain,
   stepRadiusCells,
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
@@ -172,74 +171,6 @@ describe("smooth and flatten", () => {
     expect(edge).toBeGreaterThan(1);
     expect(edge).toBeLessThan(5);
     expect(at(g, 30, 0)).toBe(1);
-  });
-});
-
-describe("stampTerrain", () => {
-  it("wedge rises along local +X, mound is a dome, both obey the cap", () => {
-    const g = grid();
-    const res = stampTerrain(g, {
-      kind: "wedge",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 24,
-      widthM: 12,
-      heightM: 4,
-    });
-    expect(res.window).toBeDefined();
-    expect(at(g, 9, 0)).toBeGreaterThan(at(g, -9, 0));
-    expect(at(g, 9, 0)).toBeGreaterThan(at(g, 0, 0));
-    expect(at(g, 0, 20)).toBe(0);
-    expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
-
-    const m = grid();
-    stampTerrain(m, {
-      kind: "mound",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 20,
-      widthM: 20,
-      heightM: 3,
-    });
-    expect(at(m, 0, 0)).toBeGreaterThan(2);
-    expect(at(m, 0, 0)).toBeGreaterThan(at(m, 6, 0));
-    expect(at(m, 6, 0)).toBeGreaterThan(at(m, 9, 0));
-    expect(at(m, 12, 0)).toBe(0);
-  });
-
-  it("rotation PI/2 turns the footprint", () => {
-    const g = grid();
-    stampTerrain(g, {
-      kind: "wedge",
-      x: 0,
-      z: 0,
-      rotationRad: Math.PI / 2,
-      lengthM: 24,
-      widthM: 12,
-      heightM: 4,
-    });
-    expect(at(g, 0, 9)).toBeGreaterThan(at(g, 0, -9));
-    expect(at(g, 9, 0)).toBeCloseTo(at(g, -9, 0), 3);
-  });
-
-  it("max-blends: never lowers taller existing terrain", () => {
-    const g = grid();
-    g.heights.fill(10);
-    const centre = terrainIndex(g, 30, 30);
-    g.heights[centre] = 12;
-    stampTerrain(g, {
-      kind: "mound",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 10,
-      widthM: 10,
-      heightM: 1,
-    });
-    expect(at(g, 0, 0)).toBeGreaterThanOrEqual(12 - 1e-3);
-    expect(at(g, 3, 0)).toBeGreaterThanOrEqual(10);
   });
 });
 
@@ -432,17 +363,6 @@ describe("road mask holds vertices in every height op (WR-03 / D-16)", () => {
   it("flattenBrush", () => {
     const g = grid();
     flattenBrush(g, brush({ radiusM: 15, strength: 1 }), 3, undefined, roadAtCentre(g));
-    heldAndMoved(g);
-  });
-
-  it("stampTerrain", () => {
-    const g = grid();
-    stampTerrain(
-      g,
-      { kind: "mound", x: 0, z: 0, rotationRad: 0, lengthM: 20, widthM: 30, heightM: 3 },
-      undefined,
-      roadAtCentre(g),
-    );
     heldAndMoved(g);
   });
 

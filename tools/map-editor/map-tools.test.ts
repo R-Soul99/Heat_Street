@@ -35,8 +35,4 @@ describe("MAP_TOOLS", () => {
       }
     }
   });
-
-  it("has no docked tools", () => {
-    expect(MAP_TOOLS.some((t) => t.dock)).toBe(false);
-  });
 });

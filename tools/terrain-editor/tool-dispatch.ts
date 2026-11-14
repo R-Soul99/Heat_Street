@@ -10,14 +10,11 @@
 import type { RoadGraph, RoadGraphEdge } from "../../src/core/road-graph.ts";
 import type { SurfaceType } from "../../src/core/surface-types.ts";
 import {
-  BLOCK_CELLS_MAX,
-  BLOCK_CELLS_MIN,
   BLOCK_STEP_MAX_M,
   BLOCK_STEP_MIN_M,
   type BrushParams,
   type BrushResult,
   type BrushShape,
-  blockWindowAt,
   createStrokeRecorder,
   type Falloff,
   flattenBrush,
@@ -25,7 +22,6 @@ import {
   type HeightOpOptions,
   paintMask,
   paintSurface,
-  raiseBlock,
   raiseLower,
   SMOOTH_PASSES_MAX,
   type StrokeDiff,
@@ -34,7 +30,6 @@ import {
   smoothBrush,
   smoothRegion,
   snapshotWindow,
-  stampTerrain,
 } from "../../src/core/terrain-brush.ts";
 import {
   type CellMask,
@@ -57,11 +52,12 @@ import {
   roadVertexMask,
   setRoadLock,
 } from "../../src/core/terrain-road.ts";
-import { isUnlocked, nearestEdgeWithin, unlockedSet } from "../../src/core/terrain-road-lock.ts";
+import { unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
 import {
   BRUSH_TOOL_FOR,
+  type BrushToolName,
   type Mode,
   type Operation,
   type RoadAction,
@@ -87,34 +83,8 @@ function presetIdForEdge(edge: RoadGraphEdge | undefined): RoadPresetId {
   return ids.find((id) => ROAD_PRESETS[id].roadClass === edge.roadClass) ?? "street";
 }
 
-export type Tool =
-  | "raise"
-  | "lower"
-  | "smooth"
-  | "flatten"
-  | "paint"
-  | "road"
-  | "stamp"
-  | "erase"
-  | "block"
-  | "smoothBox"
-  | "lock"
-  | "select";
-
-export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
-  KeyH: "raise",
-  KeyJ: "lower",
-  KeyG: "smooth",
-  KeyF: "flatten",
-  KeyP: "paint",
-  KeyR: "road",
-  KeyW: "stamp",
-  KeyE: "erase",
-  KeyB: "block",
-  KeyM: "smoothBox",
-  KeyL: "lock",
-  KeyS: "select",
-};
+/** Internal tool: a brush, or the Select-mode rubber band. */
+export type Tool = BrushToolName | "select";
 
 export interface ToolOptions {
   radiusM: number;
@@ -126,17 +96,6 @@ export interface ToolOptions {
   roadPreset: RoadPresetId;
   widthM: number;
   maxBankDeg: number;
-  stampKind: "wedge" | "mound";
-  stampRotationRad: number;
-  stampLengthM: number;
-  stampWidthM: number;
-  stampHeightM: number;
-  /** Block tool edge length in cells (integer 1..8). */
-  blockCells: number;
-  /** Block tool step in metres (0.25..5, multiples of 0.25). */
-  blockStepM: number;
-  /** Block tool direction: 1 raises, -1 lowers (replaces the old Alt modifier). */
-  blockDirection: 1 | -1;
   smoothStrength: number;
   smoothPasses: number;
   /** Select-mode raise/lower step in metres (0.25..5, multiples of 0.25). Separate from brush strength (D-12). */
@@ -155,7 +114,7 @@ export interface ToolResult {
   graphChanged: boolean;
   /** Quick 261110-rdx: the unlocked-road list changed (repaint the lock overlay, mark dirty). */
   lockChanged: boolean;
-  /** Quick 261110-rdx: the selected road changed (Lock tool click). */
+  /** The mask selection changed (a Select-mode drag finished). */
   selectionChanged: boolean;
   slopeClamped: boolean;
   /** Signed largest height change the stroke has made so far (metres). */
@@ -186,9 +145,6 @@ export interface Modifiers {
 
 export type EditArea = RoadEditTarget & UndoTarget;
 
-const MIN_STAMP_LENGTH_M = 4;
-const STAMP_ROTATE_STEP_RAD = (15 * Math.PI) / 180;
-const STAMP_ROTATE_COARSE_RAD = (45 * Math.PI) / 180;
 export const SLOPE_LIMIT_MIN_DEG = 5;
 export const SLOPE_LIMIT_MAX_DEG = 80;
 const PUSH_PULL_MAX_M = 50;
@@ -405,17 +361,12 @@ interface Stroke {
   points: { x: number; z: number }[];
   diffs: StrokeDiff[];
   removedAny: boolean;
-  steppedBlocks: Set<number>;
-  /** Block tool: vertices already stepped this stroke (shared block edges step once). */
-  steppedVerts?: Uint8Array;
 }
 
 export function createToolDispatcher(getArea: () => EditArea) {
   const stack = createUndoStack(50);
   // Authority rule: `mode` is authoritative for where pointer input goes. In "select" mode
-  // pointer drags edit the selection; in "brush" mode they run the armed brush. The legacy
-  // `setTool` is only a thin adapter onto setMode/armBrush until plan 11 removes the old
-  // tools (block, smoothBox, stamp, lock keep their legacy stroke path in brush mode).
+  // pointer drags edit the selection; in "brush" mode they run the armed brush.
   // No code path reads `brushTool` without going through `mode` (see activeTool).
   let mode: Mode = "select";
   let armed: Operation | RoadBrush | null = null;
@@ -432,15 +383,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     roadPreset: "street",
     widthM: presetDefaults.widthM,
     maxBankDeg: presetDefaults.maxBankDeg,
-    stampKind: "wedge",
-    stampRotationRad: 0,
     slopeLimitDeg: MAX_SLOPE_DEG,
-    stampLengthM: 20,
-    stampWidthM: 12,
-    stampHeightM: 4,
-    blockCells: 2,
-    blockStepM: 1,
-    blockDirection: 1,
     smoothStrength: 0.5,
     smoothPasses: 3,
     selectStepM: 1,
@@ -469,33 +412,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     }
     let r: BrushResult;
     const hop = heightOpOptions(area, options);
-    if (s.tool === "block") {
-      const win = blockWindowAt(area.grid, x, z, options.blockCells);
-      if (!win) return res;
-      const key = win.minRow * 65536 + win.minCol;
-      if (s.steppedBlocks.has(key)) return res;
-      s.steppedBlocks.add(key);
-      if (!s.steppedVerts) s.steppedVerts = new Uint8Array(area.grid.heights.length);
-      const stepped = s.steppedVerts;
-      const blockOpts: HeightOpOptions = {
-        roadMask: (w) => {
-          const m = hop.roadMask ? hop.roadMask(w) : new Uint8Array(stepped.length);
-          for (let i = 0; i < m.length; i++) if (stepped[i]) m[i] = 1;
-          return m;
-        },
-      };
-      r = raiseBlock(
-        area.grid,
-        { x, z, blockCells: options.blockCells, stepM: options.blockStepM },
-        options.blockDirection,
-        s.recorder,
-        blockOpts,
-      );
-      const stride = area.grid.rows + 1;
-      for (let c = win.minCol; c <= win.maxCol; c++) {
-        for (let rr = win.minRow; rr <= win.maxRow; rr++) stepped[rr + c * stride] = 1;
-      }
-    } else if (s.tool === "raise" || s.tool === "lower") {
+    if (s.tool === "raise" || s.tool === "lower") {
       r = raiseLower(area.grid, p, s.tool === "lower" ? -1 : 1, 1, s.recorder, hop);
     } else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder, hop);
     else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
@@ -532,11 +449,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
   function dabAlong(s: Stroke, x: number, z: number, fn: (px: number, pz: number) => ToolResult) {
     const res = emptyResult();
-    // Block strokes must not skip a block: sample at half a cell.
-    const spacing =
-      s.tool === "block"
-        ? Math.max(0.1, getArea().grid.cellSizeM / 2)
-        : Math.max(0.25, options.radiusM / 4);
+    const spacing = Math.max(0.25, options.radiusM / 4);
     const dx = x - s.last.x;
     const dz = z - s.last.z;
     const dist = Math.hypot(dx, dz);
@@ -618,7 +531,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
   function selectBrushTool(op: Operation | RoadBrush | null): void {
     armed = op;
-    brushTool = op ? (BRUSH_TOOL_FOR[op] as Tool) : null;
+    brushTool = op ? BRUSH_TOOL_FOR[op] : null;
   }
 
   function heightResult(r: BrushResult): ToolResult {
@@ -630,14 +543,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
     if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
     if (r.maxDeltaM === 0 && r.heldCount > 0) res.status = heldStatus(r.heldCount);
     return res;
-  }
-
-  /** Quick 261110-rdx: selected road (Lock tool); null once the edge is gone. */
-  let selectedEdgeId: number | null = null;
-
-  function currentSelection(): number | null {
-    if (selectedEdgeId === null) return null;
-    return getArea().graph.edges.some((e) => e.id === selectedEdgeId) ? selectedEdgeId : null;
   }
 
   const fmtChange = (r: { maxHeightChangeM: number; maxGradePct: number }): string =>
@@ -709,36 +614,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
     return res;
   }
 
-  function lockClick(x: number, z: number, mods: Modifiers): ToolResult {
-    const area = getArea();
-    const res = emptyResult();
-    const hit = nearestEdgeWithin(area.graph, x, z, options.radiusM);
-    if (!hit) {
-      res.status = "No road under the cursor.";
-      return res;
-    }
-    const id = hit.edgeId;
-    if (selectedEdgeId !== id) res.selectionChanged = true;
-    selectedEdgeId = id;
-    if (mods.shift) {
-      res.selectionChanged = true;
-      res.status = `Selected road ${id}.`;
-      return res;
-    }
-    const wasUnlocked = isUnlocked(area, id);
-    const r = setRoadLock(area, [id], wasUnlocked);
-    mergeInto(res, commitLockDiff(area, r.diff));
-    res.warnings.push(...r.warnings);
-    if (!wasUnlocked) {
-      res.status = `Unlocked road ${id}. Sculpt freely, then Re-grade or Lock it before saving.`;
-    } else if (r.regradedEdgeIds.length > 0) {
-      res.status = `Locked road ${id} (re-graded first: ${fmtChange(r)}).`;
-    } else {
-      res.status = `Locked road ${id}.`;
-    }
-    return res;
-  }
-
   return {
     getTool: (): Tool => activeTool() ?? "raise",
     getOptions: (): Readonly<ToolOptions> => options,
@@ -757,7 +632,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     },
     getSelectionMask: (): CellMask | null => liveSelection(),
     selectionCellCount: (): number => liveSelection()?.cellCount() ?? 0,
-    /** @deprecated Thin adapter onto setMode/armBrush; plan 11 removes it. */
+    /** Adapter onto setMode/armBrush by internal tool name (the editor uses setMode/armBrush). */
     setTool(next: Tool): void {
       if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       if (next === "select") {
@@ -801,23 +676,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
           SLOPE_LIMIT_MAX_DEG,
         );
       }
-      if (patch.blockCells !== undefined) {
-        options.blockCells = clamp(
-          Math.round(options.blockCells),
-          BLOCK_CELLS_MIN,
-          BLOCK_CELLS_MAX,
-        );
-      }
-      if (patch.blockStepM !== undefined) {
-        options.blockStepM = clamp(
-          Math.round(options.blockStepM * 4) / 4,
-          BLOCK_STEP_MIN_M,
-          BLOCK_STEP_MAX_M,
-        );
-      }
-      if (patch.blockDirection !== undefined) {
-        options.blockDirection = options.blockDirection < 0 ? -1 : 1;
-      }
       if (patch.selectStepM !== undefined) {
         options.selectStepM = clamp(
           Math.round(options.selectStepM * 4) / 4,
@@ -837,8 +695,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
     },
     isStroking: (): boolean => stroke !== null,
     isRepeating: (): boolean => repeat !== null,
-
-    getSelectedEdgeId: (): number | null => currentSelection(),
 
     /**
      * Road problems panel: one automatic repair as ONE undo step (07.1-15, 07.1-21).
@@ -930,19 +786,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    /** Re-grades the selected road onto the terrain: one undo step. */
-    regradeSelected(): ToolResult {
-      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
-      const area = getArea();
-      const id = currentSelection();
-      if (id === null) {
-        const res = emptyResult();
-        res.status = "Select a road first (Lock tool, Shift+click).";
-        return res;
-      }
-      return regradeResult(area, regradeRoads(area, [id]));
-    },
-
     /**
      * Lock / Unlock / Delete road on the mask selection (D-14, D-15, D-25, D-26): whole
      * edges for lock/unlock, cut at the selection edge for delete; ONE undo step each.
@@ -1018,30 +861,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    /**
-     * Smooth-area box for the active drag: the exact cell window pointerUp will smooth
-     * (same windowBetween math), from the drag start corner to (x, z). Null when no
-     * smoothBox drag is in progress.
-     */
-    smoothBoxWindow(x: number, z: number): CellWindow | null {
-      const s = stroke;
-      if (s?.tool !== "smoothBox" || !Number.isFinite(x) || !Number.isFinite(z)) return null;
-      return windowBetween(getArea(), s.start, { x, z });
-    },
-
-    /** @deprecated Vertex bounds of the selection mask; plan 11 removes it. */
-    getSelection: (): CellWindow | null => liveSelection()?.bounds() ?? null,
-    /** @deprecated Replaces the mask with one window; plan 11 removes it. */
-    setSelection(win: CellWindow | null): void {
-      if (!win) {
-        selection = null;
-        return;
-      }
-      const g = getArea().grid;
-      const m = createCellMask(g.rows, g.cols);
-      m.apply(cellBoxFromWindow(win), "replace");
-      selection = m.isEmpty() ? null : m;
-    },
     clearSelection(): void {
       selection = null;
     },
@@ -1166,11 +985,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    /** @deprecated Delegates to applyOperation; plan 11 removes it. */
-    raiseSelection(sign: 1 | -1): ToolResult {
-      return this.applyOperation(sign > 0 ? "raise" : "lower");
-    },
-
     /** Starts a push/pull on the selection (snapshot taken now). False with no selection. */
     beginPushPull(): boolean {
       if (stroke) this.pointerUp(Number.NaN, Number.NaN);
@@ -1248,13 +1062,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return true;
     },
 
-    /** Drops an in-progress smoothBox or selection drag without editing anything (Escape). */
-    cancelBoxDrag(): boolean {
-      if (stroke?.tool !== "smoothBox" && stroke?.tool !== "select") return false;
-      stroke = null;
-      return true;
-    },
-
     pointerDown(x: number, z: number, mods: Modifiers): ToolResult {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       if (stroke) this.pointerUp(x, z);
@@ -1264,7 +1071,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
         res.status = "Pick an operation";
         return res;
       }
-      if (tool === "lock") return lockClick(x, z, mods);
       if (mode === "select" && mods.alt && liveSelection()) {
         const res = emptyResult();
         res.pushPullStarted = true;
@@ -1284,7 +1090,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
         points: [{ x, z }],
         diffs: [],
         removedAny: false,
-        steppedBlocks: new Set<number>(),
       };
       stroke = s;
       const res = emptyResult();
@@ -1293,8 +1098,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         tool === "lower" ||
         tool === "smooth" ||
         tool === "flatten" ||
-        tool === "paint" ||
-        tool === "block"
+        tool === "paint"
       ) {
         mergeInto(res, dab(s, x, z));
       } else if (tool === "erase") {
@@ -1320,7 +1124,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         );
       } else if (s.tool === "select") {
         s.last = { x, z };
-      } else if (s.tool !== "stamp" && s.tool !== "smoothBox") {
+      } else {
         mergeInto(
           res,
           dabAlong(s, x, z, (px, pz) => dab(s, px, pz)),
@@ -1360,40 +1164,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
         finish(undefined);
         return res;
       }
-      if (s.tool === "stamp") {
-        let length = options.stampLengthM;
-        let width = options.stampWidthM;
-        if (finite) {
-          const drag = Math.hypot(x - s.start.x, z - s.start.z);
-          if (drag >= 1) {
-            length = Math.max(MIN_STAMP_LENGTH_M, drag);
-            options.stampLengthM = length;
-            if (options.stampKind === "mound") {
-              width = Math.max(MIN_STAMP_LENGTH_M, drag);
-              options.stampWidthM = width;
-            }
-          }
-        }
-        const r = stampTerrain(
-          area.grid,
-          {
-            kind: options.stampKind,
-            x: s.start.x,
-            z: s.start.z,
-            rotationRad: options.stampRotationRad,
-            lengthM: length,
-            widthM: width,
-            heightM: options.stampHeightM,
-          },
-          s.recorder,
-          heightOpOptions(area, options),
-        );
-        res.dirtyHeights = r.window;
-        res.slopeClamped = r.slopeClamped;
-        if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
-        finish(s.recorder.commit());
-        return res;
-      }
       if (s.tool === "select") {
         const end = finite ? { x, z } : s.last;
         const op: MaskOp = s.mods.ctrl ? "subtract" : s.mods.shift ? "add" : "replace";
@@ -1409,21 +1179,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
           ? `Selected ${mask.cellCount()} cells. Pick an operation, or Alt+drag to push/pull.`
           : "Selection cleared.";
         finish(undefined);
-        return res;
-      }
-      if (s.tool === "smoothBox") {
-        const end = finite ? { x, z } : s.start;
-        const r = smoothRegion(
-          area.grid,
-          windowBetween(area, s.start, end),
-          { strength: options.smoothStrength, passes: options.smoothPasses },
-          s.recorder,
-          heightOpOptions(area, options),
-        );
-        res.dirtyHeights = r.window;
-        res.slopeClamped = r.slopeClamped;
-        if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
-        finish(s.recorder.commit());
         return res;
       }
       if (s.tool === "erase") {
@@ -1453,9 +1208,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
       finish(rec.commit());
       return res;
     },
-    rotateStamp(sign: 1 | -1, coarse = false): void {
-      options.stampRotationRad += sign * (coarse ? STAMP_ROTATE_COARSE_RAD : STAMP_ROTATE_STEP_RAD);
-    },
     undo(): UndoRedoResult | false {
       const area = getArea();
       return toUndoResult(area, stack.undo(area));
@@ -1469,7 +1221,6 @@ export function createToolDispatcher(getArea: () => EditArea) {
     clearHistory(): void {
       stack.clear();
       stroke = null;
-      selectedEdgeId = null;
       selection = null;
       pushPull = null;
       repeat = null;
