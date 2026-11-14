@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 07.1 gap closure 07.1-17..22 executed (UAT 2026-11-13); re-verify editors, then 07-07
-last_updated: 2026-11-13T00:00:00.000Z
-last_activity: 2026-11-13 -- UAT 07.1 (10 pass, 4 issues) and gap plans 17-22 executed
+status: ready_to_plan
+stopped_at: Phase 07.1 complete (20/22) — ready to discuss Phase 07.1.1
+last_updated: 2026-11-14T01:25:54.882Z
+last_activity: "2026-11-13 - Completed quick task 261113-vei: Ctrl+wheel zoom to cursor and middle-drag orbit at cursor in both editors"
 progress:
-  total_phases: 11
+  total_phases: 13
   completed_phases: 9
   total_plans: 116
   completed_plans: 113
-  percent: 97
+  percent: 69
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 07.1 — Editor UX Overhaul (world-builder tools), alongside Phase 07 NPC/pursuer AI (07-07 open)
+**Current focus:** Phase 07.1.1 — editor controls polish
 
 ## Current Position
 
-Phase: 07.1 (Editor UX Overhaul), with Phase 07 NPC driving AI / pursuit prototype in parallel
-Plan: 14/16 summarised
-Next: re-run /gsd-verify-work 07.1 against gap plans 17-22, then 07-07
-Last activity: 2026-11-13 - Completed quick task 261113-vei: Ctrl+wheel zoom to cursor and middle-drag orbit at cursor in both editors
+Phase: 07.1.1
+Plan: Not started
+Next: /gsd-discuss-phase 07.1.1 (or /gsd-plan-phase 07.1.1); 07-07 still open
+Last activity: 2026-11-14
 
 Progress: [█████████▊] 97% (107 of 110 known plans have summaries)
 
@@ -36,7 +36,7 @@ Progress: [█████████▊] 97% (107 of 110 known plans have summ
 
 **Velocity:**
 
-- Total plans completed: 41
+- Total plans completed: 61
 - Average duration: 15 min
 - Total execution time: 1.7 hours
 
@@ -48,6 +48,7 @@ Progress: [█████████▊] 97% (107 of 110 known plans have summ
 | 01 | 7 | - | - |
 | 04.2 | 15 | - | - |
 | 04.3 | 12 | - | - |
+| 07.1 | 20 | - | - |
 
 **Per-plan detail:**
 
@@ -96,6 +97,7 @@ Progress: [█████████▊] 97% (107 of 110 known plans have summ
 - Phase 04.2 inserted after Phase 4: Driveable Terrain: terrain-as-single-source-of-truth heightfield, paint map, road brush, 3D sculpt page. Absorbs and closes 4.1. See .planning/gsd-brief-driveable-terrain.md
 - Phase 04.3 inserted after Phase 4.2: Terrain and Feel Follow-ups: lift-off spin, terrain edge, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (URGENT)
 - Phase 07.1 inserted after Phase 7: Editor UX Overhaul. Unified editor shell for the map and terrain editors (top menus, floating tool rail, info bar, tooltips), map-editor select/draw/erase/clear and a New/Import popup, and terrain-editor separate raise/lower plus grid select. Raised by the user while importing poppmap (URGENT)
+- Phase 07.1.1 inserted after Phase 07.1: Editor Controls Polish: logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls; unified editor layout (URGENT)
 
 ### Decisions
 
@@ -253,9 +255,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-03T12:38:20.001Z
-Stopped at: Phase 04.3 context gathered
-Resume file: .planning/phases/04.3-terrain-and-feel-follow-ups/04.3-CONTEXT.md
+Last session: 2026-11-14
+Stopped at: Phase 07.1 complete (UAT 12/12, security verified), ready to discuss/plan Phase 07.1.1
+Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR

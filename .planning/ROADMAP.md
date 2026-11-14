@@ -24,6 +24,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
+- [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
+- [ ] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 
 ## Phase Details
@@ -378,7 +380,7 @@ Plans:
 **Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
 **Requirements**: Working IDs EDUX-01 (shell layout, D-01/D-02), EDUX-02 (info bar, no silent failures, D-03), EDUX-03 (tooltips toggle, D-04), EDUX-04 (steppers, content-sized selects, 3 dp, D-05), EDUX-05 (New/Import popup, fresh map, D-06), EDUX-06 (map tools + Redo, D-07), EDUX-07 (terrain Raise/Lower, Grid select, push/pull, D-08), EDUX-08 (shortcuts, D-09), EDUX-09 (new maps register themselves). Tooling phase; not in v1.0 REQUIREMENTS.md
 **Depends on:** Phase 7
-**Plans:** 14/22 plans complete (07.1-12 and 07.1-13 are human verification, still open; 07.1-17..22 are UAT gap closure)
+**Plans:** 20/22 plans complete (completed 2026-11-14; 07.1-12/13 human-verification plans covered by 07.1-UAT round 1, no separate summaries; UAT round 2 12/12, SECURITY threats_open 0)
 
 Plans:
 
@@ -407,20 +409,36 @@ Plans:
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 07.1-11-PLAN.md — Map Select box (Roads/Buildings/Objects, delete/disable) and Eraser (wave 5)
-- [ ] 07.1-12-PLAN.md — Human verification: terrain editor incl. raise/lower diagnosis (wave 5)
+- [x] 07.1-12-PLAN.md — Human verification: terrain editor incl. raise/lower diagnosis (wave 5) (covered by 07.1-UAT.md round 1)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 07.1-13-PLAN.md — Human verification: map editor incl. poppmap import into a fresh map (wave 6)
+- [x] 07.1-13-PLAN.md — Human verification: map editor incl. poppmap import into a fresh map (wave 6) (covered by 07.1-UAT.md round 1)
 
 **Gap closure (UAT 2026-11-13)**
 
-- [ ] 07.1-17-PLAN.md — Shell: popup errors clear on edit, Shift+[ ] coarse, tooltips avoid other controls, registry-derived map-select test (wave 1)
-- [ ] 07.1-18-PLAN.md — TDD: connectivity never blocks saving; road problems name road ends; fix planners (two-way, connect ends, close loop) (wave 1)
-- [ ] 07.1-19-PLAN.md — Terrain: slope-limit setting (default 35), stamp rotation outline + Shift rotation, clear locked/unlocked roads (wave 1)
-- [ ] 07.1-20-PLAN.md — Map editor: reproduce + fix blank map, start screen returning, Open in terrain editor handoff with visible errors (wave 1)
-- [ ] 07.1-21-PLAN.md — Terrain: road fix buttons wired as one-step undos, quiet saves for warnings, visible ?area errors (wave 2)
-- [ ] 07.1-22-PLAN.md — Map editor adopts the dock layout with visible view toggles (wave 2)
+- [x] 07.1-17-PLAN.md — Shell: popup errors clear on edit, Shift+[ ] coarse, tooltips avoid other controls, registry-derived map-select test (wave 1)
+- [x] 07.1-18-PLAN.md — TDD: connectivity never blocks saving; road problems name road ends; fix planners (two-way, connect ends, close loop) (wave 1)
+- [x] 07.1-19-PLAN.md — Terrain: slope-limit setting (default 35), stamp rotation outline + Shift rotation, clear locked/unlocked roads (wave 1)
+- [x] 07.1-20-PLAN.md — Map editor: reproduce + fix blank map, start screen returning, Open in terrain editor handoff with visible errors (wave 1)
+- [x] 07.1-21-PLAN.md — Terrain: road fix buttons wired as one-step undos, quiet saves for warnings, visible ?area errors (wave 2)
+- [x] 07.1-22-PLAN.md — Map editor adopts the dock layout with visible view toggles (wave 2)
+
+### Phase 07.1.1: Editor Controls Polish (INSERTED)
+
+**Goal:** Both editors' controls are arranged logically, labelled descriptively, and compact, so a tool or setting can be found and changed without reading tooltips.
+**Requirements**: TBD
+**Scope (user, 2026-11-14, after 07.1 UAT round 2):**
+- Tool buttons rearranged more intelligently, in logical groups, with descriptive labels (e.g. the first 3 letters of each function's name on the button, not single letters).
+- Tooltips lighter and less persistent, with better presentation.
+- Undo/redo ("up/down") buttons stacked vertically on the left-hand side of the screen, not side by side.
+- Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
+- Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
+**Depends on:** Phase 07.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 07.1.1 to break down)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
