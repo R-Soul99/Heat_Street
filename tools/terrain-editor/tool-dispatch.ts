@@ -988,6 +988,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     /** Starts a push/pull on the selection (snapshot taken now). False with no selection. */
     beginPushPull(): boolean {
       if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (repeat) this.endOpRepeat(); // never two recorders on the same vertices
       const sel = liveSelection();
       const win = sel?.bounds();
       if (!sel || !win) return false;

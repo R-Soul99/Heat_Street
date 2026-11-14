@@ -547,6 +547,23 @@ describe("grid select (07.1)", () => {
     expect(d.canUndo()).toBe(false);
   });
 
+  it("beginPushPull while a hold-repeat is active commits the repeat first (composable undo)", () => {
+    const { area, d } = selected();
+    const sel = selBounds(d) as CellWindow;
+    const base = winHeights(area, sel);
+    d.beginOpRepeat("raise");
+    expect(d.isRepeating()).toBe(true);
+    d.beginPushPull();
+    expect(d.isRepeating()).toBe(false);
+    d.pushPullTo(2);
+    d.endPushPull();
+    d.undo();
+    expect(winHeights(area, sel)).toEqual(base.map((h) => h + 1));
+    d.undo();
+    expect(winHeights(area, sel)).toEqual(base);
+    expect(d.canUndo()).toBe(false);
+  });
+
   it("pushPullTo clamps delta to 50 m", () => {
     const { area, d } = selected();
     const sel = selBounds(d) as CellWindow;

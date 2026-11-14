@@ -1614,6 +1614,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.altKey && dispatcher.getMode() === "select") {
     e.preventDefault(); // no browser Alt menu or text selection while dragging
     if (pushPull) return;
+    stopOpHold(); // a key/pointer hold-repeat must commit before push/pull records
     if (!dispatcher.getSelectionMask() || !dispatcher.beginPushPull()) {
       setStatus(NO_SELECTION_CLICK_MSG, "error");
       return;
@@ -2397,6 +2398,7 @@ function runToolbarAction(id: ToolbarId): void {
       syncToolFromDispatcher();
       break;
     case "apply":
+      stopOpHold(); // keep the editor's hold and the dispatcher's repeat session in step
       runLockAction(() => dispatcher.applyOperation(act.op));
       shell.floating?.flash(id);
       break;
