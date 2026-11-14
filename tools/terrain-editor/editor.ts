@@ -9,12 +9,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
-import {
-  BLOCK_CELLS_MAX,
-  blockWindowAt,
-  maskAverageHeight,
-  stepRadiusCells,
-} from "../../src/core/terrain-brush.ts";
+import { maskAverageHeight, stepRadiusCells } from "../../src/core/terrain-brush.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
@@ -35,7 +30,6 @@ import {
   needsZoomHint,
   roadLockCounts,
   roadLockSegments,
-  stampOutline,
 } from "../../src/core/terrain-overlay.ts";
 import { surfaceAt } from "../../src/core/terrain-paint.ts";
 import { raycastTerrain } from "../../src/core/terrain-pick.ts";
@@ -108,9 +102,11 @@ const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT =
   "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+middle-drag (or Shift+right-drag) to pan, wheel to zoom to the cursor, Alt+wheel = brush size in cells.";
 const CURSOR_RADIUS_M = 8;
+/** Select-mode road hover reach in metres. */
+const LOCK_HOVER_RADIUS_M = 4;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
-const HEIGHT_TOOLS: readonly Tool[] = ["block", "raise", "lower", "smooth", "flatten", "smoothBox"];
+const HEIGHT_TOOLS: readonly Tool[] = ["raise", "lower", "smooth", "flatten"];
 /** Contour window size in cells (T-04.3-28 cap) and re-centre threshold. */
 const OVERLAY_CELLS = 64;
 const CONTOUR_RECENTRE_CELLS = 16;
@@ -121,7 +117,6 @@ const FOOTPRINT_TOOLS: readonly Tool[] = ["raise", "lower", "smooth", "flatten",
 const FOOTPRINT_YELLOW = 0xffd400;
 const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
-const BLOCK_YELLOW = 0xffee66;
 const BOX_CYAN = 0x44ddff;
 /** Selection accent (UI-SPEC Color) and the subtract rubber-band colour. */
 const SELECT_ACCENT = 0x4aa3ff;
@@ -135,7 +130,7 @@ const SELECT_HINT = "Shift: add, Ctrl: subtract, Alt: push/pull";
 let area: TerrainArea | null = null;
 let terrainView: TerrainView | null = null;
 let dirty = false;
-let tool: Tool = "gridSelect";
+let tool: Tool = "select";
 let lastHit: { x: number; z: number } | null = null;
 let slopeAmber = false;
 let stroking = false;
@@ -306,40 +301,7 @@ cursorRing.frustumCulled = false;
 cursorRing.visible = false;
 scene.add(cursorRing);
 
-// Stamp rise arrow: shaft + two head strokes along the wedge's rising (+X) direction.
-const STAMP_ARROW_POINTS = 6;
-const stampArrowGeometry = new THREE.BufferGeometry();
-stampArrowGeometry.setAttribute(
-  "position",
-  new THREE.BufferAttribute(new Float32Array(STAMP_ARROW_POINTS * 3), 3),
-);
-const stampArrow = new THREE.LineSegments(
-  stampArrowGeometry,
-  new THREE.LineBasicMaterial({ color: FOOTPRINT_YELLOW, depthTest: false, transparent: true }),
-);
-stampArrow.renderOrder = 999;
-stampArrow.frustumCulled = false;
-stampArrow.visible = false;
-scene.add(stampArrow);
-
-// D-22 block preview: closed rectangle on the exact cells the next click changes.
-// BLOCK_CELLS_MAX cells per side x 4 sides, with headroom.
-const BLOCK_OUTLINE_POINTS_MAX = BLOCK_CELLS_MAX * 4 + 8;
-const blockOutlineGeometry = new THREE.BufferGeometry();
-blockOutlineGeometry.setAttribute(
-  "position",
-  new THREE.BufferAttribute(new Float32Array(BLOCK_OUTLINE_POINTS_MAX * 3), 3),
-);
-const blockOutline = new THREE.LineLoop(
-  blockOutlineGeometry,
-  new THREE.LineBasicMaterial({ color: BLOCK_YELLOW, depthTest: false, transparent: true }),
-);
-blockOutline.renderOrder = 999;
-blockOutline.frustumCulled = false;
-blockOutline.visible = false;
-scene.add(blockOutline);
-
-// Smooth-area drag box: cyan terrain-hugging rectangle, rebuilt per drag move (size is unbounded).
+// Rubber-band box: terrain-hugging rectangle, rebuilt per drag move (size is unbounded).
 const boxCyanMaterial = new THREE.LineBasicMaterial({
   color: BOX_CYAN,
   depthTest: false,
@@ -657,13 +619,10 @@ function installArea(next: TerrainArea): void {
   $("empty").style.display = "none";
   frameArea(next);
   cursorRing.visible = false;
-  stampArrow.visible = false;
-  blockOutline.visible = false;
   clearBoxOutline();
   refreshSelectionOutline();
   overlayCentre = null;
   refreshOverlays();
-  syncBlockLabel();
   refreshRoadLockOverlay();
   refreshInfo();
   syncToolbar();
@@ -914,9 +873,8 @@ function setTopDown(on: boolean): void {
 function selectTool(next: Tool): void {
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   tool = next;
-  if (tool !== "block") blockOutline.visible = false;
-  if (tool !== "smoothBox") {
-    dispatcher.cancelBoxDrag();
+  if (tool !== "select") {
+    dispatcher.cancelSelectDrag();
     stroking = stroking && dispatcher.isStroking();
     clearBoxOutline();
   }
@@ -963,83 +921,7 @@ function footprintShape(): "round" | "square" {
 }
 
 function ringRadius(): number {
-  return tool === "road" || tool === "stamp" || tool === "smoothBox"
-    ? CURSOR_RADIUS_M
-    : dispatcher.getOptions().radiusM;
-}
-
-/** Draws the block preview; returns the readout line, or null when off-grid. */
-function paintBlockOutline(hit: { x: number; z: number }): string | null {
-  if (!area) return null;
-  const g = area.grid;
-  const w = blockWindowAt(g, hit.x, hit.z, dispatcher.getOptions().blockCells);
-  if (!w) {
-    blockOutline.visible = false;
-    return null;
-  }
-  const pos = blockOutlineGeometry.getAttribute("position") as THREE.BufferAttribute;
-  const x0 = g.originX + w.minCol * g.cellSizeM;
-  const x1 = g.originX + w.maxCol * g.cellSizeM;
-  const z0 = g.originZ + w.minRow * g.cellSizeM;
-  const z1 = g.originZ + w.maxRow * g.cellSizeM;
-  let k = 0;
-  const put = (x: number, z: number): void => {
-    if (k >= BLOCK_OUTLINE_POINTS_MAX) return;
-    pos.setXYZ(k++, x, sampleTerrainHeight(g, x, z) + 0.05, z);
-  };
-  // Walk the perimeter vertex by vertex so every edge hugs the terrain.
-  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
-  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
-  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
-  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
-  blockOutlineGeometry.setDrawRange(0, k);
-  pos.needsUpdate = true;
-  (blockOutline.material as THREE.LineBasicMaterial).color.setHex(
-    slopeAmber ? RING_AMBER : BLOCK_YELLOW,
-  );
-  blockOutline.visible = true;
-  const stride = g.rows + 1;
-  const h = g.heights[w.minRow + w.minCol * stride];
-  const cols = w.maxCol - w.minCol;
-  const rows = w.maxRow - w.minRow;
-  const metres = Math.round(cols * g.cellSizeM * 100) / 100;
-  return `Block ${cols} x ${rows} (${metres} m) at height ${h.toFixed(2)} m`;
-}
-
-let blockReadoutLine: string | null = null;
-
-/** Draws the smooth-area box from the drag start to the cursor; returns the readout line. */
-function paintSmoothBox(hit: { x: number; z: number }): string | null {
-  if (!area) return null;
-  const g = area.grid;
-  const o = dispatcher.getOptions();
-  const w = dispatcher.smoothBoxWindow(hit.x, hit.z);
-  if (!w) {
-    clearBoxOutline();
-    return `Smooth area: press and drag a box (${o.smoothPasses} passes, strength ${o.smoothStrength})`;
-  }
-  const pts: number[] = [];
-  const put = (x: number, z: number): void => {
-    pts.push(x, sampleTerrainHeight(g, x, z) + 0.12, z);
-  };
-  const x0 = g.originX + w.minCol * g.cellSizeM;
-  const x1 = g.originX + w.maxCol * g.cellSizeM;
-  const z0 = g.originZ + w.minRow * g.cellSizeM;
-  const z1 = g.originZ + w.maxRow * g.cellSizeM;
-  for (let c = w.minCol; c < w.maxCol; c++) put(g.originX + c * g.cellSizeM, z0);
-  for (let r = w.minRow; r < w.maxRow; r++) put(x1, g.originZ + r * g.cellSizeM);
-  for (let c = w.maxCol; c > w.minCol; c--) put(g.originX + c * g.cellSizeM, z1);
-  for (let r = w.maxRow; r > w.minRow; r--) put(x0, g.originZ + r * g.cellSizeM);
-  boxOutline.geometry.dispose();
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
-  boxOutline.geometry = geo;
-  boxOutline.material = boxCyanMaterial;
-  boxOutline.visible = true;
-  const cols = w.maxCol - w.minCol;
-  const rows = w.maxRow - w.minRow;
-  const round = (v: number) => Math.round(v * 100) / 100;
-  return `Smooth area ${cols} x ${rows} cells (${round(cols * g.cellSizeM)} x ${round(rows * g.cellSizeM)} m), ${o.smoothPasses} passes`;
+  return tool === "road" ? CURSOR_RADIUS_M : dispatcher.getOptions().radiusM;
 }
 
 /** Draws the cursor shapes for the active tool, then refreshes the footprint grid under it. */
@@ -1050,10 +932,8 @@ function paintRing(hit: { x: number; z: number }): void {
 
 function paintRingShapes(hit: { x: number; z: number }): void {
   if (!area) return;
-  if (tool === "gridSelect") {
+  if (tool === "select") {
     cursorRing.visible = false;
-    stampArrow.visible = false;
-    blockOutline.visible = false;
     const w = pushPull ? null : dispatcher.selectionPreview(hit.x, hit.z);
     if (w) {
       const op = dispatcher.selectionDragOp() ?? "replace";
@@ -1063,31 +943,7 @@ function paintRingShapes(hit: { x: number; z: number }): void {
     } else clearBoxOutline();
     return;
   }
-  if (tool === "smoothBox") {
-    blockOutline.visible = false;
-    blockReadoutLine = paintSmoothBox(hit);
-    const dragging = dispatcher.smoothBoxWindow(hit.x, hit.z) !== null;
-    if (dragging) {
-      cursorRing.visible = false;
-      stampArrow.visible = false;
-      return;
-    }
-  } else {
-    clearBoxOutline();
-  }
-  if (tool === "block") {
-    cursorRing.visible = false;
-    stampArrow.visible = false;
-    blockReadoutLine = paintBlockOutline(hit);
-    return;
-  }
-  blockOutline.visible = false;
-  if (tool !== "smoothBox") blockReadoutLine = null;
-  if (tool === "stamp") {
-    paintStampOutline(hit);
-    return;
-  }
-  stampArrow.visible = false;
+  clearBoxOutline();
   const radius = ringRadius();
   const outline = footprintOutline(hit.x, hit.z, radius, footprintShape(), RING_SEGMENTS);
   const n = Math.min(RING_SEGMENTS, outline.length / 2);
@@ -1099,66 +955,9 @@ function paintRingShapes(hit: { x: number; z: number }): void {
   }
   ringGeometry.setDrawRange(0, n);
   pos.needsUpdate = true;
-  const base = FOOTPRINT_TOOLS.includes(tool)
-    ? FOOTPRINT_YELLOW
-    : tool === "smoothBox"
-      ? BOX_CYAN
-      : RING_GREEN;
+  const base = FOOTPRINT_TOOLS.includes(tool) ? FOOTPRINT_YELLOW : RING_GREEN;
   (cursorRing.material as THREE.LineBasicMaterial).color.setHex(slopeAmber ? RING_AMBER : base);
   cursorRing.visible = true;
-}
-
-/** Stamp tool: the real rotated footprint plus the rise arrow, in place of the round ring. */
-function paintStampOutline(hit: { x: number; z: number }): void {
-  if (!area) return;
-  const o = dispatcher.getOptions();
-  const shape = stampOutline({
-    kind: o.stampKind,
-    x: hit.x,
-    z: hit.z,
-    rotationRad: o.stampRotationRad,
-    lengthM: o.stampLengthM,
-    widthM: o.stampWidthM,
-  });
-  const n = Math.min(RING_SEGMENTS, shape.outline.length / 2);
-  const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
-  // Sample along each edge too: a long straight edge over hills should hug the ground.
-  const pts: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const ax = shape.outline[i * 2];
-    const az = shape.outline[i * 2 + 1];
-    const bx = shape.outline[j * 2];
-    const bz = shape.outline[j * 2 + 1];
-    const sub = o.stampKind === "wedge" ? Math.max(1, Math.floor(RING_SEGMENTS / n)) : 1;
-    for (let k = 0; k < sub; k++) {
-      const t = k / sub;
-      pts.push(ax + (bx - ax) * t, az + (bz - az) * t);
-    }
-  }
-  const count = Math.min(RING_SEGMENTS, pts.length / 2);
-  for (let i = 0; i < count; i++) {
-    const px = pts[i * 2];
-    const pz = pts[i * 2 + 1];
-    pos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + FOOTPRINT_LIFT_M, pz);
-  }
-  ringGeometry.setDrawRange(0, count);
-  pos.needsUpdate = true;
-  (cursorRing.material as THREE.LineBasicMaterial).color.setHex(
-    slopeAmber ? RING_AMBER : FOOTPRINT_YELLOW,
-  );
-  cursorRing.visible = true;
-
-  const apos = stampArrowGeometry.getAttribute("position") as THREE.BufferAttribute;
-  const an = Math.min(STAMP_ARROW_POINTS, shape.arrow.length / 2);
-  for (let i = 0; i < an; i++) {
-    const px = shape.arrow[i * 2];
-    const pz = shape.arrow[i * 2 + 1];
-    apos.setXYZ(i, px, sampleTerrainHeight(area.grid, px, pz) + FOOTPRINT_LIFT_M * 1.5, pz);
-  }
-  stampArrowGeometry.setDrawRange(0, an);
-  apos.needsUpdate = true;
-  stampArrow.visible = an > 0;
 }
 
 /** On-screen size (px) of one terrain cell at the cursor hit point (or the orbit target). */
@@ -1210,7 +1009,7 @@ let gridKey = "";
 /** Contour interval used by the last contour build (for zoom-driven rebuilds). */
 let lastContourInterval = Number.NaN;
 
-// Quick 261110-rdx: road lock overlay (grey = locked, orange = unlocked, cyan = selected).
+// Quick 261110-rdx: road lock overlay (grey = locked, orange dashed = unlocked).
 const ROAD_LOCK_LIFT_M = 0.4;
 const lockedLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
@@ -1226,11 +1025,7 @@ const unlockedLines = new THREE.LineSegments(
     depthTest: false,
   }),
 );
-const selectedLines = new THREE.LineSegments(
-  new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: 0x44ddff, depthTest: false }),
-);
-for (const l of [lockedLines, unlockedLines, selectedLines]) {
+for (const l of [lockedLines, unlockedLines]) {
   l.frustumCulled = false;
   l.renderOrder = 997;
   scene.add(l);
@@ -1238,13 +1033,13 @@ for (const l of [lockedLines, unlockedLines, selectedLines]) {
 
 function refreshRoadLockOverlay(): void {
   if (!area) {
-    for (const l of [lockedLines, unlockedLines, selectedLines]) l.visible = false;
+    for (const l of [lockedLines, unlockedLines]) l.visible = false;
     return;
   }
   const segs = roadLockSegments(
     area.graph,
     (area as unknown as EditArea).unlockedEdgeIds,
-    dispatcher.getSelectedEdgeId(),
+    null,
     ROAD_LOCK_LIFT_M,
   );
   const set = (target: THREE.LineSegments, data: Float32Array): void => {
@@ -1257,7 +1052,6 @@ function refreshRoadLockOverlay(): void {
   };
   set(lockedLines, segs.locked);
   set(unlockedLines, segs.unlocked);
-  set(selectedLines, segs.selected);
   const counts = roadLockCounts(area.graph, (area as unknown as EditArea).unlockedEdgeIds);
   shell.info.set("roads", roadsInfoText(counts));
   updateRoadsCountEl();
@@ -1267,18 +1061,18 @@ function roadsInfoText(c: { locked: number; unlocked: number }): string {
   return `${c.locked + c.unlocked} roads: ${c.locked} locked, ${c.unlocked} unlocked`;
 }
 
-/** Lock tool hover: names the lock state of the road under the cursor (click behaviour unchanged). */
+/** Select-mode hover: names the lock state of the road under the cursor. */
 let lockHoverShown = false;
 function updateLockHover(x: number, z: number): void {
   if (!area) return;
-  if (tool !== "lock") {
+  if (tool !== "select" || stroking || pushPull) {
     if (lockHoverShown) {
       lockHoverShown = false;
       setStatus(currentHint);
     }
     return;
   }
-  const near = nearestEdgeWithin(area.graph, x, z, dispatcher.getOptions().radiusM);
+  const near = nearestEdgeWithin(area.graph, x, z, LOCK_HOVER_RADIUS_M);
   if (!near) {
     if (lockHoverShown) {
       lockHoverShown = false;
@@ -1290,8 +1084,8 @@ function updateLockHover(x: number, z: number): void {
   const free = isUnlocked(area as unknown as EditArea, near.edgeId);
   setStatus(
     free
-      ? `Road ${near.edgeId} is UNLOCKED (terrain edits can move it). Click to lock.`
-      : `Road ${near.edgeId} is LOCKED (terrain edits cannot move it). Click to unlock.`,
+      ? `Road ${near.edgeId} is UNLOCKED (terrain edits can move it).`
+      : `Road ${near.edgeId} is LOCKED (terrain edits cannot move it).`,
   );
 }
 
@@ -1331,7 +1125,6 @@ function updateFootprintGrid(hit: { x: number; z: number } | null): void {
     return;
   }
   const g = area.grid;
-  const o = dispatcher.getOptions();
   const sp = gridSpacing;
   if (sel) {
     const sw = sel.bounds();
@@ -1358,20 +1151,16 @@ function updateFootprintGrid(hit: { x: number; z: number } | null): void {
   let w: CellWindow | null;
   let r = 0;
   let shape: "round" | "square" = "round";
-  if (tool === "block") {
-    w = blockWindowAt(g, hit.x, hit.z, o.blockCells);
-  } else {
-    r = ringRadius();
-    shape = footprintShape();
-    const cs = g.cellSizeM;
-    w = {
-      minCol: Math.max(0, Math.floor((hit.x - r - g.originX) / cs)),
-      maxCol: Math.min(g.cols, Math.ceil((hit.x + r - g.originX) / cs)),
-      minRow: Math.max(0, Math.floor((hit.z - r - g.originZ) / cs)),
-      maxRow: Math.min(g.rows, Math.ceil((hit.z + r - g.originZ) / cs)),
-    };
-    if (w.minCol >= w.maxCol || w.minRow >= w.maxRow) w = null;
-  }
+  r = ringRadius();
+  shape = footprintShape();
+  const cs = g.cellSizeM;
+  w = {
+    minCol: Math.max(0, Math.floor((hit.x - r - g.originX) / cs)),
+    maxCol: Math.min(g.cols, Math.ceil((hit.x + r - g.originX) / cs)),
+    minRow: Math.max(0, Math.floor((hit.z - r - g.originZ) / cs)),
+    maxRow: Math.min(g.rows, Math.ceil((hit.z + r - g.originZ) / cs)),
+  };
+  if (w.minCol >= w.maxCol || w.minRow >= w.maxRow) w = null;
   if (
     !w ||
     needsZoomHint(cellPxAtAnchor()) ||
@@ -1382,19 +1171,14 @@ function updateFootprintGrid(hit: { x: number; z: number } | null): void {
     return;
   }
   // A round footprint also depends on the exact cursor spot, so quantise it to half a cell.
-  const q = shape === "round" && tool !== "block" ? g.cellSizeM / 2 : 0;
+  const q = shape === "round" ? g.cellSizeM / 2 : 0;
   const qx = q > 0 ? Math.round(hit.x / q) : 0;
   const qz = q > 0 ? Math.round(hit.z / q) : 0;
   const key = `${tool}|${r}|${shape}|${sp}|${w.minRow},${w.minCol},${w.maxRow},${w.maxCol}|${qx},${qz}`;
   gridLines.visible = true;
   if (key === gridKey) return;
   gridKey = key;
-  setLines(
-    gridLines,
-    tool === "block"
-      ? gridLineSegments(g, w, FOOTPRINT_LIFT_M, sp)
-      : footprintGridSegments(g, hit.x, hit.z, r, shape, FOOTPRINT_LIFT_M, sp),
-  );
+  setLines(gridLines, footprintGridSegments(g, hit.x, hit.z, r, shape, FOOTPRINT_LIFT_M, sp));
 }
 
 function rebuildContours(x: number, z: number): void {
@@ -1476,19 +1260,10 @@ function toggleOverlay(which: "grid" | "contours"): void {
   syncToolbar();
 }
 
-/** Alt + wheel: step the brush radius by whole cells (Block: its size by one cell). */
+/** Alt + wheel: step the brush radius by whole cells (Brush mode). */
 function altWheelStep(dir: 1 | -1): void {
-  if (!area) return;
-  const o = dispatcher.getOptions();
-  if (tool === "block") {
-    const n = Math.min(BLOCK_CELLS_MAX, Math.max(1, o.blockCells + dir));
-    if (activeValue) activeValue.set(n);
-    else dispatcher.setOptions({ blockCells: n });
-  } else if (activeValue && activeValue.spec === RADIUS_SPEC) {
-    activeValue.set(stepRadiusCells(o.radiusM, area.grid.cellSizeM, dir));
-  } else {
-    return;
-  }
+  if (!area || activeValue !== radiusActive) return;
+  radiusActive.set(stepRadiusCells(dispatcher.getOptions().radiusM, area.grid.cellSizeM, dir));
   if (lastHit) paintRing(lastHit);
 }
 
@@ -1497,8 +1272,6 @@ function updateCursor(clientX: number, clientY: number): void {
   const hit = pickTerrain(clientX, clientY);
   if (!hit) {
     cursorRing.visible = false;
-    stampArrow.visible = false;
-    blockOutline.visible = false;
     if (!stroking) clearBoxOutline();
     lastHit = null;
     updateFootprintGrid(null);
@@ -1516,10 +1289,6 @@ function updateCursor(clientX: number, clientY: number): void {
     `x ${fmt3(hit.x)}  z ${fmt3(hit.z)}  h ${fmt3(sampleTerrainHeight(area.grid, hit.x, hit.z))} m`,
   );
   shell.info.set("surface", surfaceAt(area.paint, hit.x, hit.z));
-  if (flyoutReadout) {
-    flyoutReadout.textContent =
-      (tool === "block" || tool === "smoothBox") && blockReadoutLine ? blockReadoutLine : "";
-  }
   applyCanvasCursor();
 }
 
@@ -1527,7 +1296,7 @@ function updateCursor(clientX: number, clientY: number): void {
 function applyCanvasCursor(): void {
   canvas.style.cursor = pushPull
     ? "ns-resize"
-    : tool === "gridSelect" && lastHit !== null
+    : tool === "select" && lastHit !== null
       ? "crosshair"
       : "";
 }
@@ -1902,8 +1671,6 @@ canvas.addEventListener("pointercancel", (e) => {
 canvas.addEventListener("pointerleave", () => {
   if (!stroking) {
     cursorRing.visible = false;
-    stampArrow.visible = false;
-    blockOutline.visible = false;
     clearBoxOutline();
   }
 });
@@ -1937,23 +1704,10 @@ interface ActiveValue {
 }
 /** The active tool's main value, adjusted by [ ] and the arrow keys (D-09). */
 let activeValue: ActiveValue | null = null;
-const flyoutReadout: HTMLElement | null = null;
-const blockLabelEl: HTMLElement | null = null;
-const rotationEl: HTMLElement | null = null;
 
 const RADIUS_SPEC: StepperSpec = { step: 0.5, coarse: 10, min: 0.5, max: 200, decimals: 1 };
 const STRENGTH_SPEC: StepperSpec = { step: 0.05, coarse: 5, min: 0, max: 1, decimals: 2 };
 const ROAD_WIDTH_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 3, max: 20, decimals: 1 };
-const STAMP_HEIGHT_SPEC: StepperSpec = { step: 0.5, coarse: 4, min: -50, max: 50, decimals: 1 };
-const STAMP_WIDTH_SPEC: StepperSpec = { step: 1, coarse: 5, min: 1, max: 200, decimals: 0 };
-const BLOCK_CELLS_SPEC: StepperSpec = {
-  step: 1,
-  coarse: 4,
-  min: 1,
-  max: BLOCK_CELLS_MAX,
-  decimals: 0,
-};
-const BLOCK_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
 const SELECT_STEP_SPEC: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
 const SLOPE_LIMIT_SPEC: StepperSpec = {
   step: 1,
@@ -1988,48 +1742,8 @@ function optStepper(
   return { field: createField(label, stepper.el, tip), stepper };
 }
 
-/** D-18: the block size label shows metres (N x cell size) for the loaded area. */
-function syncBlockLabel(): void {
-  if (!blockLabelEl) return;
-  const n = dispatcher.getOptions().blockCells;
-  const cell = area ? area.grid.cellSizeM : DEFAULT_CELL_SIZE_M;
-  blockLabelEl.textContent = `${n} x ${n} (${fmt3(n * cell)} m)`;
-}
-
-function syncRotationLabel(): void {
-  if (!rotationEl) return;
-  const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
-  rotationEl.textContent = `Rotation ${deg} deg ([ ] rotate, Shift = 45)`;
-}
-
 function note(text: string): HTMLElement {
   return el("div", "muted", text);
-}
-
-/** Lock tool colour key: solid grey, dashed orange, cyan, matching the map overlay. */
-function lockKey(): HTMLElement {
-  const key = el("div", "legend lock-key");
-  const row = (cls: string, color: string, text: string, tip: string): void => {
-    const line = el("div", "muted", undefined, tip);
-    const sw = el("i", `sw ${cls}`);
-    sw.style.background = color;
-    line.append(sw, text);
-    key.appendChild(line);
-  };
-  row(
-    "solid",
-    "#cfd4da",
-    "Locked: terrain edits cannot move it",
-    "Light grey solid line on the map",
-  );
-  row(
-    "dash",
-    "repeating-linear-gradient(90deg, #ff8a1f 0 4px, transparent 4px 6px)",
-    "Unlocked: must be re-graded or locked before saving",
-    "Orange dashed line on the map",
-  );
-  row("solid", "#44ddff", "Selected", "Cyan line on the map: the road picked with the Lock tool");
-  return key;
 }
 
 function runLockAction(fn: () => ToolResult): void {
@@ -2573,7 +2287,7 @@ let lastSyncedMode = dispatcher.getMode();
 function syncToolFromDispatcher(): void {
   const mode = dispatcher.getMode();
   const armed = dispatcher.getArmed();
-  const next: Tool = mode === "select" ? "gridSelect" : armed ? BRUSH_TOOL_FOR[armed] : "raise";
+  const next: Tool = mode === "select" ? "select" : armed ? BRUSH_TOOL_FOR[armed] : "raise";
   if (next !== tool) selectTool(next);
   applySelectionOpacity();
   if (mode !== lastSyncedMode) {
@@ -2701,7 +2415,7 @@ function runToolbarAction(id: ToolbarId): void {
 
 function clearSelectionNow(): void {
   stopOpHold();
-  dispatcher.cancelBoxDrag();
+  dispatcher.cancelSelectDrag();
   dispatcher.clearSelection();
   clearBoxOutline();
   refreshSelectionOutline();
@@ -2896,20 +2610,13 @@ window.addEventListener("keydown", (e) => {
         cancelPushPullDrag("Push/pull cancelled.");
         return;
       }
-      if (tool === "gridSelect" && stroking) {
+      if (tool === "select" && stroking) {
         // Abandon a rubber-band drag without changing the selection.
-        dispatcher.cancelBoxDrag();
+        dispatcher.cancelSelectDrag();
         stroking = false;
         clearBoxOutline();
         refreshSelectionOutline();
         setStatus("Selection drag cancelled.");
-        return;
-      }
-      if (dispatcher.cancelBoxDrag()) {
-        stroking = false;
-        clearBoxOutline();
-        if (lastHit) paintRing(lastHit);
-        setStatus("Smooth area cancelled.");
         return;
       }
       if (dispatcher.selectionCellCount() > 0) {
@@ -2936,14 +2643,6 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.code === "Escape") return;
-  if (tool === "stamp" && (e.code === "BracketLeft" || e.code === "BracketRight")) {
-    dispatcher.rotateStamp(e.code === "BracketRight" ? 1 : -1, e.shiftKey);
-    syncRotationLabel();
-    if (lastHit) paintRing(lastHit);
-    const deg = Math.round((dispatcher.getOptions().stampRotationRad * 180) / Math.PI);
-    setStatus(`Stamp rotation ${deg} degrees.`);
-    return;
-  }
   const adj = adjustDirection(e);
   if (adj && activeValue && !(active instanceof HTMLSelectElement)) {
     e.preventDefault();

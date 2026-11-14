@@ -96,7 +96,7 @@ describe("sculpt tools", () => {
     expect(new Set(Object.values(TOOL_KEYS)).size).toBe(Object.keys(TOOL_KEYS).length);
     expect(Object.values(TOOL_KEYS).sort()).toEqual(
       [
-        "gridSelect",
+        "select",
         "raise",
         "lower",
         "smooth",
@@ -646,7 +646,7 @@ describe("grid select (07.1)", () => {
 
   function selected() {
     const s = setup();
-    s.d.setTool("gridSelect");
+    s.d.setTool("select");
     s.d.pointerDown(A.x, A.z, {});
     s.d.pointerMove(B.x, B.z, {});
     s.d.pointerUp(B.x, B.z);
@@ -666,12 +666,12 @@ describe("grid select (07.1)", () => {
   }
 
   it("KeyS selects the gridSelect tool", () => {
-    expect(TOOL_KEYS.KeyS).toBe("gridSelect");
+    expect(TOOL_KEYS.KeyS).toBe("select");
   });
 
   it("dragging selects a window without editing or undo entry", () => {
     const { area, d } = setup();
-    d.setTool("gridSelect");
+    d.setTool("select");
     d.pointerDown(A.x, A.z, {});
     const live = d.selectionPreview(B.x, B.z);
     d.pointerMove(B.x, B.z, {});
@@ -686,7 +686,7 @@ describe("grid select (07.1)", () => {
 
   it("a click selects the single cell under the pointer", () => {
     const { d } = setup();
-    d.setTool("gridSelect");
+    d.setTool("select");
     d.pointerDown(-29, -29, {});
     d.pointerUp(-29, -29);
     const w = d.getSelection();
@@ -797,7 +797,7 @@ describe("grid select (07.1)", () => {
       maxRow: area.grid.rows,
       maxCol: area.grid.cols,
     });
-    d.setTool("gridSelect");
+    d.setTool("select");
     d.pointerDown(-20, -20, {});
     d.pointerUp(20, 20);
     const sel = d.getSelection() as NonNullable<ReturnType<typeof d.getSelection>>;
@@ -821,7 +821,7 @@ describe("grid select (07.1)", () => {
 
   it("clearSelection clears; windows clip to the grid", () => {
     const { d } = setup();
-    d.setTool("gridSelect");
+    d.setTool("select");
     d.pointerDown(-1000, -1000, {});
     d.pointerUp(1000, 1000);
     expect(d.getSelection()).toEqual({ minRow: 0, minCol: 0, maxRow: 80, maxCol: 80 });
@@ -1231,7 +1231,7 @@ describe("modes and mask selection (07.1.2-07)", () => {
     d.setTool("smooth");
     expect(d.getMode()).toBe("brush");
     expect(d.getArmed()).toBe("smooth");
-    d.setTool("gridSelect");
+    d.setTool("select");
     expect(d.getMode()).toBe("select");
   });
 

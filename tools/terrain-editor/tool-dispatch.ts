@@ -99,7 +99,7 @@ export type Tool =
   | "block"
   | "smoothBox"
   | "lock"
-  | "gridSelect";
+  | "select";
 
 export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyH: "raise",
@@ -113,7 +113,7 @@ export const TOOL_KEYS: Readonly<Record<string, Tool>> = {
   KeyB: "block",
   KeyM: "smoothBox",
   KeyL: "lock",
-  KeyS: "gridSelect",
+  KeyS: "select",
 };
 
 export interface ToolOptions {
@@ -420,7 +420,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
   let mode: Mode = "select";
   let armed: Operation | RoadBrush | null = null;
   let brushTool: Tool | null = null;
-  const activeTool = (): Tool | null => (mode === "select" ? "gridSelect" : brushTool);
+  const activeTool = (): Tool | null => (mode === "select" ? "select" : brushTool);
   let stroke: Stroke | null = null;
   const presetDefaults = ROAD_PRESETS.street;
   const options: ToolOptions = {
@@ -760,7 +760,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     /** @deprecated Thin adapter onto setMode/armBrush; plan 11 removes it. */
     setTool(next: Tool): void {
       if (stroke) this.pointerUp(Number.NaN, Number.NaN);
-      if (next === "gridSelect") {
+      if (next === "select") {
         mode = "select";
         return;
       }
@@ -1049,14 +1049,14 @@ export function createToolDispatcher(getArea: () => EditArea) {
     /** Live selection rubber-band window from the drag start to (x, z); null when not dragging. */
     selectionPreview(x: number, z: number): CellWindow | null {
       const s = stroke;
-      if (s?.tool !== "gridSelect" || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+      if (s?.tool !== "select" || !Number.isFinite(x) || !Number.isFinite(z)) return null;
       return windowBetween(getArea(), s.start, { x, z });
     },
 
     /** How the active selection drag will combine with the selection (for rubber-band styling). */
     selectionDragOp(): MaskOp | null {
       const s = stroke;
-      if (s?.tool !== "gridSelect") return null;
+      if (s?.tool !== "select") return null;
       return s.mods.ctrl ? "subtract" : s.mods.shift ? "add" : "replace";
     },
 
@@ -1241,9 +1241,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
+    /** Drops an in-progress selection drag without editing anything (Escape). */
+    cancelSelectDrag(): boolean {
+      if (stroke?.tool !== "select") return false;
+      stroke = null;
+      return true;
+    },
+
     /** Drops an in-progress smoothBox or selection drag without editing anything (Escape). */
     cancelBoxDrag(): boolean {
-      if (stroke?.tool !== "smoothBox" && stroke?.tool !== "gridSelect") return false;
+      if (stroke?.tool !== "smoothBox" && stroke?.tool !== "select") return false;
       stroke = null;
       return true;
     },
@@ -1311,7 +1318,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
           res,
           dabAlong(s, x, z, (px, pz) => doErase(s, px, pz)),
         );
-      } else if (s.tool === "gridSelect") {
+      } else if (s.tool === "select") {
         s.last = { x, z };
       } else if (s.tool !== "stamp" && s.tool !== "smoothBox") {
         mergeInto(
@@ -1387,7 +1394,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         finish(s.recorder.commit());
         return res;
       }
-      if (s.tool === "gridSelect") {
+      if (s.tool === "select") {
         const end = finite ? { x, z } : s.last;
         const op: MaskOp = s.mods.ctrl ? "subtract" : s.mods.shift ? "add" : "replace";
         const g = area.grid;
