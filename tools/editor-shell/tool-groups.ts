@@ -13,7 +13,6 @@ export function groupTools<T extends { group?: string }>(
   return runs;
 }
 
-/** Visible button word (D-01); the long label stays for aria-label and the shortcuts dialog. */
-export function displayLabel(t: { label: string; shortLabel?: string }): string {
-  return t.shortLabel ?? t.label;
-}
+import { displayLabel } from "./tool-rail.ts";
+
+export { displayLabel };

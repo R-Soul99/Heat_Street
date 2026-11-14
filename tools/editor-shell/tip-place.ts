@@ -1,5 +1,13 @@
 /** Pure tooltip placement: pick a side of the anchor that does not cover other controls. */
-import type { Rect } from "./dock.ts";
+
+export interface Rect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
 
 export type TipSide = "below" | "above" | "right" | "left";
 

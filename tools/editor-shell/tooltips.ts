@@ -1,8 +1,7 @@
 /** Single delegated tooltip element driven by data-tip (D-04). Not title= (cannot be toggled). */
-import type { Rect } from "./dock.ts";
 import { getBoolPref, setBoolPref } from "./prefs.ts";
 import { TIP_FADE_OUT_MS, tipSchedule } from "./tip-phase.ts";
-import { placeTip } from "./tip-place.ts";
+import { placeTip, type Rect } from "./tip-place.ts";
 
 let installed = false;
 let enabled = getBoolPref("tooltips", true);

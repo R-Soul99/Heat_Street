@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Rect } from "./dock";
 import { placeTip } from "./tip-place";
+import type { Rect } from "./tip-place.ts";
 
 const rect = (left: number, top: number, w: number, h: number): Rect => ({
   left,
