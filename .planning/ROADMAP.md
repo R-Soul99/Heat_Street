@@ -435,14 +435,14 @@ Plans:
 - Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
 - Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
 **Depends on:** Phase 07.1
-**Plans:** 1/6 plans executed
+**Plans:** 2/6 plans executed
 
 Plans:
 
 **Wave 1**
 
 - [x] 07.1.1-01-PLAN.md — Pure helpers + tests: groupTools/displayLabel, tooltip timing (tipSchedule/tipPhase), scrubSteps/applySteps/wheelDir, canvas-local point (wave 1)
-- [ ] 07.1.1-02-PLAN.md — Tool-list data modules for both editors: by-job groups, short labels, short tips + long tier; ShellTool fields (wave 1)
+- [x] 07.1.1-02-PLAN.md — Tool-list data modules for both editors: by-job groups, short labels, short tips + long tier; ShellTool fields (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
