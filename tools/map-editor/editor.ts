@@ -38,7 +38,7 @@ import {
   planImportWorld,
 } from "./image-import.ts";
 import { DEFAULT_TRACE_OPTIONS, imageToRoadGraph, type TraceOptions } from "./image-trace.ts";
-import { MAP_TOOLS, TOOL_KEYS, type Tool } from "./map-tools.ts";
+import { MAP_GRID_TOGGLE, MAP_TOOLS, TOOL_KEYS, type Tool } from "./map-tools.ts";
 import {
   addBuildingRect,
   addRoad,
@@ -61,16 +61,17 @@ import {
 import { checkRoads } from "./road-check.ts";
 import {
   type Box,
-  buildingsInBox,
+  type BoxMode,
   disableRoad,
   enableRoad,
   isDisabledRoad,
-  waysInBox,
+  selectionFromBoxes,
 } from "./select-box.ts";
 import {
   DEFAULT_TILE_M,
   fitView,
-  gridStep,
+  gridMinorStep,
+  MAP_GRID_SPACING_PRESETS_M,
   MAX_WORLD_KM,
   MIN_WORLD_KM,
   scaleBar,
@@ -105,6 +106,8 @@ let proj: Projector;
 let world: World;
 let tileM: number = DEFAULT_TILE_M;
 let showGrid = true;
+/** Grid spacing in metres (D-31); session memory only. */
+let gridSpacingM = 10;
 let showTiles = true;
 let dirty = false;
 let selected: { kind: "road" | "building"; way: RawWay } | undefined;
@@ -124,7 +127,7 @@ let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
   select:
-    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans (Shift+middle too); wheel zooms to the cursor; Ctrl+arrows pan; F fits the world.",
+    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Shift: add, Ctrl: subtract. Right- or middle-drag pans (Shift+middle too); wheel zooms to the cursor; Ctrl+arrows pan; F fits the world.",
   road: "Click centre-line points; double-click or Enter to finish; Esc cancels. Clicking a road or node connects to it. [ ] change the width.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building. [ ] change the height.",
@@ -139,8 +142,11 @@ let erasing = false;
 let erasedThisDrag = 0;
 let sizeStepper: ReturnType<typeof createStepper> | undefined;
 // Box select state: the finished box, what is inside it, and the ticked types.
-let boxRect: Box | undefined;
+let boxes: { box: Box; mode: BoxMode }[] = [];
 let boxStart: { x: number; y: number } | undefined;
+let liveMode: BoxMode = "replace";
+const modeOf = (e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): BoxMode =>
+  e.ctrlKey || e.metaKey ? "subtract" : e.shiftKey ? "add" : "replace";
 let boxHit: { roads: RawWay[]; buildings: RawWay[] } = { roads: [], buildings: [] };
 let tickRoads = true;
 let tickBuildings = true;
@@ -441,8 +447,8 @@ function line(x1: number, y1: number, x2: number, y2: number): void {
 }
 
 function drawGrid(vis: ReturnType<typeof visibleRect>): void {
-  const minor = gridStep(scale, 24);
-  const major = gridStep(scale, minor * scale * 2.5);
+  const minor = gridMinorStep(gridSpacingM, scale);
+  const major = minor * 5;
   const x0 = Math.max(0, vis.minX);
   const x1 = Math.min(world.widthM, vis.maxX);
   const y0 = Math.max(0, vis.minY);
@@ -510,12 +516,7 @@ function drawTiles(vis: ReturnType<typeof visibleRect>): void {
 
 function drawHud(): void {
   const bar = scaleBar(scale, 160);
-  // The tool row covers the canvas's bottom-left corner, so start right of it, in canvas coordinates.
-  const toolRow = document.querySelector(".shell-toolbar-bottom");
-  const bx = hudStartX(
-    toolRow === null ? null : toolRow.getBoundingClientRect().right,
-    canvas.getBoundingClientRect().left,
-  );
+  const bx = hudStartX(null, canvas.getBoundingClientRect().left);
   const by = canvas.height - 20;
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 2;
@@ -621,15 +622,19 @@ function draw(): void {
     ctx.fillStyle = "rgba(255,220,120,0.5)";
     ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
   }
-  const liveBox: Box | undefined =
-    boxStart !== undefined && hover !== undefined ? { a: boxStart, b: hover } : boxRect;
-  if (tool === "select" && liveBox !== undefined) {
-    const a = toScreen(liveBox.a);
-    const b = toScreen(liveBox.b);
-    ctx.fillStyle = "rgba(80,170,255,0.12)";
+  if (tool === "select" && boxStart !== undefined && hover !== undefined) {
+    const a = toScreen(boxStart);
+    const b = toScreen(hover);
+    const mode = liveMode;
+    ctx.fillStyle =
+      mode === "subtract"
+        ? "rgba(255,179,71,0.2)"
+        : mode === "add"
+          ? "rgba(80,170,255,0.25)"
+          : "rgba(80,170,255,0.12)";
     ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(a.x - b.x), Math.abs(a.y - b.y));
-    ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = "#5af";
+    ctx.setLineDash(mode === "replace" ? [] : [6, 4]);
+    ctx.strokeStyle = mode === "subtract" ? "#ffb347" : "#5af";
     ctx.lineWidth = 1.5;
     ctx.strokeRect(
       Math.min(a.x, b.x),
@@ -676,7 +681,7 @@ function setTool(next: Tool): void {
   heightStepper = undefined;
   selBox = undefined;
   sizeStepper = undefined;
-  boxRect = undefined;
+  boxes = [];
   boxStart = undefined;
   boxHit = { roads: [], buildings: [] };
   erasing = false;
@@ -761,6 +766,13 @@ function setTool(next: Tool): void {
       }).el,
     );
   } else if (next === "select") {
+    fly.appendChild(
+      el(
+        "div",
+        "sidebar-empty",
+        "Drag a box to select. Shift+drag adds, Ctrl+drag subtracts, Delete removes.",
+      ),
+    );
     selBox = el("div", "selection");
     fly.appendChild(selBox);
     renderSelection();
@@ -811,7 +823,7 @@ function editTag(way: RawWay, key: string, fn: () => void, rebuild: boolean): vo
 function renderSelection(): void {
   const box = selBox;
   if (box === undefined) return;
-  if (boxRect === undefined && selected === undefined) {
+  if (boxes.length === 0 && selected === undefined) {
     box.replaceChildren(
       el(
         "div",
@@ -821,7 +833,7 @@ function renderSelection(): void {
     );
     return;
   }
-  if (boxRect !== undefined) {
+  if (boxes.length > 0) {
     renderBoxPanel(box);
     return;
   }
@@ -910,14 +922,26 @@ function renderSelection(): void {
 
 /** Recomputes what is inside the box (after an edit or undo). */
 function recomputeBox(): void {
-  if (boxRect === undefined) {
+  if (boxes.length === 0) {
     boxHit = { roads: [], buildings: [] };
-    return;
+  } else {
+    boxHit = selectionFromBoxes(boxes, roads, buildings, proj);
+    if (boxHit.roads.length + boxHit.buildings.length === 0 && boxes.at(-1)?.mode === "subtract") {
+      boxes = [];
+    }
   }
-  boxHit = {
-    roads: waysInBox(roads, proj, boxRect),
-    buildings: buildingsInBox(buildings, proj, boxRect),
-  };
+  shell?.setClearSelectionEnabled(boxes.length > 0 || selected !== undefined);
+}
+
+/** Clears every selection (boxes and the single picked item). */
+function clearMapSelection(): void {
+  boxes = [];
+  boxStart = undefined;
+  boxHit = { roads: [], buildings: [] };
+  selected = undefined;
+  requestDraw();
+  renderSelection();
+  shell?.setClearSelectionEnabled(false);
 }
 
 function plural(n: number, word: string): string {
@@ -959,7 +983,7 @@ function boxAction(kind: "delete" | "disable" | "enable" | "all"): void {
 }
 
 function clearBox(): void {
-  boxRect = undefined;
+  boxes = [];
   boxStart = undefined;
   boxHit = { roads: [], buildings: [] };
   refresh("");
@@ -1044,7 +1068,7 @@ function renderBoxPanel(host: HTMLElement): void {
 }
 
 function deleteSelected(): void {
-  if (boxRect !== undefined) {
+  if (boxes.length > 0) {
     boxAction("delete");
     return;
   }
@@ -1057,7 +1081,7 @@ function deleteSelected(): void {
 }
 
 function refresh(message: string): void {
-  if (boxRect !== undefined) recomputeBox();
+  recomputeBox();
   requestDraw();
   renderSelection();
   setStatus(message);
@@ -1093,8 +1117,10 @@ canvas.addEventListener("mousedown", (e) => {
   if (roads === undefined) return;
   const wantsPan = e.button !== 0;
   dragging = { x: e.clientX, y: e.clientY, moved: false, pan: wantsPan };
-  if (e.button === 0 && tool === "select") boxStart = worldOf(e);
-  else if (e.button === 0 && tool === "eraser") {
+  if (e.button === 0 && tool === "select") {
+    boxStart = worldOf(e);
+    liveMode = modeOf(e);
+  } else if (e.button === 0 && tool === "eraser") {
     erasing = true;
     erasedThisDrag = 0;
     eraseAt(worldOf(e));
@@ -1151,17 +1177,20 @@ window.addEventListener("mouseup", (e) => {
     const a = boxStart;
     boxStart = undefined;
     if (d.moved) {
-      boxRect = { a, b: worldOf(e) };
+      const mode = modeOf(e);
+      const entry = { box: { a, b: worldOf(e) }, mode };
+      if (mode === "replace" || boxes.length === 0) boxes = [{ ...entry, mode: "replace" }];
+      else boxes.push(entry);
       selected = undefined;
       recomputeBox();
       tickRoads = boxHit.roads.length > 0;
       tickBuildings = boxHit.buildings.length > 0;
       refresh(
-        `${plural(boxHit.roads.length, "road")}, ${plural(boxHit.buildings.length, "building")} inside the box`,
+        `${plural(boxHit.roads.length, "road")}, ${plural(boxHit.buildings.length, "building")} selected`,
       );
       return;
     }
-    boxRect = undefined;
+    boxes = [];
     boxHit = { roads: [], buildings: [] };
   }
   if (movingNode !== undefined) {
@@ -1235,7 +1264,6 @@ function cancelDrawing(): void {
   roadPoints = [];
   rectStart = undefined;
   boxStart = undefined;
-  if (boxRect !== undefined) clearBox();
   requestDraw();
 }
 
@@ -1296,6 +1324,7 @@ window.addEventListener("keydown", (e) => {
   }
   if (action === "escape") {
     cancelDrawing();
+    if (roads !== undefined) clearMapSelection();
     return;
   }
   if (typing || dialogOpen || roads === undefined) return;
@@ -1309,6 +1338,7 @@ window.addEventListener("keydown", (e) => {
   }
   const next = TOOL_KEYS[e.code];
   if (next !== undefined) switchTool(next);
+  else if (e.code === MAP_GRID_TOGGLE.code) toggleGrid();
   else if (e.code === "KeyF") doFit();
   else if (e.key === "Delete" || e.key === "Backspace") deleteSelected();
   else if (e.key === "Enter" && tool === "road") finishRoad();
@@ -1667,6 +1697,7 @@ function toggleGrid(): void {
   showGrid = !showGrid;
   requestDraw();
   shell.refreshMenus();
+  shell.floating?.setPressed("grid", showGrid);
 }
 
 function toggleTiles(): void {
@@ -1688,6 +1719,30 @@ function toggleLegend(): void {
 
 function buildShell(): Shell {
   const run = (p: Promise<unknown>): void => void p;
+  const gridSpacing = createStepper({
+    value: gridSpacingM,
+    spec: {
+      step: 1,
+      coarse: 1,
+      min: 1,
+      max: 100,
+      decimals: 0,
+      presets: MAP_GRID_SPACING_PRESETS_M,
+    },
+    tip: "Grid spacing in metres",
+    unit: "m",
+    onChange: (v) => {
+      gridSpacingM = v;
+      requestDraw();
+    },
+  });
+  const toTerrain = createButton({
+    label: "Open in terrain editor",
+    tip: "Save, compile, turn this map into a terrain map and open it in the terrain editor, where you shape the ground and drive it",
+    kind: "primary",
+    onClick: () => void openInTerrainEditor(),
+  });
+  toTerrain.id = "to-terrain-btn";
   return createShell({
     root: $("app"),
     // Shared sidebar layout (07.1.1): options in the left sidebar, tools in the grouped
@@ -1825,10 +1880,46 @@ function buildShell(): Shell {
       { label: "Help", tip: "Tooltips and keyboard shortcuts", items: [] },
     ],
     tools: MAP_TOOLS,
+    floating: {
+      rows: [
+        [
+          {
+            id: "tools",
+            label: "Tools",
+            direction: "row",
+            items: MAP_TOOLS.map((tool) => ({ kind: "tool" as const, tool })),
+          },
+          {
+            id: "grid",
+            label: "Grid",
+            direction: "row",
+            items: [
+              { kind: "tool" as const, tool: MAP_GRID_TOGGLE },
+              { kind: "slot" as const, id: "gridSpacing" },
+            ],
+          },
+          {
+            id: "terrain",
+            label: "Terrain",
+            direction: "row",
+            items: [{ kind: "slot" as const, id: "toTerrain" }],
+          },
+        ],
+      ],
+      slots: { gridSpacing: gridSpacing.el, toTerrain },
+    },
+    onToolbarClick: (id) => {
+      if (id === "grid") toggleGrid();
+      else shell.setActiveTool(id);
+    },
     onToolChange: (id) => setTool(id as Tool),
     history: {
       undo,
       redo,
+      clearSelection: {
+        run: clearMapSelection,
+        tip: "Clear selection: deselect everything (Esc)",
+      },
       clearAll: {
         run: () => run(clearAll()),
         tip: "Delete every road and building in this area (asks first; Undo brings them back)",
@@ -1840,13 +1931,6 @@ function buildShell(): Shell {
       fit: doFit,
       pan: panBy,
       extra: [
-        {
-          id: "grid",
-          label: "Grid",
-          tip: "Show or hide the metre grid (also View > Show grid)",
-          run: toggleGrid,
-          pressed: () => showGrid,
-        },
         {
           id: "tiles",
           label: "Tiles",
@@ -2265,14 +2349,7 @@ async function main(): Promise<void> {
   );
   resize();
   switchTool("select");
-  const toTerrain = createButton({
-    label: "Open in terrain editor",
-    tip: "Save, compile, turn this map into a terrain map and open it in the terrain editor, where you shape the ground and drive it",
-    kind: "primary",
-    onClick: () => void openInTerrainEditor(),
-  });
-  toTerrain.id = "to-terrain-btn";
-  $("app").appendChild(toTerrain);
+  shell.floating?.setPressed("grid", showGrid);
   setStatus(HINTS.select);
   auditTips(document);
   // A dev-server reload (file edit, restart) must not throw the user back to the
