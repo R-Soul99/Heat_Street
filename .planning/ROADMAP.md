@@ -474,10 +474,33 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 0 plans
+**Plans:** 12 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 07.1.2 to break down)
+
+**Wave 1**
+
+- [ ] 07.1.2-01-PLAN.md — D-23 locked-road edge warp: failing regression test first, then opt-in padM sculpt hold (wave 1)
+- [ ] 07.1.2-02-PLAN.md — Pure foundations: CellMask selection, Grid spacing filter, preset stepping, hold-to-repeat timer (wave 1)
+- [ ] 07.1.2-03-PLAN.md — Toolbar data (modes, operations, road column, toggles), hotkey table, pure toolbar-state logic (wave 1)
+- [ ] 07.1.2-06-PLAN.md — Shell: floating toolbar, 24px sidebar title, optional Clear selection / Clear all in the history pad; bottom toolbar removed (wave 1)
+
+**Wave 2**
+
+- [ ] 07.1.2-04-PLAN.md — Mask operations: hard-step raise/lower, flatten to average, one-pass smooth, terrain fill (wave 2)
+- [ ] 07.1.2-05-PLAN.md — Road region ops: delete road cut at selection edge, whole-edge lookup for lock/unlock (wave 2)
+- [ ] 07.1.2-09-PLAN.md — Map editor conventions: floating buttons, box select add/subtract + Delete, Grid spacing in metres (wave 2)
+
+**Wave 3-4**
+
+- [ ] 07.1.2-07-PLAN.md — Dispatcher: mode, mask selection, Alt push/pull, operations, hold-repeat as one undo (wave 3)
+- [ ] 07.1.2-08-PLAN.md — Dispatcher road actions (Lock/Unlock/Delete road/Re-grade selection) + save-guard wording (wave 4)
+
+**Wave 5-7**
+
+- [ ] 07.1.2-10-PLAN.md — Terrain editor: floating toolbar wiring, hold-repeat, selection visuals, Alt handling, hotkeys (wave 5)
+- [ ] 07.1.2-11-PLAN.md — Terrain editor: mode sidebar, surface picker, Roads section; remove old tools (wave 6)
+- [ ] 07.1.2-12-PLAN.md — Hotkey audit, full npm run check gate, HUMAN-UAT checklist (wave 7)
 
 ### Phase 07.1.3: Editor feature palette (INSERTED)
 
