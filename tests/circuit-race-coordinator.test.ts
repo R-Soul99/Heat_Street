@@ -192,7 +192,17 @@ const line: RacingLine = {
   checkpointArcM: [100, 200, 300, 400],
 };
 
-function setup() {
+function setup(
+  callbacks: {
+    onClassificationChanged?: (rows: readonly unknown[], final: boolean) => void;
+    onRaceClassified?: (result: {
+      readonly rows: readonly unknown[];
+      readonly playerPosition: number;
+      readonly playerEffectiveSec: number;
+    }) => void;
+    onRestart?: () => void;
+  } = {},
+) {
   const navigation = buildNavigationGraph(graph);
   const playerBody = makeBody({ x: -1, y: 0, z: -1 });
   const resetVehicle = vi.fn();
@@ -228,6 +238,7 @@ function setup() {
     raceHud: raceHud as never,
     chime: chime as never,
     onCarReset,
+    ...callbacks,
   });
   return {
     coordinator,
@@ -880,5 +891,156 @@ describe("source guard: circuit-race-coordinator.ts never touches the medal syst
       const hits = lines.filter((line) => line.includes(term));
       expect(hits).toEqual([]);
     }
+  });
+});
+
+/** Walks one racer's body through every checkpoint, one tick each, finishing its (1-lap) race. Returns the next unused tick. */
+function finishRacer(
+  coordinator: ReturnType<typeof createCircuitRaceCoordinator>,
+  body: { setPosition(next: { x: number; y: number; z: number }): void },
+  startTick: number,
+): number {
+  let tick = startTick;
+  for (let i = 0; i < course.checkpoints.length; i++) {
+    body.setPosition(checkpointXYZ(i));
+    coordinator.onTickBegin(tick);
+    coordinator.onTickEnd();
+    tick++;
+  }
+  return tick;
+}
+
+describe("circuit race coordinator — finish, watch them cross, interrupt (D-07/D-08)", () => {
+  function setupFinish() {
+    const onClassificationChanged = vi.fn();
+    const onRaceClassified = vi.fn();
+    const onRestart = vi.fn();
+    const ctx = setup({ onClassificationChanged, onRaceClassified, onRestart });
+    ctx.coordinator.onTickBegin(0);
+    ctx.coordinator.onTickBegin(180);
+    return { ...ctx, onClassificationChanged, onRaceClassified, onRestart };
+  }
+
+  it("fires nothing before the player finishes, even when AI finish", () => {
+    const { coordinator, fleet, onClassificationChanged, onRaceClassified } = setupFinish();
+    finishRacer(coordinator, fleet.bodies[0], 181);
+    expect(coordinator.snapshot().racers[0].race.complete).toBe(true);
+    expect(onClassificationChanged).not.toHaveBeenCalled();
+    expect(onRaceClassified).not.toHaveBeenCalled();
+  });
+
+  it("player finish fires a running classification; each later AI finish updates it; all finished fires the final pair once", () => {
+    const { coordinator, fleet, playerBody, onClassificationChanged, onRaceClassified } =
+      setupFinish();
+    let tick = finishRacer(coordinator, fleet.bodies[0], 181);
+    tick = runTicks(coordinator, tick, 60);
+    tick = finishRacer(coordinator, playerBody, tick);
+
+    expect(onClassificationChanged).toHaveBeenCalledTimes(1);
+    const [firstRows, firstFinal] = onClassificationChanged.mock.calls[0];
+    expect(firstFinal).toBe(false);
+    expect(firstRows.map((row: { racerIndex: number }) => row.racerIndex).slice(0, 2)).toEqual([
+      0,
+      PLAYER_GRID_SLOT,
+    ]);
+    expect(firstRows[1]).toMatchObject({ position: 2, isPlayer: true, projected: false });
+    expect(firstRows[2].projected).toBe(true);
+
+    tick = finishRacer(coordinator, fleet.bodies[2], tick);
+    expect(onClassificationChanged).toHaveBeenCalledTimes(2);
+    expect(onClassificationChanged.mock.calls[1][1]).toBe(false);
+    expect(
+      onClassificationChanged.mock.calls[1][0].map((row: { racerIndex: number }) => row.racerIndex),
+    ).toEqual([0, PLAYER_GRID_SLOT, 2, 1]);
+    expect(onRaceClassified).not.toHaveBeenCalled();
+
+    tick = finishRacer(coordinator, fleet.bodies[1], tick);
+    expect(onRaceClassified).toHaveBeenCalledTimes(1);
+    const result = onRaceClassified.mock.calls[0][0];
+    const playerFinish = coordinator.snapshot().racers[PLAYER_GRID_SLOT].finishElapsedSec;
+    expect(result.playerPosition).toBe(2);
+    expect(result.playerEffectiveSec).toBeCloseTo(playerFinish as number, 9);
+    expect(result.rows.every((row: { projected: boolean }) => !row.projected)).toBe(true);
+    const lastCall = onClassificationChanged.mock.calls.at(-1);
+    expect(lastCall?.[1]).toBe(true);
+
+    runTicks(coordinator, tick, 10);
+    coordinator.onCommands({ restart: true, respawn: false });
+    expect(onRaceClassified).toHaveBeenCalledTimes(1);
+  });
+
+  it("player effective time includes the respawn penalty", () => {
+    const { coordinator, fleet, playerBody, onRaceClassified } = setupFinish();
+    coordinator.onCommands({ respawn: true, restart: false });
+    let tick = finishRacer(coordinator, playerBody, 181);
+    for (let i = 0; i < AI_RACER_COUNT; i++) tick = finishRacer(coordinator, fleet.bodies[i], tick);
+    const playerFinish = coordinator.snapshot().racers[PLAYER_GRID_SLOT].finishElapsedSec as number;
+    expect(onRaceClassified.mock.calls[0][0].playerEffectiveSec).toBeCloseTo(playerFinish + 5, 9);
+  });
+
+  it("restart after the player finished projects the unfinished AI by progress, then restarts to the grid", () => {
+    const {
+      coordinator,
+      fleet,
+      scene,
+      playerBody,
+      gridPoses,
+      onClassificationChanged,
+      onRaceClassified,
+      onRestart,
+    } = setupFinish();
+    let tick = finishRacer(coordinator, playerBody, 181);
+    // AI 1 further along the line than AI 2; AI 0 behind both.
+    fleet.bodies[0].setPosition({ x: 2, y: 0, z: 0 });
+    fleet.bodies[1].setPosition({ x: 8, y: 0, z: 0 });
+    fleet.bodies[2].setPosition({ x: 5, y: 0, z: 0 });
+    tick = runTicks(coordinator, tick, 1);
+
+    coordinator.onCommands({ restart: true, respawn: false });
+
+    expect(onRaceClassified).toHaveBeenCalledTimes(1);
+    const result = onRaceClassified.mock.calls[0][0];
+    expect(result.playerPosition).toBe(1);
+    expect(result.rows.map((row: { racerIndex: number }) => row.racerIndex)).toEqual([
+      PLAYER_GRID_SLOT,
+      1,
+      2,
+      0,
+    ]);
+    expect(result.rows.map((row: { projected: boolean }) => row.projected)).toEqual([
+      false,
+      true,
+      true,
+      true,
+    ]);
+    expect(onClassificationChanged.mock.calls.at(-1)?.[1]).toBe(true);
+    expect(scene.resetVehicle).toHaveBeenLastCalledWith(gridPoses[PLAYER_GRID_SLOT]);
+    expect(fleet.resetCar).toHaveBeenCalledTimes(AI_RACER_COUNT);
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    coordinator.onTickBegin(tick + 1);
+    expect(coordinator.snapshot().phase).toBe("countdown");
+    expect(coordinator.snapshot().countdownLabel).toBe("3");
+
+    coordinator.onCommands({ restart: true, respawn: false });
+    expect(onRaceClassified).toHaveBeenCalledTimes(1);
+    expect(onRestart).toHaveBeenCalledTimes(2);
+  });
+
+  it("restart before the player finishes is a DNF: no classification, but onRestart fires", () => {
+    const { coordinator, fleet, onClassificationChanged, onRaceClassified, onRestart } =
+      setupFinish();
+    finishRacer(coordinator, fleet.bodies[0], 181);
+    coordinator.onCommands({ restart: true, respawn: false });
+    expect(onRaceClassified).not.toHaveBeenCalled();
+    expect(onClassificationChanged).not.toHaveBeenCalled();
+    expect(onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("player respawn after finishing is ignored", () => {
+    const { coordinator, scene, playerBody } = setupFinish();
+    finishRacer(coordinator, playerBody, 181);
+    coordinator.onCommands({ respawn: true, restart: false });
+    expect(scene.resetVehicle).not.toHaveBeenCalled();
+    expect(coordinator.snapshot().racers[PLAYER_GRID_SLOT].race.penaltySec).toBe(0);
   });
 });
