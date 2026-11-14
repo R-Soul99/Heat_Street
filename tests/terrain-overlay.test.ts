@@ -7,6 +7,8 @@ import {
   CONTOUR_LADDER_M,
   CONTOUR_REF_CELL_PX,
   cellPixelSize,
+  clampSpacingCells,
+  GRID_SPACING_PRESETS_CELLS,
   contourIntervalForZoom,
   contourSegments,
   footprintGridSegments,
@@ -291,5 +293,50 @@ describe("roadLockCounts", () => {
   });
   it("counts unlocked edges and ignores ids not in the graph", () => {
     expect(roadLockCounts(graph, [2, 3, 99])).toEqual({ locked: 1, unlocked: 2 });
+  });
+});
+
+describe("grid spacing", () => {
+  const full = { minRow: 0, minCol: 0, maxRow: 10, maxCol: 10 };
+  const rowsOf = (seg: Float32Array): Set<number> => {
+    const zs = new Set<number>();
+    for (let i = 2; i < seg.length; i += 3) zs.add(seg[i]);
+    return zs;
+  };
+  it("spacing 1 or omitted gives the full count", () => {
+    const g = flat();
+    expect(gridLineSegments(g, full, 0.05, 1).length).toBe(gridLineSegments(g, full).length);
+  });
+  it("spacing 2 draws lines at 0,2,..,10 only", () => {
+    const g = flat();
+    const seg = gridLineSegments(g, full, 0.05, 2);
+    expect(seg.length).toBe(2 * 6 * 10 * 6);
+    // vertical (column) pieces only start at even columns: x in {0,4,..,20}
+    const xs = new Set<number>();
+    for (let i = 0; i < seg.length; i += 3) xs.add(seg[i]);
+    expect(xs.has(2)).toBe(true); // row lines span every cell
+    expect(rowsOf(seg).has(4)).toBe(true);
+  });
+  it("alignment is absolute", () => {
+    const g = flat();
+    const seg = gridLineSegments(g, { minRow: 3, minCol: 0, maxRow: 10, maxCol: 2 }, 0.05, 5);
+    // row lines at 5 and 10 -> z 10 and 20 appear as row lines
+    const zs = rowsOf(seg);
+    expect(zs.has(10)).toBe(true);
+    expect(zs.has(20)).toBe(true);
+    expect(zs.has(6)).toBe(true); // column lines span rows 3..4 (z 6) at col lines
+  });
+  it("clamps bad spacing", () => {
+    expect(clampSpacingCells(0)).toBe(1);
+    expect(clampSpacingCells(-3)).toBe(1);
+    expect(clampSpacingCells(Number.NaN)).toBe(1);
+    expect(clampSpacingCells(2.7)).toBe(3);
+    expect(GRID_SPACING_PRESETS_CELLS).toEqual([1, 2, 5, 10, 20, 50]);
+  });
+  it("footprint spacing passes through", () => {
+    const g = flat();
+    const a = footprintGridSegments(g, 10, 10, 6, "square").length;
+    const b = footprintGridSegments(g, 10, 10, 6, "square", 0.15, 2).length;
+    expect(b).toBeLessThan(a);
   });
 });

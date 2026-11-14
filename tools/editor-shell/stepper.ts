@@ -5,6 +5,22 @@ export interface StepperSpec {
   min: number;
   max: number;
   decimals: number;
+  /** Discrete values to step through (ascending); typed input snaps to the nearest. */
+  presets?: readonly number[];
+}
+
+/** Nearest preset to v; a tie goes to the larger. */
+export function snapToPreset(v: number, presets: readonly number[]): number {
+  let best = presets[0];
+  let bestD = Math.abs(v - best);
+  for (const p of presets) {
+    const d = Math.abs(v - p);
+    if (d < bestD || (d === bestD && p > best)) {
+      best = p;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 function clampRound(x: number, spec: StepperSpec): number {
@@ -15,6 +31,21 @@ function clampRound(x: number, spec: StepperSpec): number {
 
 /** Step v by `step` (or `step * coarse` with shift), clamped and rounded to display decimals. */
 export function stepValue(v: number, dir: 1 | -1, spec: StepperSpec, shift: boolean): number {
+  if (spec.presets && spec.presets.length > 0) {
+    const ps = spec.presets;
+    let i = -1;
+    if (dir > 0) i = ps.findIndex((p) => p > v);
+    else
+      for (let k = ps.length - 1; k >= 0; k--)
+        if (ps[k] < v) {
+          i = k;
+          break;
+        }
+    if (i < 0) i = dir > 0 ? ps.length - 1 : 0;
+    else if (shift) i += dir;
+    const n = Math.min(ps.length - 1, Math.max(0, i));
+    return ps[n];
+  }
   const delta = spec.step * (shift ? spec.coarse : 1) * dir;
   return clampRound(v + delta, spec);
 }
@@ -25,6 +56,7 @@ export function parseStepperInput(text: string, spec: StepperSpec): number | und
   if (t === "") return undefined;
   const n = Number(t);
   if (!Number.isFinite(n)) return undefined;
+  if (spec.presets && spec.presets.length > 0) return snapToPreset(n, spec.presets);
   return clampRound(n, spec);
 }
 

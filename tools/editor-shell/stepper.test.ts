@@ -4,6 +4,7 @@ import {
   parseStepperInput,
   type StepperSpec,
   scrubSteps,
+  snapToPreset,
   stepValue,
   wheelDir,
 } from "./stepper";
@@ -70,5 +71,24 @@ describe("wheelDir", () => {
     expect(wheelDir(0, -50)).toBe(1);
     expect(wheelDir(0, 50)).toBe(-1);
     expect(wheelDir(-3, 50)).toBe(1);
+  });
+});
+
+describe("presets", () => {
+  const ps = [1, 2, 5, 10, 20, 50] as const;
+  const pspec = { step: 1, coarse: 2, min: 1, max: 50, decimals: 0, presets: ps };
+  it("steps through presets and clamps at ends", () => {
+    expect(stepValue(5, 1, pspec, false)).toBe(10);
+    expect(stepValue(5, -1, pspec, false)).toBe(2);
+    expect(stepValue(50, 1, pspec, false)).toBe(50);
+    expect(stepValue(1, -1, pspec, false)).toBe(1);
+    expect(stepValue(5, 1, pspec, true)).toBe(20);
+    expect(applySteps(1, 3, pspec, false)).toBe(10);
+  });
+  it("snaps typed input to nearest preset, tie up", () => {
+    expect(parseStepperInput("7", pspec)).toBe(5);
+    expect(parseStepperInput("8", pspec)).toBe(10);
+    expect(parseStepperInput("1.5", pspec)).toBe(2);
+    expect(snapToPreset(3.5, ps)).toBe(5);
   });
 });

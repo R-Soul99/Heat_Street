@@ -23,6 +23,15 @@ export const CONTOUR_REF_CELL_PX = 16;
 export const CONTOUR_LADDER_M: readonly number[] = [0.25, 0.5, 1, 2, 5, 10];
 /** Lift of the brush footprint (outline and grid) above the surface. */
 export const FOOTPRINT_LIFT_M = 0.15;
+/** Grid line spacing presets (cells) for the Grid value box (D-20). */
+export const GRID_SPACING_PRESETS_CELLS = [1, 2, 5, 10, 20, 50] as const;
+
+/** Sanitize a spacing in cells: integer >= 1 (non-finite gives 1). */
+export function clampSpacingCells(n: number): number {
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.round(n);
+}
+
 /** Safety cap on contour levels a single cell can emit. */
 const MAX_LEVELS_PER_CELL = 64;
 
@@ -45,9 +54,11 @@ export function gridLineSegments(
   grid: TerrainGrid,
   window: CellWindow,
   liftM: number = GRID_LIFT_M,
+  spacingCells = 1,
 ): Float32Array {
   const w = clipWindow(grid, window);
   if (!w) return new Float32Array(0);
+  const sp = clampSpacingCells(spacingCells);
   const stride = grid.rows + 1;
   const rowsN = w.maxRow - w.minRow;
   const colsN = w.maxCol - w.minCol;
@@ -59,18 +70,20 @@ export function gridLineSegments(
     out[k++] = grid.originZ + r * grid.cellSizeM;
   };
   for (let r = w.minRow; r <= w.maxRow; r++) {
+    if (r % sp !== 0) continue;
     for (let c = w.minCol; c < w.maxCol; c++) {
       put(r, c);
       put(r, c + 1);
     }
   }
   for (let c = w.minCol; c <= w.maxCol; c++) {
+    if (c % sp !== 0) continue;
     for (let r = w.minRow; r < w.maxRow; r++) {
       put(r, c);
       put(r + 1, c);
     }
   }
-  return out;
+  return k === out.length ? out : out.slice(0, k);
 }
 
 /**
@@ -107,8 +120,10 @@ export function footprintGridSegments(
   r: number,
   shape: BrushShape = "round",
   liftM: number = FOOTPRINT_LIFT_M,
+  spacingCells = 1,
 ): Float32Array {
   const w = brushFootprintWindow(grid, x, z, r, shape);
+  const sp = clampSpacingCells(spacingCells);
   if (!w) return new Float32Array(0);
   const stride = grid.rows + 1;
   const cs = grid.cellSizeM;
@@ -132,9 +147,11 @@ export function footprintGridSegments(
     put(r1, c1);
   };
   for (let row = w.minRow; row <= w.maxRow; row++) {
+    if (row % sp !== 0) continue;
     for (let col = w.minCol; col < w.maxCol; col++) edge(row, col, row, col + 1);
   }
   for (let col = w.minCol; col <= w.maxCol; col++) {
+    if (col % sp !== 0) continue;
     for (let row = w.minRow; row < w.maxRow; row++) edge(row, col, row + 1, col);
   }
   return Float32Array.from(out);
