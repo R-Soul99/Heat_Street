@@ -18,3 +18,7 @@ None in behaviour. Yaw sign in `orbitAboutPivot` was fixed during the test phase
 tsc clean, vitest tools/terrain-editor + tools/map-editor 203 passed, biome clean. Manual browser checks from the plan not performed.
 
 ## Self-Check: PASSED
+
+## Follow-up (user, 2026-11-14)
+
+Plain wheel now zooms toward the cursor too (any wheel zooms; Ctrl+wheel still zooms without page zoom). Commit 370fe9f.

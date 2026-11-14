@@ -249,7 +249,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261104-o1l | Playground map step 2: dome field, gap jumps with landing ramps, ovals | 2026-11-04 | ec9d016 | [261104-o1l-playground-map-step-2-dome-field-big-ram](./quick/261104-o1l-playground-map-step-2-dome-field-big-ram/) |
 | 261104-vdb | Playground map step 3: five surface strips (grass, sand, mud, gravel, dirt road) | 2026-11-04 | 0c3d810 | [261104-vdb-playground-map-step-3-terrain-surface-gr](./quick/261104-vdb-playground-map-step-3-terrain-surface-gr/) |
 | 261111-x00 | Terrain editor gap closure: yellow round/square brush footprint, grid only under the brush (grid-offset root cause fixed), separate Grid/Contours buttons, Alt+wheel radius in cells, zoom-scaled contours, opt-in dock layout | 2026-11-11 | 64c8570 | [261111-x00-terrain-editor-gap-closure-brush-overlay](./quick/261111-x00-terrain-editor-gap-closure-brush-overlay/) |
-| 261113-vei | Ctrl+wheel zooms to cursor in both editors; plain wheel inert; terrain middle-drag orbits about cursor point, Shift+middle-drag pans | 2026-11-13 | eb48aab | [261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra](./quick/261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra/) |
+| 261113-vei | Wheel (plain or Ctrl) zooms to cursor in both editors; terrain middle-drag orbits about cursor point, Shift+middle-drag pans | 2026-11-13 | 370fe9f | [261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra](./quick/261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra/) |
 
 ## Session Continuity
 
