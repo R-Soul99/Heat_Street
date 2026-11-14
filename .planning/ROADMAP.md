@@ -435,10 +435,27 @@ Plans:
 - Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
 - Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
 **Depends on:** Phase 07.1
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 07.1.1 to break down)
+
+**Wave 1**
+
+- [ ] 07.1.1-01-PLAN.md — Pure helpers + tests: groupTools/displayLabel, tooltip timing (tipSchedule/tipPhase), scrubSteps/applySteps/wheelDir, canvas-local point (wave 1)
+- [ ] 07.1.1-02-PLAN.md — Tool-list data modules for both editors: by-job groups, short labels, short tips + long tier; ShellTool fields (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07.1.1-03-PLAN.md — Shared left sidebar (240px) with Raise/Lower pair, grouped full-word bottom toolbar, canvas offset; delete flyout/topbar/classic layout (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07.1.1-04-PLAN.md — Compact value box (inside arrows, drag-scrub, wheel) for every stepper; lighter two-tier auto-fading tooltips (wave 3)
+- [ ] 07.1.1-05-PLAN.md — Editor integration: terrain heading, map sidebar panels, scale-bar canvas coords, map ResizeObserver, to-terrain button (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07.1.1-06-PLAN.md — Phase gate (tsc, full vitest, biome, structural audit) + morning human UAT checklist (wave 4)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
