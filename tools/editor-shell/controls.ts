@@ -96,7 +96,11 @@ export function createStepper(o: {
         rep = window.setInterval(() => apply(stepValue(value, dir, o.spec, shift), true), 80);
       }, 400);
     });
-    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) btn.addEventListener(ev, stop);
+    for (const ev of ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"]) {
+      btn.addEventListener(ev, stop);
+    }
+    // A pointerup lost to a focus change would otherwise leave the repeat running.
+    window.addEventListener("blur", stop);
   };
   hold(up, 1);
   hold(down, -1);
