@@ -1,7 +1,7 @@
 /**
  * Pure tool dispatcher for the terrain sculpt page (phase 04.2 plan 13, D-10..D-15).
  *
- * Maps pointer phases + panel options onto the core brush / road / stamp ops.
+ * Maps pointer phases + panel options onto the core brush / road / selection ops.
  * One stroke (pointer down to up) is exactly one undo entry (D-11). No DOM and
  * no three: the editor feeds world-space cursor hits in and rebuilds only the
  * dirty regions that come back out.
