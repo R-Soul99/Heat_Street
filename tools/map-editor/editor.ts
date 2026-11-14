@@ -7,6 +7,8 @@
  * NOTE: re-running an importer or generator overwrites the raw files and loses
  * hand edits made here.
  */
+
+import { hudStartX } from "../editor-shell/canvas-point.ts";
 import {
   createButton,
   createField,
@@ -16,7 +18,6 @@ import {
   createToggle,
   el,
 } from "../editor-shell/controls.ts";
-import { hudStartX } from "../editor-shell/canvas-point.ts";
 import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
 import { fmt3 } from "../editor-shell/format.ts";
 import { createSnapshotHistory } from "../editor-shell/history.ts";
@@ -812,7 +813,11 @@ function renderSelection(): void {
   if (box === undefined) return;
   if (boxRect === undefined && selected === undefined) {
     box.replaceChildren(
-      el("div", "sidebar-empty", "Nothing selected. Click a road or building, or drag a box to select several."),
+      el(
+        "div",
+        "sidebar-empty",
+        "Nothing selected. Click a road or building, or drag a box to select several.",
+      ),
     );
     return;
   }
