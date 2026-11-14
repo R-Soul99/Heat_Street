@@ -1836,6 +1836,10 @@ function buildSidebar(): void {
       }).el,
       "Brush edge falloff",
     );
+  const shape = (): HTMLElement =>
+    createField("Shape", brushShapeSlot, "Brush footprint: circle or square");
+  const size = (): HTMLElement =>
+    createField("Size", brushSizeStepper.el, "Brush size in metres ([ ] also change it)");
   const slope = (): HTMLElement =>
     optStepper(
       "Slope limit",
@@ -1912,10 +1916,12 @@ function buildSidebar(): void {
     case "raise":
     case "lower":
     case "flatten":
-      f.append(strength(), falloff(), slope());
+      f.append(shape(), size(), strength(), falloff(), slope());
       break;
     case "smooth":
       f.append(
+        shape(),
+        size(),
         strength(),
         falloff(),
         slope(),
@@ -1943,7 +1949,7 @@ function buildSidebar(): void {
       );
       break;
     case "terrain":
-      f.append(strength(), falloff(), slope(), surfaceSwatches());
+      f.append(shape(), size(), strength(), falloff(), slope(), surfaceSwatches());
       break;
     case "roadPaint": {
       const width = optStepper(
@@ -1992,7 +1998,7 @@ function buildSidebar(): void {
       break;
     }
     case "roadErase":
-      f.append(note("Drag over roads to erase them."));
+      f.append(size(), note("Drag over roads to erase them."));
       break;
     default:
       f.append(note("Pick an operation."));
@@ -2126,7 +2132,9 @@ function pick<T extends { id: string }>(list: readonly T[], id: string): T {
 }
 
 function makeBrushShapeSlot(): HTMLElement {
-  const box = el("div", "float-slot");
+  const box = el("div", "brush-shape");
+  box.style.display = "flex";
+  box.style.gap = "4px";
   box.setAttribute("role", "group");
   box.setAttribute("aria-label", "Brush shape");
   const mk = (shape: "square" | "round", glyph: string, label: string): HTMLButtonElement => {
@@ -2144,7 +2152,7 @@ function makeBrushShapeSlot(): HTMLElement {
     brushShapeButtons.set(shape, b);
     return b;
   };
-  box.append(mk("square", "■", "Square"), mk("round", "●", "Circle"));
+  box.append(mk("round", "●", "Circle"), mk("square", "■", "Square"));
   return box;
 }
 
@@ -2190,8 +2198,6 @@ const contourStepper = createStepper({
   },
 });
 const brushShapeSlot = makeBrushShapeSlot();
-/** Slots that belong to the Brush chip: dimmed in Select mode (UI-SPEC opacity 0.4). */
-const brushSlotEls: HTMLElement[] = [brushSizeStepper.el, brushShapeSlot];
 
 const FLOAT_GROUPS: BarGroup[] = [
   {
@@ -2200,28 +2206,14 @@ const FLOAT_GROUPS: BarGroup[] = [
     items: MODES.map((t) => ({ kind: "tool" as const, tool: t })),
   },
   {
-    id: "brush",
-    label: "Brush options",
-    items: [
-      { kind: "slot", id: "brushSize" },
-      { kind: "slot", id: "brushShape" },
-    ],
-  },
-  {
     id: "grid",
     label: "Grid",
-    items: [
-      { kind: "tool", tool: pick(VIEW_TOGGLES, "grid") },
-      { kind: "slot", id: "gridSpacing" },
-    ],
+    items: [{ kind: "tool", tool: pick(VIEW_TOGGLES, "grid") }],
   },
   {
     id: "contours",
     label: "Contours",
-    items: [
-      { kind: "tool", tool: pick(VIEW_TOGGLES, "contours") },
-      { kind: "slot", id: "contourInterval" },
-    ],
+    items: [{ kind: "tool", tool: pick(VIEW_TOGGLES, "contours") }],
   },
   {
     id: "ops",
@@ -2301,10 +2293,6 @@ function syncToolbar(): void {
   }
   const shape = dispatcher.getOptions().brushShape;
   for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
-  for (const slot of brushSlotEls) {
-    slot.style.opacity = st.brushControlsEnabled ? "" : "0.4";
-    slot.style.pointerEvents = st.brushControlsEnabled ? "" : "none";
-  }
   shell.setSidebarTitle(st.title, st.subtitle);
   shell.setClearSelectionEnabled(input.selectionCells > 0);
   if (opHold && input.selectionCells === 0) stopOpHold();
@@ -2511,13 +2499,11 @@ const shell = createShell({
   onToolChange: () => {},
   bar: {
     groups: FLOAT_GROUPS,
-    slots: {
-      brushSize: brushSizeStepper.el,
-      brushShape: brushShapeSlot,
-      gridSpacing: gridSpacingStepper.el,
-      contourInterval: contourStepper.el,
-    },
   },
+  sidebarView: [
+    createField("Grid spacing", gridSpacingStepper.el, "Grid line spacing in cells (display only)"),
+    createField("Contour interval", contourStepper.el, "Height between contour lines in metres"),
+  ],
   onToolbarClick: (id) => runToolbarAction(id as ToolbarId),
   history: {
     undo: () => undoRedo("undo"),
