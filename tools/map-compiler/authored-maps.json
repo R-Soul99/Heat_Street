@@ -54,5 +54,17 @@
   {
     "id": "popp-roads",
     "format": "terrain"
+  },
+  {
+    "id": "new-area-2",
+    "format": "terrain"
+  },
+  {
+    "id": "m-m",
+    "format": "legacy"
+  },
+  {
+    "id": "map-5",
+    "format": "legacy"
   }
 ]
