@@ -474,14 +474,14 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 1/12 plans executed
+**Plans:** 2/12 plans executed
 
 Plans:
 
 **Wave 1**
 
 - [x] 07.1.2-01-PLAN.md — D-23 locked-road edge warp: failing regression test first, then opt-in padM sculpt hold (wave 1)
-- [ ] 07.1.2-02-PLAN.md — Pure foundations: CellMask selection, Grid spacing filter, preset stepping, hold-to-repeat timer (wave 1)
+- [x] 07.1.2-02-PLAN.md — Pure foundations: CellMask selection, Grid spacing filter, preset stepping, hold-to-repeat timer (wave 1)
 - [ ] 07.1.2-03-PLAN.md — Toolbar data (modes, operations, road column, toggles), hotkey table, pure toolbar-state logic (wave 1)
 - [ ] 07.1.2-06-PLAN.md — Shell: floating toolbar, 24px sidebar title, optional Clear selection / Clear all in the history pad; bottom toolbar removed (wave 1)
 
