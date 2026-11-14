@@ -435,7 +435,7 @@ Plans:
 - Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
 - Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
 **Depends on:** Phase 07.1
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 
@@ -450,7 +450,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07.1.1-04-PLAN.md — Compact value box (inside arrows, drag-scrub, wheel) for every stepper; lighter two-tier auto-fading tooltips (wave 3)
+- [x] 07.1.1-04-PLAN.md — Compact value box (inside arrows, drag-scrub, wheel) for every stepper; lighter two-tier auto-fading tooltips (wave 3)
 - [ ] 07.1.1-05-PLAN.md — Editor integration: terrain heading, map sidebar panels, scale-bar canvas coords, map ResizeObserver, to-terrain button (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
