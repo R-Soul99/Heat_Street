@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
 stopped_at: Phase 07.1.2 context gathered
-last_updated: "2026-11-14T13:06:35.100Z"
+last_updated: "2026-11-14T13:16:53.104Z"
 last_activity: 2026-11-14
 progress:
   total_phases: 15
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 ## Current Position
 
-Phase: 07.1.2 (selection-based-editor-tools) — DISCUSS
+Phase: 07.1.2 (selection-based-editor-tools) — AWAITING HUMAN UAT
 Plan: 6 of 6
-Next: /gsd-discuss-phase 07.1.2 (07.1.1 built, UAT superseded by 07.1.2 redesign); 07-07 still open
+Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; 07-07 still open
 Last activity: 2026-11-14
 
 Progress: [██████████] 97%
