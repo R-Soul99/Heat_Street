@@ -66,7 +66,7 @@ export function staleRoadBlockMessage(
   if (stale.length === 0) return null;
   const ids = stale.map((s) => s.edgeId).join(", ");
   const worst = Math.max(...stale.map((s) => s.maxDeltaM)).toFixed(2);
-  return `Unlocked road(s) ${ids} no longer match the terrain (up to ${worst} m). Re-grade them, or Lock them (locking re-grades), before saving.`;
+  return `Unlocked road(s) ${ids} no longer match the terrain (up to ${worst} m). Unlocked roads must be re-graded or locked before saving. Select an area, then use Roads in the sidebar (Re-grade selection, Re-grade all unlocked or Lock all).`;
 }
 
 /** Throws a `terrain-save:` error when an unlocked road is stale. */

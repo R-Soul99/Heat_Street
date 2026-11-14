@@ -196,7 +196,9 @@ describe("stale unlocked road guard (quick 261110-rdx)", () => {
     for (let i = 0; i < a.grid.heights.length; i++) a.grid.heights[i] += 3;
     const msg = staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds);
     expect(msg).toContain(String(id));
-    expect(msg).toContain("Re-grade");
+    expect(msg).toContain("m).");
+    expect(msg).toContain("Roads in the sidebar");
+    expect(msg).not.toContain("Lock tool");
     expect(() => assertGradedRoads(a)).toThrow(new RegExp(`^${SAVE_GUARD_PREFIX}`));
     regradeRoads(a, [id]);
     expect(staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds)).toBeNull();
