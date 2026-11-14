@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   NO_SELECTION_STATUS,
+  resolveHotkey,
   resolveToolbarAction,
   SWITCH_TO_SELECT_STATUS,
   type ToolbarInput,
@@ -28,7 +29,6 @@ describe("toolbarState", () => {
       "lower",
       "smooth",
       "flatten",
-      "terrain",
       "lock",
       "unlock",
       "deleteRoad",
@@ -36,6 +36,8 @@ describe("toolbarState", () => {
       expect(s.enabled[id]).toBe(false);
     expect(s.pressed.select).toBe(true);
     expect(s.pressed.brush).toBe(false);
+    expect(s.enabled.terrain).toBe(true);
+    expect(s.enabled.road).toBe(true);
     expect(s.enabled.roadPaint).toBe(true);
     expect(s.enabled.roadErase).toBe(true);
     expect(s.title).toBe("Select");
@@ -139,5 +141,40 @@ describe("resolveToolbarAction", () => {
       kind: "toggle",
       which: "contours",
     });
+  });
+});
+
+describe("road trigger and hotkeys", () => {
+  it("road is pressed only with a road brush armed in Brush mode", () => {
+    expect(toolbarState(brush("roadPaint")).pressed.road).toBe(true);
+    expect(toolbarState(brush("roadErase")).roadFace).toBe("roadErase");
+    expect(toolbarState(brush("raise")).pressed.road).toBe(false);
+    expect(toolbarState(sel(3)).pressed.road).toBe(false);
+    expect(toolbarState(sel(3)).roadFace).toBeNull();
+    expect(toolbarState(sel(0)).enabled.road).toBe(true);
+  });
+
+  it("terrain click with no selection still reports the status", () => {
+    expect(resolveToolbarAction(sel(0), "terrain")).toEqual({
+      kind: "blocked",
+      status: NO_SELECTION_STATUS,
+    });
+    expect(resolveToolbarAction(sel(0), "road")).toEqual({ kind: "menu", id: "road" });
+  });
+
+  it("P opens Terrain and arms it in Brush mode", () => {
+    expect(resolveHotkey(sel(0), "terrain")).toEqual({ openMenu: "terrain", action: null });
+    expect(resolveHotkey(brush(null), "terrain")).toEqual({
+      openMenu: "terrain",
+      action: { kind: "arm", op: "terrain", mode: "brush" },
+    });
+  });
+
+  it("other hotkeys act directly without opening a menu", () => {
+    expect(resolveHotkey(sel(2), "raise")).toEqual({ action: { kind: "apply", op: "raise" } });
+    expect(resolveHotkey(sel(2), "lock")).toEqual({
+      action: { kind: "roadAction", action: "lock" },
+    });
+    expect(resolveHotkey(sel(0), "roadPaint").openMenu).toBeUndefined();
   });
 });

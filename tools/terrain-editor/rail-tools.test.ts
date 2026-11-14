@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { barToolIds, validateBarSpec } from "../editor-shell/top-bar.ts";
 import {
   BRUSH_TOOL_FOR,
+  ROAD_MENU,
+  TERRAIN_BAR,
   TERRAIN_HOTKEYS,
   TOOLBAR_GLOBAL_CODES,
   TOOLBAR_TOOLS,
@@ -65,5 +68,49 @@ describe("toolbar data", () => {
       roadPaint: "road",
       roadErase: "erase",
     });
+  });
+
+  it("TERRAIN_BAR is valid and in D-32 order", () => {
+    expect(validateBarSpec(TERRAIN_BAR)).toEqual([]);
+    expect(TERRAIN_BAR.map((g) => g.id)).toEqual([
+      "selection",
+      "brush",
+      "raiseLower",
+      "smoothFlatten",
+      "menus",
+      "view",
+      "history",
+    ]);
+    const g = (id: string) => TERRAIN_BAR.find((x) => x.id === id);
+    const name = (i: { kind: string; tool?: { id: string }; id?: string }): string =>
+      i.kind === "tool" ? (i.tool?.id ?? "") : i.kind === "slot" ? (i.id ?? "") : i.kind;
+    expect(g("selection")?.items.map(name)).toEqual(["select", "clearSelection"]);
+    expect(g("history")?.items.map(name)).toEqual(["undo", "redo"]);
+    const rl = g("raiseLower")?.items ?? [];
+    expect(rl).toHaveLength(1);
+    expect(rl[0]?.kind === "stack" && rl[0].tools.map((t) => t.id)).toEqual(["raise", "lower"]);
+    expect(g("smoothFlatten")?.items.map(name)).toEqual(["smooth", "flatten"]);
+    const [terr, road] = g("menus")?.items ?? [];
+    expect(terr?.kind === "menu" && terr.tool.id).toBe("terrain");
+    expect(terr?.kind === "menu" && terr.items).toEqual([{ kind: "slot", id: "surfaces" }]);
+    expect(road?.kind === "menu" && road.tool.id).toBe("road");
+    expect(
+      road?.kind === "menu" && road.items.flatMap((m) => (m.kind === "tool" ? [m.tool.id] : [])),
+    ).toEqual(["roadPaint", "roadErase", "lock", "unlock", "deleteRoad"]);
+    expect(g("view")?.items.map(name)).toEqual(["grid", "contours"]);
+  });
+
+  it("every hotkey tool reaches a bar control", () => {
+    const ids = barToolIds(TERRAIN_BAR);
+    for (const t of TOOLBAR_TOOLS) expect(ids).toContain(t.id);
+    expect(ids).toContain("road");
+  });
+
+  it("ROAD_MENU follows tip rules with a distinct glyph", () => {
+    expect(ROAD_MENU.label.length).toBeLessThanOrEqual(12);
+    expect(ROAD_MENU.tip.startsWith("Road:")).toBe(true);
+    expect(ROAD_MENU.tip.endsWith(".")).toBe(false);
+    expect((ROAD_MENU as { code?: string }).code).toBeUndefined();
+    expect(TOOLBAR_TOOLS.map((t) => t.icon)).not.toContain(ROAD_MENU.icon);
   });
 });
