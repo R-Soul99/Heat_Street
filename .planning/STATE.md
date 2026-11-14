@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Phase 07.1.1 UI-SPEC approved
-last_updated: "2026-11-14T02:17:57.562Z"
+stopped_at: Phase 07.1.1 executed + verified at code level; awaiting human UAT (07.1.1-HUMAN-UAT.md)
+last_updated: "2026-11-14T02:22:42.610Z"
 last_activity: 2026-11-14
 progress:
   total_phases: 13
@@ -255,9 +255,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-14T02:17:57.548Z
-Stopped at: Phase 07.1.1 UI-SPEC approved
-Resume file: None
+Last session: 2026-11-14T02:22:42.599Z
+Stopped at: Phase 07.1.1 executed + verified at code level; awaiting human UAT (07.1.1-HUMAN-UAT.md)
+Resume file: .planning/phases/07.1.1-editor-controls-polish/07.1.1-HUMAN-UAT.md
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR
