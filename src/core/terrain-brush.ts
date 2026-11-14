@@ -16,9 +16,9 @@
  * Layering: pure core, no three/rapier/DOM.
  */
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
 import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
-import type { CellMask } from "./terrain-cell-mask.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
 import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
 
