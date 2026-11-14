@@ -46,7 +46,9 @@ import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import {
   applyRoadStroke,
+  edgeIdsInMask,
   eraseRoad,
+  eraseRoadRegion,
   type RegradeResult,
   ROAD_PRESETS,
   type RoadEditTarget,
@@ -58,7 +60,13 @@ import {
 import { isUnlocked, nearestEdgeWithin, unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
-import { BRUSH_TOOL_FOR, type Mode, type Operation, type RoadBrush } from "./rail-tools.ts";
+import {
+  BRUSH_TOOL_FOR,
+  type Mode,
+  type Operation,
+  type RoadAction,
+  type RoadBrush,
+} from "./rail-tools.ts";
 import {
   CONNECT_MAX_M,
   type FixKind,
@@ -70,7 +78,7 @@ import {
   smoothEdgeHeights,
   twoWayCandidates,
 } from "./road-problems.ts";
-import { NO_SELECTION_STATUS } from "./toolbar-state.ts";
+import { NO_SELECTION_STATUS, SWITCH_TO_SELECT_STATUS } from "./toolbar-state.ts";
 
 /** Road preset whose class matches the edge (fix strokes look like the road they extend). */
 function presetIdForEdge(edge: RoadGraphEdge | undefined): RoadPresetId {
@@ -188,7 +196,9 @@ const NO_SELECTION_MSG = NO_SELECTION_STATUS;
 const ERASE_MSG = "Road erased. Ctrl+Z to undo.";
 
 export const heldStatus = (n: number): string =>
-  `Held by roads: ${n} vertices did not move. Unlock the road (Lock tool, L) to sculpt under it.`;
+  `Cells beside locked roads were left untouched (${n} vertices held). Select the road and press Unlock (U) to sculpt it.`;
+
+const NO_ROADS_IN_SELECTION = "No roads in the selection";
 
 export const slopeClampHint = (deg: number): string =>
   `Slope limit reached (${deg} degrees). Lower the radius or flatten the area first.`;
@@ -931,6 +941,71 @@ export function createToolDispatcher(getArea: () => EditArea) {
         return res;
       }
       return regradeResult(area, regradeRoads(area, [id]));
+    },
+
+    /**
+     * Lock / Unlock / Delete road on the mask selection (D-14, D-15, D-25, D-26): whole
+     * edges for lock/unlock, cut at the selection edge for delete; ONE undo step each.
+     */
+    applyRoadAction(action: RoadAction): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const res = emptyResult();
+      if (mode !== "select") {
+        res.status = SWITCH_TO_SELECT_STATUS;
+        return res;
+      }
+      const sel = liveSelection();
+      if (!sel) {
+        res.status = NO_SELECTION_MSG;
+        return res;
+      }
+      const area = getArea();
+      if (action === "deleteRoad") {
+        const r = eraseRoadRegion(area, sel);
+        if (!r.diff) {
+          res.status = NO_ROADS_IN_SELECTION;
+          res.warnings.push(...r.warnings);
+          return res;
+        }
+        const out = commitLockDiff(area, r.diff);
+        out.warnings.push(...r.warnings);
+        out.status = "Road deleted in the selection. Ctrl+Z to undo.";
+        return out;
+      }
+      const ids = edgeIdsInMask(area.graph, area.grid, sel);
+      if (ids.length === 0) {
+        res.status = NO_ROADS_IN_SELECTION;
+        return res;
+      }
+      const locked = action === "lock";
+      const r = setRoadLock(area, ids, locked);
+      const out = commitLockDiff(area, r.diff);
+      out.warnings.push(...r.warnings);
+      out.status = `${locked ? "Locked" : "Unlocked"} ${r.changedEdgeIds.length} road(s)`;
+      return out;
+    },
+
+    /** Re-grades only the unlocked roads touching the selection (D-27): one undo step. */
+    regradeSelection(): ToolResult {
+      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      const res = emptyResult();
+      if (mode !== "select") {
+        res.status = SWITCH_TO_SELECT_STATUS;
+        return res;
+      }
+      const sel = liveSelection();
+      if (!sel) {
+        res.status = NO_SELECTION_MSG;
+        return res;
+      }
+      const area = getArea();
+      const unlocked = unlockedSet(area.unlockedEdgeIds);
+      const ids = edgeIdsInMask(area.graph, area.grid, sel).filter((id) => unlocked?.has(id));
+      if (ids.length === 0) {
+        res.status = "No unlocked roads in the selection";
+        return res;
+      }
+      return regradeResult(area, regradeRoads(area, ids));
     },
 
     /** Re-grades every unlocked road onto the terrain: one undo step. */

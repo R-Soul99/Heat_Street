@@ -1621,7 +1621,7 @@ function applyResult(res: ToolResult, _ms: number): void {
       const sign = delta > 0 ? "+" : "";
       setStatus(
         held > 0
-          ? `Changed ${sign}${fmt3(delta)} m; ${held} vertices held by roads did not move. Unlock the road (Lock tool, L) to sculpt under it.`
+          ? `Changed ${sign}${fmt3(delta)} m; ${held} vertices held by roads did not move. Select the road and press Unlock (U) to sculpt it.`
           : `Changed ${sign}${fmt3(delta)} m.`,
       );
     } else {

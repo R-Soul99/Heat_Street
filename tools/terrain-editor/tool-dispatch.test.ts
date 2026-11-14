@@ -1119,6 +1119,90 @@ describe("slope limit option", () => {
   });
 });
 
+describe("selection road actions (07.1.2-08)", () => {
+  function twoRoads() {
+    const s = setup();
+    s.d.setTool("road");
+    drag(s.d, [
+      [-80, -60],
+      [-40, -60],
+      [0, -60],
+      [40, -60],
+      [80, -60],
+    ]);
+    drag(s.d, [
+      [-80, 60],
+      [-40, 60],
+      [0, 60],
+      [40, 60],
+      [80, 60],
+    ]);
+    expect(s.area.graph.edges.length).toBe(2);
+    s.d.clearHistory();
+    s.d.setMode("select");
+    return s;
+  }
+  function select(d: ReturnType<typeof setup>["d"], a: [number, number], b: [number, number]) {
+    d.pointerDown(a[0], a[1], {});
+    d.pointerMove(b[0], b[1], {});
+    d.pointerUp(b[0], b[1]);
+  }
+  const crossFirst = (d: ReturnType<typeof setup>["d"]) => select(d, [-15, -80], [15, -40]);
+
+  it("unlock affects only the crossed road, lock restores it whole; one undo each", () => {
+    const { area, d } = twoRoads();
+    const edgeCount = area.graph.edges.length;
+    const first = area.graph.edges.find((e) => e.points[0][2] < 0)?.id as number;
+    crossFirst(d);
+    const r = d.applyRoadAction("unlock");
+    expect(r.status).toBe("Unlocked 1 road(s)");
+    expect(area.unlockedEdgeIds).toEqual([first]);
+    const l = d.applyRoadAction("lock");
+    expect(l.status).toBe("Locked 1 road(s)");
+    expect(area.unlockedEdgeIds ?? []).toEqual([]);
+    expect(area.graph.edges.length).toBe(edgeCount);
+    d.undo();
+    expect(area.unlockedEdgeIds).toEqual([first]);
+    d.undo();
+    expect(area.unlockedEdgeIds ?? []).toEqual([]);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("deleteRoad cuts a locked road inside the selection, one undo restores it", () => {
+    const { area, d } = twoRoads();
+    const before = JSON.stringify(area.graph);
+    crossFirst(d);
+    const r = d.applyRoadAction("deleteRoad");
+    expect(r.graphChanged).toBe(true);
+    expect(r.status).toBe("Road deleted in the selection. Ctrl+Z to undo.");
+    expect(area.graph.edges.length).toBe(3);
+    d.undo();
+    expect(JSON.stringify(area.graph)).toBe(before);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("no selection, brush mode and empty selections change nothing", () => {
+    const { d } = twoRoads();
+    expect(d.applyRoadAction("lock").status).toBe("Select an area first (drag on the map)");
+    select(d, [-15, -20], [15, 20]);
+    expect(d.applyRoadAction("unlock").status).toBe("No roads in the selection");
+    expect(d.applyRoadAction("deleteRoad").status).toBe("No roads in the selection");
+    d.setMode("brush");
+    expect(d.applyRoadAction("lock").status).toBe("Switch to Select mode (S) to use this");
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("regradeSelection re-grades only unlocked roads touching the selection", () => {
+    const { area, d } = twoRoads();
+    crossFirst(d);
+    expect(d.regradeSelection().status).toBe("No unlocked roads in the selection");
+    d.applyRoadAction("unlock");
+    for (let i = 0; i < area.grid.heights.length; i++) area.grid.heights[i] += 2;
+    const r = d.regradeSelection();
+    expect(r.status).toContain("Re-graded 1 road(s)");
+  });
+});
+
 describe("modes and mask selection (07.1.2-07)", () => {
   function box(
     d: ReturnType<typeof setup>["d"],
