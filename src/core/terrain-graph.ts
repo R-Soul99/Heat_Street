@@ -35,6 +35,8 @@
 import { yawFromTravelDirection } from "./heading.ts";
 import type { RoadGraph, RoadGraphEdge, RoadGraphNode, RoadGraphSpawn } from "./road-graph.ts";
 import type { SurfaceType } from "./surface-types.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
+import type { TerrainGrid } from "./terrain-grid.ts";
 
 type P3 = readonly [number, number, number];
 
@@ -859,6 +861,26 @@ export function eraseGraphDisc(
   if (![x, z, radiusM].every(Number.isFinite) || radiusM <= 0) {
     return { state, removedEdgeIds: [], splitFrom: [], spawnLost: false };
   }
+  return eraseGraphRegion(state, (pts) => refineAgainstDisc(pts, x, z, radiusM));
+}
+
+export interface RegionBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+}
+
+/**
+ * Shared splitter: `refine` inserts the region-boundary crossings into a
+ * polyline and flags which segments are kept (outside the region). Optional
+ * `bbox` skips edges whose polyline bounds miss the region entirely.
+ */
+export function eraseGraphRegion(
+  state: GraphEditState,
+  refine: (pts: readonly P3[]) => { readonly pts: P3[]; readonly keep: boolean[] },
+  bbox?: RegionBounds,
+): EraseResult {
   const graph = state.graph;
   const splitFrom: { id: number; parentId: number }[] = [];
   let nextEdgeId = state.nextEdgeId;
@@ -869,7 +891,11 @@ export function eraseGraphDisc(
   let changed = false;
 
   for (const e of graph.edges) {
-    const refined = refineAgainstDisc(e.points, x, z, radiusM);
+    if (bbox !== undefined && !polylineTouchesBounds(e.points, bbox)) {
+      edges.push(e);
+      continue;
+    }
+    const refined = refine(e.points);
     if (refined.keep.every(Boolean)) {
       edges.push(e);
       continue;
@@ -925,4 +951,83 @@ export function eraseGraphDisc(
     splitFrom,
     spawnLost: compact.spawnLost,
   };
+}
+
+function polylineTouchesBounds(pts: readonly P3[], b: RegionBounds): boolean {
+  let minX = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+  for (const p of pts) {
+    if (p[0] < minX) minX = p[0];
+    if (p[0] > maxX) maxX = p[0];
+    if (p[2] < minZ) minZ = p[2];
+    if (p[2] > maxZ) maxZ = p[2];
+  }
+  return maxX >= b.minX && minX <= b.maxX && maxZ >= b.minZ && minZ <= b.maxZ;
+}
+
+/**
+ * Inserts the selection-boundary crossings (grid lines) into a polyline and
+ * flags segments whose midpoint lies outside the mask (kept). Selection edges
+ * sit on grid lines, so this is exact.
+ */
+export function refineAgainstMask(
+  pts: readonly P3[],
+  grid: TerrainGrid,
+  mask: CellMask,
+): { readonly pts: P3[]; readonly keep: boolean[] } {
+  const cell = grid.cellSizeM;
+  const out: P3[] = [pts[0]];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const dx = b[0] - a[0];
+    const dz = b[2] - a[2];
+    const len = Math.hypot(dx, dz);
+    const ts: number[] = [];
+    if (len > 0 && cell > 0) {
+      const addCrossings = (a0: number, d: number, origin: number): void => {
+        if (d === 0) return;
+        const k0 = Math.ceil((Math.min(a0, a0 + d) - origin) / cell);
+        const k1 = Math.floor((Math.max(a0, a0 + d) - origin) / cell);
+        for (let k = k0; k <= k1; k++) ts.push((origin + k * cell - a0) / d);
+      };
+      addCrossings(a[0], dx, grid.originX);
+      addCrossings(a[2], dz, grid.originZ);
+      ts.sort((p, q) => p - q);
+    }
+    let last = 0;
+    for (const t of ts) {
+      if (t * len > MERGE_EPS && (1 - t) * len > MERGE_EPS && (t - last) * len > MERGE_EPS) {
+        out.push(lerp3(a, b, t));
+        last = t;
+      }
+    }
+    out.push(b);
+  }
+  const keep: boolean[] = [];
+  for (let i = 0; i + 1 < out.length; i++) {
+    const mx = (out[i][0] + out[i + 1][0]) / 2;
+    const mz = (out[i][2] + out[i + 1][2]) / 2;
+    keep.push(!mask.cellAtXZ(grid, mx, mz));
+  }
+  return { pts: out, keep };
+}
+
+/** Removes the road inside the selection mask, cutting at its boundary. */
+export function eraseGraphMask(
+  state: GraphEditState,
+  grid: TerrainGrid,
+  mask: CellMask,
+): EraseResult {
+  const bb = mask.bounds();
+  if (bb === null) return { state, removedEdgeIds: [], splitFrom: [], spawnLost: false };
+  const bbox: RegionBounds = {
+    minX: grid.originX + bb.minCol * grid.cellSizeM,
+    maxX: grid.originX + bb.maxCol * grid.cellSizeM,
+    minZ: grid.originZ + bb.minRow * grid.cellSizeM,
+    maxZ: grid.originZ + bb.maxRow * grid.cellSizeM,
+  };
+  return eraseGraphRegion(state, (pts) => refineAgainstMask(pts, grid, mask), bbox);
 }

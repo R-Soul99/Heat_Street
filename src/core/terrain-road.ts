@@ -34,12 +34,15 @@ import {
   type PaintRect,
   type StrokeDiff,
 } from "./terrain-brush.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
 import {
   addRoadStroke,
   ensureDefaultSpawn,
   eraseGraphDisc,
+  eraseGraphMask,
   findStrokeCrossings,
   type GraphEditState,
+  refineAgainstMask,
 } from "./terrain-graph.ts";
 import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
 import { DEFAULT_MAX_BANK_DEG, MAX_SLOPE_DEG } from "./terrain-limits.ts";
@@ -1097,6 +1100,73 @@ export function eraseRoad(
     carryLock(area, rec, next.graph, erased.splitFrom);
   }
   return { diff: rec.commit(), removedEdgeIds, warnings };
+}
+
+/**
+ * Delete road inside a selection (07.1.2 D-15/D-26): road-flagged paint over
+ * selected cells reverts to ground, graph edges are cut at the selection edge
+ * (locked roads included), heights are never touched. One diff.
+ */
+export function eraseRoadRegion(
+  area: RoadEditTarget,
+  mask: CellMask,
+): { diff: StrokeDiff | undefined; removedEdgeIds: number[]; warnings: string[] } {
+  const none = { diff: undefined, removedEdgeIds: [] as number[], warnings: [] as string[] };
+  const bb = mask.bounds();
+  if (bb === null) return none;
+  const { grid, paint } = area;
+  const rec = createStrokeRecorder(grid, paint);
+  const m = paint.metresPerPixel;
+  const x0 = grid.originX + bb.minCol * grid.cellSizeM;
+  const x1 = grid.originX + bb.maxCol * grid.cellSizeM;
+  const z0 = grid.originZ + bb.minRow * grid.cellSizeM;
+  const z1 = grid.originZ + bb.maxRow * grid.cellSizeM;
+  const rect: PaintRect = {
+    minPx: Math.max(0, Math.floor((x0 - paint.originX) / m)),
+    maxPx: Math.min(paint.width - 1, Math.ceil((x1 - paint.originX) / m)),
+    minPz: Math.max(0, Math.floor((z0 - paint.originZ) / m)),
+    maxPz: Math.min(paint.height - 1, Math.ceil((z1 - paint.originZ) / m)),
+  };
+  if (rect.minPx <= rect.maxPx && rect.minPz <= rect.maxPz) {
+    rec.beforePaintWrite(rect);
+    const ground = encodePaintValue(area.groundSurface, false);
+    for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
+      const cz = paint.originZ + (pz + 0.5) * m;
+      for (let px = rect.minPx; px <= rect.maxPx; px++) {
+        const cx = paint.originX + (px + 0.5) * m;
+        const i = pz * paint.width + px;
+        if ((paint.data[i] & PAINT_ROAD_FLAG) === 0) continue;
+        if (mask.cellAtXZ(grid, cx, cz)) paint.data[i] = ground;
+      }
+    }
+  }
+  const before = { graph: area.graph, nextEdgeId: area.nextEdgeId };
+  const erased = eraseGraphMask(before, grid, mask);
+  let removedEdgeIds: number[] = [];
+  if (erased.state !== before) {
+    const next = ensureDefaultSpawn(erased.state);
+    area.graph = next.graph;
+    area.nextEdgeId = next.nextEdgeId;
+    removedEdgeIds = erased.removedEdgeIds;
+    rec.recordGraph(
+      JSON.stringify(before.graph),
+      JSON.stringify(next.graph),
+      before.nextEdgeId,
+      next.nextEdgeId,
+    );
+    carryLock(area, rec, next.graph, erased.splitFrom);
+  }
+  return { diff: rec.commit(), removedEdgeIds, warnings: [] };
+}
+
+/** Whole edge ids with any part over a selected cell (07.1.2 D-25). Pure. */
+export function edgeIdsInMask(graph: RoadGraph, grid: TerrainGrid, mask: CellMask): number[] {
+  if (mask.isEmpty()) return [];
+  const ids = new Set<number>();
+  for (const e of graph.edges) {
+    if (refineAgainstMask(e.points, grid, mask).keep.some((k) => !k)) ids.add(e.id);
+  }
+  return [...ids].sort((a, b) => a - b);
 }
 
 // ---------------------------------------------------------------- re-grade / lock (quick 261110-rdx)
