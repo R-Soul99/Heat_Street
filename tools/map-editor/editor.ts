@@ -824,6 +824,7 @@ function editTag(way: RawWay, key: string, fn: () => void, rebuild: boolean): vo
 function renderSelection(): void {
   const box = selBox;
   if (box === undefined) return;
+  if (boxes.length > 0) recomputeBox(); // may drop boxes that now hit nothing
   if (boxes.length === 0 && selected === undefined) {
     box.replaceChildren(
       el(
@@ -927,9 +928,8 @@ function recomputeBox(): void {
     boxHit = { roads: [], buildings: [] };
   } else {
     boxHit = selectionFromBoxes(boxes, roads, buildings, proj);
-    if (boxHit.roads.length + boxHit.buildings.length === 0 && boxes.at(-1)?.mode === "subtract") {
-      boxes = [];
-    }
+    // An empty hit set drops the boxes so a later edit or undo cannot silently re-select items.
+    if (boxHit.roads.length + boxHit.buildings.length === 0) boxes = [];
   }
   shell?.setClearSelectionEnabled(boxes.length > 0 || selected !== undefined);
 }
