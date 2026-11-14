@@ -39,7 +39,10 @@ export function createToolRail(tools: ShellTool[], onSelect: (id: string) => voi
     b.type = "button";
     b.setAttribute("aria-pressed", "false");
     // Announce the visible word (WCAG label-in-name); the long label stays in the tooltip/shortcuts.
-    b.setAttribute("aria-label", t.keyLabel ? `${displayLabel(t)} (${t.keyLabel})` : displayLabel(t));
+    b.setAttribute(
+      "aria-label",
+      t.keyLabel ? `${displayLabel(t)} (${t.keyLabel})` : displayLabel(t),
+    );
     if (t.tipLong) b.dataset.tipLong = t.tipLong;
     b.disabled = Boolean(t.disabled);
     b.addEventListener("click", () => onSelect(t.id));
