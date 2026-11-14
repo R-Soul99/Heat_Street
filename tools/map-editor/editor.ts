@@ -38,7 +38,7 @@ import {
   planImportWorld,
 } from "./image-import.ts";
 import { DEFAULT_TRACE_OPTIONS, imageToRoadGraph, type TraceOptions } from "./image-trace.ts";
-import { MAP_GRID_TOGGLE, MAP_TOOLS, TOOL_KEYS, type Tool } from "./map-tools.ts";
+import { MAP_BAR, MAP_GRID_TOGGLE, MAP_TOOLS, TOOL_KEYS, type Tool } from "./map-tools.ts";
 import {
   addBuildingRect,
   addRoad,
@@ -1323,6 +1323,7 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (action === "escape") {
+    if (shell.bar?.closeMenus()) return;
     cancelDrawing();
     if (roads !== undefined) clearMapSelection();
     return;
@@ -1745,8 +1746,8 @@ function buildShell(): Shell {
   toTerrain.id = "to-terrain-btn";
   return createShell({
     root: $("app"),
-    // Shared sidebar layout (07.1.1): options in the left sidebar, tools in the grouped
-    // bottom toolbar; no Raise/Lower pair in the map editor.
+    // Shared sidebar layout (07.1.1): options in the left sidebar, tools in the shared
+    // top bar (D-38); no Raise/Lower pair in the map editor.
     layout: "dock",
     menus: [
       {
@@ -1880,29 +1881,8 @@ function buildShell(): Shell {
       { label: "Help", tip: "Tooltips and keyboard shortcuts", items: [] },
     ],
     tools: MAP_TOOLS,
-    bar: {
-      groups: [
-        {
-          id: "tools",
-          label: "Tools",
-          items: MAP_TOOLS.map((tool) => ({ kind: "tool" as const, tool })),
-        },
-        {
-          id: "grid",
-          label: "Grid",
-          items: [
-            { kind: "tool" as const, tool: MAP_GRID_TOGGLE },
-            { kind: "slot" as const, id: "gridSpacing" },
-          ],
-        },
-        {
-          id: "terrain",
-          label: "Terrain",
-          items: [{ kind: "slot" as const, id: "toTerrain" }],
-        },
-      ],
-      slots: { gridSpacing: gridSpacing.el, toTerrain },
-    },
+    bar: { groups: MAP_BAR, slots: { toTerrain } },
+    sidebarView: [createField("Grid spacing", gridSpacing.el, "Grid line spacing in metres")],
     onToolbarClick: (id) => {
       if (id === "grid") toggleGrid();
       else shell.setActiveTool(id);

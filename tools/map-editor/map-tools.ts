@@ -1,5 +1,6 @@
 // Map editor tool list, data only (07.1.1). Node-importable so the key map is unit-tested.
 import type { ShellTool } from "../editor-shell/tool-rail.ts";
+import type { BarGroup } from "../editor-shell/top-bar.ts";
 
 export type Tool = "select" | "road" | "move" | "building" | "eraser";
 
@@ -53,7 +54,7 @@ export const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
   MAP_TOOLS.map((t) => [t.code, t.id]),
 );
 
-/** Grid toggle in the floating row; X in both editors (T is the terrain Top-down key). */
+/** Grid toggle in the top bar; X in both editors (T is the terrain Top-down key). */
 export const MAP_GRID_TOGGLE: ShellTool & { id: "grid"; code: "KeyX" } = {
   id: "grid",
   code: "KeyX",
@@ -61,5 +62,39 @@ export const MAP_GRID_TOGGLE: ShellTool & { id: "grid"; code: "KeyX" } = {
   icon: "▦",
   keyLabel: "X",
   tip: "Grid: show grid lines",
-  tipLong: "Toggle the grid; set its spacing in metres beside the button.",
+  tipLong: "Toggle the grid; set its spacing in the sidebar View section.",
 };
+
+const mapTool = (id: Tool) => {
+  const t = MAP_TOOLS.find((x) => x.id === id);
+  if (!t) throw new Error(`unknown map tool ${id}`);
+  return { kind: "tool" as const, tool: t };
+};
+
+/** D-38 top bar: Select, Clear selection, Clear all | tools | Grid | Undo Redo | Open in terrain editor. */
+export const MAP_BAR: BarGroup[] = [
+  {
+    id: "selection",
+    label: "Selection",
+    items: [
+      mapTool("select"),
+      { kind: "slot", id: "clearSelection" },
+      { kind: "slot", id: "clearAll" },
+    ],
+  },
+  {
+    id: "tools",
+    label: "Tools",
+    items: [mapTool("move"), mapTool("road"), mapTool("building"), mapTool("eraser")],
+  },
+  { id: "view", label: "View", items: [{ kind: "tool", tool: MAP_GRID_TOGGLE }] },
+  {
+    id: "history",
+    label: "History",
+    items: [
+      { kind: "slot", id: "undo" },
+      { kind: "slot", id: "redo" },
+    ],
+  },
+  { id: "terrain", label: "Terrain", items: [{ kind: "slot", id: "toTerrain" }] },
+];
