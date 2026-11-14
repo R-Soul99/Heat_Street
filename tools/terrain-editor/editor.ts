@@ -2459,14 +2459,15 @@ const shell = createShell({
   history: {
     undo: () => undoRedo("undo"),
     redo: () => undoRedo("redo"),
-    clear: () => {
-      dispatcher.cancelBoxDrag();
-      dispatcher.clearSelection();
-      clearBoxOutline();
-      refreshSelectionOutline();
+    clearSelection: {
+      run: () => {
+        dispatcher.cancelBoxDrag();
+        dispatcher.clearSelection();
+        clearBoxOutline();
+        refreshSelectionOutline();
+      },
+      tip: "Clear selection: deselect everything (Esc)",
     },
-    clearLabel: "Clear selection",
-    clearTip: "Clear the Grid selection or cancel a box drag (does not change terrain)",
   },
   view: {
     zoomIn: () => dolly(0.8),

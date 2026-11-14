@@ -60,7 +60,7 @@ body {
 .menu-btn,
 .menu-item,
 .btn,
-.rail-btn,
+.tool-btn,
 .shell-history button,
 .shell-viewpad button,
 dialog button {
@@ -126,7 +126,7 @@ dialog button {
   background: #000;
   margin: 4px 0;
 }
-.rail-btn {
+.tool-btn {
   position: relative;
   height: 40px;
   min-width: 56px;
@@ -137,33 +137,97 @@ dialog button {
   justify-content: center;
   gap: 2px;
 }
-.rail-btn[aria-pressed="true"] {
+.tool-btn[aria-pressed="true"],
+.tool-btn.flash {
   background: var(--accent);
   color: #000;
 }
-.rail-btn:hover:not(:disabled) {
+.tool-btn.is-disabled {
+  opacity: 0.4;
+}
+.tool-btn:hover:not(.is-disabled) {
   filter: brightness(1.15);
 }
-.rail-btn:focus-visible {
+.tool-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.rail-icon {
+.tool-glyph {
   font-size: 16px;
   line-height: 1;
 }
-.rail-label {
+.tool-word {
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
 }
-.rail-key {
+.tool-key {
   position: absolute;
   top: 1px;
   right: 3px;
   font-size: 11px;
   line-height: 1.3;
   opacity: 0.7;
+}
+.tool-btn.big {
+  width: 64px;
+  height: 40px;
+  flex-direction: row;
+  gap: 4px;
+  padding: 0 4px;
+}
+.tool-btn.big .tool-glyph {
+  font-size: 24px;
+}
+.tool-btn.big .tool-word {
+  font-size: 16px;
+  font-weight: 600;
+}
+.shell-floatbar {
+  position: absolute;
+  left: calc(var(--sidebar-w) + 8px);
+  top: 36px;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: calc(100% - var(--sidebar-w) - 332px);
+}
+.float-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.float-chip {
+  pointer-events: auto;
+  background: var(--panel);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  gap: 4px;
+  user-select: none;
+}
+.float-chip.col {
+  flex-direction: column;
+}
+.float-divider {
+  background: #000;
+  flex: none;
+  width: 1px;
+  align-self: stretch;
+}
+.float-chip.col > .float-divider {
+  width: auto;
+  height: 1px;
+}
+.history-divider {
+  width: 1px;
+  height: 24px;
+  background: #000;
+  align-self: center;
+  margin: 0 4px;
 }
 .shell-history {
   top: 36px;
@@ -438,23 +502,20 @@ dialog button {
   flex-direction: column;
   gap: 8px;
 }
-.sidebar-pair {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
-}
-.pair-btn {
-  width: 40px;
-  height: 28px;
-  min-width: 0;
-  padding: 0;
-}
 .sidebar-title {
+  font-size: 24px;
   font-weight: 600;
   line-height: 1.2;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #000;
+  overflow-wrap: anywhere;
+}
+.sidebar-subtitle {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.sidebar-divider {
+  height: 1px;
+  background: #000;
+  flex: none;
 }
 .sidebar-body {
   display: flex;
@@ -472,7 +533,6 @@ dialog button {
 .sidebar-body .muted {
   max-width: 100%;
 }
-.shell-toolbar-bottom,
 .shell-infobox {
   position: absolute;
   background: var(--panel);
@@ -480,29 +540,6 @@ dialog button {
   z-index: 10;
   border-radius: 4px;
   user-select: none;
-}
-.shell-toolbar-bottom {
-  left: calc(var(--sidebar-w) + 8px);
-  bottom: 8px;
-  max-width: calc(100% - var(--sidebar-w) - 380px);
-  padding: 4px;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.tool-group {
-  display: flex;
-  gap: 4px;
-  flex: none;
-}
-.tool-sep {
-  width: 1px;
-  height: 24px;
-  background: #000;
-  margin: 0 4px;
-  flex: none;
 }
 .shell-infobox {
   right: 8px;

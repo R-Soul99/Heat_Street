@@ -1,13 +1,19 @@
 /**
- * Editor-agnostic shell layout: menubar, fixed left sidebar (active tool name + options),
- * grouped bottom toolbar, history pad, view pad, info box. Knows nothing about roads or terrain.
+ * Editor-agnostic shell layout: menubar, fixed left sidebar (large tool name + options),
+ * floating toolbar over the canvas (no bottom toolbar), history pad, view pad, info box.
+ * Knows nothing about roads or terrain.
  */
 import { createButton, el } from "./controls.ts";
 import { openDialog } from "./dialog.ts";
+import {
+  createFloatingToolbar,
+  type FloatingToolbar,
+  type FloatRow,
+  validateFloatSpec,
+} from "./floating-toolbar.ts";
 import { createInfobar, type InfoField } from "./infobar.ts";
 import { createMenubar, type MenuItemSpec, type MenuSpec } from "./menubar.ts";
-import { displayLabel } from "./tool-groups.ts";
-import { createToolRail, type ShellTool } from "./tool-rail.ts";
+import { displayLabel, type ShellTool } from "./tool-rail.ts";
 import { installTooltips, setTooltipsEnabled, tooltipsEnabled } from "./tooltips.ts";
 
 export { adjustDirection, isTextEntryFocused } from "./keys.ts";
@@ -20,12 +26,15 @@ export interface ShellOptions {
   menus: MenuSpec[];
   tools: ShellTool[];
   onToolChange: (id: string) => void;
+  /** Floating toolbar rows over the canvas (07.1.2 D-18). */
+  floating?: { rows: FloatRow[]; slots?: Record<string, HTMLElement> };
+  /** Floating tool click handler; defaults to setActiveTool(id). */
+  onToolbarClick?: (id: string) => void;
   history: {
     undo: () => void;
     redo: () => void;
-    clear: () => void;
-    clearLabel: string;
-    clearTip: string;
+    clearSelection?: { run: () => void; tip: string };
+    clearAll?: { run: () => void; tip: string };
   };
   view: {
     zoomIn: () => void;
@@ -49,6 +58,9 @@ export interface Shell {
     setDirty(dirty: boolean): void;
   };
   setHistoryState(canUndo: boolean, canRedo: boolean): void;
+  setClearSelectionEnabled(on: boolean): void;
+  setSidebarTitle(title: string, subtitle?: string): void;
+  floating: FloatingToolbar | undefined;
   setToolEnabled(id: string, enabled: boolean): void;
   refreshMenus(): void;
   isDialogOpen(): boolean;
@@ -95,23 +107,40 @@ export function createShell(options: ShellOptions): Shell {
   help.items.push(tooltipItem, shortcutsItem);
 
   const menubar = createMenubar(menus);
-  const rail = createToolRail(options.tools, (id) => setActiveTool(id));
+  let floating: FloatingToolbar | undefined;
   const sidebar = el("aside", "shell-sidebar");
   const title = el("div", "sidebar-title", "No tool selected");
+  const subtitle = el("div", "sidebar-subtitle");
+  subtitle.hidden = true;
+  const divider = el("div", "sidebar-divider");
   const body = el("div", "sidebar-body");
-  if (rail.pair.children.length > 0) sidebar.appendChild(rail.pair);
-  sidebar.append(title, body);
+  sidebar.append(title, subtitle, divider, body);
   const showEmpty = (): void => {
     body.replaceChildren(el("div", "sidebar-empty", "Pick a tool to see its options."));
   };
   showEmpty();
+  const setSidebarTitle = (t: string, sub?: string): void => {
+    title.textContent = t;
+    subtitle.textContent = sub ?? "";
+    subtitle.hidden = !sub;
+  };
   const setActiveTool = (id: string): void => {
-    rail.setActive(id);
+    for (const x of options.tools) floating?.setPressed(x.id, x.id === id);
     const t = options.tools.find((x) => x.id === id);
-    title.textContent = t ? displayLabel(t) : id;
+    setSidebarTitle(t ? displayLabel(t) : id);
     body.replaceChildren();
     options.onToolChange(id);
   };
+  if (options.floating) {
+    for (const err of validateFloatSpec(options.floating.rows)) {
+      console.warn(`floating toolbar: ${err}`);
+    }
+    floating = createFloatingToolbar(
+      options.floating.rows,
+      options.floating.slots ?? {},
+      options.onToolbarClick ?? setActiveTool,
+    );
+  }
 
   const undoBtn = createButton({
     label: "Undo",
@@ -123,14 +152,31 @@ export function createShell(options: ShellOptions): Shell {
     tip: "Redo the change you undid (Ctrl+Shift+Z)",
     onClick: options.history.redo,
   });
-  const clearBtn = createButton({
-    label: options.history.clearLabel,
-    tip: options.history.clearTip,
-    kind: "danger",
-    onClick: options.history.clear,
-  });
   const historyPad = el("div", "shell-history");
-  historyPad.append(undoBtn, redoBtn, clearBtn);
+  historyPad.append(undoBtn, redoBtn);
+  const h = options.history;
+  let clearSelectionBtn: HTMLButtonElement | undefined;
+  if (h.clearSelection || h.clearAll) {
+    historyPad.appendChild(el("div", "history-divider"));
+    if (h.clearSelection) {
+      clearSelectionBtn = createButton({
+        label: "Clear selection",
+        tip: h.clearSelection.tip,
+        onClick: h.clearSelection.run,
+      });
+      historyPad.appendChild(clearSelectionBtn);
+    }
+    if (h.clearAll) {
+      historyPad.appendChild(
+        createButton({
+          label: "Clear all",
+          tip: h.clearAll.tip,
+          kind: "danger",
+          onClick: h.clearAll.run,
+        }),
+      );
+    }
+  }
 
   const pad = el("div", "shell-viewpad");
   const v = options.view;
@@ -177,7 +223,9 @@ export function createShell(options: ShellOptions): Shell {
   sync();
 
   const info = createInfobar(options.infoFields);
-  options.root.append(menubar.el, sidebar, rail.rail, historyPad, pad, info.el);
+  options.root.append(menubar.el, sidebar);
+  if (floating) options.root.appendChild(floating.el);
+  options.root.append(historyPad, pad, info.el);
 
   const setHistoryState = (canUndo: boolean, canRedo: boolean): void => {
     undoBtn.disabled = !canUndo;
@@ -191,7 +239,12 @@ export function createShell(options: ShellOptions): Shell {
     flyout: body,
     info: { set: info.set, status: info.status, setDirty: info.setDirty },
     setHistoryState,
-    setToolEnabled: rail.setEnabled,
+    setClearSelectionEnabled: (on) => {
+      if (clearSelectionBtn) clearSelectionBtn.disabled = !on;
+    },
+    setSidebarTitle,
+    floating,
+    setToolEnabled: (id, on) => floating?.setEnabled(id, on),
     refreshMenus: () => {
       menubar.refresh();
       sync();

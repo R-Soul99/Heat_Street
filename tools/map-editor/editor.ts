@@ -1829,9 +1829,10 @@ function buildShell(): Shell {
     history: {
       undo,
       redo,
-      clear: () => run(clearAll()),
-      clearLabel: "Clear all",
-      clearTip: "Delete every road and building in this area (asks first; Undo brings them back)",
+      clearAll: {
+        run: () => run(clearAll()),
+        tip: "Delete every road and building in this area (asks first; Undo brings them back)",
+      },
     },
     view: {
       zoomIn: () => zoomCentre(1.25),

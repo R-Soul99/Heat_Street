@@ -1,7 +1,3 @@
-import { el } from "./controls.ts";
-import { splitDockTools } from "./dock.ts";
-import { groupTools } from "./tool-groups.ts";
-
 export interface ShellTool {
   id: string;
   label: string;
@@ -24,75 +20,4 @@ export interface ShellTool {
 /** Visible button word (D-01); the long label stays for aria-label and the shortcuts dialog. */
 export function displayLabel(t: { label: string; shortLabel?: string }): string {
   return t.shortLabel ?? t.label;
-}
-
-export interface ToolRail {
-  /** Bottom toolbar: grouped glyph + word + key-hint buttons. */
-  rail: HTMLElement;
-  /** Pinned glyph-only pair (Raise/Lower) that sits at the top of the sidebar. */
-  pair: HTMLElement;
-  setActive(id: string): void;
-  setEnabled(id: string, on: boolean): void;
-}
-
-export function createToolRail(tools: ShellTool[], onSelect: (id: string) => void): ToolRail {
-  const rail = el("div", "shell-toolbar-bottom");
-  const pair = el("div", "sidebar-pair");
-  const { top, bottom } = splitDockTools(tools);
-  const btns = new Map<string, HTMLButtonElement>();
-
-  const make = (t: ShellTool, cls: string): HTMLButtonElement => {
-    const b = el("button", cls, undefined, t.keyLabel ? `${t.tip} (${t.keyLabel})` : t.tip);
-    b.type = "button";
-    b.setAttribute("aria-pressed", "false");
-    // Announce the visible word (WCAG label-in-name); the long label stays in the tooltip/shortcuts.
-    b.setAttribute(
-      "aria-label",
-      t.keyLabel ? `${displayLabel(t)} (${t.keyLabel})` : displayLabel(t),
-    );
-    if (t.tipLong) b.dataset.tipLong = t.tipLong;
-    b.disabled = Boolean(t.disabled);
-    b.addEventListener("click", () => onSelect(t.id));
-    btns.set(t.id, b);
-    return b;
-  };
-
-  for (const t of top) {
-    const b = make(t, "rail-btn pair-btn");
-    b.append(el("span", "rail-icon", t.icon));
-    pair.appendChild(b);
-  }
-
-  groupTools(bottom).forEach((run, i) => {
-    if (i > 0) {
-      const sep = el("div", "tool-sep");
-      sep.setAttribute("role", "separator");
-      sep.setAttribute("aria-orientation", "vertical");
-      rail.appendChild(sep);
-    }
-    const g = el("div", "tool-group");
-    g.dataset.group = run.group ?? "";
-    for (const t of run.tools) {
-      const b = make(t, "rail-btn");
-      b.append(
-        el("span", "rail-icon", t.icon),
-        el("span", "rail-label", displayLabel(t)),
-        el("span", "rail-key", t.keyLabel ?? ""),
-      );
-      g.appendChild(b);
-    }
-    rail.appendChild(g);
-  });
-
-  return {
-    rail,
-    pair,
-    setActive(id) {
-      for (const [k, b] of btns) b.setAttribute("aria-pressed", k === id ? "true" : "false");
-    },
-    setEnabled(id, on) {
-      const b = btns.get(id);
-      if (b) b.disabled = !on;
-    },
-  };
 }
