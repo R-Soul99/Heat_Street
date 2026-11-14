@@ -714,7 +714,7 @@ describe("grid select (07.1)", () => {
   it("raiseSelection without a selection reports and pushes nothing", () => {
     const { d } = setup();
     const r = d.raiseSelection(1);
-    expect(r.status).toBe("Select some cells first (Grid select, S).");
+    expect(r.status).toBe("Select an area first (drag on the map)");
     expect(d.canUndo()).toBe(false);
   });
 
@@ -759,10 +759,10 @@ describe("grid select (07.1)", () => {
     d.cancelPushPull();
   });
 
-  it("Ctrl+pointerDown on an existing selection starts push/pull, not a new band", () => {
+  it("Alt+pointerDown on an existing selection starts push/pull, not a new band", () => {
     const { d } = selected();
     const sel = d.getSelection();
-    const r = d.pointerDown(60, 60, { ctrl: true });
+    const r = d.pointerDown(60, 60, { alt: true });
     expect(r.pushPullStarted).toBe(true);
     d.pointerMove(90, 90, {});
     d.pointerUp(90, 90);
@@ -1116,5 +1116,249 @@ describe("slope limit option", () => {
     expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4, 9);
     d.rotateStamp(-1);
     expect(d.getOptions().stampRotationRad).toBeCloseTo(Math.PI / 4 - Math.PI / 12, 9);
+  });
+});
+
+describe("modes and mask selection (07.1.2-07)", () => {
+  function box(
+    d: ReturnType<typeof setup>["d"],
+    a: [number, number],
+    b: [number, number],
+    mods: { shift?: boolean; ctrl?: boolean; alt?: boolean } = {},
+  ) {
+    d.pointerDown(a[0], a[1], mods);
+    d.pointerMove(b[0], b[1], mods);
+    return d.pointerUp(b[0], b[1]);
+  }
+
+  it("defaults to select mode; setTool adapter maps onto mode/armed", () => {
+    const { d } = setup();
+    expect(d.getMode()).toBe("select");
+    d.setTool("smooth");
+    expect(d.getMode()).toBe("brush");
+    expect(d.getArmed()).toBe("smooth");
+    d.setTool("gridSelect");
+    expect(d.getMode()).toBe("select");
+  });
+
+  it("plain drag replaces, shift adds, ctrl subtracts; no undo entries", () => {
+    const { d } = setup();
+    box(d, [-30, -30], [-9, -9]);
+    const first = d.selectionCellCount();
+    expect(first).toBe(49);
+    box(d, [30, 30], [51, 51]);
+    expect(d.selectionCellCount()).toBe(49);
+    box(d, [-30, -30], [-9, -9], { shift: true });
+    expect(d.selectionCellCount()).toBe(98);
+    box(d, [-30, -30], [-9, -9], { ctrl: true });
+    expect(d.selectionCellCount()).toBe(49);
+    box(d, [30, 30], [51, 51], { ctrl: true });
+    expect(d.getSelectionMask()).toBeNull();
+    expect(d.getSelection()).toBeNull();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("selectionDragOp reports the live op", () => {
+    const { d } = setup();
+    d.pointerDown(0, 0, { shift: true });
+    expect(d.selectionDragOp()).toBe("add");
+    d.pointerUp(9, 9);
+    d.pointerDown(0, 0, { ctrl: true });
+    expect(d.selectionDragOp()).toBe("subtract");
+    d.pointerUp(9, 9);
+    expect(d.selectionDragOp()).toBeNull();
+  });
+
+  it("switching mode keeps the selection; clearSelection and clearHistory empty it", () => {
+    const { d } = setup();
+    box(d, [-30, -30], [-9, -9]);
+    const n = d.selectionCellCount();
+    d.setMode("brush");
+    d.setMode("select");
+    expect(d.selectionCellCount()).toBe(n);
+    d.clearSelection();
+    expect(d.getSelectionMask()).toBeNull();
+    box(d, [-30, -30], [-9, -9]);
+    d.clearHistory();
+    expect(d.getSelectionMask()).toBeNull();
+  });
+
+  it("brush mode with nothing armed reports and edits nothing", () => {
+    const { area, d } = setup();
+    d.setMode("brush");
+    const r = d.pointerDown(0, 0, {});
+    d.pointerUp(0, 0);
+    expect(r.status).toBe("Pick an operation");
+    expect(d.canUndo()).toBe(false);
+    expect(Math.max(...(area.grid.heights as unknown as number[]))).toBe(0);
+  });
+
+  it("armBrush raise sculpts, terrain paints", () => {
+    const { area, d } = setup();
+    d.armBrush("raise");
+    expect(d.getMode()).toBe("brush");
+    d.pointerDown(0, 0, {});
+    d.pointerUp(0, 0);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
+    d.armBrush("terrain");
+    d.setOptions({ surface: "sand" });
+    d.pointerDown(30, 30, {});
+    d.pointerUp(30, 30);
+    expect(surfaceAt(area.paint, 30, 30)).toBe("sand");
+  });
+
+  it("alt push/pull in select mode: only selected vertices move, one undo entry", () => {
+    const { area, d } = setup();
+    box(d, [-30, -30], [-9, -9]);
+    const outside = area.grid.heights[0];
+    const r = d.pointerDown(60, 60, { alt: true });
+    expect(r.pushPullStarted).toBe(true);
+    d.pointerUp(60, 60);
+    expect(d.beginPushPull()).toBe(true);
+    d.pushPullTo(1.5);
+    d.endPushPull();
+    expect(sampleTerrainHeight(area.grid, -20, -20)).toBeCloseTo(1.5, 5);
+    expect(area.grid.heights[0]).toBe(outside);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(sampleTerrainHeight(area.grid, -20, -20)).toBe(0);
+  });
+
+  it("ctrl in select mode subtracts instead of push/pull; brush mode ignores alt", () => {
+    const { d } = setup();
+    box(d, [-30, -30], [-9, -9]);
+    const r = d.pointerDown(-20, -20, { ctrl: true });
+    expect(r.pushPullStarted).toBeUndefined();
+    d.pointerUp(-20, -20);
+    d.armBrush("raise");
+    const r2 = d.pointerDown(60, 60, { alt: true });
+    expect(r2.pushPullStarted).toBeUndefined();
+    d.pointerUp(60, 60);
+  });
+});
+
+describe("selection operations (07.1.2-07)", () => {
+  function selected() {
+    const s = setup();
+    s.d.pointerDown(-30, -30, {});
+    s.d.pointerUp(-9, -9);
+    return s;
+  }
+  const hAt = (area: EditArea) => sampleTerrainHeight(area.grid, -20, -20);
+
+  it("raise/lower step exactly selectStepM, one undo entry each", () => {
+    const { area, d } = selected();
+    d.setOptions({ selectStepM: 0.5 });
+    d.applyOperation("raise");
+    expect(hAt(area)).toBeCloseTo(0.5, 5);
+    d.applyOperation("lower");
+    d.applyOperation("lower");
+    expect(hAt(area)).toBeCloseTo(-0.5, 5);
+    d.undo();
+    d.undo();
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(hAt(area)).toBe(0);
+  });
+
+  it("no selection: status and no change", () => {
+    const { d } = setup();
+    for (const op of ["raise", "lower", "smooth", "flatten", "terrain"] as const) {
+      const r = d.applyOperation(op);
+      expect(r.status).toBe("Select an area first (drag on the map)");
+    }
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("flatten sets selected vertices to the average", () => {
+    const { area, d } = selected();
+    const stride = area.grid.rows + 1;
+    area.grid.heights[35 + 35 * stride] = 4;
+    d.applyOperation("flatten");
+    const vals = new Set<number>();
+    for (let c = 30; c <= 37; c++) {
+      for (let r = 30; r <= 37; r++) vals.add(Math.round(area.grid.heights[r + c * stride] * 1e4));
+    }
+    expect(vals.size).toBe(1);
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("smooth acts only inside the selection, one undo entry", () => {
+    const { area, d } = selected();
+    const stride = area.grid.rows + 1;
+    area.grid.heights[33 + 33 * stride] = 3;
+    area.grid.heights[10 + 10 * stride] = 3;
+    d.setOptions({ selectSmoothStrength: 1 });
+    d.applyOperation("smooth");
+    expect(area.grid.heights[33 + 33 * stride]).toBeLessThan(3);
+    expect(area.grid.heights[10 + 10 * stride]).toBe(3);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("terrain fills selected cells with the surface, one undo entry", () => {
+    const { area, d } = selected();
+    d.setOptions({ surface: "sand" });
+    const r = d.applyOperation("terrain");
+    expect(r.dirtyPaint).toBeDefined();
+    expect(surfaceAt(area.paint, -20, -20)).toBe("sand");
+    expect(surfaceAt(area.paint, 60, 60)).not.toBe("sand");
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("a hold (begin + 4 ticks + end) is base + 5 steps and ONE undo entry", () => {
+    const { area, d } = selected();
+    d.setOptions({ selectStepM: 0.25 });
+    d.beginOpRepeat("raise");
+    expect(d.isRepeating()).toBe(true);
+    for (let i = 0; i < 4; i++) d.opRepeatTick();
+    const end = d.endOpRepeat();
+    expect(d.isRepeating()).toBe(false);
+    expect(end.dirtyHeights).toBeDefined();
+    expect(hAt(area)).toBeCloseTo(1.25, 5);
+    d.undo();
+    expect(hAt(area)).toBe(0);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("a smooth hold is one undo entry", () => {
+    const { area, d } = selected();
+    const stride = area.grid.rows + 1;
+    area.grid.heights[33 + 33 * stride] = 3;
+    d.beginOpRepeat("smooth");
+    d.opRepeatTick();
+    d.opRepeatTick();
+    d.endOpRepeat();
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(area.grid.heights[33 + 33 * stride]).toBe(3);
+  });
+
+  it("reports the slope clamp for a step steeper than the limit", () => {
+    const { d } = selected();
+    d.setOptions({ slopeLimitDeg: 5, selectStepM: 5 });
+    const r = d.applyOperation("raise");
+    expect(r.slopeClamped).toBe(true);
+    expect(r.status).toBe(slopeClampHint(5));
+  });
+
+  it("select-mode and brush options are independent and validated", () => {
+    const { d } = setup();
+    const before = { ...d.getOptions() };
+    d.setOptions({ selectStepM: 2, selectSmoothStrength: 0.9 });
+    expect(d.getOptions().radiusM).toBe(before.radiusM);
+    expect(d.getOptions().strength).toBe(before.strength);
+    expect(d.getOptions().smoothStrength).toBe(before.smoothStrength);
+    d.setOptions({ radiusM: 30, strength: 3 });
+    expect(d.getOptions().selectStepM).toBe(2);
+    expect(d.getOptions().selectSmoothStrength).toBe(0.9);
+    d.setOptions({ selectSmoothStrength: 7 });
+    expect(d.getOptions().selectSmoothStrength).toBe(1);
+    d.setOptions({ selectSmoothStrength: Number.NaN, selectStepM: Number.NaN });
+    expect(d.getOptions().selectSmoothStrength).toBe(1);
+    expect(d.getOptions().selectStepM).toBe(2);
   });
 });

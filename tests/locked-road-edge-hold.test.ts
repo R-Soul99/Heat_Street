@@ -219,3 +219,44 @@ describe("locked road edge hold, other geometry", () => {
     expect(maxChange(before, heightsAt(area, samples))).toBeGreaterThan(0.1);
   });
 });
+
+describe("selection operations", () => {
+  const boxes: ReadonlyArray<readonly [string, Pt, Pt]> = [
+    ["overlapping the road", [-60, -24], [60, 24]],
+    ["abutting the road", [-60, 3.5], [60, 36]],
+  ];
+  const ops = ["raise", "lower", "flatten", "smooth", "terrain"] as const;
+
+  describe.each(boxes)("selection %s", (_name, a, b) => {
+    it.each(ops)("%s leaves the road edge untouched (80 degree limit)", (op) => {
+      const area = makeArea(SIZE, 3);
+      const d = createToolDispatcher(() => area);
+      drawRoad(
+        d,
+        [
+          [-HALF_LEN, 0],
+          [-40, 0],
+          [0, 0],
+          [40, 0],
+          [HALF_LEN, 0],
+        ],
+        7,
+      );
+      const samples = straightSamples(3.5, 3, HALF_LEN);
+      const before = heightsAt(area, samples);
+      d.setMode("select");
+      d.pointerDown(a[0], a[1], {});
+      d.pointerUp(b[0], b[1]);
+      expect(d.selectionCellCount()).toBeGreaterThan(0);
+      d.setOptions({ slopeLimitDeg: 80, selectStepM: 5, selectSmoothStrength: 1 });
+      if (op === "raise" || op === "lower" || op === "smooth") {
+        d.beginOpRepeat(op);
+        for (let i = 0; i < 10; i++) d.opRepeatTick();
+        d.endOpRepeat();
+      } else {
+        d.applyOperation(op);
+      }
+      expect(maxChange(before, heightsAt(area, samples))).toBeLessThan(1e-6);
+    });
+  });
+});

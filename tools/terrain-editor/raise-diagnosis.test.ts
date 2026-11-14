@@ -79,7 +79,7 @@ describe("raise/lower diagnosis", () => {
     const area = makeArea(240);
     const d = createToolDispatcher(() => area);
     d.setTool("raise");
-    // Modifiers no longer has an alt field; force one through to prove it is ignored.
+    // Alt is push/pull only in Select mode with a selection; the Raise brush ignores it.
     d.pointerDown(0, 0, { alt: true } as unknown as Modifiers);
     d.pointerUp(0, 0);
     expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
