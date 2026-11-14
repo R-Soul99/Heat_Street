@@ -187,12 +187,23 @@ export const SLOPE_CLAMP_HINT = slopeClampHint(MAX_SLOPE_DEG);
  * WR-02: sculpt height ops hand the slope limiter every existing road vertex
  * (road paint + the graph's levelled radius) so the limiter never moves road
  * terrain and graph y stays equal to the terrain (D-16).
+ *
+ * D-23/D-30: the mask is padded by cell*sqrt2, so a ring about one cell wide beside
+ * each locked road is untouchable by sculpting while the road is locked.
  */
 function heightOpOptions(area: EditArea, options: ToolOptions): HeightOpOptions {
   // Quick 261110-rdx: unlocked roads are not held; undefined when none, so the old path runs.
   const free = unlockedSet(area.unlockedEdgeIds);
   return {
-    roadMask: (win) => roadVertexMask(area.grid, area.paint, area.graph, win, free),
+    roadMask: (win) =>
+      roadVertexMask(
+        area.grid,
+        area.paint,
+        area.graph,
+        win,
+        free,
+        area.grid.cellSizeM * Math.SQRT2,
+      ),
     maxSlopeDeg: options.slopeLimitDeg,
   };
 }

@@ -80,31 +80,34 @@ const CASES: ReadonlyArray<readonly [number, number, number]> = [
 const SIZE = 240;
 const HALF_LEN = 80;
 
-describe.each(CASES)("locked road edge hold (cell %d m, road %d m wide, slope %d deg)", (cellSizeM, widthM, slopeDeg) => {
-  const tools: Tool[] = ["raise", "lower", "smooth", "flatten"];
-  it.each(tools)("%s beside a locked road leaves the edge untouched", (tool) => {
-    const area = makeArea(SIZE, cellSizeM);
-    const d = createToolDispatcher(() => area);
-    drawRoad(
-      d,
-      [
-        [-HALF_LEN, 0],
-        [-40, 0],
-        [0, 0],
-        [40, 0],
-        [HALF_LEN, 0],
-      ],
-      widthM,
-    );
-    const half = widthM / 2;
-    const samples = straightSamples(half, cellSizeM, HALF_LEN);
-    const before = heightsAt(area, samples);
-    d.setTool(tool);
-    d.setOptions({ slopeLimitDeg: slopeDeg, radiusM: 15, strength: 1 });
-    dab(d, 0, 14, 60);
-    expect(maxChange(before, heightsAt(area, samples))).toBeLessThan(1e-6);
-  });
-});
+describe.each(CASES)(
+  "locked road edge hold (cell %d m, road %d m wide, slope %d deg)",
+  (cellSizeM, widthM, slopeDeg) => {
+    const tools: Tool[] = ["raise", "lower", "smooth", "flatten"];
+    it.each(tools)("%s beside a locked road leaves the edge untouched", (tool) => {
+      const area = makeArea(SIZE, cellSizeM);
+      const d = createToolDispatcher(() => area);
+      drawRoad(
+        d,
+        [
+          [-HALF_LEN, 0],
+          [-40, 0],
+          [0, 0],
+          [40, 0],
+          [HALF_LEN, 0],
+        ],
+        widthM,
+      );
+      const half = widthM / 2;
+      const samples = straightSamples(half, cellSizeM, HALF_LEN);
+      const before = heightsAt(area, samples);
+      d.setTool(tool);
+      d.setOptions({ slopeLimitDeg: slopeDeg, radiusM: 15, strength: 1 });
+      dab(d, 0, 14, 60);
+      expect(maxChange(before, heightsAt(area, samples))).toBeLessThan(1e-6);
+    });
+  },
+);
 
 describe("locked road edge hold, other geometry", () => {
   it("diagonal road", () => {
