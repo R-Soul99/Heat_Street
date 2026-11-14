@@ -35,7 +35,12 @@ export function createRepeater(o: {
     start() {
       stop();
       on = true;
-      o.tick();
+      try {
+        o.tick();
+      } catch (err) {
+        stop(); // never report running with no timers scheduled
+        throw err;
+      }
       delay = t.setTimeout(() => {
         delay = undefined;
         rep = t.setInterval(o.tick, o.intervalMs);

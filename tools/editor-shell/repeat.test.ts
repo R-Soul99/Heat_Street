@@ -42,4 +42,16 @@ describe("createRepeater", () => {
     vi.advanceTimersByTime(100 + 50);
     expect(tick).toHaveBeenCalledTimes(3);
   });
+
+  it("a throwing first tick leaves the repeater stopped", () => {
+    const r = createRepeater({
+      delayMs: 400,
+      intervalMs: 80,
+      tick: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(() => r.start()).toThrow("boom");
+    expect(r.running()).toBe(false);
+  });
 });
