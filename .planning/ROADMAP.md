@@ -474,7 +474,7 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 10/12 plans executed
+**Plans:** 11/12 plans executed
 
 Plans:
 
@@ -499,7 +499,7 @@ Plans:
 **Wave 5-7**
 
 - [x] 07.1.2-10-PLAN.md — Terrain editor: floating toolbar wiring, hold-repeat, selection visuals, Alt handling, hotkeys (wave 5)
-- [ ] 07.1.2-11-PLAN.md — Terrain editor: mode sidebar, surface picker, Roads section; remove old tools (wave 6)
+- [x] 07.1.2-11-PLAN.md — Terrain editor: mode sidebar, surface picker, Roads section; remove old tools (wave 6)
 - [ ] 07.1.2-12-PLAN.md — Hotkey audit, full npm run check gate, HUMAN-UAT checklist (wave 7)
 
 ### Phase 07.1.3: Editor feature palette (INSERTED)
