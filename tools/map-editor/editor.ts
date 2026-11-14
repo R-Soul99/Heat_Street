@@ -36,6 +36,7 @@ import {
   planImportWorld,
 } from "./image-import.ts";
 import { DEFAULT_TRACE_OPTIONS, imageToRoadGraph, type TraceOptions } from "./image-trace.ts";
+import { MAP_TOOLS, TOOL_KEYS, type Tool } from "./map-tools.ts";
 import {
   addBuildingRect,
   addRoad,
@@ -110,7 +111,6 @@ let shell: Shell;
 const ROAD_WIDTH_SPEC: StepperSpec = { step: 0.5, coarse: 4, min: 2, max: 40, decimals: 1 };
 const BUILDING_HEIGHT_SPEC: StepperSpec = { step: 1, coarse: 5, min: 2, max: 200, decimals: 0 };
 
-type Tool = "select" | "road" | "move" | "building" | "eraser";
 let tool: Tool = "select";
 let roadPoints: Snap[] = [];
 let hover: { x: number; y: number } | undefined;
@@ -1257,13 +1257,6 @@ function adjustActive(dir: 1 | -1, coarse: boolean): boolean {
   return false;
 }
 
-const TOOL_KEYS: Record<string, Tool> = {
-  KeyV: "select",
-  KeyR: "road",
-  KeyM: "move",
-  KeyB: "building",
-  KeyE: "eraser",
-};
 const ARROW_PAN: Record<string, [-1 | 0 | 1, -1 | 0 | 1]> = {
   ArrowLeft: [-1, 0],
   ArrowRight: [1, 0],
@@ -1822,43 +1815,7 @@ function buildShell(): Shell {
       },
       { label: "Help", tip: "Tooltips and keyboard shortcuts", items: [] },
     ],
-    tools: [
-      {
-        id: "select",
-        label: "Select",
-        icon: "↖",
-        keyLabel: "V",
-        tip: "Select: click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete.",
-      },
-      {
-        id: "road",
-        label: "Draw road",
-        icon: "╱",
-        keyLabel: "R",
-        tip: "Draw road: click centre-line points; double-click or Enter to finish; Esc cancels",
-      },
-      {
-        id: "move",
-        label: "Move node",
-        icon: "✥",
-        keyLabel: "M",
-        tip: "Move node: drag a road node; roads that share it follow",
-      },
-      {
-        id: "building",
-        label: "Building",
-        icon: "▭",
-        keyLabel: "B",
-        tip: "Building: drag a rectangle to add a building",
-      },
-      {
-        id: "eraser",
-        label: "Eraser",
-        icon: "⌫",
-        keyLabel: "E",
-        tip: "Eraser: click or drag over roads and buildings to delete them. One drag = one Undo.",
-      },
-    ],
+    tools: MAP_TOOLS,
     onToolChange: (id) => setTool(id as Tool),
     history: {
       undo,
