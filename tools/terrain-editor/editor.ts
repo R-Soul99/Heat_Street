@@ -1766,7 +1766,8 @@ function buildSurfaceMenu(): HTMLElement {
   group.setAttribute("role", "radiogroup");
   group.setAttribute("aria-label", "Surface");
   group.style.display = "grid";
-  group.style.gridTemplateColumns = "repeat(4, 32px)";
+  // Two even rows (6 surfaces = 3 x 2), so no ragged last row.
+  group.style.gridTemplateColumns = `repeat(${Math.ceil(SURFACE_TYPES.length / 2)}, 32px)`;
   group.style.gap = "4px";
   group.style.padding = "4px";
   const buttons: [SurfaceType, HTMLButtonElement][] = [];
