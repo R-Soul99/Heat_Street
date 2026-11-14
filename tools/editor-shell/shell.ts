@@ -1,9 +1,12 @@
-/** Editor-agnostic shell layout (D-01/D-02). Knows nothing about roads or terrain. */
+/**
+ * Editor-agnostic shell layout: menubar, fixed left sidebar (active tool name + options),
+ * grouped bottom toolbar, history pad, view pad, info box. Knows nothing about roads or terrain.
+ */
 import { createButton, el } from "./controls.ts";
 import { openDialog } from "./dialog.ts";
-import { flyoutAnchor } from "./dock.ts";
 import { createInfobar, type InfoField } from "./infobar.ts";
 import { createMenubar, type MenuItemSpec, type MenuSpec } from "./menubar.ts";
+import { displayLabel } from "./tool-groups.ts";
 import { createToolRail, type ShellTool } from "./tool-rail.ts";
 import { installTooltips, setTooltipsEnabled, tooltipsEnabled } from "./tooltips.ts";
 
@@ -12,8 +15,8 @@ export type { InfoField, MenuItemSpec, MenuSpec, ShellTool };
 
 export interface ShellOptions {
   root: HTMLElement;
-  /** "classic" (default) is the D-01 layout; "dock" is the terrain editor variant. */
-  layout?: "classic" | "dock";
+  /** Ignored; the sidebar layout is the only layout (07.1.1). Kept so existing call sites compile. */
+  layout?: "dock";
   menus: MenuSpec[];
   tools: ShellTool[];
   onToolChange: (id: string) => void;
@@ -36,6 +39,9 @@ export interface ShellOptions {
 
 export interface Shell {
   setActiveTool(id: string): void;
+  /** The fixed left sidebar (pinned pair, tool title, options body). */
+  sidebar: HTMLElement;
+  /** Sidebar body for the active tool's options (alias kept from the old flyout). */
   flyout: HTMLElement;
   info: {
     set(key: string, text: string): void;
@@ -89,40 +95,23 @@ export function createShell(options: ShellOptions): Shell {
   help.items.push(tooltipItem, shortcutsItem);
 
   const menubar = createMenubar(menus);
-  const dock = options.layout === "dock";
-  const rail = createToolRail(options.tools, (id) => setActiveTool(id), dock ? "dock" : "classic");
-  let activeId: string | null = null;
-  /** Dock layout: top tools show their options in the top row, others float above their button. */
-  const placeFlyout = (): void => {
-    if (!dock || !rail.topbar || activeId === null) return;
-    const f = rail.flyout;
-    if (rail.isTop(activeId)) {
-      f.classList.remove("floating");
-      f.style.left = "";
-      f.style.bottom = "";
-      if (f.parentElement !== rail.topbar) rail.topbar.appendChild(f);
-      return;
-    }
-    f.classList.add("floating");
-    if (f.parentElement !== options.root) options.root.appendChild(f);
-    const btn = rail.buttonFor(activeId);
-    if (!btn) return;
-    const a = flyoutAnchor(btn.getBoundingClientRect(), options.root.getBoundingClientRect(), {
-      width: f.offsetWidth,
-      height: f.offsetHeight,
-    });
-    f.style.left = `${a.left}px`;
-    f.style.bottom = `${a.bottom}px`;
+  const rail = createToolRail(options.tools, (id) => setActiveTool(id));
+  const sidebar = el("aside", "shell-sidebar");
+  const title = el("div", "sidebar-title", "No tool selected");
+  const body = el("div", "sidebar-body");
+  if (rail.pair.children.length > 0) sidebar.appendChild(rail.pair);
+  sidebar.append(title, body);
+  const showEmpty = (): void => {
+    body.replaceChildren(el("div", "sidebar-empty", "Pick a tool to see its options."));
   };
+  showEmpty();
   const setActiveTool = (id: string): void => {
-    activeId = id;
     rail.setActive(id);
-    rail.flyout.replaceChildren();
-    placeFlyout();
+    const t = options.tools.find((x) => x.id === id);
+    title.textContent = t ? displayLabel(t) : id;
+    body.replaceChildren();
     options.onToolChange(id);
-    if (dock) requestAnimationFrame(placeFlyout);
   };
-  if (dock) window.addEventListener("resize", placeFlyout);
 
   const undoBtn = createButton({
     label: "Undo",
@@ -187,13 +176,8 @@ export function createShell(options: ShellOptions): Shell {
   }
   sync();
 
-  const info = createInfobar(options.infoFields, dock ? "box" : "bar");
-  if (dock && rail.topbar) {
-    options.root.classList.add("shell-dock");
-    options.root.append(menubar.el, rail.topbar, rail.rail, historyPad, pad, info.el);
-  } else {
-    options.root.append(menubar.el, rail.rail, rail.flyout, historyPad, pad, info.el);
-  }
+  const info = createInfobar(options.infoFields);
+  options.root.append(menubar.el, sidebar, rail.rail, historyPad, pad, info.el);
 
   const setHistoryState = (canUndo: boolean, canRedo: boolean): void => {
     undoBtn.disabled = !canUndo;
@@ -203,7 +187,8 @@ export function createShell(options: ShellOptions): Shell {
 
   return {
     setActiveTool,
-    flyout: rail.flyout,
+    sidebar,
+    flyout: body,
     info: { set: info.set, status: info.status, setDirty: info.setDirty },
     setHistoryState,
     setToolEnabled: rail.setEnabled,

@@ -1,5 +1,6 @@
 import { el } from "./controls.ts";
 import { splitDockTools } from "./dock.ts";
+import { displayLabel, groupTools } from "./tool-groups.ts";
 
 export interface ShellTool {
   id: string;
@@ -19,46 +20,62 @@ export interface ShellTool {
 }
 
 export interface ToolRail {
+  /** Bottom toolbar: grouped glyph + word + key-hint buttons. */
   rail: HTMLElement;
-  flyout: HTMLElement;
-  /** Dock layout only: the compact top row (tools, then the flyout for a top tool). */
-  topbar?: HTMLElement;
-  /** The tool's button (dock layout positions the flyout from it). */
-  buttonFor(id: string): HTMLButtonElement | undefined;
-  isTop(id: string): boolean;
+  /** Pinned glyph-only pair (Raise/Lower) that sits at the top of the sidebar. */
+  pair: HTMLElement;
   setActive(id: string): void;
   setEnabled(id: string, on: boolean): void;
 }
 
-export function createToolRail(
-  tools: ShellTool[],
-  onSelect: (id: string) => void,
-  layout: "classic" | "dock" = "classic",
-): ToolRail {
-  const dock = layout === "dock";
-  const rail = el("div", dock ? "shell-toolbar-bottom" : "shell-rail");
-  const topbar = dock ? el("div", "shell-topbar") : undefined;
-  const topIds = new Set(splitDockTools(tools).top.map((t) => t.id));
-  const flyout = el("div", "shell-flyout");
+export function createToolRail(tools: ShellTool[], onSelect: (id: string) => void): ToolRail {
+  const rail = el("div", "shell-toolbar-bottom");
+  const pair = el("div", "sidebar-pair");
+  const { top, bottom } = splitDockTools(tools);
   const btns = new Map<string, HTMLButtonElement>();
-  for (const t of tools) {
-    const b = el("button", "rail-btn", undefined, t.keyLabel ? `${t.tip} (${t.keyLabel})` : t.tip);
+
+  const make = (t: ShellTool, cls: string): HTMLButtonElement => {
+    const b = el("button", cls, undefined, t.keyLabel ? `${t.tip} (${t.keyLabel})` : t.tip);
     b.type = "button";
     b.setAttribute("aria-pressed", "false");
     b.setAttribute("aria-label", t.label);
-    b.append(el("span", "rail-icon", t.icon), el("span", "rail-key", t.keyLabel ?? ""));
+    if (t.tipLong) b.dataset.tipLong = t.tipLong;
     b.disabled = Boolean(t.disabled);
     b.addEventListener("click", () => onSelect(t.id));
-    if (topbar && topIds.has(t.id)) topbar.appendChild(b);
-    else rail.appendChild(b);
     btns.set(t.id, b);
+    return b;
+  };
+
+  for (const t of top) {
+    const b = make(t, "rail-btn pair-btn");
+    b.append(el("span", "rail-icon", t.icon));
+    pair.appendChild(b);
   }
+
+  groupTools(bottom).forEach((run, i) => {
+    if (i > 0) {
+      const sep = el("div", "tool-sep");
+      sep.setAttribute("role", "separator");
+      sep.setAttribute("aria-orientation", "vertical");
+      rail.appendChild(sep);
+    }
+    const g = el("div", "tool-group");
+    g.dataset.group = run.group ?? "";
+    for (const t of run.tools) {
+      const b = make(t, "rail-btn");
+      b.append(
+        el("span", "rail-icon", t.icon),
+        el("span", "rail-label", displayLabel(t)),
+        el("span", "rail-key", t.keyLabel ?? ""),
+      );
+      g.appendChild(b);
+    }
+    rail.appendChild(g);
+  });
+
   return {
     rail,
-    flyout,
-    topbar,
-    buttonFor: (id) => btns.get(id),
-    isTop: (id) => topIds.has(id),
+    pair,
     setActive(id) {
       for (const [k, b] of btns) b.setAttribute("aria-pressed", k === id ? "true" : "false");
     },
