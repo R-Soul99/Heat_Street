@@ -66,20 +66,19 @@ import { createRepeater, OP_REPEAT_MS, REPEAT_DELAY_MS } from "../editor-shell/r
 import { createShell } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
-import type { BarGroup } from "../editor-shell/top-bar.ts";
+import { menuFace } from "../editor-shell/top-bar.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import {
   BRUSH_TOOL_FOR,
-  MODES,
-  OPERATIONS,
   ROAD_BUTTONS,
+  ROAD_MENU,
+  TERRAIN_BAR,
   TERRAIN_HOTKEYS,
   TOOLBAR_TOOLS,
   type ToolbarId,
-  VIEW_TOGGLES,
 } from "./rail-tools.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
@@ -92,7 +91,12 @@ import {
   type Tool,
   type ToolResult,
 } from "./tool-dispatch.ts";
-import { resolveToolbarAction, type ToolbarInput, toolbarState } from "./toolbar-state.ts";
+import {
+  resolveHotkey,
+  resolveToolbarAction,
+  type ToolbarInput,
+  toolbarState,
+} from "./toolbar-state.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("view");
@@ -371,6 +375,7 @@ function setOutline(line: THREE.LineLoop, w: CellWindow | null, lift: number): v
 }
 
 let selectionReadoutEl: HTMLElement | null = null;
+let surfaceReadoutEl: HTMLElement | null = null;
 let selectionAvgEl: HTMLElement | null = null;
 let roadsCountEl: HTMLElement | null = null;
 /** Mode and armed brush the sidebar was last built for (rebuilt only when it changes). */
@@ -605,6 +610,7 @@ function installArea(next: TerrainArea): void {
     terrainView.dispose();
   }
   stopOpHold();
+  shell.bar?.closeMenus();
   area = next;
   dispatcher.clearHistory();
   pushPull = null; // dialogs cancel a live push/pull before an area is replaced
@@ -1754,15 +1760,15 @@ function runLockAction(fn: () => ToolResult): void {
   updateHistoryButtons();
 }
 
-/** Shared Surface picker (D-11): one value feeds the Terrain fill and the Terrain brush. */
-function surfaceSwatches(): HTMLElement {
+/** Terrain drop-down content (D-34): one swatch grid feeding the Terrain fill and the Terrain brush. */
+function buildSurfaceMenu(): HTMLElement {
   const group = el("div", "swatch-grid");
   group.setAttribute("role", "radiogroup");
   group.setAttribute("aria-label", "Surface");
   group.style.display = "grid";
   group.style.gridTemplateColumns = "repeat(4, 32px)";
   group.style.gap = "4px";
-  const current = dispatcher.getOptions().surface;
+  group.style.padding = "4px";
   const buttons: [SurfaceType, HTMLButtonElement][] = [];
   const sync = (): void => {
     const now = dispatcher.getOptions().surface;
@@ -1776,22 +1782,57 @@ function surfaceSwatches(): HTMLElement {
     b.type = "button";
     b.setAttribute("role", "radio");
     b.setAttribute("aria-label", s);
-    b.setAttribute("aria-checked", String(s === current));
     b.dataset.tip = s;
     b.style.width = "32px";
     b.style.height = "32px";
     b.style.padding = "0";
     b.style.cursor = "pointer";
-    b.style.background = `#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}`;
+    b.style.background = surfaceColour(s);
     b.addEventListener("click", () => {
       dispatcher.setOptions({ surface: s });
       sync();
+      shell.bar?.closeMenus();
+      runToolbarAction("terrain");
     });
     buttons.push([s, b]);
     group.appendChild(b);
   }
   sync();
-  return createField("Surface", group, "Surface type that is filled or painted (affects grip)");
+  return group;
+}
+
+function surfaceColour(s: SurfaceType): string {
+  return `#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}`;
+}
+
+/** Current-surface readout shown in the sidebar while the Terrain brush is armed (D-34). */
+function surfaceField(): HTMLElement {
+  surfaceReadoutEl = el("div");
+  updateSurfaceReadout();
+  return createField(
+    "Surface",
+    surfaceReadoutEl,
+    "Surface the Terrain brush paints (affects grip)",
+  );
+}
+
+function updateSurfaceReadout(): void {
+  if (!surfaceReadoutEl) return;
+  const now = dispatcher.getOptions().surface;
+  const row = el("div");
+  row.style.display = "flex";
+  row.style.alignItems = "center";
+  row.style.gap = "6px";
+  const chip = el("span");
+  chip.style.display = "inline-block";
+  chip.style.width = "16px";
+  chip.style.height = "16px";
+  chip.style.border = "1px solid #555";
+  chip.style.background = surfaceColour(now);
+  const name = el("span");
+  name.textContent = now;
+  row.append(chip, name);
+  surfaceReadoutEl.replaceChildren(row, note("Change it from Terrain \u25BE in the top bar."));
 }
 
 function updateRoadsCountEl(): void {
@@ -1805,6 +1846,7 @@ function updateRoadsCountEl(): void {
 function buildSidebar(): void {
   activeValue = null;
   selectionReadoutEl = null;
+  surfaceReadoutEl = null;
   selectionAvgEl = null;
   roadsCountEl = null;
   const o = dispatcher.getOptions();
@@ -1881,7 +1923,6 @@ function buildSidebar(): void {
         (v) => dispatcher.setOptions({ selectSmoothStrength: v }),
       ).field,
       slope(),
-      surfaceSwatches(),
       createField("Selection size", selectionReadoutEl, "Cells and area of the selection"),
       createField("Average height", selectionAvgEl, "Average terrain height of the selection"),
       createSection("Roads", "Road actions for the selection and the whole map", true, [
@@ -1949,7 +1990,7 @@ function buildSidebar(): void {
       );
       break;
     case "terrain":
-      f.append(shape(), size(), strength(), falloff(), slope(), surfaceSwatches());
+      f.append(shape(), size(), strength(), falloff(), slope(), surfaceField());
       break;
     case "roadPaint": {
       const width = optStepper(
@@ -2125,12 +2166,6 @@ function cancelActiveStroke(): void {
 
 const brushShapeButtons = new Map<"square" | "round", HTMLButtonElement>();
 
-function pick<T extends { id: string }>(list: readonly T[], id: string): T {
-  const found = list.find((t) => t.id === id);
-  if (!found) throw new Error(`toolbar tool missing: ${id}`);
-  return found;
-}
-
 function makeBrushShapeSlot(): HTMLElement {
   const box = el("div", "brush-shape");
   box.style.display = "flex";
@@ -2199,48 +2234,7 @@ const contourStepper = createStepper({
 });
 const brushShapeSlot = makeBrushShapeSlot();
 
-const FLOAT_GROUPS: BarGroup[] = [
-  {
-    id: "modes",
-    label: "Mode",
-    items: MODES.map((t) => ({ kind: "tool" as const, tool: t })),
-  },
-  {
-    id: "grid",
-    label: "Grid",
-    items: [{ kind: "tool", tool: pick(VIEW_TOGGLES, "grid") }],
-  },
-  {
-    id: "contours",
-    label: "Contours",
-    items: [{ kind: "tool", tool: pick(VIEW_TOGGLES, "contours") }],
-  },
-  {
-    id: "ops",
-    label: "Operations",
-    items: ["smooth", "flatten", "terrain"].map((id) => ({
-      kind: "tool" as const,
-      tool: pick(OPERATIONS, id),
-    })),
-  },
-  {
-    id: "raiseLower",
-    label: "Raise and lower",
-    items: [{ kind: "stack", tools: [pick(OPERATIONS, "raise"), pick(OPERATIONS, "lower")] }],
-  },
-  {
-    id: "roads",
-    label: "Roads",
-    items: [
-      { kind: "tool", tool: pick(ROAD_BUTTONS, "roadPaint") },
-      { kind: "tool", tool: pick(ROAD_BUTTONS, "roadErase") },
-      { kind: "divider" },
-      { kind: "tool", tool: pick(ROAD_BUTTONS, "lock") },
-      { kind: "tool", tool: pick(ROAD_BUTTONS, "unlock") },
-      { kind: "tool", tool: pick(ROAD_BUTTONS, "deleteRoad") },
-    ],
-  },
-];
+const surfaceMenu = buildSurfaceMenu();
 
 function toolbarInput(): ToolbarInput {
   return {
@@ -2284,13 +2278,23 @@ function syncToolbar(): void {
   }
   const f = shell.bar;
   if (f) {
-    for (const t of TOOLBAR_TOOLS) {
+    for (const t of [...TOOLBAR_TOOLS, ROAD_MENU]) {
       f.setEnabled(t.id, st.enabled[t.id], st.disabledTip[t.id]);
       const pressed =
         t.id === "grid" ? gridOn : t.id === "contours" ? contoursOn : st.pressed[t.id];
       f.setPressed(t.id, pressed);
     }
+    f.setMenuFace("road", menuFace(ROAD_MENU, ROAD_BUTTONS, st.roadFace));
+    const terrainTool = TOOLBAR_TOOLS.find((t) => t.id === "terrain");
+    if (terrainTool) {
+      f.setMenuFace("terrain", {
+        ...menuFace(terrainTool, [], null),
+        active: st.pressed.terrain,
+        swatch: surfaceColour(dispatcher.getOptions().surface),
+      });
+    }
   }
+  updateSurfaceReadout();
   const shape = dispatcher.getOptions().brushShape;
   for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
   shell.setSidebarTitle(st.title, st.subtitle);
@@ -2377,6 +2381,9 @@ function runToolbarAction(id: ToolbarId): void {
       break;
     case "toggle":
       toggleOverlay(act.which);
+      break;
+    case "menu":
+      shell.bar?.openMenu(act.id);
       break;
     case "blocked":
       setStatus(act.status);
@@ -2498,7 +2505,8 @@ const shell = createShell({
   tools: TOOLBAR_TOOLS,
   onToolChange: () => {},
   bar: {
-    groups: FLOAT_GROUPS,
+    groups: TERRAIN_BAR,
+    slots: { surfaces: surfaceMenu },
   },
   sidebarView: [
     createField("Grid spacing", gridSpacingStepper.el, "Grid line spacing in cells (display only)"),
@@ -2572,6 +2580,7 @@ window.addEventListener("keydown", (e) => {
       return;
     case "escape":
       if (dialogOpen) return;
+      if (shell.bar?.closeMenus()) return;
       if (opHold) {
         stopOpHold();
         return;
@@ -2609,7 +2618,9 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (e.repeat) return; // OS key repeat never re-fires a toolbar action
     if (isHoldOp(tid) && startOpHold(tid, e.code)) return;
-    runToolbarAction(tid);
+    const hk = resolveHotkey(toolbarInput(), tid);
+    if (hk.openMenu) shell.bar?.openMenu(hk.openMenu);
+    if (hk.action) runToolbarAction(tid);
     return;
   }
   if (e.code === "Escape") return;
