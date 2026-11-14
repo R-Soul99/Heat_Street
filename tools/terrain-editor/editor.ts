@@ -9,7 +9,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
-import { BLOCK_CELLS_MAX, blockWindowAt, stepRadiusCells } from "../../src/core/terrain-brush.ts";
+import {
+  BLOCK_CELLS_MAX,
+  blockWindowAt,
+  maskAverageHeight,
+  stepRadiusCells,
+} from "../../src/core/terrain-brush.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
@@ -404,6 +409,10 @@ function setOutline(line: THREE.LineLoop, w: CellWindow | null, lift: number): v
 }
 
 let selectionReadoutEl: HTMLElement | null = null;
+let selectionAvgEl: HTMLElement | null = null;
+let roadsCountEl: HTMLElement | null = null;
+/** Mode and armed brush the sidebar was last built for (rebuilt only when it changes). */
+let sidebarKey = "";
 
 // Mask selection (D-04, D-06): boundary outline plus a translucent fill. Select mode is solid,
 // Brush mode is faint (UI-SPEC 6).
@@ -446,6 +455,7 @@ function refreshSelectionOutline(): void {
   selectionFill.visible = false;
   if (!mask || !area) {
     if (selectionReadoutEl) selectionReadoutEl.textContent = "Nothing selected";
+    if (selectionAvgEl) selectionAvgEl.textContent = "-";
     refreshSelectionGrid();
     return;
   }
@@ -462,6 +472,10 @@ function refreshSelectionOutline(): void {
   if (selectionReadoutEl) {
     const c = area.grid.cellSizeM;
     selectionReadoutEl.textContent = `${cells} cells, ${fmt3(cells * c * c)} m2`;
+  }
+  if (selectionAvgEl) {
+    const avg = maskAverageHeight(area.grid, mask);
+    selectionAvgEl.textContent = avg === null ? "-" : `${fmt3(avg)} m`;
   }
   refreshSelectionGrid();
 }
@@ -906,7 +920,6 @@ function selectTool(next: Tool): void {
     stroking = stroking && dispatcher.isStroking();
     clearBoxOutline();
   }
-  buildFlyout(next);
   if (lastHit) paintRing(lastHit);
   updateZoomHint();
 }
@@ -1247,6 +1260,7 @@ function refreshRoadLockOverlay(): void {
   set(selectedLines, segs.selected);
   const counts = roadLockCounts(area.graph, (area as unknown as EditArea).unlockedEdgeIds);
   shell.info.set("roads", roadsInfoText(counts));
+  updateRoadsCountEl();
 }
 
 function roadsInfoText(c: { locked: number; unlocked: number }): string {
@@ -1923,9 +1937,9 @@ interface ActiveValue {
 }
 /** The active tool's main value, adjusted by [ ] and the arrow keys (D-09). */
 let activeValue: ActiveValue | null = null;
-let flyoutReadout: HTMLElement | null = null;
-let blockLabelEl: HTMLElement | null = null;
-let rotationEl: HTMLElement | null = null;
+const flyoutReadout: HTMLElement | null = null;
+const blockLabelEl: HTMLElement | null = null;
+const rotationEl: HTMLElement | null = null;
 
 const RADIUS_SPEC: StepperSpec = { step: 0.5, coarse: 10, min: 0.5, max: 200, decimals: 1 };
 const STRENGTH_SPEC: StepperSpec = { step: 0.05, coarse: 5, min: 0, max: 1, decimals: 2 };
@@ -1948,6 +1962,7 @@ const SLOPE_LIMIT_SPEC: StepperSpec = {
   max: SLOPE_LIMIT_MAX_DEG,
   decimals: 0,
 };
+const ROAD_BANK_SPEC: StepperSpec = { step: 1, coarse: 5, min: 0, max: 20, decimals: 0 };
 const PASSES_SPEC: StepperSpec = { step: 1, coarse: 3, min: 1, max: 10, decimals: 0 };
 
 function optStepper(
@@ -2024,30 +2039,65 @@ function runLockAction(fn: () => ToolResult): void {
   updateHistoryButtons();
 }
 
-function buildFlyout(t: Tool): void {
+/** Shared Surface picker (D-11): one value feeds the Terrain fill and the Terrain brush. */
+function surfaceSwatches(): HTMLElement {
+  const group = el("div", "swatch-grid");
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", "Surface");
+  group.style.display = "grid";
+  group.style.gridTemplateColumns = "repeat(4, 32px)";
+  group.style.gap = "4px";
+  const current = dispatcher.getOptions().surface;
+  const buttons: [SurfaceType, HTMLButtonElement][] = [];
+  const sync = (): void => {
+    const now = dispatcher.getOptions().surface;
+    for (const [s, b] of buttons) {
+      b.setAttribute("aria-checked", String(s === now));
+      b.style.outline = s === now ? "2px solid #4aa3ff" : "1px solid #555";
+    }
+  };
+  for (const s of SURFACE_TYPES) {
+    const b = el("button", "swatch", undefined, s);
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-label", s);
+    b.setAttribute("aria-checked", String(s === current));
+    b.dataset.tip = s;
+    b.style.width = "32px";
+    b.style.height = "32px";
+    b.style.padding = "0";
+    b.style.cursor = "pointer";
+    b.style.background = `#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}`;
+    b.addEventListener("click", () => {
+      dispatcher.setOptions({ surface: s });
+      sync();
+    });
+    buttons.push([s, b]);
+    group.appendChild(b);
+  }
+  sync();
+  return createField("Surface", group, "Surface type that is filled or painted (affects grip)");
+}
+
+function updateRoadsCountEl(): void {
+  if (!roadsCountEl) return;
+  roadsCountEl.textContent = area
+    ? roadsInfoText(roadLockCounts(area.graph, (area as unknown as EditArea).unlockedEdgeIds))
+    : "No area loaded";
+}
+
+/** Sidebar content for the current mode and armed brush (D-12, D-18, D-27). */
+function buildSidebar(): void {
   activeValue = null;
-  flyoutReadout = null;
-  blockLabelEl = null;
-  rotationEl = null;
   selectionReadoutEl = null;
+  selectionAvgEl = null;
+  roadsCountEl = null;
   const o = dispatcher.getOptions();
   const f = shell.flyout;
   f.replaceChildren();
+  const mode = dispatcher.getMode();
+  const armed = dispatcher.getArmed();
 
-  const radius = (main: boolean): HTMLElement =>
-    optStepper(
-      "Radius",
-      "Brush radius in metres",
-      RADIUS_SPEC,
-      o.radiusM,
-      "m",
-      (v) => {
-        dispatcher.setOptions({ radiusM: v });
-        brushSizeStepper.set(dispatcher.getOptions().radiusM);
-        if (lastHit) paintRing(lastHit);
-      },
-      main,
-    ).field;
   const strength = (): HTMLElement =>
     optStepper(
       "Strength",
@@ -2080,86 +2130,107 @@ function buildFlyout(t: Tool): void {
       "deg",
       (v) => dispatcher.setOptions({ slopeLimitDeg: v }),
     ).field;
-  const shapeSel = (): HTMLElement =>
-    createField(
-      "Shape",
-      createSelect({
-        options: [
-          { value: "round", label: "Round" },
-          { value: "square", label: "Square" },
-        ],
-        value: o.brushShape,
-        tip: "Brush footprint shape; the brush acts on exactly the outlined area",
-        onChange: (v) => {
-          dispatcher.setOptions({ brushShape: v === "square" ? "square" : "round" });
-          syncToolbar();
-          if (lastHit) paintRing(lastHit);
-        },
-      }).el,
-      "Brush footprint shape",
-    );
-  const surface = (): HTMLElement =>
-    createField(
-      "Surface",
-      createSelect<SurfaceType>({
-        options: SURFACE_TYPES.map((s) => ({ value: s, label: s })),
-        value: o.surface,
-        tip: "Surface type that is painted (affects grip)",
-        onChange: (v) => dispatcher.setOptions({ surface: v }),
-      }).el,
-      "Surface type",
-    );
 
-  switch (t) {
+  if (mode === "select") {
+    selectionReadoutEl = el("div", "muted");
+    selectionAvgEl = el("div", "muted");
+    roadsCountEl = el("div", "muted");
+    const fullWidth = (label: string, tip: string, run: () => ToolResult): HTMLButtonElement => {
+      const b = createButton({ label, tip, onClick: () => runLockAction(run) });
+      b.style.width = "100%";
+      return b;
+    };
+    const step = optStepper(
+      "Step",
+      "Height change per Raise or Lower tick in metres",
+      SELECT_STEP_SPEC,
+      o.selectStepM,
+      "m",
+      (v) => dispatcher.setOptions({ selectStepM: v }),
+      true,
+    );
+    f.append(
+      note("Drag on the map to select an area."),
+      note(SELECT_HINT),
+      step.field,
+      optStepper(
+        "Smooth strength",
+        "How strongly Smooth acts on the selection each tick, 0 to 1",
+        STRENGTH_SPEC,
+        o.selectSmoothStrength,
+        "",
+        (v) => dispatcher.setOptions({ selectSmoothStrength: v }),
+      ).field,
+      slope(),
+      surfaceSwatches(),
+      createField("Selection size", selectionReadoutEl, "Cells and area of the selection"),
+      createField("Average height", selectionAvgEl, "Average terrain height of the selection"),
+      createSection("Roads", "Road actions for the selection and the whole map", true, [
+        fullWidth(
+          "Re-grade selection",
+          "Re-grade the unlocked roads touching the selection so they fit the terrain again",
+          () => dispatcher.regradeSelection(),
+        ),
+        fullWidth(
+          "Re-grade all unlocked",
+          "Re-grade every unlocked road so it fits the terrain again",
+          () => dispatcher.regradeAllUnlocked(),
+        ),
+        fullWidth("Lock all", "Lock every road so terrain edits cannot move it", () =>
+          dispatcher.lockAll(true),
+        ),
+        fullWidth(
+          "Unlock all",
+          "Unlock every road so terrain edits can reshape the ground under it",
+          () => dispatcher.lockAll(false),
+        ),
+        roadsCountEl,
+      ]),
+    );
+    updateRoadsCountEl();
+    refreshSelectionOutline();
+    return;
+  }
+
+  activeValue = radiusActive;
+  switch (armed) {
     case "raise":
     case "lower":
-    case "smooth":
     case "flatten":
-      f.append(radius(true), strength(), falloff(), shapeSel(), slope());
+      f.append(strength(), falloff(), slope());
       break;
-    case "paint": {
-      f.append(radius(true), strength(), falloff(), shapeSel(), surface());
-      const key = el("div", "legend");
-      for (const s of SURFACE_TYPES) {
-        const span = el("span");
-        const sw = el("i", "sw");
-        sw.style.background = `#${TERRAIN_SURFACE_PALETTE[s].toString(16).padStart(6, "0")}`;
-        span.append(sw, s);
-        key.appendChild(span);
-      }
-      f.append(createField("Colour key", key, "Colours used for each surface type"));
-      break;
-    }
-    case "erase":
-      f.append(radius(true));
-      break;
-    case "lock":
+    case "smooth":
       f.append(
-        radius(true),
+        strength(),
+        falloff(),
+        slope(),
+        optStepper(
+          "Smooth strength",
+          "Strength used by Smooth whole map, 0 to 1",
+          STRENGTH_SPEC,
+          o.smoothStrength,
+          "",
+          (v) => dispatcher.setOptions({ smoothStrength: v }),
+        ).field,
+        optStepper(
+          "Passes",
+          "How many smoothing passes Smooth whole map runs, 1 to 10",
+          PASSES_SPEC,
+          o.smoothPasses,
+          undefined,
+          (v) => dispatcher.setOptions({ smoothPasses: v }),
+        ).field,
         createButton({
-          label: "Lock all",
-          tip: "Lock every road so terrain edits cannot move it",
-          onClick: () => runLockAction(() => dispatcher.lockAll(true)),
+          label: "Smooth whole map",
+          tip: "Smooth the entire map (Ctrl+Z undoes it)",
+          onClick: () => void smoothWholeMap(),
         }),
-        createButton({
-          label: "Unlock all",
-          tip: "Unlock every road so terrain edits can reshape the ground under it",
-          onClick: () => runLockAction(() => dispatcher.lockAll(false)),
-        }),
-        createButton({
-          label: "Re-grade selected",
-          tip: "Re-grade the ground under the selected road so it fits the terrain again",
-          onClick: () => runLockAction(() => dispatcher.regradeSelected()),
-        }),
-        createButton({
-          label: "Re-grade all unlocked",
-          tip: "Re-grade every unlocked road so it fits the terrain again",
-          onClick: () => runLockAction(() => dispatcher.regradeAllUnlocked()),
-        }),
-        lockKey(),
       );
       break;
-    case "road": {
+    case "terrain":
+      f.append(strength(), falloff(), slope(), surfaceSwatches());
+      break;
+    case "roadPaint": {
       const width = optStepper(
         "Width",
         "Road width in metres",
@@ -2167,7 +2238,14 @@ function buildFlyout(t: Tool): void {
         o.widthM,
         "m",
         (v) => dispatcher.setOptions({ widthM: v }),
-        true,
+      );
+      const bank = optStepper(
+        "Max bank",
+        "Steepest sideways tilt of the road in degrees",
+        ROAD_BANK_SPEC,
+        o.maxBankDeg,
+        "deg",
+        (v) => dispatcher.setOptions({ maxBankDeg: v }),
       );
       const presetLabels: Record<string, string> = {
         street: "Street",
@@ -2188,197 +2266,21 @@ function buildFlyout(t: Tool): void {
             onChange: (v) => {
               dispatcher.setOptions({ roadPreset: v });
               width.stepper.set(dispatcher.getOptions().widthM);
+              bank.stepper.set(dispatcher.getOptions().maxBankDeg);
             },
           }).el,
           "Road class",
         ),
-        surface(),
         width.field,
+        bank.field,
       );
       break;
     }
-    case "stamp": {
-      rotationEl = el("div", "muted");
-      syncRotationLabel();
-      f.append(
-        createField(
-          "Stamp",
-          createSelect({
-            options: [
-              { value: "wedge", label: "Wedge" },
-              { value: "mound", label: "Mound" },
-            ],
-            value: o.stampKind,
-            tip: "Wedge makes a ramp; mound makes a hill",
-            onChange: (v) =>
-              dispatcher.setOptions({ stampKind: v === "mound" ? "mound" : "wedge" }),
-          }).el,
-          "Stamp shape",
-        ),
-        optStepper(
-          "Height",
-          "Stamp height in metres",
-          STAMP_HEIGHT_SPEC,
-          o.stampHeightM,
-          "m",
-          (v) => dispatcher.setOptions({ stampHeightM: v }),
-          true,
-        ).field,
-        optStepper("Width", "Stamp width in metres", STAMP_WIDTH_SPEC, o.stampWidthM, "m", (v) =>
-          dispatcher.setOptions({ stampWidthM: v }),
-        ).field,
-        rotationEl,
-        slope(),
-        note("Drag to set the stamp length."),
-      );
-      break;
-    }
-    case "block": {
-      blockLabelEl = el("div", "muted");
-      flyoutReadout = el("div", "muted");
-      const row = el("div", "seg");
-      const raiseBtn = createButton({
-        label: "Raise",
-        tip: "Each click raises the block by the step",
-        onClick: () => setDir(1),
-      });
-      const lowerBtn = createButton({
-        label: "Lower",
-        tip: "Each click lowers the block by the step",
-        onClick: () => setDir(-1),
-      });
-      const setDir = (d: 1 | -1): void => {
-        dispatcher.setOptions({ blockDirection: d });
-        raiseBtn.setAttribute("aria-pressed", String(d === 1));
-        lowerBtn.setAttribute("aria-pressed", String(d === -1));
-      };
-      setDir(o.blockDirection);
-      row.append(raiseBtn, lowerBtn);
-      f.append(
-        optStepper(
-          "Size (cells)",
-          "Block edge length in cells",
-          BLOCK_CELLS_SPEC,
-          o.blockCells,
-          undefined,
-          (v) => {
-            dispatcher.setOptions({ blockCells: v });
-            syncBlockLabel();
-            if (lastHit) paintRing(lastHit);
-          },
-          true,
-        ).field,
-        blockLabelEl,
-        optStepper(
-          "Step",
-          "Height change per click in metres",
-          BLOCK_STEP_SPEC,
-          o.blockStepM,
-          "m",
-          (v) => dispatcher.setOptions({ blockStepM: v }),
-        ).field,
-        createField("Direction", row, "Whether a click raises or lowers the block"),
-        slope(),
-        flyoutReadout,
-        note("Click steps the block in the chosen direction. Drag paints blocks."),
-      );
-      syncBlockLabel();
-      break;
-    }
-    case "gridSelect": {
-      selectionReadoutEl = el("div", "muted");
-      const bigButton = (label: string, tip: string, sign: 1 | -1): HTMLButtonElement => {
-        const b = createButton({
-          label,
-          tip,
-          onClick: () => runLockAction(() => dispatcher.raiseSelection(sign)),
-        });
-        b.style.fontSize = "1.1em";
-        b.style.padding = "10px 12px";
-        b.style.width = "100%";
-        return b;
-      };
-      const range = el("input", undefined, undefined, "Step size in metres, 0.25 to 5");
-      range.type = "range";
-      range.min = String(SELECT_STEP_SPEC.min);
-      range.max = String(SELECT_STEP_SPEC.max);
-      range.step = String(SELECT_STEP_SPEC.step);
-      range.value = String(o.selectStepM);
-      const rangeLabel = el("div", "muted", `Step ${fmt3(o.selectStepM)} m`);
-      const applyStep = (v: number): void => {
-        dispatcher.setOptions({ selectStepM: v });
-        const real = dispatcher.getOptions().selectStepM;
-        range.value = String(real);
-        rangeLabel.textContent = `Step ${fmt3(real)} m`;
-      };
-      const stepField = optStepper(
-        "Step size",
-        "Height change per raise/lower press in metres",
-        SELECT_STEP_SPEC,
-        o.selectStepM,
-        "m",
-        applyStep,
-        true,
-      );
-      range.addEventListener("input", () => {
-        const v = Number(range.value);
-        stepField.stepper.set(v);
-        applyStep(v);
-      });
-      f.append(
-        selectionReadoutEl,
-        bigButton(
-          "▲ Raise selection",
-          "Raise the selected cells by the Step amount (one undo step)",
-          1,
-        ),
-        bigButton(
-          "▼ Lower selection",
-          "Lower the selected cells by the Step amount (one undo step)",
-          -1,
-        ),
-        createSection("Step", "Set how far each raise/lower press moves the selection", false, [
-          range,
-          rangeLabel,
-          stepField.field,
-        ]),
-        slope(),
-        note("Ctrl+drag up/down pushes or pulls the selection. Esc cancels."),
-      );
-      refreshSelectionOutline();
-      break;
-    }
-    case "smoothBox":
-      flyoutReadout = el("div", "muted");
-      f.append(
-        optStepper(
-          "Strength",
-          "Smoothing strength, 0 to 1",
-          STRENGTH_SPEC,
-          o.smoothStrength,
-          "",
-          (v) => dispatcher.setOptions({ smoothStrength: v }),
-          true,
-        ).field,
-        optStepper(
-          "Passes",
-          "How many smoothing passes to run, 1 to 10",
-          PASSES_SPEC,
-          o.smoothPasses,
-          undefined,
-          (v) => dispatcher.setOptions({ smoothPasses: v }),
-        ).field,
-        slope(),
-        flyoutReadout,
-        note("Drag a box to smooth it. Roads never move."),
-        createButton({
-          label: "Smooth whole map",
-          tip: "Smooth the entire map (Ctrl+Z undoes it)",
-          onClick: () => void smoothWholeMap(),
-        }),
-      );
+    case "roadErase":
+      f.append(note("Drag over roads to erase them."));
       break;
     default:
+      f.append(note("Pick an operation."));
       break;
   }
 }
@@ -2538,10 +2440,19 @@ const brushSizeStepper = createStepper({
   unit: "m",
   onChange: (v) => {
     dispatcher.setOptions({ radiusM: v });
-    if (activeValue && activeValue.spec === RADIUS_SPEC) activeValue.set(v);
     if (lastHit) paintRing(lastHit);
   },
 });
+/** [ ] / arrow keys and Alt+wheel adjust the floating brush size in Brush mode. */
+const radiusActive: ActiveValue = {
+  get: () => brushSizeStepper.get(),
+  set: (v) => {
+    brushSizeStepper.set(v);
+    dispatcher.setOptions({ radiusM: v });
+    brushSizeStepper.set(dispatcher.getOptions().radiusM);
+  },
+  spec: RADIUS_SPEC,
+};
 const gridSpacingStepper = createStepper({
   value: gridSpacing,
   spec: { step: 1, coarse: 5, min: 1, max: 50, decimals: 0, presets: GRID_SPACING_PRESETS_CELLS },
@@ -2677,6 +2588,11 @@ function syncToolFromDispatcher(): void {
 function syncToolbar(): void {
   const input = toolbarInput();
   const st = toolbarState(input);
+  const key = `${input.mode}|${input.armed ?? ""}`;
+  if (key !== sidebarKey) {
+    sidebarKey = key;
+    buildSidebar();
+  }
   const f = shell.floating;
   if (f) {
     for (const t of TOOLBAR_TOOLS) {
@@ -2922,20 +2838,6 @@ const shell = createShell({
     pan: (dx, dy) => panView(dx, dy),
     extra: [
       {
-        id: "grid",
-        label: "Grid",
-        tip: "Show the terrain cell grid under the brush (X)",
-        run: () => toggleOverlay("grid"),
-        pressed: () => gridOn,
-      },
-      {
-        id: "contours",
-        label: "Contours",
-        tip: "Show lines of equal height around the cursor; spacing follows zoom (C)",
-        run: () => toggleOverlay("contours"),
-        pressed: () => contoursOn,
-      },
-      {
         id: "topdown",
         label: "Top-down",
         tip: "Look straight down at the map (T)",
@@ -3098,7 +3000,6 @@ function frame(): void {
   requestAnimationFrame(frame);
 }
 
-buildFlyout(tool);
 syncToolbar();
 applySelectionOpacity();
 updateHistoryButtons();
