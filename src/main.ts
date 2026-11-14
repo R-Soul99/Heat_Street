@@ -53,7 +53,14 @@ import { forwardFromYaw, headingFromRotation, yawFromTravelDirection } from "./c
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
 import { MAP_FORMATS, resolveMapId } from "./core/map-select";
-import { loadMedalProgress, saveMedalResult } from "./core/medal-persistence";
+import {
+  knownProgressCourseIds,
+  loadMedalProgress,
+  type MedalStorage,
+  raceVariantCourseId,
+  saveMedalResult,
+  saveRaceResult,
+} from "./core/medal-persistence";
 import {
   buildReferenceCourseRecord,
   type MedalReferenceCourse,
@@ -129,7 +136,7 @@ import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
 import { createNavigationArrow } from "./hud/navigation-arrow";
 import { createRaceHud } from "./hud/race-hud";
-import { createResultsView } from "./hud/results-view";
+import { buildRaceClassificationRows, createResultsView } from "./hud/results-view";
 import { createSpeedometer } from "./hud/speedometer";
 import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
@@ -805,24 +812,32 @@ try {
   // ahead of `createMapScene`, plan 07-02) — this block only builds what
   // depends on them.
   // Free-drive areas (no routes file) skip medals and the results view entirely.
-  const medalProgress =
-    rd === undefined
-      ? undefined
-      : loadMedalProgress(
-          {
-            get: (key) => localStorage.getItem(key),
-            set: (key, value) => localStorage.setItem(key, value),
-          },
-          rd.routes.courses.map((candidate) => candidate.id),
-        );
+  const medalStorage: MedalStorage = {
+    get: (key) => localStorage.getItem(key),
+    set: (key, value) => localStorage.setItem(key, value),
+  };
+  // 07-07 (T-07-24): EVERY progress load/save passes the full id list —
+  // solo course ids PLUS each circuit course's `.race` variant id — because
+  // a load with a shorter list drops unknown records, so a solo save would
+  // otherwise silently delete the Circuit Race record (and vice versa).
+  const knownIds = rd === undefined ? undefined : knownProgressCourseIds(rd.routes.courses);
+  const medalProgress = rd === undefined ? undefined : loadMedalProgress(medalStorage, knownIds);
+  const raceCardCourse = rd?.routes.courses.find((candidate) => candidate.mode === "circuit");
   const resultsView =
     rd === undefined || medalProgress === undefined
       ? undefined
       : createResultsView(
           rd.routes.courses,
           rd.medalReference.courses,
-          rd.course.id,
+          isCircuitRace ? raceVariantCourseId(rd.course.id) : rd.course.id,
           medalProgress.courses,
+          raceCardCourse === undefined
+            ? undefined
+            : {
+                course: raceCardCourse,
+                raceCourseId: raceVariantCourseId(raceCardCourse.id),
+                fieldSize: RACE_FIELD_SIZE,
+              },
         );
   let loopClock: LoopHandle | null = null;
 
@@ -846,9 +861,14 @@ try {
   const raceHud = createRaceHud();
 
   // Circuit Race builds a `CircuitRaceCoordinator` INSTEAD of the solo
-  // coordinator and its medal-timing machinery below — nothing is saved in
-  // this mode yet (D-05/SC5: solo Time Attack's own medal path is
-  // completely untouched when `fleet`/`gridPoses` are undefined).
+  // coordinator and its medal-timing machinery below — it saves only a
+  // best finish/time under the `.race` variant id (07-07, D-05/D-06/SC5:
+  // solo Time Attack's own medal path is completely untouched).
+  // D-07 fast retry: R after the player finished classifies (projected) and
+  // restarts in the SAME call — keep that just-classified result on screen
+  // through the restart instead of wiping it the same frame it appears. A
+  // restart that produced no classification (DNF) clears the panel.
+  let keepRaceResultOnRestart = false;
   const circuitRace =
     fleet === undefined || gridPoses === undefined || line === undefined || rd === undefined
       ? undefined
@@ -870,6 +890,35 @@ try {
           // reset is what makes the car pop onto its new pose with no
           // one-frame interpolation slide (07-RESEARCH.md Pitfall 4).
           onCarReset: (racerIndex) => transforms.snapBody(1 + racerIndex),
+          // D-07: the RACE RESULT panel follows the field across the line.
+          onClassificationChanged: (rows, final) =>
+            resultsView?.showRaceClassification(
+              buildRaceClassificationRows(rows, [...AI_PAINTS.map((paint) => paint.name), "YOU"]),
+              final,
+            ),
+          // D-05/D-06: saved exactly once per classified race under the
+          // `.race` variant id — best finish + best time, never a medal.
+          onRaceClassified: (result) => {
+            keepRaceResultOnRestart = true;
+            if (
+              saveRaceResult(
+                medalStorage,
+                raceVariantCourseId(rd.course.id),
+                {
+                  complete: true,
+                  effectiveTimeSec: result.playerEffectiveSec,
+                  finishPosition: result.playerPosition,
+                },
+                knownIds,
+              )
+            ) {
+              resultsView?.updateCards(loadMedalProgress(medalStorage, knownIds).courses);
+            }
+          },
+          onRestart: () => {
+            if (!keepRaceResultOnRestart) resultsView?.clearCompletion();
+            keepRaceResultOnRestart = false;
+          },
         });
   const raceCoordinator =
     fleet !== undefined || rd === undefined || medalProgress === undefined
@@ -903,28 +952,17 @@ try {
               }
             }
             const saved = saveMedalResult(
-              {
-                get: (key) => localStorage.getItem(key),
-                set: (key, value) => localStorage.setItem(key, value),
-              },
+              medalStorage,
               rd.course.id,
               {
                 complete: true,
                 effectiveTimeSec: completion.effectiveTimeSec,
                 medal: completion.medal,
               },
-              rd.routes.courses.map((candidate) => candidate.id),
+              knownIds,
             );
             if (saved) {
-              resultsView?.updateCards(
-                loadMedalProgress(
-                  {
-                    get: (key) => localStorage.getItem(key),
-                    set: (key, value) => localStorage.setItem(key, value),
-                  },
-                  rd.routes.courses.map((candidate) => candidate.id),
-                ).courses,
-              );
+              resultsView?.updateCards(loadMedalProgress(medalStorage, knownIds).courses);
             }
             resultsView?.showCompletion(completion);
           },

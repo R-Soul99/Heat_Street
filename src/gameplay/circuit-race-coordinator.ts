@@ -15,6 +15,9 @@ import { headingFromRotation } from "../core/heading";
 import type { InputFrame } from "../core/input-tape";
 import { type NavigationGraph, nearestRoadNode } from "../core/navigation";
 import {
+  type ClassificationInput,
+  type ClassificationRow,
+  classifyRace,
   computeStandings,
   createGapTracker,
   createProgressTracker,
@@ -95,6 +98,19 @@ export interface CircuitRaceCoordinatorDeps {
   readonly chime: CheckpointChime;
   /** Called once per AI reset, AFTER `fleet.resetCar` — `src/main.ts` uses this to `TransformCache.snapBody` the reset car so it pops instantly with no one-frame interpolation slide (07-RESEARCH.md Pitfall 4). */
   readonly onCarReset?: (racerIndex: number) => void;
+  /** D-07: fires when the player finishes (`final: false`), on every later racer finish, and with `final: true` once the classification is final (all finished, or restart after the player finished). */
+  readonly onClassificationChanged?: (rows: readonly ClassificationRow[], final: boolean) => void;
+  /** D-07: fires EXACTLY once per race that the player finished — when every racer is complete, or on a restart after the player finished (unfinished AI projected from progress). Never fires for a DNF. */
+  readonly onRaceClassified?: (result: RaceClassifiedResult) => void;
+  /** D-08: fires on every restart, after the field is back on the grid and the countdown is re-armed. */
+  readonly onRestart?: () => void;
+}
+
+export interface RaceClassifiedResult {
+  readonly rows: readonly ClassificationRow[];
+  readonly playerPosition: number;
+  /** Player finish elapsed + penalty seconds. */
+  readonly playerEffectiveSec: number;
 }
 
 export interface RacerSnapshot {
@@ -182,6 +198,8 @@ export function createCircuitRaceCoordinator(
   let armedTick: number | null = null;
   let goTick: number | null = null;
   let currentTick = 0;
+  /** D-07: the final classification has been emitted for this race (reset on restart) — guarantees onRaceClassified fires at most once. */
+  let classified = false;
 
   /** Racer `PLAYER_GRID_SLOT` reads the scene's own vehicle body; racers `0..AI_RACER_COUNT-1` read the matching fleet car, position-for-position (RACER INDEX TABLE). */
   function racerBody(racerIndex: number): {
@@ -222,12 +240,48 @@ export function createCircuitRaceCoordinator(
   function computeCurrentStandings(): readonly Standing[] {
     const inputs: StandingInput[] = [];
     for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
-      const finish = finishElapsedSec[racerIndex];
-      const finishEffectiveSec =
-        finish === null ? null : finish + races[racerIndex].snapshot().penaltySec;
-      inputs.push({ racerIndex, finishEffectiveSec, progressM: racerProgressM(racerIndex) });
+      inputs.push({
+        racerIndex,
+        finishEffectiveSec: racerFinishEffectiveSec(racerIndex),
+        progressM: racerProgressM(racerIndex),
+      });
     }
     return computeStandings(inputs);
+  }
+
+  function racerFinishEffectiveSec(racerIndex: number): number | null {
+    const finish = finishElapsedSec[racerIndex];
+    return finish === null ? null : finish + races[racerIndex].snapshot().penaltySec;
+  }
+
+  /** D-07 classification: finished racers by effective time, unfinished projected by progress. */
+  function buildClassification(): readonly ClassificationRow[] {
+    const inputs: ClassificationInput[] = [];
+    for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
+      inputs.push({
+        racerIndex,
+        isPlayer: racerIndex === PLAYER_GRID_SLOT,
+        finishEffectiveSec: racerFinishEffectiveSec(racerIndex),
+        progressM: racerProgressM(racerIndex),
+      });
+    }
+    return classifyRace(inputs);
+  }
+
+  /** Emits the final classification exactly once (all finished, or restart after the player finished). Requires the player to have finished. */
+  function emitFinalClassification(): void {
+    if (classified) return;
+    const playerEffectiveSec = racerFinishEffectiveSec(PLAYER_GRID_SLOT);
+    if (playerEffectiveSec === null) return;
+    classified = true;
+    const rows = buildClassification();
+    const playerRow = rows.find((row) => row.isPlayer);
+    deps.onRaceClassified?.({
+      rows,
+      playerPosition: playerRow?.position ?? RACE_FIELD_SIZE,
+      playerEffectiveSec,
+    });
+    deps.onClassificationChanged?.(rows, true);
   }
 
   function currentCountdown(): {
@@ -328,6 +382,7 @@ export function createCircuitRaceCoordinator(
   }
 
   function onTickEnd(): void {
+    let anyFinishedThisTick = false;
     for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
       const isPlayer = racerIndex === PLAYER_GRID_SLOT;
       const body = racerBody(racerIndex);
@@ -352,8 +407,19 @@ export function createCircuitRaceCoordinator(
           if (isPlayer) deps.chime.play();
           if (race.snapshot().complete && finishElapsedSec[racerIndex] === null) {
             finishElapsedSec[racerIndex] = computeElapsedSec();
+            anyFinishedThisTick = true;
           }
         }
+      }
+    }
+
+    // D-07: once the player has finished, the order is shown as each car
+    // crosses; when the whole field is home the classification is final.
+    if (anyFinishedThisTick && !classified && finishElapsedSec[PLAYER_GRID_SLOT] !== null) {
+      if (finishElapsedSec.every((finish) => finish !== null)) {
+        emitFinalClassification();
+      } else {
+        deps.onClassificationChanged?.(buildClassification(), false);
       }
     }
 
@@ -422,6 +488,10 @@ export function createCircuitRaceCoordinator(
 
   function onCommands(commands: RaceCommands): void {
     if (commands.restart) {
+      // D-07 fast retry: a restart after the player finished classifies the
+      // race NOW (unfinished AI projected from progress) before the field
+      // returns to the grid — no waiting for the AI to cross.
+      emitFinalClassification();
       for (let racerIndex = 0; racerIndex < RACE_FIELD_SIZE; racerIndex++) {
         races[racerIndex].restart();
         insideMaps[racerIndex].clear();
@@ -438,8 +508,10 @@ export function createCircuitRaceCoordinator(
       // grid order from progress alone, with no stale milestone data from
       // the previous attempt.
       gap.reset();
+      classified = false;
       deps.raceHud.flashRestart();
       refresh();
+      deps.onRestart?.();
       return;
     }
     if (commands.respawn) {
