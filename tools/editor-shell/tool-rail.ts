@@ -13,7 +13,7 @@ export interface ShellTool {
   dock?: "top";
   /** By-job group; consecutive tools with the same group sit together, divider between groups (07.1.1 D-02). */
   group?: string;
-  /** Visible button word when label is over 12 characters (D-01); label stays for aria-label and the shortcuts list. */
+  /** Visible button word when label is over 12 characters (D-01); label stays for the shortcuts list; aria-label uses the visible word. */
   shortLabel?: string;
   /** Long how-to text shown on the long-hover tooltip tier (D-08). */
   tipLong?: string;
@@ -38,7 +38,8 @@ export function createToolRail(tools: ShellTool[], onSelect: (id: string) => voi
     const b = el("button", cls, undefined, t.keyLabel ? `${t.tip} (${t.keyLabel})` : t.tip);
     b.type = "button";
     b.setAttribute("aria-pressed", "false");
-    b.setAttribute("aria-label", t.label);
+    // Announce the visible word (WCAG label-in-name); the long label stays in the tooltip/shortcuts.
+    b.setAttribute("aria-label", t.keyLabel ? `${displayLabel(t)} (${t.keyLabel})` : displayLabel(t));
     if (t.tipLong) b.dataset.tipLong = t.tipLong;
     b.disabled = Boolean(t.disabled);
     b.addEventListener("click", () => onSelect(t.id));
