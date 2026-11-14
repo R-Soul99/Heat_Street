@@ -435,7 +435,7 @@ Plans:
 - Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
 - Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
 **Depends on:** Phase 07.1
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 
 Plans:
 
@@ -446,7 +446,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07.1.1-03-PLAN.md — Shared left sidebar (240px) with Raise/Lower pair, grouped full-word bottom toolbar, canvas offset; delete flyout/topbar/classic layout (wave 2)
+- [x] 07.1.1-03-PLAN.md — Shared left sidebar (240px) with Raise/Lower pair, grouped full-word bottom toolbar, canvas offset; delete flyout/topbar/classic layout (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
