@@ -474,7 +474,7 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 5/12 plans executed
+**Plans:** 6/12 plans executed
 
 Plans:
 
@@ -488,7 +488,7 @@ Plans:
 **Wave 2**
 
 - [x] 07.1.2-04-PLAN.md — Mask operations: hard-step raise/lower, flatten to average, one-pass smooth, terrain fill (wave 2)
-- [ ] 07.1.2-05-PLAN.md — Road region ops: delete road cut at selection edge, whole-edge lookup for lock/unlock (wave 2)
+- [x] 07.1.2-05-PLAN.md — Road region ops: delete road cut at selection edge, whole-edge lookup for lock/unlock (wave 2)
 - [ ] 07.1.2-09-PLAN.md — Map editor conventions: floating buttons, box select add/subtract + Delete, Grid spacing in metres (wave 2)
 
 **Wave 3-4**
