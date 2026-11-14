@@ -3,6 +3,7 @@ import {
   blankWorld,
   DEFAULT_TILE_M,
   fitView,
+  gridMinorStep,
   gridStep,
   scaleBar,
   syntheticBbox,
@@ -172,5 +173,20 @@ describe("view maths", () => {
   it("visibleRect matches the canvas corners", () => {
     const r = visibleRect({ scale: 2, panX: 100, panY: 300 }, 400, 200);
     expect(r).toEqual({ minX: -50, maxX: 150, maxY: 150, minY: 50 });
+  });
+});
+
+describe("gridMinorStep", () => {
+  it("keeps the spacing when it is wide enough", () => {
+    expect(gridMinorStep(10, 1)).toBe(10);
+  });
+  it("coarsens by 2/5/10 multiples when too dense", () => {
+    expect(gridMinorStep(10, 0.4)).toBe(20); // 10 m = 4 px, 20 m = 8 px
+    expect(gridMinorStep(10, 0.2)).toBe(50);
+    expect(gridMinorStep(10, 0.1)).toBe(100);
+  });
+  it("treats bad spacing as 1", () => {
+    expect(gridMinorStep(Number.NaN, 10)).toBe(1);
+    expect(gridMinorStep(0, 10)).toBe(1);
   });
 });

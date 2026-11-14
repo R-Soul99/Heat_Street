@@ -199,6 +199,26 @@ export function gridStep(pxPerM: number, minPx: number): number {
   return last;
 }
 
+/** Grid spacing presets for the map editor, in metres (D-31). */
+export const MAP_GRID_SPACING_PRESETS_M = [1, 5, 10, 20, 50, 100] as const;
+
+/**
+ * Minor grid step in metres: the user's spacing, or the smallest multiple of it
+ * (x1, 2, 5, 10, 20, 50, ...) that is at least `minPx` on screen.
+ */
+export function gridMinorStep(spacingM: number, pxPerM: number, minPx = 6): number {
+  const base = Number.isFinite(spacingM) && spacingM >= 1 ? spacingM : 1;
+  if (!(pxPerM > 0)) return base;
+  let last = base;
+  for (let k = 0; k <= 7; k++) {
+    for (const m of [1, 2, 5]) {
+      last = base * m * 10 ** k;
+      if (last * pxPerM >= minPx - 1e-9) return last;
+    }
+  }
+  return last;
+}
+
 /** Largest 1-2-5 length (metres) that fits in `maxPx`, with its pixel size and label. */
 export function scaleBar(
   pxPerM: number,

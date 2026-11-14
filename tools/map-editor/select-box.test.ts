@@ -5,6 +5,7 @@ import {
   disableRoad,
   enableRoad,
   isDisabledRoad,
+  selectionFromBoxes,
   waysInBox,
 } from "./select-box.ts";
 
@@ -52,5 +53,49 @@ describe("disable / enable", () => {
     expect(w.tags?.highway).toBe("track");
     expect(isDisabledRoad(w)).toBe(false);
     expect(enableRoad(w)).toBe(false);
+  });
+});
+
+describe("selectionFromBoxes", () => {
+  const roads = env();
+  const r1 = addRoad(roads, proj, [free(0, 100), free(100, 100)], { highway: "residential" });
+  const r2 = addRoad(roads, proj, [free(200, 100), free(300, 100)], { highway: "residential" });
+  const bs = env();
+  addBuildingRect(bs, proj.toLatLon({ x: 20, y: 120 }), proj.toLatLon({ x: 40, y: 140 }), 8);
+  const A = { a: { x: -10, y: 90 }, b: { x: 110, y: 150 } };
+  const B = { a: { x: 190, y: 90 }, b: { x: 310, y: 150 } };
+  const sel = (boxes: Parameters<typeof selectionFromBoxes>[0]) =>
+    selectionFromBoxes(boxes, roads, bs, proj);
+
+  it("single replace equals the plain box queries", () => {
+    const s = sel([{ box: A, mode: "replace" }]);
+    expect(s.roads).toEqual(waysInBox(roads, proj, A));
+    expect(s.buildings).toEqual(buildingsInBox(bs, proj, A));
+  });
+  it("add unions without duplicates", () => {
+    const s = sel([
+      { box: A, mode: "replace" },
+      { box: B, mode: "add" },
+      { box: A, mode: "add" },
+    ]);
+    expect(s.roads).toEqual([r1, r2]);
+    expect(s.buildings).toHaveLength(1);
+  });
+  it("subtract drops touched items", () => {
+    const s = sel([
+      { box: A, mode: "replace" },
+      { box: B, mode: "add" },
+      { box: B, mode: "subtract" },
+    ]);
+    expect(s.roads).toEqual([r1]);
+  });
+  it("a later replace discards earlier ops; empty list is empty", () => {
+    const s = sel([
+      { box: A, mode: "replace" },
+      { box: B, mode: "replace" },
+    ]);
+    expect(s.roads).toEqual([r2]);
+    expect(s.buildings).toHaveLength(0);
+    expect(sel([])).toEqual({ roads: [], buildings: [] });
   });
 });

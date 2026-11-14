@@ -111,3 +111,41 @@ export function isDisabledRoad(way: RawWay): boolean {
   const t = way.tags;
   return t !== undefined && t["disused:highway"] !== undefined && t.highway === undefined;
 }
+
+export type BoxMode = "replace" | "add" | "subtract";
+
+/**
+ * Folds a list of box operations left to right into one selection. Replace
+ * discards what came before, add unions, subtract drops any road or building
+ * the box touches (whole item). Order is preserved, duplicates removed by identity.
+ */
+export function selectionFromBoxes(
+  boxes: { box: Box; mode: BoxMode }[],
+  roads: RawEnvelope,
+  buildings: RawEnvelope,
+  proj: Projector,
+): { roads: RawWay[]; buildings: RawWay[] } {
+  let selRoads: RawWay[] = [];
+  let selBuildings: RawWay[] = [];
+  const union = (a: RawWay[], b: RawWay[]): RawWay[] => {
+    const seen = new Set(a);
+    return [...a, ...b.filter((w) => !seen.has(w))];
+  };
+  for (const { box, mode } of boxes) {
+    const r = waysInBox(roads, proj, box);
+    const b = buildingsInBox(buildings, proj, box);
+    if (mode === "replace") {
+      selRoads = r;
+      selBuildings = b;
+    } else if (mode === "add") {
+      selRoads = union(selRoads, r);
+      selBuildings = union(selBuildings, b);
+    } else {
+      const rs = new Set(r);
+      const bs = new Set(b);
+      selRoads = selRoads.filter((w) => !rs.has(w));
+      selBuildings = selBuildings.filter((w) => !bs.has(w));
+    }
+  }
+  return { roads: selRoads, buildings: selBuildings };
+}
