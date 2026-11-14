@@ -62,13 +62,14 @@ import {
   resolveShortcut,
   STANDARD_BINDINGS,
 } from "../editor-shell/keys.ts";
-import { createShell, type ShellTool } from "../editor-shell/shell.ts";
+import { createShell } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
+import { RAIL_TOOL_IDS, RAIL_TOOLS } from "./rail-tools.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
@@ -1772,96 +1773,6 @@ function undoRedo(kind: "undo" | "redo"): void {
 }
 
 // ---------------------------------------------------------------- tool options
-
-const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
-  {
-    id: "raise",
-    label: "Raise",
-    icon: "▲",
-    dock: "top",
-    keyLabel: "H",
-    tip: "Click or drag to raise terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
-  },
-  {
-    id: "lower",
-    label: "Lower",
-    icon: "▼",
-    dock: "top",
-    keyLabel: "J",
-    tip: "Click or drag to lower terrain by up to Strength metres per dab at the centre. Zoom in to see small changes; the info bar shows the change.",
-  },
-  {
-    id: "smooth",
-    label: "Smooth",
-    icon: "≈",
-    keyLabel: "G",
-    tip: "Smooth bumps out of the terrain under the brush.",
-  },
-  {
-    id: "flatten",
-    label: "Flatten",
-    icon: "▬",
-    keyLabel: "F",
-    tip: "Flatten the terrain to the height where you started the stroke.",
-  },
-  {
-    id: "paint",
-    label: "Surface paint",
-    icon: "◐",
-    keyLabel: "P",
-    tip: "Paint a surface type (tarmac, gravel, grass...) onto the terrain.",
-  },
-  {
-    id: "road",
-    label: "Road brush",
-    icon: "═",
-    keyLabel: "R",
-    tip: "Drag a road across the terrain. The ground is graded flat under it.",
-  },
-  {
-    id: "stamp",
-    label: "Stamp",
-    icon: "◭",
-    keyLabel: "W",
-    tip: "Stamp a wedge (ramp) or mound onto the terrain. Drag to set its length.",
-  },
-  {
-    id: "erase",
-    label: "Erase road",
-    icon: "✕",
-    keyLabel: "E",
-    tip: "Erase road segments under the brush.",
-  },
-  {
-    id: "block",
-    label: "Block",
-    icon: "▦",
-    keyLabel: "B",
-    tip: "Raise or lower a square block of cells. Click steps it; drag paints blocks.",
-  },
-  {
-    id: "smoothBox",
-    label: "Smooth area",
-    icon: "▒",
-    keyLabel: "M",
-    tip: "Drag a box to smooth that whole area. Roads never move.",
-  },
-  {
-    id: "gridSelect",
-    label: "Grid select",
-    icon: "▦",
-    keyLabel: "S",
-    tip: "Drag a rectangle of cells. Then raise/lower it with the ▲/▼ buttons, or Ctrl+drag up/down to push or pull it by hand.",
-  },
-  {
-    id: "lock",
-    label: "Lock/unlock road",
-    icon: "⚿",
-    keyLabel: "L",
-    tip: "Click a road to lock or unlock it. Shift+click selects it without toggling.",
-  },
-];
-const RAIL_TOOL_IDS = new Set<string>(RAIL_TOOLS.map((t) => t.id));
 
 interface ActiveValue {
   get(): number;
