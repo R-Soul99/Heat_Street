@@ -1,4 +1,5 @@
 /** Form controls for the editor shell. All text via textContent; all carry data-tip. */
+import { createRepeater, REPEAT_DELAY_MS, STEPPER_REPEAT_MS } from "./repeat.ts";
 import {
   applySteps,
   parseStepperInput,
@@ -80,21 +81,18 @@ export function createStepper(o: {
   root.appendChild(arrows);
 
   const hold = (btn: HTMLButtonElement, dir: 1 | -1): void => {
-    let delay: number | undefined;
-    let rep: number | undefined;
-    const stop = (): void => {
-      if (delay !== undefined) window.clearTimeout(delay);
-      if (rep !== undefined) window.clearInterval(rep);
-      delay = rep = undefined;
-    };
+    let shift = false;
+    const rep = createRepeater({
+      delayMs: REPEAT_DELAY_MS,
+      intervalMs: STEPPER_REPEAT_MS,
+      tick: () => apply(stepValue(value, dir, o.spec, shift), true),
+    });
+    const stop = (): void => rep.stop();
     btn.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       e.stopPropagation();
-      const shift = e.shiftKey;
-      apply(stepValue(value, dir, o.spec, shift), true);
-      delay = window.setTimeout(() => {
-        rep = window.setInterval(() => apply(stepValue(value, dir, o.spec, shift), true), 80);
-      }, 400);
+      shift = e.shiftKey;
+      rep.start();
     });
     for (const ev of ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"]) {
       btn.addEventListener(ev, stop);
