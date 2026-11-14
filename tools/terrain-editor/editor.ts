@@ -88,7 +88,7 @@ const wrap = $("wrap");
 
 const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT =
-  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+middle-drag (or Shift+right-drag) to pan, Ctrl+wheel to zoom to the cursor, Alt+wheel = brush size in cells.";
+  "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+middle-drag (or Shift+right-drag) to pan, wheel to zoom to the cursor, Alt+wheel = brush size in cells.";
 const CURSOR_RADIUS_M = 8;
 const RING_SEGMENTS = 64;
 const ZOOM_HINT = "Zoom in to see single cells.";
@@ -158,7 +158,7 @@ const controls = new OrbitControls(camera, canvas);
 // LEFT is reserved for brushes. Shift + right-drag pans (OrbitControls default).
 // MIDDLE is handled below: drag orbits about the ground point under the cursor at
 // button-down (horizontal spins, vertical tilts); Shift + middle-drag pans.
-// Ctrl/Meta + wheel zooms toward the cursor; plain wheel does nothing; Alt + wheel is brush size.
+// Wheel (with or without Ctrl/Meta) zooms toward the cursor; Alt + wheel is brush size.
 controls.mouseButtons = {
   LEFT: null,
   MIDDLE: null,
@@ -168,7 +168,7 @@ controls.enableDamping = false;
 controls.maxPolarAngle = Math.PI / 2 - 0.02;
 const NAV_MIN_DIST_M = 2;
 const NAV_MAX_DIST_M = camera.far * 0.5;
-controls.enableZoom = false; // zoom is Ctrl+wheel toward the cursor, handled below
+controls.enableZoom = false; // wheel zooms toward the cursor, handled below
 controls.minDistance = NAV_MIN_DIST_M;
 controls.maxDistance = NAV_MAX_DIST_M;
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -237,7 +237,7 @@ canvas.addEventListener(
       if (raw !== 0) altWheelStep(raw < 0 ? 1 : -1);
       return;
     }
-    e.preventDefault(); // plain wheel does nothing; Ctrl+wheel must not page-zoom
+    e.preventDefault(); // wheel and Ctrl+wheel zoom; Ctrl+wheel must not page-zoom
     e.stopImmediatePropagation();
     const factor = wheelZoomFactor(e, canvas.clientHeight);
     if (factor === null) return;

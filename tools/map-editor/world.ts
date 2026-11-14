@@ -267,14 +267,14 @@ export function zoomAt(
 }
 
 /**
- * Wheel zoom factor for the editors: null for a plain wheel (does nothing), otherwise the
- * zoom factor for Ctrl/Meta+wheel (> 1 zooms in).
+ * Wheel zoom factor for the editors (> 1 zooms in). Plain wheel and Ctrl/Meta+wheel both
+ * zoom; null when there is no vertical scroll.
  */
 export function wheelZoomFactor(
-  e: { deltaY: number; deltaMode: number; ctrlKey: boolean; metaKey: boolean },
+  e: { deltaY: number; deltaMode: number },
   pageHeightPx: number,
 ): number | null {
-  if (!e.ctrlKey && !e.metaKey) return null;
+  if (e.deltaY === 0) return null;
   const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? pageHeightPx : 1;
   return Math.exp(-e.deltaY * unit * 0.0015);
 }

@@ -156,17 +156,14 @@ describe("view maths", () => {
     expect(zoomAt(v, 0.0001, 0, 0, 0.1, 20).scale).toBe(0.1);
   });
 
-  it("wheelZoomFactor is null for a plain wheel", () => {
-    const e = { deltaY: -100, deltaMode: 0, ctrlKey: false, metaKey: false };
-    expect(wheelZoomFactor(e, 800)).toBeNull();
+  it("wheelZoomFactor is null when there is no vertical scroll", () => {
+    expect(wheelZoomFactor({ deltaY: 0, deltaMode: 0 }, 800)).toBeNull();
   });
 
-  it("wheelZoomFactor zooms with ctrl/meta and scales by deltaMode", () => {
-    const base = { deltaMode: 0, ctrlKey: true, metaKey: false };
+  it("wheelZoomFactor zooms on any wheel and scales by deltaMode", () => {
+    const base = { deltaMode: 0 };
     expect(wheelZoomFactor({ ...base, deltaY: -100 }, 800) ?? 0).toBeGreaterThan(1);
-    expect(
-      wheelZoomFactor({ ...base, ctrlKey: false, metaKey: true, deltaY: 100 }, 800) ?? 9,
-    ).toBeLessThan(1);
+    expect(wheelZoomFactor({ ...base, deltaY: 100 }, 800) ?? 9).toBeLessThan(1);
     const px = wheelZoomFactor({ ...base, deltaY: -1 }, 800) as number;
     const line = wheelZoomFactor({ ...base, deltaMode: 1, deltaY: -1 }, 800) as number;
     expect(Math.log(line)).toBeCloseTo(Math.log(px) * 16, 9);

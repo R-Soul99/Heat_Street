@@ -122,7 +122,7 @@ let drawWidth = 5;
 let buildingHeight = 8;
 const HINTS: Record<Tool, string> = {
   select:
-    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans (Shift+middle too); Ctrl+wheel zooms to the cursor; Ctrl+arrows pan; F fits the world.",
+    "Click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete. Right- or middle-drag pans (Shift+middle too); wheel zooms to the cursor; Ctrl+arrows pan; F fits the world.",
   road: "Click centre-line points; double-click or Enter to finish; Esc cancels. Clicking a road or node connects to it. [ ] change the width.",
   move: "Drag a road node to move it (shared by every road that meets there).",
   building: "Click and drag a rectangle to add a building. [ ] change the height.",
