@@ -88,6 +88,7 @@ export function createStepper(o: {
       delay = rep = undefined;
     };
     btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
       e.stopPropagation();
       const shift = e.shiftKey;
       apply(stepValue(value, dir, o.spec, shift), true);
