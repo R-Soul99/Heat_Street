@@ -1035,23 +1035,23 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    /** Restores the snapshot heights; no undo entry. */
+    /**
+     * Reverts every vertex the drag touched (including slope-limiter-moved
+     * neighbours outside the selection) by applying the recorder's own inverse
+     * diff; no undo entry is left behind.
+     */
     cancelPushPull(): ToolResult {
       const pp = pushPull;
       if (!pp) return emptyResult();
-      const area = getArea();
-      const r = setMaskFromBase(
-        area.grid,
-        pp.mask,
-        pp.base,
-        pp.win,
-        0,
-        undefined,
-        heightOpOptions(area, options),
-      );
       pushPull = null;
       const res = emptyResult();
-      res.dirtyHeights = r.window;
+      const diff = pp.recorder.commit();
+      if (!diff) return res;
+      const area = getArea();
+      const scratch = createUndoStack(1);
+      scratch.push(diff);
+      const r = scratch.undo(area);
+      if (r) res.dirtyHeights = r.heightsWindow;
       return res;
     },
 

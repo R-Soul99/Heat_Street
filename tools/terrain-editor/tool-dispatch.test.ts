@@ -537,6 +537,16 @@ describe("grid select (07.1)", () => {
     expect(d.canUndo()).toBe(false);
   });
 
+  it("cancelPushPull restores the WHOLE heights array (limiter-moved neighbours too)", () => {
+    const { area, d } = selected();
+    const original = Float32Array.from(area.grid.heights);
+    d.beginPushPull();
+    d.pushPullTo(20);
+    d.cancelPushPull();
+    expect(Array.from(area.grid.heights)).toEqual(Array.from(original));
+    expect(d.canUndo()).toBe(false);
+  });
+
   it("pushPullTo clamps delta to 50 m", () => {
     const { area, d } = selected();
     const sel = selBounds(d) as CellWindow;
