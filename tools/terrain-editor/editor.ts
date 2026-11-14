@@ -54,7 +54,6 @@ import {
   el,
 } from "../editor-shell/controls.ts";
 import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
-import type { FloatRow } from "../editor-shell/floating-toolbar.ts";
 import { fmt3 } from "../editor-shell/format.ts";
 import {
   adjustDirection,
@@ -67,6 +66,7 @@ import { createRepeater, OP_REPEAT_MS, REPEAT_DELAY_MS } from "../editor-shell/r
 import { createShell } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
+import type { BarGroup } from "../editor-shell/top-bar.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
@@ -2193,79 +2193,61 @@ const brushShapeSlot = makeBrushShapeSlot();
 /** Slots that belong to the Brush chip: dimmed in Select mode (UI-SPEC opacity 0.4). */
 const brushSlotEls: HTMLElement[] = [brushSizeStepper.el, brushShapeSlot];
 
-const FLOAT_ROWS: FloatRow[] = [
-  [
-    {
-      id: "modes",
-      label: "Mode",
-      direction: "row",
-      items: MODES.map((t) => ({ kind: "tool" as const, tool: t })),
-    },
-    {
-      id: "brush",
-      label: "Brush options",
-      direction: "row",
-      items: [
-        { kind: "slot", id: "brushSize" },
-        { kind: "slot", id: "brushShape" },
-      ],
-    },
-    {
-      id: "grid",
-      label: "Grid",
-      direction: "row",
-      items: [
-        { kind: "tool", tool: pick(VIEW_TOGGLES, "grid") },
-        { kind: "slot", id: "gridSpacing" },
-      ],
-    },
-    {
-      id: "contours",
-      label: "Contours",
-      direction: "row",
-      items: [
-        { kind: "tool", tool: pick(VIEW_TOGGLES, "contours") },
-        { kind: "slot", id: "contourInterval" },
-      ],
-    },
-  ],
-  [
-    {
-      id: "ops",
-      label: "Operations",
-      direction: "row",
-      items: ["smooth", "flatten", "terrain"].map((id) => ({
-        kind: "tool" as const,
-        tool: pick(OPERATIONS, id),
-      })),
-    },
-  ],
-  [
-    {
-      id: "raiseLower",
-      label: "Raise and lower",
-      direction: "column",
-      items: [
-        { kind: "tool", tool: pick(OPERATIONS, "raise"), size: "big" },
-        { kind: "tool", tool: pick(OPERATIONS, "lower"), size: "big" },
-      ],
-    },
-  ],
-  [
-    {
-      id: "roads",
-      label: "Roads",
-      direction: "column",
-      items: [
-        { kind: "tool", tool: pick(ROAD_BUTTONS, "roadPaint") },
-        { kind: "tool", tool: pick(ROAD_BUTTONS, "roadErase") },
-        { kind: "divider" },
-        { kind: "tool", tool: pick(ROAD_BUTTONS, "lock") },
-        { kind: "tool", tool: pick(ROAD_BUTTONS, "unlock") },
-        { kind: "tool", tool: pick(ROAD_BUTTONS, "deleteRoad") },
-      ],
-    },
-  ],
+const FLOAT_GROUPS: BarGroup[] = [
+  {
+    id: "modes",
+    label: "Mode",
+    items: MODES.map((t) => ({ kind: "tool" as const, tool: t })),
+  },
+  {
+    id: "brush",
+    label: "Brush options",
+    items: [
+      { kind: "slot", id: "brushSize" },
+      { kind: "slot", id: "brushShape" },
+    ],
+  },
+  {
+    id: "grid",
+    label: "Grid",
+    items: [
+      { kind: "tool", tool: pick(VIEW_TOGGLES, "grid") },
+      { kind: "slot", id: "gridSpacing" },
+    ],
+  },
+  {
+    id: "contours",
+    label: "Contours",
+    items: [
+      { kind: "tool", tool: pick(VIEW_TOGGLES, "contours") },
+      { kind: "slot", id: "contourInterval" },
+    ],
+  },
+  {
+    id: "ops",
+    label: "Operations",
+    items: ["smooth", "flatten", "terrain"].map((id) => ({
+      kind: "tool" as const,
+      tool: pick(OPERATIONS, id),
+    })),
+  },
+  {
+    id: "raiseLower",
+    label: "Raise and lower",
+    items: [{ kind: "stack", tools: [pick(OPERATIONS, "raise"), pick(OPERATIONS, "lower")] }],
+  },
+  {
+    id: "roads",
+    label: "Roads",
+    items: [
+      { kind: "tool", tool: pick(ROAD_BUTTONS, "roadPaint") },
+      { kind: "tool", tool: pick(ROAD_BUTTONS, "roadErase") },
+      { kind: "divider" },
+      { kind: "tool", tool: pick(ROAD_BUTTONS, "lock") },
+      { kind: "tool", tool: pick(ROAD_BUTTONS, "unlock") },
+      { kind: "tool", tool: pick(ROAD_BUTTONS, "deleteRoad") },
+    ],
+  },
 ];
 
 function toolbarInput(): ToolbarInput {
@@ -2308,7 +2290,7 @@ function syncToolbar(): void {
     sidebarKey = key;
     buildSidebar();
   }
-  const f = shell.floating;
+  const f = shell.bar;
   if (f) {
     for (const t of TOOLBAR_TOOLS) {
       f.setEnabled(t.id, st.enabled[t.id], st.disabledTip[t.id]);
@@ -2400,7 +2382,7 @@ function runToolbarAction(id: ToolbarId): void {
     case "apply":
       stopOpHold(); // keep the editor's hold and the dispatcher's repeat session in step
       runLockAction(() => dispatcher.applyOperation(act.op));
-      shell.floating?.flash(id);
+      shell.bar?.flash(id);
       break;
     case "roadAction":
       runLockAction(() => dispatcher.applyRoadAction(act.action));
@@ -2527,8 +2509,8 @@ const shell = createShell({
   ],
   tools: TOOLBAR_TOOLS,
   onToolChange: () => {},
-  floating: {
-    rows: FLOAT_ROWS,
+  bar: {
+    groups: FLOAT_GROUPS,
     slots: {
       brushSize: brushSizeStepper.el,
       brushShape: brushShapeSlot,
@@ -2670,7 +2652,7 @@ window.addEventListener("keyup", suppressAltMenu);
 
 // Hold-to-repeat on the Raise, Lower and Smooth buttons (D-08, D-10).
 for (const id of HOLD_OPS) {
-  const b = shell.floating?.button(id);
+  const b = shell.bar?.button(id);
   if (!b) continue;
   b.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;

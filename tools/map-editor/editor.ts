@@ -1697,7 +1697,7 @@ function toggleGrid(): void {
   showGrid = !showGrid;
   requestDraw();
   shell.refreshMenus();
-  shell.floating?.setPressed("grid", showGrid);
+  shell.bar?.setPressed("grid", showGrid);
 }
 
 function toggleTiles(): void {
@@ -1880,31 +1880,26 @@ function buildShell(): Shell {
       { label: "Help", tip: "Tooltips and keyboard shortcuts", items: [] },
     ],
     tools: MAP_TOOLS,
-    floating: {
-      rows: [
-        [
-          {
-            id: "tools",
-            label: "Tools",
-            direction: "row",
-            items: MAP_TOOLS.map((tool) => ({ kind: "tool" as const, tool })),
-          },
-          {
-            id: "grid",
-            label: "Grid",
-            direction: "row",
-            items: [
-              { kind: "tool" as const, tool: MAP_GRID_TOGGLE },
-              { kind: "slot" as const, id: "gridSpacing" },
-            ],
-          },
-          {
-            id: "terrain",
-            label: "Terrain",
-            direction: "row",
-            items: [{ kind: "slot" as const, id: "toTerrain" }],
-          },
-        ],
+    bar: {
+      groups: [
+        {
+          id: "tools",
+          label: "Tools",
+          items: MAP_TOOLS.map((tool) => ({ kind: "tool" as const, tool })),
+        },
+        {
+          id: "grid",
+          label: "Grid",
+          items: [
+            { kind: "tool" as const, tool: MAP_GRID_TOGGLE },
+            { kind: "slot" as const, id: "gridSpacing" },
+          ],
+        },
+        {
+          id: "terrain",
+          label: "Terrain",
+          items: [{ kind: "slot" as const, id: "toTerrain" }],
+        },
       ],
       slots: { gridSpacing: gridSpacing.el, toTerrain },
     },
@@ -2349,7 +2344,7 @@ async function main(): Promise<void> {
   );
   resize();
   switchTool("select");
-  shell.floating?.setPressed("grid", showGrid);
+  shell.bar?.setPressed("grid", showGrid);
   setStatus(HINTS.select);
   auditTips(document);
   // A dev-server reload (file edit, restart) must not throw the user back to the

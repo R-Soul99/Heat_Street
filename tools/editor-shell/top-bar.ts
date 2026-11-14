@@ -3,6 +3,8 @@
  * tool buttons, stacked pairs, drop-down menus, dividers and editor/shell slots. The spec helpers
  * are pure; the DOM builder writes all text via textContent (T-07.1.2-23).
  */
+import { el } from "./controls.ts";
+import { type DropdownEvent, dropdownNext } from "./dropdown.ts";
 import { displayLabel, type ShellTool } from "./tool-rail.ts";
 
 export type MenuItem =
@@ -112,4 +114,196 @@ export function menuFace(
   const child = activeId === null ? undefined : children.find((c) => c.id === activeId);
   if (child) return { icon: child.icon, word: displayLabel(child), active: true };
   return { icon: trigger.icon, word: displayLabel(trigger), active: false };
+}
+
+export interface TopBar {
+  el: HTMLElement;
+  button(id: string): HTMLButtonElement | undefined;
+  setPressed(id: string, on: boolean): void;
+  setEnabled(id: string, on: boolean, disabledTip?: string): void;
+  flash(id: string): void;
+  openMenu(id: string): void;
+  /** Close any open menu; true when one was open (editors call this first on Esc). */
+  closeMenus(): boolean;
+  isMenuOpen(id: string): boolean;
+  setMenuFace(id: string, face: MenuFace): void;
+}
+
+export function createTopBar(
+  groups: BarGroup[],
+  slots: Record<string, HTMLElement>,
+  onClick: (id: string) => void,
+  onMenu?: (id: string, open: boolean) => void,
+): TopBar {
+  const root = el("div", "shell-topbar");
+  const btns = new Map<string, HTMLButtonElement>();
+  const tips = new Map<string, string>();
+  const menus = new Map<
+    string,
+    { wrap: HTMLElement; trigger: HTMLButtonElement; menu: HTMLElement }
+  >();
+  let openId: string | null = null;
+
+  const render = (): void => {
+    for (const [id, m] of menus) {
+      const open = id === openId;
+      m.menu.hidden = !open;
+      m.trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+  };
+  const dispatch = (ev: DropdownEvent): void => {
+    const prev = openId;
+    openId = dropdownNext(openId, ev);
+    render();
+    if (prev !== openId) {
+      if (prev !== null) onMenu?.(prev, false);
+      if (openId !== null) onMenu?.(openId, true);
+    }
+  };
+
+  const make = (t: ShellTool, cls: string, handler: () => void): HTMLButtonElement => {
+    const tip = t.keyLabel ? `${t.tip} (${t.keyLabel})` : t.tip;
+    const b = el("button", `tool-btn ${cls}`.trim(), undefined, tip);
+    b.type = "button";
+    b.setAttribute("aria-pressed", "false");
+    b.setAttribute(
+      "aria-label",
+      t.keyLabel ? `${displayLabel(t)} (${t.keyLabel})` : displayLabel(t),
+    );
+    if (t.tipLong) b.dataset.tipLong = t.tipLong;
+    b.append(
+      el("span", "tool-glyph", t.icon),
+      el("span", "tool-word", displayLabel(t)),
+      el("span", "tool-key", t.keyLabel ?? ""),
+    );
+    b.addEventListener("click", handler);
+    btns.set(t.id, b);
+    tips.set(t.id, tip);
+    return b;
+  };
+  const addSlot = (parent: HTMLElement, id: string): void => {
+    const slot = slots[id];
+    if (slot) parent.appendChild(slot);
+    else console.warn(`top bar: missing slot "${id}"`);
+  };
+
+  for (const g of groups) {
+    const ge = el("div", "bar-group");
+    ge.setAttribute("role", "toolbar");
+    ge.setAttribute("aria-label", g.label);
+    ge.addEventListener("pointerdown", (e) => e.stopPropagation());
+    for (const item of g.items) {
+      if (item.kind === "tool") {
+        ge.appendChild(make(item.tool, "", () => onClick(item.tool.id)));
+      } else if (item.kind === "stack") {
+        const st = el("div", "bar-stack");
+        for (const t of item.tools) st.appendChild(make(t, "stacked", () => onClick(t.id)));
+        ge.appendChild(st);
+      } else if (item.kind === "divider") {
+        ge.appendChild(el("div", "bar-divider"));
+      } else if (item.kind === "slot") {
+        addSlot(ge, item.id);
+      } else {
+        const wrap = el("div", "bar-menu-wrap");
+        const trig = item.tool;
+        const trigger = make(trig, "has-menu", () => {
+          if (trigger.classList.contains("is-disabled")) {
+            onClick(trig.id);
+            return;
+          }
+          dispatch({ type: "trigger", id: trig.id });
+        });
+        trigger.appendChild(el("span", "tool-caret", "▾"));
+        trigger.setAttribute("aria-haspopup", "menu");
+        trigger.setAttribute("aria-expanded", "false");
+        const menu = el("div", "bar-menu");
+        menu.setAttribute("role", "menu");
+        menu.hidden = true;
+        for (const m of item.items) {
+          if (m.kind === "tool") {
+            const cb = make(m.tool, "menu-item-btn", () => {
+              onClick(m.tool.id);
+              dispatch({ type: "pick" });
+            });
+            cb.setAttribute("role", "menuitem");
+            menu.appendChild(cb);
+          } else if (m.kind === "divider") {
+            menu.appendChild(el("div", "bar-divider"));
+          } else {
+            addSlot(menu, m.id);
+          }
+        }
+        wrap.append(trigger, menu);
+        menus.set(trig.id, { wrap, trigger, menu });
+        ge.appendChild(wrap);
+      }
+    }
+    root.appendChild(ge);
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (openId === null) return;
+      const target = e.target as Node | null;
+      const open = menus.get(openId);
+      if (!open || (target && open.wrap.contains(target))) return;
+      dispatch({ type: "outside" });
+      if (!target || !root.contains(target)) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    },
+    true,
+  );
+
+  return {
+    el: root,
+    button: (id) => btns.get(id),
+    setPressed(id, on) {
+      btns.get(id)?.setAttribute("aria-pressed", on ? "true" : "false");
+    },
+    setEnabled(id, on, disabledTip) {
+      const b = btns.get(id);
+      if (!b) return;
+      b.classList.toggle("is-disabled", !on);
+      if (on) {
+        b.removeAttribute("aria-disabled");
+        const orig = tips.get(id);
+        if (orig !== undefined) b.dataset.tip = orig;
+      } else {
+        b.setAttribute("aria-disabled", "true");
+        if (disabledTip !== undefined) b.dataset.tip = disabledTip;
+      }
+    },
+    flash(id) {
+      const b = btns.get(id);
+      if (!b) return;
+      b.classList.add("flash");
+      setTimeout(() => b.classList.remove("flash"), 150);
+    },
+    openMenu: (id) => {
+      if (menus.has(id)) dispatch({ type: "open", id });
+    },
+    closeMenus() {
+      const was = openId !== null;
+      if (was) dispatch({ type: "close" });
+      return was;
+    },
+    isMenuOpen: (id) => openId === id,
+    setMenuFace(id, face) {
+      const m = menus.get(id);
+      if (!m) return;
+      const glyph = m.trigger.querySelector(".tool-glyph");
+      const word = m.trigger.querySelector(".tool-word");
+      if (glyph) glyph.textContent = face.icon;
+      if (word) word.textContent = face.word;
+      m.trigger.querySelector(".bar-swatch")?.remove();
+      if (face.swatch && word) {
+        const sw = el("span", "bar-swatch");
+        sw.style.background = face.swatch;
+        word.before(sw);
+      }
+    },
+  };
 }

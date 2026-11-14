@@ -1,20 +1,22 @@
 /**
  * Editor-agnostic shell layout: menubar, fixed left sidebar (large tool name + options),
- * floating toolbar over the canvas (no bottom toolbar), history pad, view pad, info box.
+ * slim top bar over the canvas (tool groups, drop-downs, Undo/Redo/Clear), view pad, info box.
  * Knows nothing about roads or terrain.
  */
-import { createButton, el } from "./controls.ts";
+import { createButton, createSection, el } from "./controls.ts";
 import { openDialog } from "./dialog.ts";
-import {
-  createFloatingToolbar,
-  type FloatingToolbar,
-  type FloatRow,
-  validateFloatSpec,
-} from "./floating-toolbar.ts";
 import { createInfobar, type InfoField } from "./infobar.ts";
 import { createMenubar, type MenuItemSpec, type MenuSpec } from "./menubar.ts";
 import { displayLabel, type ShellTool } from "./tool-rail.ts";
 import { installTooltips, setTooltipsEnabled, tooltipsEnabled } from "./tooltips.ts";
+import {
+  type BarGroup,
+  createTopBar,
+  RESERVED_SLOTS,
+  type TopBar,
+  validateBarSpec,
+  withHistoryGroup,
+} from "./top-bar.ts";
 
 export { adjustDirection, isTextEntryFocused } from "./keys.ts";
 export type { InfoField, MenuItemSpec, MenuSpec, ShellTool };
@@ -26,9 +28,15 @@ export interface ShellOptions {
   menus: MenuSpec[];
   tools: ShellTool[];
   onToolChange: (id: string) => void;
-  /** Floating toolbar rows over the canvas (07.1.2 D-18). */
-  floating?: { rows: FloatRow[]; slots?: Record<string, HTMLElement> };
-  /** Floating tool click handler; defaults to setActiveTool(id). */
+  /** Top bar groups over the canvas (07.1.2 D-32). Undo/Redo/Clear are added by the shell. */
+  bar?: {
+    groups: BarGroup[];
+    slots?: Record<string, HTMLElement>;
+    onMenu?: (id: string, open: boolean) => void;
+  };
+  /** Persistent sidebar "View" section content, shown below the tool options (D-36). */
+  sidebarView?: HTMLElement[];
+  /** Bar tool click handler; defaults to setActiveTool(id). */
   onToolbarClick?: (id: string) => void;
   history: {
     undo: () => void;
@@ -60,7 +68,7 @@ export interface Shell {
   setHistoryState(canUndo: boolean, canRedo: boolean): void;
   setClearSelectionEnabled(on: boolean): void;
   setSidebarTitle(title: string, subtitle?: string): void;
-  floating: FloatingToolbar | undefined;
+  bar: TopBar | undefined;
   setToolEnabled(id: string, enabled: boolean): void;
   refreshMenus(): void;
   isDialogOpen(): boolean;
@@ -107,7 +115,7 @@ export function createShell(options: ShellOptions): Shell {
   help.items.push(tooltipItem, shortcutsItem);
 
   const menubar = createMenubar(menus);
-  let floating: FloatingToolbar | undefined;
+  let bar: TopBar | undefined;
   const sidebar = el("aside", "shell-sidebar");
   const title = el("div", "sidebar-title", "No tool selected");
   const subtitle = el("div", "sidebar-subtitle");
@@ -115,6 +123,16 @@ export function createShell(options: ShellOptions): Shell {
   const divider = el("div", "sidebar-divider");
   const body = el("div", "sidebar-body");
   sidebar.append(title, subtitle, divider, body);
+  if (options.sidebarView) {
+    sidebar.appendChild(
+      createSection(
+        "View",
+        "Display settings for the grid and overlays, shown for every tool",
+        true,
+        options.sidebarView,
+      ),
+    );
+  }
   const showEmpty = (): void => {
     body.replaceChildren(el("div", "sidebar-empty", "Pick a tool to see its options."));
   };
@@ -125,23 +143,12 @@ export function createShell(options: ShellOptions): Shell {
     subtitle.hidden = !sub;
   };
   const setActiveTool = (id: string): void => {
-    for (const x of options.tools) floating?.setPressed(x.id, x.id === id);
+    for (const x of options.tools) bar?.setPressed(x.id, x.id === id);
     const t = options.tools.find((x) => x.id === id);
     setSidebarTitle(t ? displayLabel(t) : id);
     body.replaceChildren();
     options.onToolChange(id);
   };
-  if (options.floating) {
-    for (const err of validateFloatSpec(options.floating.rows)) {
-      console.warn(`floating toolbar: ${err}`);
-    }
-    floating = createFloatingToolbar(
-      options.floating.rows,
-      options.floating.slots ?? {},
-      options.onToolbarClick ?? setActiveTool,
-    );
-  }
-
   const undoBtn = createButton({
     label: "Undo",
     tip: "Undo the last change (Ctrl+Z)",
@@ -152,31 +159,37 @@ export function createShell(options: ShellOptions): Shell {
     tip: "Redo the change you undid (Ctrl+Shift+Z)",
     onClick: options.history.redo,
   });
-  const historyPad = el("div", "shell-history");
-  historyPad.append(undoBtn, redoBtn);
   const h = options.history;
+  const historySlots: Record<string, HTMLElement> = { undo: undoBtn, redo: redoBtn };
   let clearSelectionBtn: HTMLButtonElement | undefined;
-  if (h.clearSelection || h.clearAll) {
-    historyPad.appendChild(el("div", "history-divider"));
-    if (h.clearSelection) {
-      clearSelectionBtn = createButton({
-        label: "Clear selection",
-        tip: h.clearSelection.tip,
-        onClick: h.clearSelection.run,
-      });
-      historyPad.appendChild(clearSelectionBtn);
-    }
-    if (h.clearAll) {
-      historyPad.appendChild(
-        createButton({
-          label: "Clear all",
-          tip: h.clearAll.tip,
-          kind: "danger",
-          onClick: h.clearAll.run,
-        }),
-      );
-    }
+  if (h.clearSelection) {
+    clearSelectionBtn = createButton({
+      label: "Clear selection",
+      tip: h.clearSelection.tip,
+      onClick: h.clearSelection.run,
+    });
+    historySlots.clearSelection = clearSelectionBtn;
   }
+  if (h.clearAll) {
+    historySlots.clearAll = createButton({
+      label: "Clear all",
+      tip: h.clearAll.tip,
+      kind: "danger",
+      onClick: h.clearAll.run,
+    });
+  }
+  const editorSlots = options.bar?.slots ?? {};
+  for (const id of RESERVED_SLOTS) {
+    if (id in editorSlots) console.warn(`top bar: slot id "${id}" is reserved for the shell`);
+  }
+  const barGroups = options.bar?.groups ?? [];
+  for (const err of validateBarSpec(barGroups)) console.warn(`top bar: ${err}`);
+  bar = createTopBar(
+    withHistoryGroup(barGroups, Object.keys(historySlots)),
+    { ...editorSlots, ...historySlots },
+    options.onToolbarClick ?? setActiveTool,
+    options.bar?.onMenu,
+  );
 
   const pad = el("div", "shell-viewpad");
   const v = options.view;
@@ -224,8 +237,7 @@ export function createShell(options: ShellOptions): Shell {
 
   const info = createInfobar(options.infoFields);
   options.root.append(menubar.el, sidebar);
-  if (floating) options.root.appendChild(floating.el);
-  options.root.append(historyPad, pad, info.el);
+  options.root.append(bar.el, pad, info.el);
 
   const setHistoryState = (canUndo: boolean, canRedo: boolean): void => {
     undoBtn.disabled = !canUndo;
@@ -243,8 +255,8 @@ export function createShell(options: ShellOptions): Shell {
       if (clearSelectionBtn) clearSelectionBtn.disabled = !on;
     },
     setSidebarTitle,
-    floating,
-    setToolEnabled: (id, on) => floating?.setEnabled(id, on),
+    bar,
+    setToolEnabled: (id, on) => bar?.setEnabled(id, on),
     refreshMenus: () => {
       menubar.refresh();
       sync();
