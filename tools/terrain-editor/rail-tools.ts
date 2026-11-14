@@ -32,7 +32,6 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "sculpt",
     keyLabel: "G",
     tip: "Smooth: ease bumps under the brush",
-    tipLong: "Smooth bumps out of the terrain under the brush.",
   },
   {
     id: "flatten",
@@ -41,7 +40,6 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "sculpt",
     keyLabel: "F",
     tip: "Flatten: level to the height where you start",
-    tipLong: "Flatten the terrain to the height where you started the stroke.",
   },
   {
     id: "gridSelect",
@@ -56,11 +54,11 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
   {
     id: "block",
     label: "Block",
-    icon: "▦",
+    icon: "▣",
     group: "select",
     keyLabel: "B",
     tip: "Block: raise or lower a square block of cells",
-    tipLong: "Raise or lower a square block of cells. Click steps it; drag paints blocks.",
+    tipLong: "Click steps it; drag paints blocks.",
   },
   {
     id: "smoothBox",
@@ -70,7 +68,7 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "select",
     keyLabel: "M",
     tip: "Smooth box: drag a box to smooth that area",
-    tipLong: "Drag a box to smooth that whole area. Roads never move.",
+    tipLong: "Roads never move.",
   },
   {
     id: "paint",
@@ -80,7 +78,7 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "surface",
     keyLabel: "P",
     tip: "Paint: paint a surface type onto the terrain",
-    tipLong: "Paint a surface type (tarmac, gravel, grass...) onto the terrain.",
+    tipLong: "Surface types include tarmac, gravel and grass.",
   },
   {
     id: "road",
@@ -90,7 +88,6 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "roads",
     keyLabel: "R",
     tip: "Road: drag a road; the ground grades flat under it",
-    tipLong: "Drag a road across the terrain. The ground is graded flat under it.",
   },
   {
     id: "erase",
@@ -100,7 +97,6 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "roads",
     keyLabel: "E",
     tip: "Erase: remove road segments under the brush",
-    tipLong: "Erase road segments under the brush.",
   },
   {
     id: "lock",
@@ -110,7 +106,7 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "roads",
     keyLabel: "L",
     tip: "Lock: click a road to lock or unlock it",
-    tipLong: "Click a road to lock or unlock it. Shift+click selects it without toggling.",
+    tipLong: "Shift+click selects a road without toggling it.",
   },
   {
     id: "stamp",
@@ -119,7 +115,7 @@ export const RAIL_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "roads",
     keyLabel: "W",
     tip: "Stamp: stamp a ramp or mound; drag to set length",
-    tipLong: "Stamp a wedge (ramp) or mound onto the terrain. Drag to set its length.",
+    tipLong: "Shapes are a wedge (ramp) or a mound.",
   },
 ];
 

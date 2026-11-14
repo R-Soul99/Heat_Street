@@ -62,8 +62,16 @@ describe("terrain RAIL_TOOLS", () => {
       expect(`${t.tip} (${t.keyLabel})`.length).toBeLessThanOrEqual(60);
       expect(t.tip.endsWith(".")).toBe(false);
       expect(t.tip.startsWith(`${word}:`)).toBe(true);
-      expect(t.tipLong?.length ?? 0).toBeGreaterThan(0);
+      if (t.tipLong) {
+        // Long tier adds how-to text only; it must not repeat the short tip (IN-01).
+        expect(t.tipLong.startsWith(t.tip)).toBe(false);
+        expect(t.tipLong.endsWith(".")).toBe(true);
+      }
     }
+  });
+
+  it("gives every tool a distinct glyph", () => {
+    expect(new Set(RAIL_TOOLS.map((t) => t.icon)).size).toBe(RAIL_TOOLS.length);
   });
 
   it("exposes the id set", () => {

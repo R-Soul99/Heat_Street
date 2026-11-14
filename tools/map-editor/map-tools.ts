@@ -19,8 +19,7 @@ export const MAP_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "select",
     keyLabel: "V",
     tip: "Select: click a road or building to edit it",
-    tipLong:
-      "Select: click a road or building to edit it. Drag a box to select many roads and buildings, then press Delete.",
+    tipLong: "Drag a box to select many roads and buildings, then press Delete.",
   },
   {
     id: "move",
@@ -29,7 +28,6 @@ export const MAP_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "select",
     keyLabel: "M",
     tip: "Move node: drag a road node; shared roads follow",
-    tipLong: "Move node: drag a road node; roads that share it follow",
   },
   {
     id: "road",
@@ -38,7 +36,7 @@ export const MAP_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "draw",
     keyLabel: "R",
     tip: "Draw road: click points, double-click to finish",
-    tipLong: "Draw road: click centre-line points; double-click or Enter to finish; Esc cancels",
+    tipLong: "Click centre-line points; double-click or Enter to finish; Esc cancels.",
   },
   {
     id: "building",
@@ -47,7 +45,6 @@ export const MAP_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "draw",
     keyLabel: "B",
     tip: "Building: drag a rectangle to add a building",
-    tipLong: "Building: drag a rectangle to add a building",
   },
   {
     id: "eraser",
@@ -56,6 +53,6 @@ export const MAP_TOOLS: (ShellTool & { id: Tool })[] = [
     group: "remove",
     keyLabel: "E",
     tip: "Eraser: delete roads and buildings you drag over",
-    tipLong: "Eraser: click or drag over roads and buildings to delete them. One drag = one Undo.",
+    tipLong: "A single click also deletes. One drag = one Undo.",
   },
 ];

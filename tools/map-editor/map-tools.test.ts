@@ -17,7 +17,11 @@ describe("MAP_TOOLS", () => {
       expect((t.shortLabel ?? t.label).length).toBeLessThanOrEqual(12);
       expect(`${t.tip} (${t.keyLabel})`.length).toBeLessThanOrEqual(60);
       expect(t.tip.endsWith(".")).toBe(false);
-      expect(t.tipLong?.length ?? 0).toBeGreaterThan(0);
+      if (t.tipLong) {
+        // Long tier adds how-to text only; it must not repeat the short tip (IN-01).
+        expect(t.tipLong.startsWith(t.tip)).toBe(false);
+        expect(t.tipLong.endsWith(".")).toBe(true);
+      }
     }
   });
 
