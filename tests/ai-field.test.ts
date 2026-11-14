@@ -13,7 +13,12 @@ import { parseMapCollision } from "../src/core/map-collision";
 import { parseMedalReference } from "../src/core/medal-reference";
 import { buildNavigationGraph, nearestRoadNode } from "../src/core/navigation";
 import { createRaceState } from "../src/core/race-state";
-import { buildGridPoses, buildRacingLine, silverLapTargetSec } from "../src/core/racing-line";
+import {
+  buildGridPoses,
+  buildRacingLine,
+  LEGACY_06_03_LINE_PARAMS,
+  silverLapTargetSec,
+} from "../src/core/racing-line";
 import { parseRoadGraph } from "../src/core/road-graph";
 import { DT } from "../src/core/sim-clock";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
@@ -23,9 +28,9 @@ import { createMapScene } from "../src/physics/map-scene";
 import { sampleVehicle } from "../src/physics/vehicle";
 import { createWorld } from "../src/physics/world";
 // Plan 04.2-15: the shipped juliette-ga.medals.json was re-recorded on the migrated
-// terrain map (handlingContentVersion "261101-terrain"). Circuit Race is forced off on
-// terrain areas, and the AI pace (AI_PACE_CALIBRATION) was calibrated against the legacy
-// map + the phase 06-03 reference, so this test pins that frozen 06-03 reference.
+// terrain map. This file keeps proving the AI on the LEGACY ribbon map, so it pins the
+// frozen 06-03 reference AND the legacy pace (LEGACY_06_03_LINE_PARAMS). The shipped
+// pace (AI_PACE_CALIBRATION) is calibrated on terrain in tests/ai-lap-terrain.test.ts (07-07).
 import medalsRaw from "./fixtures/juliette-ga.06-03-legacy.medals.json?raw";
 
 const graph = parseRoadGraph(compiledRaw, "public/maps/juliette-ga.map.json");
@@ -87,7 +92,7 @@ describe("ai-field: three AI cars launched together from the real grid all compl
   it("all three AI reach lap 2, never flip, and avoidance never deadlocks or leaves bounds", () => {
     const tuning = defaultTuning();
     const surfaceProfiles = defaultSurfaceProfiles();
-    const line = buildRacingLine(course, navigation, surfaceProfiles);
+    const line = buildRacingLine(course, navigation, surfaceProfiles, LEGACY_06_03_LINE_PARAMS);
     const grid = buildGridPoses(line, 4);
     const target = silverLapTargetSec(reference);
 

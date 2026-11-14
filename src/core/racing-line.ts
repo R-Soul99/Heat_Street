@@ -75,68 +75,57 @@ export interface RacingLineParams {
 }
 
 /**
- * FIXED compile-time calibration of the whole speed profile to Silver pace
- * (D-09/CIRC-02). Never varied at runtime, never derived from any racer's
- * state — the entire point of a fixed-difficulty AI is that this is a single
- * constant chosen once (Task 3's calibration step) and baked into the
- * shipped build, not a live knob.
+ * THE one fixed AI pace dial (D-09/CIRC-02): a single compile-time multiplier
+ * on the whole curvature-derived speed profile (corners, braking zones AND
+ * the straight-line cap alike). Never varied at runtime and never derived
+ * from any racer's live state or race position, so there is no rubber-banding
+ * or catch-up: a good drive beats the field and a bad one loses to it.
+ * Racers drive the same car and tune as everyone else, with no speed edge.
+ * Raise it to make the field faster; lower it to make them slower.
  *
- * [MEASURED] (plan 07-01 Task 3, `tests/ai-lap.test.ts`): started at 1.0
- * (i.e. `DEFAULT_RACING_LINE_PARAMS.topSpeedMs` of 45 m/s / ~100 mph applied
- * almost unscaled). At 1.0 and at an intermediate 0.75, the headless lap
- * crashed into a roadside building on the real circuit's fast 19->16 leg
- * (tarmac, not the dirt leg) — the pure-pursuit driver tracked the racing
- * line closely on gentle curves but the position/steering error visibly grew
- * across the ~100 m entering a modest bend (radius roughly 180-300 m) taken
- * at 40-45 m/s, and the car ran wide off the ~7 m-wide carriageway into a
- * building the map places close to the road edge there. This is an ordinary
- * pure-pursuit limitation (bounded steering authority and a speed-scaled
- * look-ahead that both shrink proportionally as speed drops), not a sign
- * error or a broken formula — reducing the whole pace, which reduces
- * `lookAheadDistanceM` at every point too, gave the controller enough margin
- * to track the corner cleanly. 0.5 (127.4 s) and 0.47 (150.0 s / -6.8%) both
- * completed without crashing but under-ran the +/-6% Silver band; 0.455
- * lands the measured one-lap time at 154.40 s against a 161.00 s Silver
- * target (-4.1%), inside the band with margin. `aLatMaxMs2` (below) was
- * deliberately left untouched — the crash was not caused by insufficient
- * cornering grip in the speed profile, and D-09/07-RESEARCH.md reserve that
- * knob specifically for a car sliding or running wide on the dirt leg, which
- * this was not.
+ * [MEASURED 2026-11-14, plan 07-07 pace rework, `tests/ai-lap-terrain.test.ts`]
+ * on the CURRENT terrain Juliette (`juliette-ga.terrain.bin/.json`, medals
+ * `handlingContentVersion` "261104-liftwide": circuit reference 213.05 s over
+ * 3 laps, so the Silver total is 245.01 s / 81.67 s a lap and Gold is
+ * 213.05 s / 71.02 s a lap), shipped RWD car, 60 Hz, standing start at GO.
+ * One AI car alone:
  *
- * RE-VERIFIED (2026-09-23 debug session `ai-pace-and-handbrake-feel`,
- * investigating "AI opponents capped at ~40mph, trivially outclassed"): this
- * comment's 0.75-also-crashes claim does NOT reproduce on the current
- * map/physics build. Re-running the exact same `tests/ai-lap.test.ts`
- * methodology: 0.75 now completes cleanly (max tilt 9.73 deg, straight-line
- * steer average 0.056 — both comfortably inside their gates), only 1.0
- * actually fails to complete within the test's tick budget. That headroom
- * is moot in practice, though: this dial is already constrained almost
- * entirely by the Silver +/-6% lap-time band above, not by the crash risk —
- * 0.455 already sits near the top edge of that band (-4.1%; 0.47 alone
- * measured -6.8%, outside it), far below where the (re-verified, higher
- * than documented) crash threshold would start to matter. A decoupled
- * model — scaling only cornering aggressiveness here while letting
- * straight-line top speed run closer to the player's own ~100 mph ceiling,
- * so the AI reads as "cautious in corners, fast on straights" instead of
- * uniformly capped everywhere — was prototyped and rejected during that
- * session: on this course the Silver lap-time target (161.00 s over
- * ~2040 m, ~12.7 m/s / ~28 mph average) requires a genuinely slow pace
- * across the WHOLE lap, not just in corners, and the AI driver's reactive
- * (fixed-lookahead, proportional) throttle/brake controller produced
- * non-monotonic lap times as the cornering dial was swept independently of
- * the top-speed dial (e.g. a MORE conservative cornering scale measured a
- * SHORTER lap than a less conservative one at the same top-speed ceiling) —
- * too unpredictable to ship without dedicated retuning well beyond a debug
- * session's scope. The real fix for "AI feels outclassed" is almost
- * certainly that the Silver/Gold reference times in
- * `public/maps/juliette-ga.medals.json` (locked in phase 06-03, tagged
- * `handlingContentVersion: "260920-sm2"`) were not re-validated against how
- * fast the post-260920-sm2 buffed player car (4.15 s 0-60, up from 6.52 s)
- * can actually lap this course — a medal-timing/difficulty-tier design
- * decision for Phase 7 planning, not something this dial alone can paper
- * over.
+ *   paceScale  lap 1   3 laps   notes
+ *   0.455      152.5   456.5    the old value: about half Silver pace
+ *   0.70       104.3   -
+ *   0.85        87.6   261.1
+ *   0.90        82.9   247.0    shipped: lap 1 +1.5%, 3 laps +0.8% over Silver
+ *   0.92        81.6   243.0
+ *   1.00        75.7   225.1    clean, near Gold pace
+ *
+ * The 3-AI, 3-lap field at 0.90 finishes in 247.0 / 248.5 / 249.9 s. That is
+ * just slower than the 245.0 s Silver total, so a clean Silver-pace drive
+ * just beats the field and a messy one (spins, a 5 s respawn) loses. Every
+ * lap is clean: tilt under 15 deg, never more than about 1 m beyond the
+ * carriageway edge, no handbrake, no throttle and brake together.
+ *
+ * Why the old 0.455 was so slow: it was calibrated on the pre-04.2 legacy
+ * ribbon map against the stale 06-03 Silver reference (161 s for one lap).
+ * Circuit Race was switched off on terrain maps, so nobody re-measured it
+ * after Juliette moved to terrain and the reference was re-recorded. The
+ * legacy tests (`tests/ai-lap.test.ts`, `tests/ai-field.test.ts`) still pin
+ * that legacy calibration explicitly through `LEGACY_06_03_LINE_PARAMS`.
+ *
+ * Tried and rejected: scaling only the cornering grip (`aLatMaxMs2`) while
+ * letting straights run flat out. On terrain Juliette it was erratic
+ * (aLat 4 went 58 m off the line) and gave non-monotonic lap times, the same
+ * failure the 2026-09-23 debug session recorded on the legacy map. Scaling
+ * the whole profile is monotonic and repeatable (see the table).
  */
-export const AI_PACE_CALIBRATION = 0.455;
+export const AI_PACE_CALIBRATION = 0.9;
+
+/**
+ * The shipped RWD car's own top speed, m/s (`shippedTuning("rwd").drive
+ * .topSpeedMs`, pinned by `tests/racing-line.test.ts`). It is a constant
+ * rather than read from the live tune, so a developer's saved tuning can never
+ * change AI pace, the same rule as using `defaultSurfaceProfiles()`.
+ */
+export const RACING_LINE_TOP_SPEED_MS = 48;
 
 export const DEFAULT_RACING_LINE_PARAMS: RacingLineParams = Object.freeze({
   spacingM: 2,
@@ -147,8 +136,19 @@ export const DEFAULT_RACING_LINE_PARAMS: RacingLineParams = Object.freeze({
   aLatMaxMs2: 7.0,
   aBrakeMs2: 6.0,
   aAccelMs2: 3.0,
-  topSpeedMs: 45,
+  topSpeedMs: RACING_LINE_TOP_SPEED_MS,
   paceScale: AI_PACE_CALIBRATION,
+});
+
+/**
+ * The pre-04.2 legacy-map calibration (06-03 Silver reference, 45 m/s cap,
+ * pace 0.455). Kept ONLY so the legacy-fixture lap tests stay meaningful;
+ * the game never uses it.
+ */
+export const LEGACY_06_03_LINE_PARAMS: RacingLineParams = Object.freeze({
+  ...DEFAULT_RACING_LINE_PARAMS,
+  topSpeedMs: 45,
+  paceScale: 0.455,
 });
 
 function wrapIndex(i: number, n: number): number {

@@ -81,8 +81,8 @@ describe("lookAheadDistanceM", () => {
     expect(lookAheadDistanceM(0, params)).toBe(6);
   });
 
-  it("speed 100 clamps to lookAheadMaxM (40)", () => {
-    expect(lookAheadDistanceM(100, params)).toBe(40);
+  it("speed 100 clamps to lookAheadMaxM (20)", () => {
+    expect(lookAheadDistanceM(100, params)).toBe(20);
   });
 
   it("speed 20 with gain 0.9 is 18", () => {

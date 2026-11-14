@@ -3,6 +3,7 @@ import compiledRaw from "../public/maps/juliette-ga.map.json?raw";
 import routesRaw from "../public/maps/juliette-ga.routes.json?raw";
 import type { Course } from "../src/core/course";
 import { parseCourseData } from "../src/core/course";
+import { shippedTuning } from "../src/core/feel";
 import { forwardFromYaw } from "../src/core/heading";
 import {
   buildNavigationGraph,
@@ -10,6 +11,7 @@ import {
   DEFECT_COORDINATES,
 } from "../src/core/navigation";
 import {
+  AI_PACE_CALIBRATION,
   buildGridPoses,
   buildRacingLine,
   curvatureFromThreePoints,
@@ -17,6 +19,7 @@ import {
   DEFAULT_RACING_LINE_PARAMS,
   nearestLineIndex,
   pointAhead,
+  RACING_LINE_TOP_SPEED_MS,
   silverLapTargetSec,
   targetSpeedAtCurvature,
 } from "../src/core/racing-line";
@@ -364,5 +367,18 @@ describe("buildGridPoses: real Juliette circuit", () => {
         expect(Math.hypot(pose.x - dx, pose.z - dz)).toBeGreaterThanOrEqual(DEFECT_CLEARANCE_M);
       }
     }
+  });
+});
+
+describe("racing-line pace constants (07-07)", () => {
+  it("the line's top speed is the shipped RWD car's own top speed (same car, no speed edge)", () => {
+    expect(RACING_LINE_TOP_SPEED_MS).toBe(shippedTuning("rwd").drive.topSpeedMs);
+    expect(DEFAULT_RACING_LINE_PARAMS.topSpeedMs).toBe(RACING_LINE_TOP_SPEED_MS);
+  });
+
+  it("there is exactly one fixed pace dial, at most the car's own pace", () => {
+    expect(DEFAULT_RACING_LINE_PARAMS.paceScale).toBe(AI_PACE_CALIBRATION);
+    expect(AI_PACE_CALIBRATION).toBeGreaterThan(0);
+    expect(AI_PACE_CALIBRATION).toBeLessThanOrEqual(1);
   });
 });

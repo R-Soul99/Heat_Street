@@ -67,7 +67,12 @@ export function defaultAiDriverParams(tuning: VehicleTuning): AiDriverParams {
   return {
     lookAheadGainSec: 0.9,
     lookAheadMinM: 6,
-    lookAheadMaxM: 40,
+    // 20 m, not 40 (07-07 pace rework): at Silver pace (40+ m/s) a 36-40 m
+    // look-ahead steered too lazily and the car weaved slowly up to 4 m off
+    // a fast dirt straight on terrain Juliette; 20 m keeps it within ~1 m of
+    // the carriageway with unchanged lap times. Slow legacy pace never
+    // reached the old cap, so it is unaffected.
+    lookAheadMaxM: 20,
     wheelbaseM: 2 * tuning.wheels.halfWheelbase,
     maxSteerLockRad: tuning.drive.maxSteerLock,
     speedLeadSec: 0.5,
