@@ -1,4 +1,4 @@
-/** Pure stepper maths. The DOM builder lives in stepper-el.ts (plan 07.1-04). */
+/** Pure stepper maths (07.1-01, 07.1.1 D-10). The DOM value box lives in controls.ts createStepper. */
 export interface StepperSpec {
   step: number;
   coarse: number;
@@ -26,4 +26,35 @@ export function parseStepperInput(text: string, spec: StepperSpec): number | und
   const n = Number(t);
   if (!Number.isFinite(n)) return undefined;
   return clampRound(n, spec);
+}
+
+/** Horizontal drag pixels per value step; under SCRUB_DEAD_ZONE_PX total movement counts as a click. */
+export const SCRUB_PX_PER_STEP = 8;
+export const SCRUB_DEAD_ZONE_PX = 3;
+
+/** Convert horizontal drag distance to whole steps, carrying the remainder. */
+export function scrubSteps(
+  dxPx: number,
+  carry: number,
+  pxPerStep = SCRUB_PX_PER_STEP,
+): { steps: number; carry: number } {
+  const total = carry + dxPx;
+  const steps = Math.trunc(total / pxPerStep);
+  return { steps: steps + 0, carry: total - steps * pxPerStep + 0 };
+}
+
+/** Apply a signed whole-step count through stepValue (clamp/round reused). */
+export function applySteps(v: number, steps: number, spec: StepperSpec, shift: boolean): number {
+  const dir: 1 | -1 = steps < 0 ? -1 : 1;
+  let out = v;
+  for (let i = 0; i < Math.abs(steps); i++) out = stepValue(out, dir, spec, shift);
+  return out;
+}
+
+/** Wheel up = increase. Shift+wheel arrives as deltaX in Chrome on Windows. */
+export function wheelDir(deltaY: number, deltaX = 0): 1 | -1 | 0 {
+  const d = deltaY !== 0 ? deltaY : deltaX;
+  if (d < 0) return 1;
+  if (d > 0) return -1;
+  return 0;
 }

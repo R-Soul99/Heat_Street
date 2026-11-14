@@ -18,7 +18,7 @@ describe("groupTools", () => {
     expect(groupTools([])).toEqual([]);
   });
   it("treats undefined group as one run", () => {
-    const runs = groupTools([{ id: "x" }, { id: "y" }]);
+    const runs = groupTools([{ group: undefined }, { group: undefined }]);
     expect(runs.length).toBe(1);
     expect(runs[0]?.group).toBeUndefined();
   });

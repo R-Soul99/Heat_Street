@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseStepperInput, type StepperSpec, stepValue } from "./stepper";
+import {
+  applySteps,
+  parseStepperInput,
+  type StepperSpec,
+  scrubSteps,
+  stepValue,
+  wheelDir,
+} from "./stepper";
 
 const spec: StepperSpec = { step: 0.25, coarse: 4, min: 0.25, max: 5, decimals: 2 };
 
@@ -30,5 +37,38 @@ describe("parseStepperInput", () => {
   it("clamps", () => {
     expect(parseStepperInput("99", spec)).toBe(5);
     expect(parseStepperInput("-3", spec)).toBe(0.25);
+  });
+});
+
+describe("scrubSteps", () => {
+  it("converts px to steps with carry", () => {
+    expect(scrubSteps(8, 0)).toEqual({ steps: 1, carry: 0 });
+    expect(scrubSteps(20, 0)).toEqual({ steps: 2, carry: 4 });
+    expect(scrubSteps(5, 0)).toEqual({ steps: 0, carry: 5 });
+    expect(scrubSteps(3, 5)).toEqual({ steps: 1, carry: 0 });
+    expect(scrubSteps(-20, 0)).toEqual({ steps: -2, carry: -4 });
+    expect(scrubSteps(0, 0)).toEqual({ steps: 0, carry: 0 });
+    expect(scrubSteps(10, 0, 5)).toEqual({ steps: 2, carry: 0 });
+  });
+});
+
+describe("applySteps", () => {
+  it("applies signed steps via stepValue", () => {
+    expect(applySteps(1, 3, spec, false)).toBe(1.75);
+    expect(applySteps(1, -2, spec, false)).toBe(0.5);
+    expect(applySteps(4, 10, spec, false)).toBe(5);
+    expect(applySteps(1, 1, spec, true)).toBe(2);
+    expect(applySteps(1, 0, spec, false)).toBe(1);
+  });
+});
+
+describe("wheelDir", () => {
+  it("maps wheel direction", () => {
+    expect(wheelDir(-100)).toBe(1);
+    expect(wheelDir(100)).toBe(-1);
+    expect(wheelDir(0)).toBe(0);
+    expect(wheelDir(0, -50)).toBe(1);
+    expect(wheelDir(0, 50)).toBe(-1);
+    expect(wheelDir(-3, 50)).toBe(1);
   });
 });
