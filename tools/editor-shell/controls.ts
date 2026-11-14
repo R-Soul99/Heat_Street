@@ -1,5 +1,14 @@
 /** Form controls for the editor shell. All text via textContent; all carry data-tip. */
-import { parseStepperInput, type StepperSpec, stepValue } from "./stepper.ts";
+import {
+  applySteps,
+  parseStepperInput,
+  SCRUB_DEAD_ZONE_PX,
+  SCRUB_PX_PER_STEP,
+  type StepperSpec,
+  scrubSteps,
+  stepValue,
+  wheelDir,
+} from "./stepper.ts";
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -33,17 +42,27 @@ export function createStepper(o: {
   unit?: string;
   onChange: (v: number) => void;
 }): { el: HTMLElement; get(): number; set(v: number): void } {
-  const root = el("div", "stepper");
-  const minus = el("button", "step-btn", "\u2212", `${o.tip} (decrease; Shift = coarse)`);
-  const plus = el("button", "step-btn", "+", `${o.tip} (increase; Shift = coarse)`);
-  minus.type = "button";
-  plus.type = "button";
-  const input = el("input", "step-input", undefined, o.tip);
+  const boxTip = `${o.tip} (drag, scroll or use arrows; Shift = coarse)`;
+  const tipLong = `Range ${o.spec.min} to ${o.spec.max}${o.unit ? ` ${o.unit}` : ""}. Drag sideways or scroll over the box to change it; Shift = coarse steps. Click to type a value.`;
+  const root = el("div", "value-box", undefined, boxTip);
+  root.dataset.tipLong = tipLong;
+  const input = el("input", "vb-input", undefined, boxTip);
+  input.dataset.tipLong = tipLong;
   input.type = "text";
   input.inputMode = "decimal";
+  input.setAttribute("aria-label", o.tip);
+  const up = el("button", "vb-arrow vb-up", "\u25b2", `${o.tip} (increase; Shift = coarse)`);
+  const down = el("button", "vb-arrow vb-down", "\u25bc", `${o.tip} (decrease; Shift = coarse)`);
+  up.type = "button";
+  down.type = "button";
+  up.setAttribute("aria-label", "Increase");
+  down.setAttribute("aria-label", "Decrease");
+  const arrows = el("div", "vb-arrows");
+  arrows.append(up, down);
   let value = o.value;
   const show = (): void => {
     input.value = value.toFixed(o.spec.decimals);
+    input.size = Math.min(10, Math.max(4, input.value.length));
   };
   const apply = (v: number, notify: boolean): void => {
     const changed = v !== value;
@@ -56,9 +75,9 @@ export function createStepper(o: {
     }
   };
   show();
-  root.append(minus, input);
+  root.appendChild(input);
   if (o.unit) root.appendChild(el("span", "unit", o.unit));
-  root.appendChild(plus);
+  root.appendChild(arrows);
 
   const hold = (btn: HTMLButtonElement, dir: 1 | -1): void => {
     let delay: number | undefined;
@@ -69,6 +88,7 @@ export function createStepper(o: {
       delay = rep = undefined;
     };
     btn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
       const shift = e.shiftKey;
       apply(stepValue(value, dir, o.spec, shift), true);
       delay = window.setTimeout(() => {
@@ -77,8 +97,70 @@ export function createStepper(o: {
     });
     for (const ev of ["pointerup", "pointerleave", "pointercancel"]) btn.addEventListener(ev, stop);
   };
-  hold(minus, -1);
-  hold(plus, 1);
+  hold(up, 1);
+  hold(down, -1);
+
+  // Drag-scrub: sideways drag steps the value; a press without movement focuses for typing.
+  let drag: {
+    pointerId: number;
+    startX: number;
+    lastX: number;
+    carry: number;
+    moved: boolean;
+  } | null = null;
+  const canScrubFrom = (e: MouseEvent): boolean =>
+    e.button === 0 &&
+    !(e.target as Element | null)?.closest?.(".vb-arrows") &&
+    document.activeElement !== input;
+  const endDrag = (): void => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    root.classList.remove("scrubbing");
+    if (root.hasPointerCapture?.(d.pointerId)) root.releasePointerCapture(d.pointerId);
+    if (d.moved) input.blur();
+  };
+  root.addEventListener("mousedown", (e) => {
+    if (canScrubFrom(e)) e.preventDefault();
+  });
+  root.addEventListener("pointerdown", (e) => {
+    if (!canScrubFrom(e)) return;
+    e.preventDefault();
+    drag = { pointerId: e.pointerId, startX: e.clientX, lastX: e.clientX, carry: 0, moved: false };
+    root.setPointerCapture(e.pointerId);
+  });
+  root.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.startX) < SCRUB_DEAD_ZONE_PX) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      root.classList.add("scrubbing");
+    }
+    const r = scrubSteps(e.clientX - drag.lastX, drag.carry, SCRUB_PX_PER_STEP);
+    drag.lastX = e.clientX;
+    drag.carry = r.carry;
+    if (r.steps !== 0) apply(applySteps(value, r.steps, o.spec, e.shiftKey), true);
+  });
+  root.addEventListener("pointerup", () => {
+    if (drag && !drag.moved) {
+      input.focus();
+      input.select();
+    }
+    endDrag();
+  });
+  root.addEventListener("pointercancel", endDrag);
+  root.addEventListener("lostpointercapture", endDrag);
+
+  root.addEventListener(
+    "wheel",
+    (e) => {
+      const d = wheelDir(e.deltaY, e.deltaX);
+      if (d === 0) return;
+      e.preventDefault();
+      apply(stepValue(value, d, o.spec, e.shiftKey), true);
+    },
+    { passive: false },
+  );
 
   const commit = (): void => {
     const p = parseStepperInput(input.value, o.spec);

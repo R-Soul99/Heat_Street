@@ -1,9 +1,9 @@
 /** Single delegated tooltip element driven by data-tip (D-04). Not title= (cannot be toggled). */
 import type { Rect } from "./dock.ts";
 import { getBoolPref, setBoolPref } from "./prefs.ts";
+import { TIP_FADE_OUT_MS, tipSchedule } from "./tip-phase.ts";
 import { placeTip } from "./tip-place.ts";
 
-const DELAY_MS = 400;
 let installed = false;
 let enabled = getBoolPref("tooltips", true);
 
@@ -18,26 +18,50 @@ export function setTooltipsEnabled(on: boolean): void {
 }
 
 let tipEl: HTMLDivElement | undefined;
-let timer: number | undefined;
+let timers: number[] = [];
+let current: HTMLElement | null = null;
+/** Target whose tip already faded or was dismissed; it returns only after the pointer leaves and re-enters. */
+let consumed: HTMLElement | null = null;
+
+function clearTimers(): void {
+  for (const t of timers) window.clearTimeout(t);
+  timers = [];
+}
 
 function hide(): void {
-  if (timer !== undefined) {
-    window.clearTimeout(timer);
-    timer = undefined;
+  clearTimers();
+  if (tipEl) {
+    tipEl.classList.remove("visible", "fading");
+    tipEl.style.display = "none";
   }
-  if (tipEl) tipEl.style.display = "none";
+  current = null;
+}
+
+function fade(): void {
+  if (!tipEl) return;
+  tipEl.classList.add("fading");
+  tipEl.classList.remove("visible");
+  consumed = current;
+  timers.push(
+    window.setTimeout(() => {
+      if (tipEl) tipEl.style.display = "none";
+    }, TIP_FADE_OUT_MS),
+  );
 }
 
 function show(target: HTMLElement, text: string): void {
   if (!tipEl) return;
-  tipEl.textContent = text;
-  tipEl.style.display = "block";
+  const el = tipEl;
+  el.textContent = text;
+  el.style.display = "block";
+  el.classList.remove("fading");
   const r = target.getBoundingClientRect();
-  const w = tipEl.offsetWidth;
-  const h = tipEl.offsetHeight;
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  el.classList.toggle("wrapped", h > 24);
   const avoid: Rect[] = [];
   for (const o of document.querySelectorAll("button, input, select, summary, [data-tip]")) {
-    if (o === target || target.contains(o) || o.contains(target) || o === tipEl) continue;
+    if (o === target || target.contains(o) || o.contains(target) || o === el) continue;
     const b = o.getBoundingClientRect();
     if (b.width === 0 || b.height === 0) continue;
     avoid.push(b);
@@ -48,8 +72,9 @@ function show(target: HTMLElement, text: string): void {
     { width: window.innerWidth, height: window.innerHeight },
     avoid,
   );
-  tipEl.style.left = `${p.x}px`;
-  tipEl.style.top = `${p.y}px`;
+  el.style.left = `${p.x}px`;
+  el.style.top = `${p.y}px`;
+  requestAnimationFrame(() => el.classList.add("visible"));
 }
 
 export function installTooltips(doc: Document): void {
@@ -63,18 +88,43 @@ export function installTooltips(doc: Document): void {
   doc.addEventListener("pointerover", (e) => {
     if (!enabled) return;
     const t = (e.target as Element | null)?.closest?.("[data-tip]") as HTMLElement | null;
-    if (!t) return;
+    if (!t || t === current || t === consumed) return;
     hide();
-    const text = t.dataset.tip;
-    if (!text) return;
-    timer = window.setTimeout(() => show(t, text), DELAY_MS);
+    current = t;
+    const short = t.dataset.tip;
+    if (!short) return;
+    const long = t.dataset.tipLong;
+    const s = tipSchedule(Boolean(long));
+    timers.push(window.setTimeout(() => show(t, short), s.showAt));
+    if (long && s.longAt !== undefined) {
+      timers.push(window.setTimeout(() => show(t, `${short}. ${long}`), s.longAt));
+    }
+    timers.push(window.setTimeout(fade, s.fadeAt));
   });
   doc.addEventListener("pointerout", (e) => {
-    const t = (e.target as Element | null)?.closest?.("[data-tip]");
-    if (t) hide();
+    const t = (e.target as Element | null)?.closest?.("[data-tip]") as HTMLElement | null;
+    if (!t) return;
+    const rel = e.relatedTarget;
+    if (rel instanceof Node && t.contains(rel)) return;
+    if (t === current) hide();
+    if (t === consumed) consumed = null;
   });
-  doc.addEventListener("pointerdown", hide, true);
-  doc.addEventListener("keydown", hide, true);
+  doc.addEventListener(
+    "pointerdown",
+    () => {
+      consumed = current ?? consumed;
+      hide();
+    },
+    true,
+  );
+  doc.addEventListener(
+    "keydown",
+    () => {
+      consumed = current ?? consumed;
+      hide();
+    },
+    true,
+  );
   doc.addEventListener("scroll", hide, true);
 }
 
