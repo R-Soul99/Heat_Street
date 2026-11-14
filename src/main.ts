@@ -351,8 +351,9 @@ try {
     const selectedMode: "p2p" | "circuit" | "circuit-race" =
       modeParam === "circuit-race" ? "circuit-race" : modeParam === "circuit" ? "circuit" : "p2p";
     const wantsCircuitRace = selectedMode === "circuit-race";
-    // Circuit race is forced off for terrain areas (no AI line on a heightfield yet).
-    isCircuitRace = wantsCircuitRace && !isTerrain;
+    // Terrain areas race too: the AI fleet drives terrain like the pursuers do,
+    // and grid poses are re-seated on the heightfield below.
+    isCircuitRace = wantsCircuitRace;
     const courseMode = wantsCircuitRace ? "circuit" : selectedMode;
     const course = routes.courses.find((candidate) => candidate.mode === courseMode);
     if (course === undefined) throw new Error(`no ${courseMode} course in ${MAP_ROUTES_URL}`);
@@ -472,7 +473,17 @@ try {
   if (isCircuitRace && rd !== undefined) {
     const { course, navigation } = rd;
     line = buildRacingLine(course, navigation, defaultSurfaceProfiles());
-    gridPoses = buildGridPoses(line, RACE_FIELD_SIZE);
+    const linePoses = buildGridPoses(line, RACE_FIELD_SIZE);
+    // On a terrain map, seat each grid slot on the heightfield (as pursuer
+    // spawns do) rather than trusting the road graph's node heights.
+    const physicsGrid = terrainPhysicsGrid;
+    gridPoses =
+      physicsGrid === undefined
+        ? linePoses
+        : linePoses.map((pose) => ({
+            ...pose,
+            y: sampleTerrainHeight(physicsGrid, pose.x, pose.z) + SPAWN_CLEARANCE_M,
+          }));
     scene.resetVehicle(gridPoses[PLAYER_GRID_SLOT]);
     fleet = createAiFleet(
       world,
