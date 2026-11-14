@@ -564,6 +564,16 @@ describe("grid select (07.1)", () => {
     expect(d.canUndo()).toBe(false);
   });
 
+  it("switching mode mid rubber-band drops the drag instead of committing it", () => {
+    const { d } = setup();
+    d.setTool("select");
+    d.pointerDown(A.x, A.z, {});
+    d.pointerMove(B.x, B.z, {});
+    d.setMode("brush");
+    expect(d.isStroking()).toBe(false);
+    expect(d.getSelectionMask()).toBeNull();
+  });
+
   it("pushPullTo clamps delta to 50 m", () => {
     const { area, d } = selected();
     const sel = selBounds(d) as CellWindow;

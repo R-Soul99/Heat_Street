@@ -620,13 +620,17 @@ export function createToolDispatcher(getArea: () => EditArea) {
     getMode: (): Mode => mode,
     /** Switching mode never touches the selection (D-06). */
     setMode(next: Mode): void {
-      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (stroke?.tool === "select")
+        stroke = null; // drop the unreleased rubber band
+      else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       mode = next;
     },
     getArmed: (): Operation | RoadBrush | null => armed,
     /** Arms a brush and switches to Brush mode (D-16). */
     armBrush(op: Operation | RoadBrush): void {
-      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (stroke?.tool === "select")
+        stroke = null; // drop the unreleased rubber band
+      else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       selectBrushTool(op);
       mode = "brush";
     },
@@ -634,7 +638,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
     selectionCellCount: (): number => liveSelection()?.cellCount() ?? 0,
     /** Adapter onto setMode/armBrush by internal tool name (the editor uses setMode/armBrush). */
     setTool(next: Tool): void {
-      if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      if (stroke?.tool === "select")
+        stroke = null; // drop the unreleased rubber band
+      else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       if (next === "select") {
         mode = "select";
         return;
