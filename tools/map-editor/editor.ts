@@ -1177,7 +1177,7 @@ window.addEventListener("mouseup", (e) => {
     const a = boxStart;
     boxStart = undefined;
     if (d.moved) {
-      const mode = modeOf(e);
+      const mode = liveMode; // same mode the rubber band previewed (snapshotted at mousedown)
       const entry = { box: { a, b: worldOf(e) }, mode };
       if (mode === "replace" || boxes.length === 0) boxes = [{ ...entry, mode: "replace" }];
       else boxes.push(entry);
