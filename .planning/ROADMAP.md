@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
 - [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
-- [ ] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix
+- [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
 - [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 
@@ -474,7 +474,7 @@ Plans:
 - Map editor follows the same conventions wherever the same control applies to both editors.
 - Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
 **Depends on:** Phase 07.1.1
-**Plans:** 11/12 plans executed
+**Plans:** 12/12 plans complete
 
 Plans:
 
@@ -500,7 +500,7 @@ Plans:
 
 - [x] 07.1.2-10-PLAN.md — Terrain editor: floating toolbar wiring, hold-repeat, selection visuals, Alt handling, hotkeys (wave 5)
 - [x] 07.1.2-11-PLAN.md — Terrain editor: mode sidebar, surface picker, Roads section; remove old tools (wave 6)
-- [ ] 07.1.2-12-PLAN.md — Hotkey audit, full npm run check gate, HUMAN-UAT checklist (wave 7)
+- [x] 07.1.2-12-PLAN.md — Hotkey audit, full npm run check gate, HUMAN-UAT checklist (wave 7)
 
 ### Phase 07.1.3: Editor feature palette (INSERTED)
 
