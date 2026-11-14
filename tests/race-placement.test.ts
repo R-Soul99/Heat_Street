@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyRace,
   computeStandings,
   createGapTracker,
   createProgressTracker,
@@ -192,5 +193,30 @@ describe("createGapTracker", () => {
     gap.record(0, -20, 5);
     gap.record(1, 0, 1);
     expect(gap.gapSec(1, 0)).toBeNull();
+  });
+});
+
+describe("classifyRace (07-07, D-07)", () => {
+  it("orders finished by time, then unfinished by progress (projected), flags the player", () => {
+    const rows = classifyRace([
+      { racerIndex: 0, isPlayer: false, finishEffectiveSec: 485, progressM: 1200 },
+      { racerIndex: 1, isPlayer: false, finishEffectiveSec: null, progressM: 900 },
+      { racerIndex: 2, isPlayer: false, finishEffectiveSec: null, progressM: 1100 },
+      { racerIndex: 3, isPlayer: true, finishEffectiveSec: 481.22, progressM: 1200 },
+    ]);
+    expect(rows.map((row) => row.racerIndex)).toEqual([3, 0, 2, 1]);
+    expect(rows.map((row) => row.position)).toEqual([1, 2, 3, 4]);
+    expect(rows.map((row) => row.projected)).toEqual([false, false, true, true]);
+    expect(rows[0]).toEqual({
+      position: 1,
+      racerIndex: 3,
+      isPlayer: true,
+      effectiveSec: 481.22,
+      projected: false,
+    });
+    expect(rows[2].effectiveSec).toBeNull();
+    expect(rows.filter((row) => row.isPlayer)).toHaveLength(1);
+    expect(Object.isFrozen(rows)).toBe(true);
+    expect(Object.isFrozen(rows[0])).toBe(true);
   });
 });
