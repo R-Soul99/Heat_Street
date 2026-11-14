@@ -1891,7 +1891,6 @@ function buildFlyout(t: Tool): void {
   const o = dispatcher.getOptions();
   const f = shell.flyout;
   f.replaceChildren();
-  f.appendChild(el("div", "field-label", RAIL_TOOLS.find((x) => x.id === t)?.label ?? t));
 
   const radius = (main: boolean): HTMLElement =>
     optStepper(
