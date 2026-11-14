@@ -18,6 +18,7 @@
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
 import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
 
@@ -551,7 +552,7 @@ export function setWindowFromBase(
 export function smoothRegion(
   grid: TerrainGrid,
   region: CellWindow,
-  params: { strength: number; passes: number },
+  params: { strength: number; passes: number; selected?: Uint8Array },
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
 ): BrushResult {
@@ -568,7 +569,16 @@ export function smoothRegion(
   const stride = grid.rows + 1;
   const rowsN = win.maxRow - win.minRow + 1;
   const colsN = win.maxCol - win.minCol + 1;
-  const mask = opts?.roadMask?.(win);
+  const roadMask = opts?.roadMask?.(win);
+  const selected = params.selected;
+  if (selected && selected.length !== grid.heights.length) return noOp();
+  // Unselected vertices are treated exactly like held road vertices.
+  const mask: Uint8Array | undefined =
+    roadMask || selected
+      ? Uint8Array.from({ length: grid.heights.length }, (_, i) =>
+          (roadMask?.[i] ?? 0) !== 0 || (selected !== undefined && !selected[i]) ? 1 : 0,
+        )
+      : undefined;
   let cur = new Float64Array(rowsN * colsN);
   let nxt = new Float64Array(rowsN * colsN);
   for (let c = 0; c < colsN; c++) {
@@ -619,6 +629,86 @@ export function smoothRegion(
     false,
     opts,
   );
+}
+
+/**
+ * D-08 / D-24: absolute hard-step push/pull of the selected vertices to
+ * `base + deltaM` (base snapshotted over `baseWin`, normally mask.bounds()).
+ * Unselected vertices are left alone; road holds and the slope limiter apply
+ * through runHeightOp.
+ */
+export function setMaskFromBase(
+  grid: TerrainGrid,
+  mask: CellMask,
+  base: Float32Array,
+  baseWin: CellWindow,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM) || mask.isEmpty()) return noOp();
+  const w = clipWindow(grid, baseWin);
+  if (!w) return noOp();
+  const rowsN = w.maxRow - w.minRow + 1;
+  if (base.length !== rowsN * (w.maxCol - w.minCol + 1)) return noOp();
+  const sel = mask.vertexMask(grid);
+  const stride = grid.rows + 1;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      if (!sel[row + col * stride]) return h;
+      return base[row - w.minRow + (col - w.minCol) * rowsN] + deltaM;
+    },
+    rec,
+    false,
+    opts,
+  );
+}
+
+/** D-28: mean height of every selected vertex, road-held ones included. Null when empty. */
+export function maskAverageHeight(grid: TerrainGrid, mask: CellMask): number | null {
+  if (mask.isEmpty()) return null;
+  const sel = mask.vertexMask(grid);
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < sel.length; i++) {
+    if (!sel[i]) continue;
+    sum += grid.heights[i];
+    n++;
+  }
+  return n > 0 ? sum / n : null;
+}
+
+/** D-09: level every selected un-held vertex to the selection average. */
+export function flattenMaskToAverage(
+  grid: TerrainGrid,
+  mask: CellMask,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult & { targetM?: number } {
+  const target = maskAverageHeight(grid, mask);
+  const b = mask.bounds();
+  if (target === null || !b) return noOp();
+  const w = clipWindow(grid, b);
+  if (!w) return noOp();
+  const sel = mask.vertexMask(grid);
+  const stride = grid.rows + 1;
+  const res = runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      return sel[row + col * stride] ? target : h;
+    },
+    rec,
+    false,
+    opts,
+  );
+  return { ...res, targetM: target };
 }
 
 export function flattenBrush(
@@ -772,6 +862,50 @@ export function paintSurface(
   return paintDisc(paint, params, rec, (old) =>
     (old & PAINT_ROAD_FLAG) !== 0 && opts.overRoads !== true ? old : value,
   );
+}
+
+/**
+ * D-11 / D-13: fills every paint pixel whose centre lies in a selected cell with
+ * `surface`. Road-flagged pixels are kept. One beforePaintWrite = one undo diff.
+ */
+export function paintMask(
+  paint: PaintMap,
+  grid: TerrainGrid,
+  mask: CellMask,
+  surface: SurfaceType,
+  rec?: StrokeRecorder,
+): PaintResult {
+  if (!SURFACE_TYPES.includes(surface)) return { pixelsChanged: 0 };
+  const b = mask.bounds();
+  const m = paint.metresPerPixel;
+  if (!b || !(m > 0)) return { pixelsChanged: 0 };
+  const x0 = grid.originX + b.minCol * grid.cellSizeM;
+  const x1 = grid.originX + b.maxCol * grid.cellSizeM;
+  const z0 = grid.originZ + b.minRow * grid.cellSizeM;
+  const z1 = grid.originZ + b.maxRow * grid.cellSizeM;
+  const rect = {
+    minPx: Math.max(0, Math.floor((x0 - paint.originX) / m)),
+    maxPx: Math.min(paint.width - 1, Math.ceil((x1 - paint.originX) / m)),
+    minPz: Math.max(0, Math.floor((z0 - paint.originZ) / m)),
+    maxPz: Math.min(paint.height - 1, Math.ceil((z1 - paint.originZ) / m)),
+  };
+  if (rect.minPx > rect.maxPx || rect.minPz > rect.maxPz) return { pixelsChanged: 0 };
+  rec?.beforePaintWrite(rect);
+  const value = encodePaintValue(surface, false);
+  let changed = 0;
+  for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
+    const cz = paint.originZ + (pz + 0.5) * m;
+    for (let px = rect.minPx; px <= rect.maxPx; px++) {
+      const cx = paint.originX + (px + 0.5) * m;
+      if (!mask.cellAtXZ(grid, cx, cz)) continue;
+      const i = pz * paint.width + px;
+      const old = paint.data[i];
+      if ((old & PAINT_ROAD_FLAG) !== 0 || old === value) continue;
+      paint.data[i] = value;
+      changed++;
+    }
+  }
+  return { rect, pixelsChanged: changed };
 }
 
 /** Clears the road flag and resets to the area's ground surface inside the radius. */
