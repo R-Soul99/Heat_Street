@@ -1241,9 +1241,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    /** Drops an in-progress smoothBox drag without editing anything (Escape). */
+    /** Drops an in-progress smoothBox or selection drag without editing anything (Escape). */
     cancelBoxDrag(): boolean {
-      if (stroke?.tool !== "smoothBox") return false;
+      if (stroke?.tool !== "smoothBox" && stroke?.tool !== "gridSelect") return false;
       stroke = null;
       return true;
     },

@@ -457,6 +457,16 @@ describe("block and smooth tools (04.3-07)", () => {
     expect(d.cancelBoxDrag()).toBe(false);
   });
 
+  it("cancelBoxDrag abandons a selection drag and leaves the selection untouched", () => {
+    const { d } = setup();
+    d.setMode("select");
+    d.pointerDown(0, 0, {});
+    d.pointerMove(20, 20);
+    expect(d.cancelBoxDrag()).toBe(true);
+    expect(d.isStroking()).toBe(false);
+    expect(d.selectionCellCount()).toBe(0);
+  });
+
   it("smoothAll is one undo entry", () => {
     const { area, d } = setup();
     d.setTool("block");

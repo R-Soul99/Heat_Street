@@ -25,6 +25,7 @@ import {
   FOOTPRINT_LIFT_M,
   footprintGridSegments,
   footprintOutline,
+  GRID_SPACING_PRESETS_CELLS,
   gridLineSegments,
   needsZoomHint,
   roadLockCounts,
@@ -54,6 +55,7 @@ import {
   el,
 } from "../editor-shell/controls.ts";
 import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
+import type { FloatRow } from "../editor-shell/floating-toolbar.ts";
 import { fmt3 } from "../editor-shell/format.ts";
 import {
   adjustDirection,
@@ -62,6 +64,7 @@ import {
   resolveShortcut,
   STANDARD_BINDINGS,
 } from "../editor-shell/keys.ts";
+import { createRepeater, OP_REPEAT_MS, REPEAT_DELAY_MS } from "../editor-shell/repeat.ts";
 import { createShell } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
 import { auditTips } from "../editor-shell/tooltips.ts";
@@ -69,7 +72,16 @@ import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { RAIL_TOOL_IDS, RAIL_TOOLS } from "./rail-tools.ts";
+import {
+  BRUSH_TOOL_FOR,
+  MODES,
+  OPERATIONS,
+  ROAD_BUTTONS,
+  TERRAIN_HOTKEYS,
+  TOOLBAR_TOOLS,
+  type ToolbarId,
+  VIEW_TOGGLES,
+} from "./rail-tools.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
@@ -78,10 +90,10 @@ import {
   type EditArea,
   SLOPE_LIMIT_MAX_DEG,
   SLOPE_LIMIT_MIN_DEG,
-  TOOL_KEYS,
   type Tool,
   type ToolResult,
 } from "./tool-dispatch.ts";
+import { resolveToolbarAction, type ToolbarInput, toolbarState } from "./toolbar-state.ts";
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>("view");
@@ -106,13 +118,19 @@ const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
 const BLOCK_YELLOW = 0xffee66;
 const BOX_CYAN = 0x44ddff;
+/** Selection accent (UI-SPEC Color) and the subtract rubber-band colour. */
+const SELECT_ACCENT = 0x4aa3ff;
+const SUBTRACT_ORANGE = 0xffb347;
+/** Selection fill is skipped above this many cells (T-07.1.2-18); the outline still draws. */
+const SELECTION_FILL_MAX_CELLS = 250000;
+const SELECT_HINT = "Shift: add, Ctrl: subtract, Alt: push/pull";
 
 // ---------------------------------------------------------------- state
 
 let area: TerrainArea | null = null;
 let terrainView: TerrainView | null = null;
 let dirty = false;
-let tool: Tool = "raise";
+let tool: Tool = "gridSelect";
 let lastHit: { x: number; z: number } | null = null;
 let slopeAmber = false;
 let stroking = false;
@@ -124,11 +142,13 @@ let editCounter = 0;
 let gridOn = false;
 let contoursOn = false;
 let contourInterval = 1;
+/** Grid line spacing in cells (D-20). */
+let gridSpacing = 1;
 let currentHint = "";
 const logLines: string[] = [];
 const LOG_MAX = 200;
 let activePointerId: number | null = null;
-/** Ctrl+drag push/pull in progress (Ctrl is read at pointerdown only). */
+/** Alt+drag push/pull in progress (Alt is read at pointerdown only). */
 let pushPull: {
   startY: number;
   pointerId: number;
@@ -138,7 +158,7 @@ let pushPull: {
 const PUSH_PULL_M_PER_PX = 0.05;
 const PUSH_PULL_FINE_M_PER_PX = 0.01;
 const NO_AREA_MSG = "Load or create an area first (File > Open area or File > New).";
-const NO_SELECTION_CLICK_MSG = "Select some cells first (Grid select, S), then Ctrl+drag.";
+const NO_SELECTION_CLICK_MSG = "Select some cells first (Select mode, S), then Alt+drag.";
 
 // ---------------------------------------------------------------- three setup
 
@@ -315,10 +335,35 @@ blockOutline.visible = false;
 scene.add(blockOutline);
 
 // Smooth-area drag box: cyan terrain-hugging rectangle, rebuilt per drag move (size is unbounded).
-const boxOutline = new THREE.LineLoop(
-  new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: BOX_CYAN, depthTest: false, transparent: true }),
-);
+const boxCyanMaterial = new THREE.LineBasicMaterial({
+  color: BOX_CYAN,
+  depthTest: false,
+  transparent: true,
+});
+// Select-mode rubber bands (UI-SPEC Color): replace solid accent, add dashed accent,
+// subtract dashed orange.
+const bandMaterials = {
+  replace: new THREE.LineBasicMaterial({
+    color: SELECT_ACCENT,
+    depthTest: false,
+    transparent: true,
+  }),
+  add: new THREE.LineDashedMaterial({
+    color: SELECT_ACCENT,
+    dashSize: 1.5,
+    gapSize: 1,
+    depthTest: false,
+    transparent: true,
+  }),
+  subtract: new THREE.LineDashedMaterial({
+    color: SUBTRACT_ORANGE,
+    dashSize: 1.5,
+    gapSize: 1,
+    depthTest: false,
+    transparent: true,
+  }),
+};
+const boxOutline = new THREE.LineLoop(new THREE.BufferGeometry(), boxCyanMaterial);
 boxOutline.renderOrder = 999;
 boxOutline.frustumCulled = false;
 boxOutline.visible = false;
@@ -360,30 +405,73 @@ function setOutline(line: THREE.LineLoop, w: CellWindow | null, lift: number): v
 
 let selectionReadoutEl: HTMLElement | null = null;
 
-/** Rebuilds the persistent Grid select outline and its flyout read-out (heights move under it). */
-function refreshSelectionOutline(): void {
-  const sel = area ? dispatcher.getSelection() : null;
-  setOutline(selectionOutline, sel, 0.2);
-  if (!selectionReadoutEl) return;
-  if (!sel || !area) {
-    selectionReadoutEl.textContent = "Nothing selected";
-    return;
-  }
-  const cols = sel.maxCol - sel.minCol;
-  const rows = sel.maxRow - sel.minRow;
-  const c = area.grid.cellSizeM;
-  selectionReadoutEl.textContent = `${cols} x ${rows} cells, ${fmt3(cols * c)} x ${fmt3(rows * c)} m`;
+// Mask selection (D-04, D-06): boundary outline plus a translucent fill. Select mode is solid,
+// Brush mode is faint (UI-SPEC 6).
+const selectionLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: SELECT_ACCENT, depthTest: false, transparent: true }),
+);
+const selectionFill = new THREE.Mesh(
+  new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({
+    color: SELECT_ACCENT,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    side: THREE.DoubleSide,
+  }),
+);
+for (const o of [selectionLines, selectionFill]) {
+  o.renderOrder = 999;
+  o.frustumCulled = false;
+  o.visible = false;
+  scene.add(o);
 }
 
-// Grid select: persistent yellow outline of the selected cells (the cyan box is the live drag).
-const selectionOutline = new THREE.LineLoop(
-  new THREE.BufferGeometry(),
-  new THREE.LineBasicMaterial({ color: BLOCK_YELLOW, depthTest: false, transparent: true }),
-);
-selectionOutline.renderOrder = 999;
-selectionOutline.frustumCulled = false;
-selectionOutline.visible = false;
-scene.add(selectionOutline);
+/** Select mode: fill 0.25, outline 1. Brush mode (faint): fill 0.10, outline 0.5. */
+function applySelectionOpacity(): void {
+  const select = dispatcher.getMode() === "select";
+  (selectionFill.material as THREE.MeshBasicMaterial).opacity = select ? 0.25 : 0.1;
+  (selectionLines.material as THREE.LineBasicMaterial).opacity = select ? 1 : 0.5;
+}
+
+/** Rebuilds the persistent selection outline + fill and read-out (heights move under it). */
+function refreshSelectionOutline(): void {
+  const mask = area ? dispatcher.getSelectionMask() : null;
+  selectionLines.geometry.dispose();
+  selectionFill.geometry.dispose();
+  selectionLines.geometry = new THREE.BufferGeometry();
+  selectionFill.geometry = new THREE.BufferGeometry();
+  selectionLines.visible = false;
+  selectionFill.visible = false;
+  if (!mask || !area) {
+    if (selectionReadoutEl) selectionReadoutEl.textContent = "Nothing selected";
+    refreshSelectionGrid();
+    return;
+  }
+  const lines = mask.boundarySegments(area.grid, 0.2);
+  selectionLines.geometry.setAttribute("position", new THREE.BufferAttribute(lines, 3));
+  selectionLines.visible = lines.length > 0;
+  const cells = mask.cellCount();
+  if (cells <= SELECTION_FILL_MAX_CELLS) {
+    const tris = mask.fillTriangles(area.grid, 0.18);
+    selectionFill.geometry.setAttribute("position", new THREE.BufferAttribute(tris, 3));
+    selectionFill.visible = tris.length > 0;
+  }
+  applySelectionOpacity();
+  if (selectionReadoutEl) {
+    const c = area.grid.cellSizeM;
+    selectionReadoutEl.textContent = `${cells} cells, ${fmt3(cells * c * c)} m2`;
+  }
+  refreshSelectionGrid();
+}
+
+/** Selection changed: a Select-mode grid follows the selection bounds. */
+function refreshSelectionGrid(): void {
+  if (!gridOn) return;
+  gridKey = "";
+  updateFootprintGrid(lastHit);
+}
 
 const previewMaterial = new THREE.LineBasicMaterial({
   color: RING_GREEN,
@@ -540,6 +628,7 @@ function installArea(next: TerrainArea): void {
     scene.remove(terrainView.group);
     terrainView.dispose();
   }
+  stopOpHold();
   area = next;
   dispatcher.clearHistory();
   pushPull = null; // dialogs cancel a live push/pull before an area is replaced
@@ -563,6 +652,7 @@ function installArea(next: TerrainArea): void {
   syncBlockLabel();
   refreshRoadLockOverlay();
   refreshInfo();
+  syncToolbar();
 }
 
 /** Loads a saved area. Resolves to the error text on failure, null on success or cancel. */
@@ -810,7 +900,6 @@ function setTopDown(on: boolean): void {
 function selectTool(next: Tool): void {
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   tool = next;
-  dispatcher.setTool(next);
   if (tool !== "block") blockOutline.visible = false;
   if (tool !== "smoothBox") {
     dispatcher.cancelBoxDrag();
@@ -932,6 +1021,7 @@ function paintSmoothBox(hit: { x: number; z: number }): string | null {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
   boxOutline.geometry = geo;
+  boxOutline.material = boxCyanMaterial;
   boxOutline.visible = true;
   const cols = w.maxCol - w.minCol;
   const rows = w.maxRow - w.minRow;
@@ -952,8 +1042,12 @@ function paintRingShapes(hit: { x: number; z: number }): void {
     stampArrow.visible = false;
     blockOutline.visible = false;
     const w = pushPull ? null : dispatcher.selectionPreview(hit.x, hit.z);
-    if (w) setOutline(boxOutline, w, 0.12);
-    else clearBoxOutline();
+    if (w) {
+      const op = dispatcher.selectionDragOp() ?? "replace";
+      boxOutline.material = bandMaterials[op];
+      setOutline(boxOutline, w, 0.12);
+      if (op !== "replace") boxOutline.computeLineDistances();
+    } else clearBoxOutline();
     return;
   }
   if (tool === "smoothBox") {
@@ -1212,14 +1306,41 @@ function setLines(target: THREE.LineSegments, data: Float32Array): void {
   target.geometry = g;
 }
 
-/** Grid lines for the active tool's footprint only, rebuilt when its cell window changes. */
+/**
+ * Grid lines: over the selection bounds in Select mode with a selection (A4), otherwise for the
+ * active tool's footprint under the cursor. Rebuilt when its cell window, spacing or tool changes.
+ */
 function updateFootprintGrid(hit: { x: number; z: number } | null): void {
-  if (!area || !gridOn || !hit) {
+  const sel = area && dispatcher.getMode() === "select" ? dispatcher.getSelectionMask() : null;
+  if (!area || !gridOn || (!hit && !sel)) {
     gridLines.visible = false;
     return;
   }
   const g = area.grid;
   const o = dispatcher.getOptions();
+  const sp = gridSpacing;
+  if (sel) {
+    const sw = sel.bounds();
+    if (
+      !sw ||
+      needsZoomHint(cellPxAtAnchor()) ||
+      sw.maxCol - sw.minCol > FOOTPRINT_GRID_MAX_CELLS ||
+      sw.maxRow - sw.minRow > FOOTPRINT_GRID_MAX_CELLS
+    ) {
+      gridLines.visible = false;
+      return;
+    }
+    const skey = `sel|${sp}|${sw.minRow},${sw.minCol},${sw.maxRow},${sw.maxCol}`;
+    gridLines.visible = true;
+    if (skey === gridKey) return;
+    gridKey = skey;
+    setLines(gridLines, gridLineSegments(g, sw, FOOTPRINT_LIFT_M, sp));
+    return;
+  }
+  if (!hit) {
+    gridLines.visible = false;
+    return;
+  }
   let w: CellWindow | null;
   let r = 0;
   let shape: "round" | "square" = "round";
@@ -1250,15 +1371,15 @@ function updateFootprintGrid(hit: { x: number; z: number } | null): void {
   const q = shape === "round" && tool !== "block" ? g.cellSizeM / 2 : 0;
   const qx = q > 0 ? Math.round(hit.x / q) : 0;
   const qz = q > 0 ? Math.round(hit.z / q) : 0;
-  const key = `${tool}|${r}|${shape}|${w.minRow},${w.minCol},${w.maxRow},${w.maxCol}|${qx},${qz}`;
+  const key = `${tool}|${r}|${shape}|${sp}|${w.minRow},${w.minCol},${w.maxRow},${w.maxCol}|${qx},${qz}`;
   gridLines.visible = true;
   if (key === gridKey) return;
   gridKey = key;
   setLines(
     gridLines,
     tool === "block"
-      ? gridLineSegments(g, w, FOOTPRINT_LIFT_M)
-      : footprintGridSegments(g, hit.x, hit.z, r, shape, FOOTPRINT_LIFT_M),
+      ? gridLineSegments(g, w, FOOTPRINT_LIFT_M, sp)
+      : footprintGridSegments(g, hit.x, hit.z, r, shape, FOOTPRINT_LIFT_M, sp),
   );
 }
 
@@ -1338,6 +1459,7 @@ function toggleOverlay(which: "grid" | "contours"): void {
   else contoursOn = !contoursOn;
   refreshOverlays();
   shell.refreshMenus();
+  syncToolbar();
 }
 
 /** Alt + wheel: step the brush radius by whole cells (Block: its size by one cell). */
@@ -1363,9 +1485,10 @@ function updateCursor(clientX: number, clientY: number): void {
     cursorRing.visible = false;
     stampArrow.visible = false;
     blockOutline.visible = false;
-    gridLines.visible = false;
     if (!stroking) clearBoxOutline();
     lastHit = null;
+    updateFootprintGrid(null);
+    applyCanvasCursor();
     shell.info.set("cursor", "off the terrain");
     shell.info.set("surface", "");
     return;
@@ -1383,6 +1506,16 @@ function updateCursor(clientX: number, clientY: number): void {
     flyoutReadout.textContent =
       (tool === "block" || tool === "smoothBox") && blockReadoutLine ? blockReadoutLine : "";
   }
+  applyCanvasCursor();
+}
+
+/** Crosshair over terrain in Select mode; ns-resize while push/pulling (UI-SPEC). */
+function applyCanvasCursor(): void {
+  canvas.style.cursor = pushPull
+    ? "ns-resize"
+    : tool === "gridSelect" && lastHit !== null
+      ? "crosshair"
+      : "";
 }
 
 // ---------------------------------------------------------------- stroke application
@@ -1601,6 +1734,7 @@ function applyResult(res: ToolResult, _ms: number): void {
       res.lockChanged);
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
   refreshSelectionOutline();
+  if (res.selectionChanged) syncToolbar();
   if (edited) setDirty(true);
   slopeAmber = res.slopeClamped;
   if (res.previewPoints !== undefined) setPreview(res.previewPoints);
@@ -1635,6 +1769,10 @@ function applyResult(res: ToolResult, _ms: number): void {
   if (edited || res.graphChanged || res.lockChanged) refreshRoadProblems();
 }
 
+function modsOf(e: PointerEvent): { shift: boolean; ctrl: boolean; alt: boolean } {
+  return { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
+}
+
 function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (!area) return;
   const hit = pickTerrain(e.clientX, e.clientY);
@@ -1644,10 +1782,10 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (phase === "down") {
     if (!hit) return;
     stroking = true;
-    res = dispatcher.pointerDown(hit.x, hit.z, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
+    res = dispatcher.pointerDown(hit.x, hit.z, modsOf(e));
   } else if (phase === "move") {
     if (!hit) return;
-    res = dispatcher.pointerMove(hit.x, hit.z, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
+    res = dispatcher.pointerMove(hit.x, hit.z, modsOf(e));
   } else {
     stroking = false;
     setPreview(null);
@@ -1672,6 +1810,7 @@ function cancelPushPullDrag(message: string): void {
   const pp = pushPull;
   if (!pp) return;
   pushPull = null;
+  applyCanvasCursor();
   if (!area) return;
   const r = dispatcher.cancelPushPull();
   rebuild(r.dirtyHeights, { heights: true });
@@ -1689,15 +1828,16 @@ canvas.addEventListener("pointerdown", (e) => {
     setStatus(NO_AREA_MSG, "error");
     return;
   }
-  if (tool === "gridSelect" && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault(); // no text selection while dragging
+  if (e.altKey && dispatcher.getMode() === "select") {
+    e.preventDefault(); // no browser Alt menu or text selection while dragging
     if (pushPull) return;
-    if (!dispatcher.getSelection() || !dispatcher.beginPushPull()) {
+    if (!dispatcher.getSelectionMask() || !dispatcher.beginPushPull()) {
       setStatus(NO_SELECTION_CLICK_MSG, "error");
       return;
     }
     pushPull = { startY: e.clientY, pointerId: e.pointerId, dirtyBefore: dirty, lastDeltaM: 0 };
     canvas.setPointerCapture(e.pointerId);
+    applyCanvasCursor();
     setStatus("Push/pull the selection: drag up or down. Shift = fine, Esc cancels.");
     return;
   }
@@ -1722,6 +1862,7 @@ canvas.addEventListener("pointerup", (e) => {
   if (pushPull && e.pointerId === pushPull.pointerId && e.button === 0) {
     const pp = pushPull;
     pushPull = null;
+    applyCanvasCursor();
     const res = dispatcher.endPushPull();
     applyResult(res, 0);
     updateHistoryButtons();
@@ -1754,13 +1895,14 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 function undoRedo(kind: "undo" | "redo"): void {
-  if (!area || stroking || pushPull) return;
+  if (!area || stroking || pushPull || opHold) return;
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
   rebuild(r.dirtyPaint, { paint: true });
   refreshOverlaysAfterEdit(r.dirtyHeights);
   refreshSelectionOutline();
+  syncToolbar();
   setDirty(true);
   setStatus(kind === "undo" ? "Undid last stroke." : "Redid stroke.", "ok");
   updateHistoryButtons();
@@ -1901,6 +2043,7 @@ function buildFlyout(t: Tool): void {
       "m",
       (v) => {
         dispatcher.setOptions({ radiusM: v });
+        brushSizeStepper.set(dispatcher.getOptions().radiusM);
         if (lastHit) paintRing(lastHit);
       },
       main,
@@ -1949,6 +2092,7 @@ function buildFlyout(t: Tool): void {
         tip: "Brush footprint shape; the brush acts on exactly the outlined area",
         onChange: (v) => {
           dispatcher.setOptions({ brushShape: v === "square" ? "square" : "round" });
+          syncToolbar();
           if (lastHit) paintRing(lastHit);
         },
       }).el,
@@ -2334,6 +2478,7 @@ async function contourIntervalDialog(): Promise<void> {
   });
   if (r === "apply") {
     contourInterval = st.get();
+    contourStepper.set(contourInterval);
     refreshOverlays();
   }
 }
@@ -2351,6 +2496,300 @@ function cancelActiveStroke(): void {
     canvas.releasePointerCapture(activePointerId);
   }
   activePointerId = null;
+}
+
+// ---------------------------------------------------------------- floating toolbar (07.1.2)
+
+const brushShapeButtons = new Map<"square" | "round", HTMLButtonElement>();
+
+function pick<T extends { id: string }>(list: readonly T[], id: string): T {
+  const found = list.find((t) => t.id === id);
+  if (!found) throw new Error(`toolbar tool missing: ${id}`);
+  return found;
+}
+
+function makeBrushShapeSlot(): HTMLElement {
+  const box = el("div", "float-slot");
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", "Brush shape");
+  const mk = (shape: "square" | "round", glyph: string, label: string): HTMLButtonElement => {
+    const b = el("button", "tool-btn", glyph, `${label} brush`);
+    b.type = "button";
+    b.setAttribute("aria-label", label);
+    b.setAttribute("aria-pressed", "false");
+    b.style.width = "32px";
+    b.style.height = "32px";
+    b.addEventListener("click", () => {
+      dispatcher.setOptions({ brushShape: shape });
+      syncToolbar();
+      if (lastHit) paintRing(lastHit);
+    });
+    brushShapeButtons.set(shape, b);
+    return b;
+  };
+  box.append(mk("square", "■", "Square"), mk("round", "●", "Circle"));
+  return box;
+}
+
+const brushSizeStepper = createStepper({
+  value: dispatcher.getOptions().radiusM,
+  spec: RADIUS_SPEC,
+  tip: "Brush size",
+  unit: "m",
+  onChange: (v) => {
+    dispatcher.setOptions({ radiusM: v });
+    if (activeValue && activeValue.spec === RADIUS_SPEC) activeValue.set(v);
+    if (lastHit) paintRing(lastHit);
+  },
+});
+const gridSpacingStepper = createStepper({
+  value: gridSpacing,
+  spec: { step: 1, coarse: 5, min: 1, max: 50, decimals: 0, presets: GRID_SPACING_PRESETS_CELLS },
+  tip: "Grid spacing in cells",
+  unit: "cells",
+  onChange: (v) => {
+    gridSpacing = v;
+    gridKey = "";
+    updateFootprintGrid(lastHit);
+  },
+});
+const contourStepper = createStepper({
+  value: contourInterval,
+  spec: { step: 0.25, coarse: 4, min: CONTOUR_MIN_M, max: CONTOUR_MAX_M, decimals: 2 },
+  tip: "Contour interval in metres",
+  unit: "m",
+  onChange: (v) => {
+    contourInterval = v;
+    refreshOverlays();
+  },
+});
+const brushShapeSlot = makeBrushShapeSlot();
+/** Slots that belong to the Brush chip: dimmed in Select mode (UI-SPEC opacity 0.4). */
+const brushSlotEls: HTMLElement[] = [brushSizeStepper.el, brushShapeSlot];
+
+const FLOAT_ROWS: FloatRow[] = [
+  [
+    {
+      id: "modes",
+      label: "Mode",
+      direction: "row",
+      items: MODES.map((t) => ({ kind: "tool" as const, tool: t })),
+    },
+    {
+      id: "brush",
+      label: "Brush options",
+      direction: "row",
+      items: [
+        { kind: "slot", id: "brushSize" },
+        { kind: "slot", id: "brushShape" },
+      ],
+    },
+    {
+      id: "grid",
+      label: "Grid",
+      direction: "row",
+      items: [
+        { kind: "tool", tool: pick(VIEW_TOGGLES, "grid") },
+        { kind: "slot", id: "gridSpacing" },
+      ],
+    },
+    {
+      id: "contours",
+      label: "Contours",
+      direction: "row",
+      items: [
+        { kind: "tool", tool: pick(VIEW_TOGGLES, "contours") },
+        { kind: "slot", id: "contourInterval" },
+      ],
+    },
+  ],
+  [
+    {
+      id: "ops",
+      label: "Operations",
+      direction: "row",
+      items: ["smooth", "flatten", "terrain"].map((id) => ({
+        kind: "tool" as const,
+        tool: pick(OPERATIONS, id),
+      })),
+    },
+  ],
+  [
+    {
+      id: "raiseLower",
+      label: "Raise and lower",
+      direction: "column",
+      items: [
+        { kind: "tool", tool: pick(OPERATIONS, "raise"), size: "big" },
+        { kind: "tool", tool: pick(OPERATIONS, "lower"), size: "big" },
+      ],
+    },
+  ],
+  [
+    {
+      id: "roads",
+      label: "Roads",
+      direction: "column",
+      items: [
+        { kind: "tool", tool: pick(ROAD_BUTTONS, "roadPaint") },
+        { kind: "tool", tool: pick(ROAD_BUTTONS, "roadErase") },
+        { kind: "divider" },
+        { kind: "tool", tool: pick(ROAD_BUTTONS, "lock") },
+        { kind: "tool", tool: pick(ROAD_BUTTONS, "unlock") },
+        { kind: "tool", tool: pick(ROAD_BUTTONS, "deleteRoad") },
+      ],
+    },
+  ],
+];
+
+function toolbarInput(): ToolbarInput {
+  return {
+    mode: dispatcher.getMode(),
+    selectionCells: dispatcher.selectionCellCount(),
+    cellSizeM: area?.grid.cellSizeM ?? 1,
+    armed: dispatcher.getArmed(),
+  };
+}
+
+/** The single place a toolbar id is resolved to an action (clicks and hotkeys both land here). */
+function routeToolbar(id: ToolbarId): ReturnType<typeof resolveToolbarAction> {
+  return resolveToolbarAction(toolbarInput(), id);
+}
+
+let lastSyncedMode = dispatcher.getMode();
+
+/** The editor's legacy `tool` follows the dispatcher mode and armed brush. */
+function syncToolFromDispatcher(): void {
+  const mode = dispatcher.getMode();
+  const armed = dispatcher.getArmed();
+  const next: Tool = mode === "select" ? "gridSelect" : armed ? BRUSH_TOOL_FOR[armed] : "raise";
+  if (next !== tool) selectTool(next);
+  applySelectionOpacity();
+  if (mode !== lastSyncedMode) {
+    lastSyncedMode = mode;
+    refreshSelectionGrid();
+    if (mode === "select") setStatus(SELECT_HINT);
+  }
+  applyCanvasCursor();
+}
+
+/** Pressed, enabled and tooltip state of every toolbar control, plus the sidebar title. */
+function syncToolbar(): void {
+  const input = toolbarInput();
+  const st = toolbarState(input);
+  const f = shell.floating;
+  if (f) {
+    for (const t of TOOLBAR_TOOLS) {
+      f.setEnabled(t.id, st.enabled[t.id], st.disabledTip[t.id]);
+      const pressed =
+        t.id === "grid" ? gridOn : t.id === "contours" ? contoursOn : st.pressed[t.id];
+      f.setPressed(t.id, pressed);
+    }
+  }
+  const shape = dispatcher.getOptions().brushShape;
+  for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
+  for (const slot of brushSlotEls) {
+    slot.style.opacity = st.brushControlsEnabled ? "" : "0.4";
+    slot.style.pointerEvents = st.brushControlsEnabled ? "" : "none";
+  }
+  shell.setSidebarTitle(st.title, st.subtitle);
+  shell.setClearSelectionEnabled(input.selectionCells > 0);
+  if (opHold && input.selectionCells === 0) stopOpHold();
+}
+
+// Hold-to-repeat for Raise, Lower and Smooth (D-08, D-10): one undo step per press-hold-release.
+type HoldOp = "raise" | "lower" | "smooth";
+const HOLD_OPS: readonly HoldOp[] = ["raise", "lower", "smooth"];
+const isHoldOp = (id: string): id is HoldOp => (HOLD_OPS as readonly string[]).includes(id);
+let opHold: { op: HoldOp; repeater: ReturnType<typeof createRepeater>; key?: string } | null = null;
+/** The click that follows a pointer hold must not apply a second step. */
+let clickSuppress: ToolbarId | null = null;
+
+function startOpHold(op: HoldOp, key?: string): boolean {
+  if (!area || opHold || stroking || pushPull) return false;
+  if (routeToolbar(op).kind !== "apply") return false;
+  let first = true;
+  const repeater = createRepeater({
+    delayMs: REPEAT_DELAY_MS,
+    intervalMs: OP_REPEAT_MS,
+    tick: () => {
+      const res = first ? dispatcher.beginOpRepeat(op) : dispatcher.opRepeatTick();
+      first = false;
+      applyResult(res, 0);
+    },
+  });
+  opHold = { op, repeater, key };
+  repeater.start();
+  if (!dispatcher.isRepeating()) {
+    stopOpHold();
+    return false;
+  }
+  return true;
+}
+
+function stopOpHold(): void {
+  const h = opHold;
+  if (!h) return;
+  opHold = null;
+  h.repeater.stop();
+  if (area) {
+    // The ticks already refreshed the view; the end only commits the single undo entry.
+    dispatcher.endOpRepeat();
+    updateHistoryButtons();
+    refreshRoadProblems();
+  }
+  syncToolbar();
+}
+
+function endPointerHold(id: HoldOp): void {
+  if (!opHold || opHold.key !== undefined || opHold.op !== id) return;
+  stopOpHold();
+  window.setTimeout(() => {
+    clickSuppress = null;
+  }, 0);
+}
+
+function runToolbarAction(id: ToolbarId): void {
+  if (clickSuppress === id) {
+    clickSuppress = null;
+    syncToolbar();
+    return;
+  }
+  const act = routeToolbar(id);
+  switch (act.kind) {
+    case "mode":
+    case "arm":
+      stopOpHold();
+      cancelActiveStroke();
+      if (act.kind === "mode") dispatcher.setMode(act.mode);
+      else dispatcher.armBrush(act.op);
+      stroking = stroking && dispatcher.isStroking();
+      syncToolFromDispatcher();
+      break;
+    case "apply":
+      runLockAction(() => dispatcher.applyOperation(act.op));
+      shell.floating?.flash(id);
+      break;
+    case "roadAction":
+      runLockAction(() => dispatcher.applyRoadAction(act.action));
+      break;
+    case "toggle":
+      toggleOverlay(act.which);
+      break;
+    case "blocked":
+      setStatus(act.status);
+      break;
+  }
+  syncToolbar();
+}
+
+function clearSelectionNow(): void {
+  stopOpHold();
+  dispatcher.cancelBoxDrag();
+  dispatcher.clearSelection();
+  clearBoxOutline();
+  refreshSelectionOutline();
+  syncToolbar();
 }
 
 // ---------------------------------------------------------------- shell
@@ -2454,18 +2893,23 @@ const shell = createShell({
     },
     { label: "Help", tip: "Help and preferences", items: [] },
   ],
-  tools: RAIL_TOOLS,
-  onToolChange: (id) => selectTool(id as Tool),
+  tools: TOOLBAR_TOOLS,
+  onToolChange: () => {},
+  floating: {
+    rows: FLOAT_ROWS,
+    slots: {
+      brushSize: brushSizeStepper.el,
+      brushShape: brushShapeSlot,
+      gridSpacing: gridSpacingStepper.el,
+      contourInterval: contourStepper.el,
+    },
+  },
+  onToolbarClick: (id) => runToolbarAction(id as ToolbarId),
   history: {
     undo: () => undoRedo("undo"),
     redo: () => undoRedo("redo"),
     clearSelection: {
-      run: () => {
-        dispatcher.cancelBoxDrag();
-        dispatcher.clearSelection();
-        clearBoxOutline();
-        refreshSelectionOutline();
-      },
+      run: clearSelectionNow,
       tip: "Clear selection: deselect everything (Esc)",
     },
   },
@@ -2516,8 +2960,6 @@ const shell = createShell({
 const BINDINGS: Binding[] = [
   ...STANDARD_BINDINGS,
   { id: "topdown", code: "KeyT", label: "T" },
-  { id: "grid", code: "KeyX", label: "X" },
-  { id: "contours", code: "KeyC", label: "C" },
   { id: "drive", code: "KeyD", label: "D" },
 ];
 
@@ -2543,36 +2985,38 @@ window.addEventListener("keydown", (e) => {
       undoRedo("redo");
       return;
     case "escape":
-      if (!dialogOpen && pushPull) {
+      if (dialogOpen) return;
+      if (opHold) {
+        stopOpHold();
+        return;
+      }
+      if (pushPull) {
         cancelPushPullDrag("Push/pull cancelled.");
         return;
       }
-      if (!dialogOpen && tool === "gridSelect" && stroking) {
-        // Abandon a rubber-band drag without selecting anything.
-        const prev = dispatcher.getSelection();
-        dispatcher.pointerUp(Number.NaN, Number.NaN);
-        dispatcher.setSelection(prev);
+      if (tool === "gridSelect" && stroking) {
+        // Abandon a rubber-band drag without changing the selection.
+        dispatcher.cancelBoxDrag();
         stroking = false;
         clearBoxOutline();
         refreshSelectionOutline();
         setStatus("Selection drag cancelled.");
         return;
       }
-      if (!dialogOpen && dispatcher.cancelBoxDrag()) {
+      if (dispatcher.cancelBoxDrag()) {
         stroking = false;
         clearBoxOutline();
         if (lastHit) paintRing(lastHit);
         setStatus("Smooth area cancelled.");
+        return;
+      }
+      if (dispatcher.selectionCellCount() > 0) {
+        clearSelectionNow();
+        setStatus("Selection cleared.");
       }
       return;
     case "topdown":
       setTopDown(!topDown);
-      return;
-    case "grid":
-      toggleOverlay("grid");
-      return;
-    case "contours":
-      toggleOverlay("contours");
       return;
     case "drive":
       void driveHere();
@@ -2581,9 +3025,12 @@ window.addEventListener("keydown", (e) => {
       break;
   }
   if (textFocused || dialogOpen || e.altKey || e.ctrlKey || e.metaKey) return;
-  const next = TOOL_KEYS[e.code];
-  if (next && RAIL_TOOL_IDS.has(next)) {
-    shell.setActiveTool(next);
+  const tid = TERRAIN_HOTKEYS[e.code];
+  if (tid) {
+    e.preventDefault();
+    if (e.repeat) return; // OS key repeat never re-fires a toolbar action
+    if (isHoldOp(tid) && startOpHold(tid, e.code)) return;
+    runToolbarAction(tid);
     return;
   }
   if (e.code === "Escape") return;
@@ -2603,6 +3050,40 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
+window.addEventListener("keyup", (e) => {
+  if (opHold?.key === e.code) stopOpHold();
+});
+window.addEventListener("blur", () => stopOpHold());
+
+// D-05 (assumption A1): a bare Alt press must not open the browser menu while Alt+drag push/pull
+// is in use. Text fields and dialogs keep the default.
+const suppressAltMenu = (e: KeyboardEvent): void => {
+  if (e.key === "Alt" && !isTextEntryFocused(document.activeElement) && !shell.isDialogOpen()) {
+    e.preventDefault();
+  }
+};
+window.addEventListener("keydown", suppressAltMenu);
+window.addEventListener("keyup", suppressAltMenu);
+
+// Hold-to-repeat on the Raise, Lower and Smooth buttons (D-08, D-10).
+for (const id of HOLD_OPS) {
+  const b = shell.floating?.button(id);
+  if (!b) continue;
+  b.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (!startOpHold(id)) return;
+    clickSuppress = id;
+    try {
+      b.setPointerCapture(e.pointerId);
+    } catch {
+      // capture is best-effort; pointerleave still ends the hold
+    }
+  });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel", "lostpointercapture"]) {
+    b.addEventListener(ev, () => endPointerHold(id));
+  }
+}
+
 window.addEventListener("beforeunload", (e) => {
   if (dirty) e.preventDefault();
 });
@@ -2617,7 +3098,9 @@ function frame(): void {
   requestAnimationFrame(frame);
 }
 
-shell.setActiveTool(tool);
+buildFlyout(tool);
+syncToolbar();
+applySelectionOpacity();
 updateHistoryButtons();
 setHint(DEFAULT_HINT);
 setStatus("No area loaded. Use File > Open area or File > New.");
