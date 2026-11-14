@@ -16,6 +16,7 @@ import {
   createToggle,
   el,
 } from "../editor-shell/controls.ts";
+import { hudStartX } from "../editor-shell/canvas-point.ts";
 import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
 import { fmt3 } from "../editor-shell/format.ts";
 import { createSnapshotHistory } from "../editor-shell/history.ts";
@@ -508,9 +509,12 @@ function drawTiles(vis: ReturnType<typeof visibleRect>): void {
 
 function drawHud(): void {
   const bar = scaleBar(scale, 160);
-  // Dock layout: the tool row covers the canvas's bottom-left corner, so start right of it.
+  // The tool row covers the canvas's bottom-left corner, so start right of it, in canvas coordinates.
   const toolRow = document.querySelector(".shell-toolbar-bottom");
-  const bx = toolRow === null ? 16 : toolRow.getBoundingClientRect().right + 16;
+  const bx = hudStartX(
+    toolRow === null ? null : toolRow.getBoundingClientRect().right,
+    canvas.getBoundingClientRect().left,
+  );
   const by = canvas.height - 20;
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 2;
@@ -676,10 +680,8 @@ function setTool(next: Tool): void {
   boxHit = { roads: [], buildings: [] };
   erasing = false;
   const fly = shell.flyout;
-  // The tool's help goes to the info bar, not the flyout, so an empty flyout
-  // (Select with nothing selected, Move) hides instead of covering the map.
+  // Options render in the shell sidebar (07.1.1); the tool's help still goes to the info bar.
   fly.replaceChildren();
-  fly.hidden = false;
   setStatus(HINTS[next]);
   if (next === "road") {
     widthStepper = createStepper({
@@ -761,6 +763,8 @@ function setTool(next: Tool): void {
     selBox = el("div", "selection");
     fly.appendChild(selBox);
     renderSelection();
+  } else if (next === "move") {
+    fly.appendChild(el("div", "sidebar-empty", "Drag a road node; roads that share it follow."));
   }
   if (roads !== undefined) requestDraw();
 }
@@ -807,11 +811,11 @@ function renderSelection(): void {
   const box = selBox;
   if (box === undefined) return;
   if (boxRect === undefined && selected === undefined) {
-    box.replaceChildren();
-    shell.flyout.hidden = true;
+    box.replaceChildren(
+      el("div", "sidebar-empty", "Nothing selected. Click a road or building, or drag a box to select several."),
+    );
     return;
   }
-  shell.flyout.hidden = false;
   if (boxRect !== undefined) {
     renderBoxPanel(box);
     return;
@@ -1328,7 +1332,7 @@ function resize(): void {
   if (wasFit && canvas.width > 0 && canvas.height > 0) fitWorld();
   if (roads !== undefined) requestDraw();
 }
-window.addEventListener("resize", resize);
+new ResizeObserver(() => resize()).observe(canvas);
 
 let legendEl: HTMLElement;
 
@@ -1681,8 +1685,8 @@ function buildShell(): Shell {
   const run = (p: Promise<unknown>): void => void p;
   return createShell({
     root: $("app"),
-    // GD-LAYOUT: same dock as the terrain editor. All tools sit in the bottom row
-    // (none are dock: "top") because the Select flyout is a column panel.
+    // Shared sidebar layout (07.1.1): options in the left sidebar, tools in the grouped
+    // bottom toolbar; no Raise/Lower pair in the map editor.
     layout: "dock",
     menus: [
       {

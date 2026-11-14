@@ -18,8 +18,8 @@
       .selection { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
       .selection .btn { width: 100%; }
       .selection .toggle { display: flex; }
-      /* Top-left is free in the dock layout (no top tool row; history pad and view pad are top-right). */
-      #to-terrain-btn { position: absolute; left: 8px; top: 36px; z-index: 12; padding: 8px 14px; font-weight: 600; }
+      /* Top-left of the canvas area, right of the sidebar (07.1.1). */
+      #to-terrain-btn { position: absolute; left: calc(var(--sidebar-w) + 8px); top: 36px; z-index: 12; padding: 8px 14px; font-weight: 600; }
       .ro { color: #9aa; margin: 2px 0; }
     </style>
   </head>
