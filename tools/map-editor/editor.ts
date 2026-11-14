@@ -60,6 +60,7 @@ import {
 } from "./model.ts";
 import { checkRoads } from "./road-check.ts";
 import {
+  appendBox,
   type Box,
   type BoxMode,
   disableRoad,
@@ -1179,8 +1180,7 @@ window.addEventListener("mouseup", (e) => {
     if (d.moved) {
       const mode = liveMode; // same mode the rubber band previewed (snapshotted at mousedown)
       const entry = { box: { a, b: worldOf(e) }, mode };
-      if (mode === "replace" || boxes.length === 0) boxes = [{ ...entry, mode: "replace" }];
-      else boxes.push(entry);
+      boxes = appendBox(boxes, entry);
       selected = undefined;
       recomputeBox();
       tickRoads = boxHit.roads.length > 0;

@@ -115,6 +115,20 @@ export function isDisabledRoad(way: RawWay): boolean {
 export type BoxMode = "replace" | "add" | "subtract";
 
 /**
+ * Appends one finished box to the box list. Replace starts over, add on an empty
+ * list is stored as replace, and subtract on an empty list is ignored (nothing
+ * to subtract from), so Ctrl+drag with no selection never selects.
+ */
+export function appendBox(
+  boxes: readonly { box: Box; mode: BoxMode }[],
+  entry: { box: Box; mode: BoxMode },
+): { box: Box; mode: BoxMode }[] {
+  if (entry.mode === "replace") return [{ ...entry }];
+  if (boxes.length === 0) return entry.mode === "add" ? [{ ...entry, mode: "replace" }] : [];
+  return [...boxes, entry];
+}
+
+/**
  * Folds a list of box operations left to right into one selection. Replace
  * discards what came before, add unions, subtract drops any road or building
  * the box touches (whole item). Order is preserved, duplicates removed by identity.

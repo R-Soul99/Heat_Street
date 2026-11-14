@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addBuildingRect, addRoad, makeProjector, type RawEnvelope } from "./model.ts";
 import {
+  appendBox,
   buildingsInBox,
   disableRoad,
   enableRoad,
@@ -97,5 +98,23 @@ describe("selectionFromBoxes", () => {
     expect(s.roads).toEqual([r2]);
     expect(s.buildings).toHaveLength(0);
     expect(sel([])).toEqual({ roads: [], buildings: [] });
+  });
+});
+
+describe("appendBox", () => {
+  const A = { a: { x: 0, y: 0 }, b: { x: 10, y: 10 } };
+  const B = { a: { x: 20, y: 20 }, b: { x: 30, y: 30 } };
+
+  it("subtract on an empty list is ignored, never turned into a select", () => {
+    expect(appendBox([], { box: A, mode: "subtract" })).toEqual([]);
+  });
+  it("add on an empty list is stored as replace", () => {
+    expect(appendBox([], { box: A, mode: "add" })).toEqual([{ box: A, mode: "replace" }]);
+  });
+  it("replace starts over; add and subtract append", () => {
+    const one = [{ box: A, mode: "replace" as const }];
+    expect(appendBox(one, { box: B, mode: "replace" })).toEqual([{ box: B, mode: "replace" }]);
+    expect(appendBox(one, { box: B, mode: "add" })).toHaveLength(2);
+    expect(appendBox(one, { box: B, mode: "subtract" })).toHaveLength(2);
   });
 });
