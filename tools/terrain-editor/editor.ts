@@ -34,7 +34,9 @@ import {
   MAX_START_NAME_CHARS,
   serializeTerrainSidecar,
   type TerrainArea,
+  type TerrainBuilding,
   type TerrainFeature,
+  type TerrainObject,
   type TerrainPointFeature,
   type TerrainStartPoint,
 } from "../../src/core/terrain-format.ts";
@@ -108,10 +110,17 @@ import {
   BUILDING_TOO_SMALL,
   canPlaceAt,
   canPlaceLine,
+  deleteBuilding,
+  deleteFeature,
+  deleteRamp,
   featureIdSeed,
   footprintCorners,
   LINE_TOO_FEW_POINTS,
+  moveFeature,
+  pickFeatureAt,
   RAMP_FOOT_RADIUS_M,
+  removeInMask,
+  type ScenerySelection,
   scatterPoints,
   seatBuilding,
 } from "./features.ts";
@@ -135,6 +144,8 @@ import {
   canPlaceRampAt,
   checkSceneryBudget,
   fitScatterToBudget,
+  type MoveResult,
+  moveSceneryItem,
   type SceneryArea,
 } from "./scenery-guards.ts";
 import {
@@ -486,6 +497,7 @@ function applySelectionOpacity(): void {
 /** Rebuilds the persistent selection outline + fill and read-out (heights move under it). */
 function refreshSelectionOutline(): void {
   const mask = area ? dispatcher.getSelectionMask() : null;
+  if (deleteSceneryBtn) deleteSceneryBtn.disabled = mask === null;
   selectionLines.geometry.dispose();
   selectionFill.geometry.dispose();
   selectionLines.geometry = new THREE.BufferGeometry();
@@ -764,6 +776,10 @@ function sceneryChanged(r: {
   if (r.featuresChanged) sceneryView.setFeatures(area.features ?? []);
   if (r.buildingsChanged) sceneryView.setBuildings(area.buildings);
   if (r.featuresChanged || r.buildingsChanged) refreshBudgetReadout();
+  if (r.featuresChanged || r.buildingsChanged || r.objectsChanged) {
+    hoverScenery = null;
+    refreshSceneryBoxes(); // a selection that vanished (undo, redo, delete) is cleared here
+  }
 }
 
 /** Sculpting under scenery re-seats it on the new ground (buildings re-seat inside the stroke diff). */
@@ -1364,8 +1380,23 @@ let lastGhostReason = "";
 const rampGesture = createDragGesture();
 const lineBuilder = createLineBuilder();
 
+/** A selected placed item being dragged in Select mode (plan 11). */
+interface SceneryMoveDrag {
+  sel: ScenerySelection;
+  pointerId: number;
+  startX: number;
+  startZ: number;
+  dx: number;
+  dz: number;
+  moved: boolean;
+  result: MoveResult | null;
+}
+let moveDrag: SceneryMoveDrag | null = null;
+/** The Select sidebar button for bulk scenery removal (enabled while a box selection exists). */
+let deleteSceneryBtn: HTMLButtonElement | null = null;
+
 function sceneryGestureActive(): boolean {
-  return scatterDrag !== null || buildGesture.active() || rampGesture.active();
+  return scatterDrag !== null || buildGesture.active() || rampGesture.active() || moveDrag !== null;
 }
 
 // Building footprint overlay: terrain-hugging accent outline plus a 0.25 fill (same as Select).
@@ -1841,6 +1872,10 @@ function sceneryPointerDown(e: PointerEvent, kind: SceneryPlaceKind): void {
 
 function sceneryPointerMove(e: PointerEvent): void {
   if (!area) return;
+  if (moveDrag) {
+    moveDragTo(e);
+    return;
+  }
   const hit = pickTerrain(e.clientX, e.clientY);
   if (!hit) return;
   lastHit = { x: hit.x, z: hit.z };
@@ -1869,6 +1904,10 @@ function sceneryPointerMove(e: PointerEvent): void {
 function sceneryPointerUp(e: PointerEvent): void {
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   activePointerId = null;
+  if (moveDrag) {
+    finishMoveDrag(e);
+    return;
+  }
   if (scatterDrag) {
     finishScatter();
     return;
@@ -2294,6 +2333,11 @@ function cancelSceneryGesture(): void {
   scatterDrag = null;
   buildGesture.cancel();
   rampGesture.cancel();
+  if (moveDrag) {
+    moveDrag = null;
+    clearMoveGhost();
+    refreshSceneryBoxes();
+  }
   if (area) {
     sceneryView?.setFeatures(area.features ?? []);
     refreshBudgetReadout();
@@ -2303,6 +2347,358 @@ function cancelSceneryGesture(): void {
   }
   activePointerId = null;
   updatePlaceGhost();
+}
+
+// ---------------------------------------------------------------- select, move, delete scenery (07.1.3 plan 11)
+
+const SCENERY_PICK_RADIUS_M = 1.5;
+/** A press that travels less than this is a plain select, not a move. */
+const MOVE_MIN_M = 0.3;
+/** Bulk removals above this many items ask first (T-07.1.3-25). */
+const BULK_DELETE_CONFIRM_ABOVE = 20;
+
+let selectedScenery: ScenerySelection | null = null;
+let hoverScenery: ScenerySelection | null = null;
+let moveGhost: THREE.Object3D | null = null;
+let lastMoveReason = "";
+function makeBoxHelper(opacity: number): THREE.Box3Helper {
+  const h = new THREE.Box3Helper(new THREE.Box3(), SELECT_ACCENT);
+  const m = h.material as THREE.LineBasicMaterial;
+  m.depthTest = false;
+  m.transparent = true;
+  m.opacity = opacity;
+  h.renderOrder = 998;
+  h.visible = false;
+  return h;
+}
+const selectedBox = makeBoxHelper(1);
+const hoverBox = makeBoxHelper(0.5);
+scene.add(selectedBox, hoverBox);
+
+function sceneryAreaFull(): SceneryArea | null {
+  const a = sceneryAreaWith();
+  if (!a || !area) return null;
+  return { ...a, objects: area.objects };
+}
+
+function sceneryExists(sel: ScenerySelection): boolean {
+  if (!area) return false;
+  if (sel.kind === "feature") return (area.features ?? []).some((f) => f.id === sel.id);
+  if (sel.kind === "building") return sel.index >= 0 && sel.index < area.buildings.length;
+  return area.objects.some((o) => o.crest.id === sel.id && o.crest.ramp !== undefined);
+}
+
+/** Rough world bounds of one placed item for the selection box (display only). */
+function sceneryBounds(sel: ScenerySelection): THREE.Box3 | null {
+  if (!area) return null;
+  const box = new THREE.Box3();
+  const grow = (x: number, z: number, r: number, h: number): void => {
+    const y = heightAtArea(x, z);
+    box.expandByPoint(new THREE.Vector3(x - r, y - 0.2, z - r));
+    box.expandByPoint(new THREE.Vector3(x + r, y + h, z + r));
+  };
+  if (sel.kind === "feature") {
+    const f = (area.features ?? []).find((v) => v.id === sel.id);
+    if (!f) return null;
+    if ("points" in f) for (const p of f.points) grow(p[0], p[1], 0.6, f.heightM);
+    else grow(f.x, f.z, 1.5 * f.scale, 5 * f.scale);
+    return box;
+  }
+  if (sel.kind === "building") {
+    const b = area.buildings[sel.index];
+    if (!b) return null;
+    const r = Math.hypot(b.halfExtents.x, b.halfExtents.z);
+    box.expandByPoint(
+      new THREE.Vector3(b.center.x - r, b.center.y - b.halfExtents.y, b.center.z - r),
+    );
+    box.expandByPoint(
+      new THREE.Vector3(b.center.x + r, b.center.y + b.halfExtents.y, b.center.z + r),
+    );
+    return box;
+  }
+  const o = area.objects.find((v) => v.crest.id === sel.id && v.crest.ramp !== undefined);
+  const ramp = o?.crest.ramp;
+  if (!o || !ramp) return null;
+  const r = rampLengthM(o.crest.heightM, ramp) + ramp.widthM / 2;
+  grow(o.crest.centerX, o.crest.centerZ, r, o.crest.heightM + 0.5);
+  return box;
+}
+
+function selectableNow(): boolean {
+  return dispatcher.getMode() === "select" && dispatcher.placing() === null;
+}
+
+/** Shows or hides the accent selection box and the 50% hover box. */
+function refreshSceneryBoxes(): void {
+  const ok = selectableNow() && area !== null;
+  if (selectedScenery && !(ok && sceneryExists(selectedScenery))) selectedScenery = null;
+  const sb = ok && selectedScenery ? sceneryBounds(selectedScenery) : null;
+  if (sb) selectedBox.box.copy(sb);
+  selectedBox.visible = sb !== null;
+  const hb = ok && hoverScenery && !moveDrag ? sceneryBounds(hoverScenery) : null;
+  if (hb) hoverBox.box.copy(hb);
+  hoverBox.visible = hb !== null;
+  if (deleteSceneryBtn) deleteSceneryBtn.disabled = !(area && dispatcher.getSelectionMask());
+}
+
+function selectScenery(sel: ScenerySelection | null): void {
+  selectedScenery = sel;
+  refreshSceneryBoxes();
+}
+
+function updateSceneryHover(hit: { x: number; z: number } | null): void {
+  let next: ScenerySelection | null = null;
+  if (hit && area && selectableNow() && !moveDrag && !stroking) {
+    next =
+      pickFeatureAt(
+        area.features ?? [],
+        area.buildings,
+        area.objects,
+        hit.x,
+        hit.z,
+        SCENERY_PICK_RADIUS_M,
+      ) ?? null;
+  }
+  const same =
+    next === hoverScenery ||
+    (next !== null &&
+      hoverScenery !== null &&
+      JSON.stringify(next) === JSON.stringify(hoverScenery));
+  if (same) return;
+  hoverScenery = next;
+  refreshSceneryBoxes();
+}
+
+function clearMoveGhost(): void {
+  if (moveGhost) {
+    scene.remove(moveGhost);
+    disposeObject(moveGhost);
+    moveGhost = null;
+  }
+  lastMoveReason = "";
+  ghostRefused = false;
+  applyCanvasCursor();
+}
+
+/** Forgets any selection and drag (area replaced). */
+function resetSceneryMove(): void {
+  moveDrag = null;
+  selectedScenery = null;
+  hoverScenery = null;
+  clearMoveGhost();
+  refreshSceneryBoxes();
+}
+
+/** Press in Select mode: a hit selects the item and starts a move drag. Returns false on a miss. */
+function scenerySelectDown(e: PointerEvent): boolean {
+  if (!area) return false;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) return false;
+  const sel = pickFeatureAt(
+    area.features ?? [],
+    area.buildings,
+    area.objects,
+    hit.x,
+    hit.z,
+    SCENERY_PICK_RADIUS_M,
+  );
+  if (!sel) {
+    if (selectedScenery) selectScenery(null);
+    return false;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  selectedStartId = null;
+  canvas.setPointerCapture(e.pointerId);
+  activePointerId = e.pointerId;
+  moveDrag = {
+    sel,
+    pointerId: e.pointerId,
+    startX: hit.x,
+    startZ: hit.z,
+    dx: 0,
+    dz: 0,
+    moved: false,
+    result: null,
+  };
+  selectScenery(sel);
+  setStatus("Drag to move, Delete removes it, Esc cancels.");
+  return true;
+}
+
+/** The moved item as a translucent ghost (red when refused, D-12). */
+function showMoveGhost(d: SceneryMoveDrag, refused: boolean): void {
+  if (!area) return;
+  if (moveGhost) {
+    scene.remove(moveGhost);
+    disposeObject(moveGhost);
+    moveGhost = null;
+  }
+  const tint = refused ? GHOST_REFUSED : undefined;
+  const sel = d.sel;
+  if (sel.kind === "feature") {
+    const moved = moveFeature(area.features ?? [], sel.id, d.dx, d.dz).find((f) => f.id === sel.id);
+    if (!moved) return;
+    moveGhost = buildFeaturePreview(moved, heightAtArea, {
+      opacity: GHOST_OPACITY,
+      ...(tint !== undefined ? { tint } : {}),
+    });
+  } else if (sel.kind === "building") {
+    const b = area.buildings[sel.index];
+    if (!b) return;
+    const res = d.result;
+    const placed = res?.ok && res.buildings ? res.buildings[sel.index] : undefined;
+    moveGhost = buildingGhostMesh(
+      placed ?? { ...b, center: { x: b.center.x + d.dx, y: b.center.y, z: b.center.z + d.dz } },
+      tint,
+    );
+  } else {
+    const o = area.objects.find((v) => v.crest.id === sel.id && v.crest.ramp !== undefined);
+    if (!o) return;
+    const group = new THREE.Group();
+    const crest: AuthoredCrest = {
+      ...o.crest,
+      centerX: o.crest.centerX + d.dx,
+      centerZ: o.crest.centerZ + d.dz,
+    };
+    for (const mesh of buildCrestMeshes([crest], heightAtArea, TERRAIN_SURFACE_PALETTE)) {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.transparent = true;
+      mat.opacity = GHOST_OPACITY;
+      mat.depthWrite = false;
+      if (refused) mat.color.setHex(GHOST_REFUSED);
+      group.add(mesh);
+    }
+    moveGhost = group;
+  }
+  scene.add(moveGhost);
+}
+
+function moveDragTo(e: PointerEvent): void {
+  const d = moveDrag;
+  if (!d || !area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) return;
+  lastHit = { x: hit.x, z: hit.z };
+  d.dx = hit.x - d.startX;
+  d.dz = hit.z - d.startZ;
+  if (!d.moved && Math.hypot(d.dx, d.dz) < MOVE_MIN_M) return;
+  d.moved = true;
+  const guard = sceneryAreaFull();
+  if (!guard) return;
+  const res = moveSceneryItem(guard, d.sel, d.dx, d.dz);
+  d.result = res;
+  showMoveGhost(d, !res.ok);
+  ghostRefused = !res.ok;
+  const reason = res.ok ? "" : res.reason;
+  if (reason !== lastMoveReason) {
+    lastMoveReason = reason;
+    setStatus(
+      reason === "" ? "Drag to move, release to drop." : reason,
+      reason === "" ? "info" : "error",
+    );
+  }
+  applyCanvasCursor();
+}
+
+/** Release: one undo step when the move is allowed; a refused move snaps back and pushes nothing. */
+function finishMoveDrag(e: PointerEvent): void {
+  const d = moveDrag;
+  if (!d) return;
+  if (area) moveDragTo(e);
+  moveDrag = null;
+  const res = d.result;
+  const moved = d.moved;
+  clearMoveGhost();
+  if (!area || !moved || res === null) {
+    refreshSceneryBoxes();
+    return;
+  }
+  if (!res.ok) {
+    setStatus(`${res.reason}. The item snapped back.`, "error");
+    refreshSceneryBoxes();
+    return;
+  }
+  const parts: {
+    features?: readonly TerrainFeature[];
+    buildings?: readonly TerrainBuilding[];
+    objects?: readonly TerrainObject[];
+  } = {};
+  if (res.features) parts.features = res.features;
+  if (res.buildings) parts.buildings = res.buildings;
+  if (res.objects) parts.objects = res.objects;
+  applyResult(dispatcher.commitScenery(parts), 0);
+  updateHistoryButtons();
+  refreshSceneryBoxes();
+  setStatus("Moved. Ctrl+Z undoes it.", "ok");
+}
+
+/** Delete with a selected placed item removes it as one undo step. False when nothing applies. */
+function deleteSelectedScenery(): boolean {
+  if (!area || moveDrag || !selectedScenery || !selectableNow()) return false;
+  const sel = selectedScenery;
+  if (!sceneryExists(sel)) return false;
+  let res: ToolResult;
+  let what: string;
+  if (sel.kind === "feature") {
+    const f = (area.features ?? []).find((v) => v.id === sel.id);
+    what = f ? sentenceCase(f.kind) : "Item";
+    res = dispatcher.commitScenery({ features: deleteFeature(area.features ?? [], sel.id) });
+  } else if (sel.kind === "building") {
+    what = "Building";
+    res = dispatcher.commitScenery({ buildings: deleteBuilding(area.buildings, sel.index) });
+  } else {
+    what = "Ramp";
+    res = dispatcher.commitScenery({ objects: deleteRamp(area.objects, sel.id) });
+  }
+  applyResult(res, 0);
+  selectScenery(null);
+  hoverScenery = null;
+  updateHistoryButtons();
+  setStatus(`${what} deleted. Ctrl+Z undoes it.`, "ok");
+  return true;
+}
+
+/** Sidebar button: removes the scenery inside the box selection, one undo step (confirm above 20). */
+async function deleteSceneryInSelection(): Promise<void> {
+  if (!area) return;
+  const mask = dispatcher.getSelectionMask();
+  if (!mask) {
+    setStatus("Nothing selected", "error");
+    return;
+  }
+  const g = area.grid;
+  const r = removeInMask(area.features ?? [], area.buildings, (x, z) => mask.cellAtXZ(g, x, z));
+  const n = r.removedFeatures + r.removedBuildings;
+  if (n === 0) {
+    setStatus("No scenery in the selection");
+    return;
+  }
+  if (n > BULK_DELETE_CONFIRM_ABOVE) {
+    const body = document.createElement("p");
+    body.textContent = "They are removed from this map. Undo brings them back.";
+    // Keep features comes first so the dialog's initial focus lands on the safe choice.
+    const choice = await openDialog<"keep" | "delete">({
+      title: `Delete ${n} features?`,
+      body,
+      actions: [
+        { id: "keep", label: "Keep features", tip: "Close this dialog and keep everything" },
+        {
+          id: "delete",
+          label: `Delete ${n} features`,
+          tip: "Remove them from the map (Ctrl+Z brings them back)",
+        },
+      ],
+    });
+    if (choice !== "delete") return;
+  }
+  const parts: { features?: readonly TerrainFeature[]; buildings?: readonly TerrainBuilding[] } =
+    {};
+  if (r.removedFeatures > 0) parts.features = r.features;
+  if (r.removedBuildings > 0) parts.buildings = r.buildings;
+  applyResult(dispatcher.commitScenery(parts), 0);
+  updateHistoryButtons();
+  refreshSceneryBoxes();
+  setStatus(`Deleted ${n} item${n === 1 ? "" : "s"}. Ctrl+Z undoes it.`, "ok");
 }
 
 function resize(): void {
@@ -2462,6 +2858,7 @@ function installArea(next: TerrainArea): void {
   scene.add(terrainView.group);
   rampGesture.cancel();
   cancelLine();
+  resetSceneryMove();
   rebuildRamps();
   $("empty").style.display = "none";
   frameArea(next);
@@ -3144,6 +3541,7 @@ function updateCursor(clientX: number, clientY: number): void {
     cursorRing.visible = false;
     if (!stroking) clearBoxOutline();
     lastHit = null;
+    updateSceneryHover(null);
     updateFootprintGrid(null);
     updatePlaceGhost();
     applyCanvasCursor();
@@ -3152,6 +3550,7 @@ function updateCursor(clientX: number, clientY: number): void {
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
+  updateSceneryHover(lastHit);
   paintRing(hit);
   updateLockHover(hit.x, hit.z);
   maybeRebuildContours(hit.x, hit.z);
@@ -3521,6 +3920,20 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   if (placing === "ramp") {
     if (!stroking && !pushPull && !opHold && !sceneryGestureActive()) rampPointerDown(e);
+    return;
+  }
+  if (
+    placing === null &&
+    dispatcher.getMode() === "select" &&
+    !e.shiftKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !stroking &&
+    !pushPull &&
+    !opHold &&
+    !sceneryGestureActive() &&
+    scenerySelectDown(e)
+  ) {
     return;
   }
   canvas.setPointerCapture(e.pointerId);
@@ -4201,6 +4614,14 @@ function buildSidebar(): void {
         roadsCountEl,
       ]),
     );
+    deleteSceneryBtn = createButton({
+      label: "Delete scenery in selection",
+      tip: "Remove every tree, bush, hedge, fence and building inside the box selection (Ctrl+Z undoes it)",
+      onClick: () => void deleteSceneryInSelection(),
+    });
+    deleteSceneryBtn.style.width = "100%";
+    deleteSceneryBtn.disabled = dispatcher.getSelectionMask() === null;
+    f.append(deleteSceneryBtn);
     if ((area?.startPoints?.length ?? 0) > 0) f.append(buildStartPointsSection(false));
     updateRoadsCountEl();
     refreshSelectionOutline();
@@ -4590,6 +5011,7 @@ function syncToolbar(): void {
   }
   updateSurfaceReadout();
   updatePlaceGhost();
+  refreshSceneryBoxes();
   const shape = dispatcher.getOptions().brushShape;
   for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
   shell.setSidebarTitle(st.title, st.subtitle);
@@ -4924,6 +5346,10 @@ window.addEventListener("keydown", (e) => {
         setStatus("Line cancelled.");
         return;
       }
+      if (selectedScenery) {
+        selectScenery(null);
+        return;
+      }
       if (dispatcher.placing() !== null) {
         stopOpHold();
         dispatcher.setPlacing(null);
@@ -4975,7 +5401,7 @@ window.addEventListener("keydown", (e) => {
       return;
     }
   }
-  if (e.code === "Delete" && deleteSelectedStart()) {
+  if (e.code === "Delete" && (deleteSelectedScenery() || deleteSelectedStart())) {
     e.preventDefault();
     return;
   }
