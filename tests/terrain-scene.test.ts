@@ -216,17 +216,41 @@ describe("createTerrainScene", () => {
     }
   });
 
-  it("throws naming the area when there is no default spawn and no override", () => {
+  it("falls back to the grid centre at heading 0 when there is no spawn and no override", () => {
     const world = createWorld();
     try {
+      const grid = flatGrid();
+      for (let i = 0; i < grid.heights.length; i++) grid.heights[i] = 1;
+      const scene = createTerrainScene(
+        world,
+        input(grid, { graph: graphWith(false) }),
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      );
+      expect(scene.defaultSpawnPose.x).toBeCloseTo(grid.originX + grid.scaleX / 2, 6);
+      expect(scene.defaultSpawnPose.z).toBeCloseTo(grid.originZ + grid.scaleZ / 2, 6);
+      expect(scene.defaultSpawnPose.headingRad).toBe(0);
+      expect(scene.defaultSpawnPose.y).toBeCloseTo(1.6, 5);
+    } finally {
+      world.free();
+    }
+  });
+
+  it("still throws when the default spawn references an unknown node", () => {
+    const world = createWorld();
+    try {
+      const g = {
+        ...graphWith(true),
+        spawns: [{ id: "default", nodeId: 99, headingRad: 0 }],
+      } as unknown as RoadGraph;
       expect(() =>
         createTerrainScene(
           world,
-          input(flatGrid(), { graph: graphWith(false) }),
+          input(flatGrid(), { graph: g }),
           defaultTuning(),
           defaultSurfaceProfiles(),
         ),
-      ).toThrow(/test-area/);
+      ).toThrow(/unknown node/);
     } finally {
       world.free();
     }

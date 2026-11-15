@@ -102,7 +102,7 @@ import type { SurfaceType } from "./core/surface-types";
 import {
   crestsFromObjects,
   physicsGridForArea,
-  resolveDriveHerePose,
+  resolveStartPose,
 } from "./core/terrain-drive-setup";
 import { loadTerrainArea, type TerrainArea } from "./core/terrain-format";
 import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
@@ -387,9 +387,14 @@ try {
     const physicsGrid = physicsGridForArea(terrainArea);
     terrainPhysicsGrid = physicsGrid;
     const crests = crestsFromObjects(terrainArea.objects);
-    // ?at=x,z "drive here" (D-12): validated against the GRID extent, so it
-    // works on a freshly created area with no roads yet.
-    const spawnOverride = resolveDriveHerePose(location.search, physicsGrid, graph);
+    // ?at=x,z (+ ?heading=) > ?start=<id> > sidecar default start point (07.1.3 D-04, no mode
+    // gate, D-18): validated against the GRID extent, so it works on a fresh area with no roads.
+    const spawnOverride = resolveStartPose(
+      location.search,
+      physicsGrid,
+      graph,
+      terrainArea.startPoints,
+    );
     const terrainScene = createTerrainScene(
       world,
       {

@@ -6,9 +6,9 @@
  */
 import type { AuthoredCrest } from "./crest-geometry.ts";
 import { yawFromTravelDirection } from "./heading.ts";
-import { parseDriveAt } from "./map-select.ts";
+import { parseDriveAt, parseDriveHeading, parseStartId } from "./map-select.ts";
 import type { RoadGraph } from "./road-graph.ts";
-import type { TerrainArea, TerrainObject } from "./terrain-format.ts";
+import type { TerrainArea, TerrainObject, TerrainStartPoint } from "./terrain-format.ts";
 import { type TerrainGrid, upsampleTerrainGrid } from "./terrain-grid.ts";
 
 export interface TerrainExtent {
@@ -72,7 +72,41 @@ export function resolveDriveHerePose(
 ): { x: number; z: number; headingRad: number } | undefined {
   const at = parseDriveAt(search, terrainGridExtent(grid));
   if (at === undefined) return undefined;
-  return { x: at.x, z: at.z, headingRad: nearestEdgeHeading(graph, at.x, at.z) ?? 0 };
+  return {
+    x: at.x,
+    z: at.z,
+    headingRad: parseDriveHeading(search) ?? nearestEdgeHeading(graph, at.x, at.z) ?? 0,
+  };
+}
+
+function inExtent(e: TerrainExtent, p: { x: number; z: number }): boolean {
+  return p.x >= e.minX && p.x <= e.maxX && p.z >= e.minZ && p.z <= e.maxZ;
+}
+
+/**
+ * Spawn pose priority (07.1.3 D-04): `?at=` (+ `?heading=` degrees) > `?start=<id>` >
+ * first in-extent sidecar start point > undefined (caller falls back to the road-graph
+ * spawn, then the grid centre).
+ */
+export function resolveStartPose(
+  search: string,
+  grid: TerrainGrid,
+  graph: RoadGraph,
+  startPoints: readonly TerrainStartPoint[] | undefined,
+): { x: number; z: number; headingRad: number } | undefined {
+  const at = resolveDriveHerePose(search, grid, graph);
+  if (at !== undefined) return at;
+  const extent = terrainGridExtent(grid);
+  const pts = startPoints ?? [];
+  const id = parseStartId(search);
+  if (id !== undefined) {
+    const hit = pts.find((p) => p.id === id);
+    if (hit !== undefined && inExtent(extent, hit)) {
+      return { x: hit.x, z: hit.z, headingRad: hit.headingRad };
+    }
+  }
+  const first = pts.find((p) => inExtent(extent, p));
+  return first === undefined ? undefined : { x: first.x, z: first.z, headingRad: first.headingRad };
 }
 
 /** The grid used for BOTH the collider and the view (same triangles). */

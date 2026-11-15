@@ -6,6 +6,7 @@ import {
   nearestEdgeHeading,
   physicsGridForArea,
   resolveDriveHerePose,
+  resolveStartPose,
   terrainGridExtent,
 } from "../src/core/terrain-drive-setup";
 import { createTerrainGrid } from "../src/core/terrain-grid";
@@ -113,5 +114,48 @@ describe("crestsFromObjects", () => {
       ]),
     ).toEqual([a, b]);
     expect(crestsFromObjects([])).toEqual([]);
+  });
+});
+
+describe("resolveStartPose", () => {
+  const sps = [
+    { id: "start-1", name: "A", x: 10, z: 10, headingRad: 1 },
+    { id: "start-2", name: "B", x: -20, z: 5, headingRad: 2 },
+  ];
+  it("?at wins over ?start and the default, with ?heading", () => {
+    const p = resolveStartPose("?at=30,-20&heading=90&start=start-2", grid, graph(false), sps);
+    expect(p?.x).toBe(30);
+    expect(p?.z).toBe(-20);
+    expect(p?.headingRad).toBeCloseTo(Math.PI / 2, 10);
+  });
+  it("?at without ?heading uses the nearest road heading, else 0", () => {
+    expect(resolveStartPose("?at=30,-20", grid, graph(false), sps)?.headingRad).toBe(0);
+    const p = resolveStartPose("?at=0,5", grid, graph(true), sps);
+    expect(forwardFromYaw(p?.headingRad ?? Number.NaN).x).toBeCloseTo(1, 6);
+  });
+  it("?start=<id> picks that entry; unknown id falls to the default", () => {
+    expect(resolveStartPose("?start=start-2", grid, graph(false), sps)).toEqual({
+      x: -20,
+      z: 5,
+      headingRad: 2,
+    });
+    expect(resolveStartPose("?start=start-9", grid, graph(false), sps)).toEqual({
+      x: 10,
+      z: 10,
+      headingRad: 1,
+    });
+  });
+  it("uses the first in-extent start point and skips out-of-extent ones", () => {
+    expect(resolveStartPose("", grid, graph(false), sps)).toEqual({ x: 10, z: 10, headingRad: 1 });
+    const far = [{ id: "start-1", name: "F", x: 999, z: 0, headingRad: 0 }, ...sps];
+    expect(resolveStartPose("", grid, graph(false), far)).toEqual({
+      x: 10,
+      z: 10,
+      headingRad: 1,
+    });
+  });
+  it("is undefined with no params and no start points", () => {
+    expect(resolveStartPose("", grid, graph(false), undefined)).toBeUndefined();
+    expect(resolveStartPose("", grid, graph(false), [])).toBeUndefined();
   });
 });

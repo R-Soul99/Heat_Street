@@ -97,6 +97,26 @@ export function parseDriveAt(
 }
 
 /**
+ * `?heading=` degrees (07.1.3 D-04): one decimal in 0..360 inclusive, at most
+ * 8 characters; returns RADIANS (VehiclePose yaw, unit conversion only).
+ */
+export function parseDriveHeading(search: string): number | undefined {
+  const raw = new URLSearchParams(search).get("heading");
+  if (raw === null || raw.length === 0 || raw.length > 8) return undefined;
+  if (!DECIMAL.test(raw)) return undefined;
+  const deg = Number(raw);
+  if (!Number.isFinite(deg) || deg < 0 || deg > 360) return undefined;
+  return (deg * Math.PI) / 180;
+}
+
+/** `?start=<id>` (07.1.3 D-04): only `start-N` ids; never used as an object key. */
+export function parseStartId(search: string): string | undefined {
+  const raw = new URLSearchParams(search).get("start");
+  if (raw === null || !/^start-\d{1,3}$/.test(raw)) return undefined;
+  return raw;
+}
+
+/**
  * `search` with `?map=` set to `id`, every other parameter kept (`feel`, `debug`...).
  * The default map is written explicitly so a stale `?map=` can't survive.
  */

@@ -113,19 +113,21 @@ function resolveTerrainSpawn(input: TerrainSceneInput): VehiclePose {
   } else {
     const spawn = input.graph.spawns?.find((s) => s.id === DEFAULT_SPAWN_ID);
     if (spawn === undefined) {
-      throw new Error(
-        `createTerrainScene: area "${input.areaId}" has no "${DEFAULT_SPAWN_ID}" spawn -- cannot place the vehicle`,
-      );
+      // 07.1.3 D-04: no spawn and no start point -> grid centre, heading 0 (never throw).
+      x = input.grid.originX + input.grid.scaleX / 2;
+      z = input.grid.originZ + input.grid.scaleZ / 2;
+      headingRad = 0;
+    } else {
+      const node = input.graph.nodes.find((n) => n.id === spawn.nodeId);
+      if (node === undefined) {
+        throw new Error(
+          `createTerrainScene: area "${input.areaId}" spawn "${DEFAULT_SPAWN_ID}" references unknown node id ${spawn.nodeId}`,
+        );
+      }
+      x = node.x;
+      z = node.z;
+      headingRad = spawn.headingRad;
     }
-    const node = input.graph.nodes.find((n) => n.id === spawn.nodeId);
-    if (node === undefined) {
-      throw new Error(
-        `createTerrainScene: area "${input.areaId}" spawn "${DEFAULT_SPAWN_ID}" references unknown node id ${spawn.nodeId}`,
-      );
-    }
-    x = node.x;
-    z = node.z;
-    headingRad = spawn.headingRad;
   }
   return { x, y: sampleTerrainHeight(input.grid, x, z) + SPAWN_CLEARANCE_M, z, headingRad };
 }

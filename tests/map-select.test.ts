@@ -6,6 +6,8 @@ import {
   MAP_FORMATS,
   MAP_LABELS,
   parseDriveAt,
+  parseDriveHeading,
+  parseStartId,
   resolveMapId,
   searchForMap,
 } from "../src/core/map-select";
@@ -119,5 +121,44 @@ describe("parseDriveAt", () => {
     expect(parseDriveAt("?at=101,0", b)).toBeUndefined();
     expect(parseDriveAt("?at=0,-100.5", b)).toBeUndefined();
     expect(parseDriveAt(`?at=0.${"0".repeat(40)},0`, b)).toBeUndefined();
+  });
+});
+
+describe("parseDriveHeading", () => {
+  it("parses degrees to radians", () => {
+    expect(parseDriveHeading("?heading=90")).toBeCloseTo(Math.PI / 2, 10);
+    expect(parseDriveHeading("?heading=0")).toBe(0);
+    expect(parseDriveHeading("?heading=360")).toBeCloseTo(2 * Math.PI, 10);
+  });
+  it("rejects bad values", () => {
+    for (const s of [
+      "?heading=-1",
+      "?heading=361",
+      "?heading=abc",
+      "?heading=1e2",
+      "?heading=123456789",
+      "?heading=",
+      "",
+    ]) {
+      expect(parseDriveHeading(s)).toBeUndefined();
+    }
+  });
+});
+
+describe("parseStartId", () => {
+  it("accepts start-N", () => {
+    expect(parseStartId("?start=start-3")).toBe("start-3");
+  });
+  it("rejects anything else", () => {
+    for (const s of [
+      "?start=start-1000",
+      "?start=Start-1",
+      "?start=start-",
+      "?start=__proto__",
+      "?start=start-1;x",
+      "",
+    ]) {
+      expect(parseStartId(s)).toBeUndefined();
+    }
   });
 });
