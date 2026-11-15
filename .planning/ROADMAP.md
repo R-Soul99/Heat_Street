@@ -517,13 +517,13 @@ Plans:
 **Requirements**: TBD
 **Briefs:** `.planning/plans-ahead/01-start-points.md` (do first), then `.planning/plans-ahead/02-scenery-palette.md`. Summarised in `07.1.3-CONTEXT.md`.
 **Depends on:** Phase 07.1.2
-**Plans:** 5/11 plans executed
+**Plans:** 6/11 plans executed
 
 Plans:
 - [x] 07.1.3-01-PLAN.md — Start-point sidecar field and game spawn resolution (D-01, D-02, D-04, D-18)
 - [x] 07.1.3-02-PLAN.md — Place layout sketch approval; Place menu toolbar data and state (D-15)
 - [x] 07.1.3-03-PLAN.md — Pure start-point ops, drag gesture, drive URL builder, startPoints undo part (D-03, D-05, D-06, D-16)
-- [ ] 07.1.3-04-PLAN.md — Editor start-point tool, markers, list, Drive from / Drive here; 2-minute check
+- [x] 07.1.3-04-PLAN.md — Editor start-point tool, markers, list, Drive from / Drive here; 2-minute check
 - [x] 07.1.3-05-PLAN.md — Scenery catalog and features / building style sidecar format (D-07, D-08, D-10)
 - [x] 07.1.3-06-PLAN.md — Pure scenery geometry; game colliders, LOS transparency, kerb measurement (D-10)
 - [ ] 07.1.3-07-PLAN.md — Pure feature/building/ramp ops, placement guards (road, triangle limit, moves), scenery undo parts (D-09, D-12, D-14, D-16)
