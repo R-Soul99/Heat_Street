@@ -21,9 +21,12 @@ import { nearestEdgeHeading, terrainGridExtent } from "../../src/core/terrain-dr
 import {
   encodeTerrainBinary,
   loadTerrainArea,
+  MAX_BUILDINGS,
   MAX_START_NAME_CHARS,
   serializeTerrainSidecar,
   type TerrainArea,
+  type TerrainFeature,
+  type TerrainPointFeature,
   type TerrainStartPoint,
 } from "../../src/core/terrain-format.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
@@ -51,6 +54,7 @@ import {
 } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import {
+  buildFeaturePreview,
   createSceneryView,
   estimateSceneryTriangles,
   type SceneryView,
@@ -87,6 +91,15 @@ import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
+import {
+  addPointFeature,
+  BUILDING_TOO_SMALL,
+  canPlaceAt,
+  featureIdSeed,
+  footprintCorners,
+  scatterPoints,
+  seatBuilding,
+} from "./features.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { createDragGesture, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 import {
@@ -103,6 +116,7 @@ import {
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
+import { checkSceneryBudget, fitScatterToBudget, type SceneryArea } from "./scenery-guards.ts";
 import {
   addStartPoint,
   defaultStartPoint,
@@ -284,6 +298,14 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener(
   "wheel",
   (e) => {
+    if (buildGesture.active()) {
+      // A footprint drag is live: the wheel turns the building 15 degrees, it does not zoom.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const raw = e.deltaY || e.deltaX;
+      if (raw !== 0) rotateBuildingDrag(raw < 0 ? 1 : -1);
+      return;
+    }
     if (e.altKey) {
       // Alt + wheel: brush radius in whole terrain cells (block size on Block).
       e.preventDefault();
@@ -1112,9 +1134,616 @@ function buildScenerySidebar(kind: SceneryPlaceKind, f: HTMLElement): void {
   );
 }
 
-/** A palette value changed (variant, size, rotation, scatter): refresh whatever follows the cursor. */
+// ---------------------------------------------------------------- scenery placement (07.1.3 plan 09)
+
+const DEG = Math.PI / 180;
+const GHOST_OPACITY = 0.5;
+const GHOST_REFUSED = 0xff6b6b;
+/** Scatter stamps are spaced 1.5 radii apart so overlapping stamps keep the density near the set value. */
+const SCATTER_STAMP_FACTOR = 1.5;
+const BUILDING_FILL_CELLS = 12;
+const BUILDING_OUTLINE_STEPS = 16;
+
+/** Never-reused feature id counter (undo does not reset it). */
+let featureSeed = 1;
+/** Session random source for random rotation and scatter seeds (LCG, never Math.random). */
+let rngState = 0x2f6e2b1;
+function nextRand(): number {
+  rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+  return rngState / 4294967296;
+}
+
+function sceneryAreaWith(features?: readonly TerrainFeature[]): SceneryArea | null {
+  if (!area) return null;
+  return {
+    grid: area.grid,
+    paint: area.paint,
+    features: features ?? area.features ?? [],
+    buildings: area.buildings,
+    legacyGlbBuildings: area.legacyGlbBuildings,
+  };
+}
+
+function currentFeatureSeed(): number {
+  return Math.max(featureSeed, featureIdSeed(area?.features ?? []));
+}
+
+/** A refused edit: the reason goes to the sidebar budget line and the info bar. */
+function refuseBudget(reason: string): void {
+  setBudgetMessage(reason);
+  setStatus(reason, "error");
+}
+
+function disposeObject(o: THREE.Object3D): void {
+  o.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material as THREE.Material | undefined;
+    if (mat) mat.dispose();
+  });
+}
+
+interface BuildingPlan {
+  x: number;
+  z: number;
+  widthM: number;
+  depthM: number;
+  rotationY: number;
+  dragged: boolean;
+}
+
+const buildGesture = createDragGesture();
+let scatterDrag: {
+  kind: PointPlaceKind;
+  pointerId: number;
+  base: number;
+  moves: number;
+  work: TerrainFeature[];
+  skipped: number;
+  last: { x: number; z: number } | null;
+  limitMsg: string;
+} | null = null;
+let ghost: THREE.Object3D | null = null;
+let ghostRefused = false;
+let lastGhostReason = "";
+
+function sceneryGestureActive(): boolean {
+  return scatterDrag !== null || buildGesture.active();
+}
+
+// Building footprint overlay: terrain-hugging accent outline plus a 0.25 fill (same as Select).
+const rectLine = new THREE.LineLoop(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: SELECT_ACCENT, depthTest: false, transparent: true }),
+);
+const rectFill = new THREE.Mesh(
+  new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({
+    color: SELECT_ACCENT,
+    opacity: 0.25,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    side: THREE.DoubleSide,
+  }),
+);
+for (const o of [rectLine, rectFill]) {
+  o.renderOrder = 998;
+  o.frustumCulled = false;
+  o.visible = false;
+  scene.add(o);
+}
+
+/** World (x, z) of a footprint point; u and v run 0..1 across the rotated rectangle. */
+function rectPoint(plan: BuildingPlan, u: number, v: number): [number, number] {
+  const lx = -plan.widthM / 2 + plan.widthM * u;
+  const lz = -plan.depthM / 2 + plan.depthM * v;
+  const c = Math.cos(plan.rotationY);
+  const s = Math.sin(plan.rotationY);
+  return [plan.x + lx * c + lz * s, plan.z - lx * s + lz * c];
+}
+
+function setRect(plan: BuildingPlan | null): void {
+  rectLine.geometry.dispose();
+  rectFill.geometry.dispose();
+  rectLine.geometry = new THREE.BufferGeometry();
+  rectFill.geometry = new THREE.BufferGeometry();
+  rectLine.visible = false;
+  rectFill.visible = false;
+  if (!plan || !area) return;
+  const line: number[] = [];
+  const put = (arr: number[], u: number, v: number, lift: number): void => {
+    const [x, z] = rectPoint(plan, u, v);
+    arr.push(x, heightAtArea(x, z) + lift, z);
+  };
+  const n = BUILDING_OUTLINE_STEPS;
+  for (let i = 0; i < n; i++) put(line, i / n, 0, 0.25);
+  for (let i = 0; i < n; i++) put(line, 1, i / n, 0.25);
+  for (let i = 0; i < n; i++) put(line, 1 - i / n, 1, 0.25);
+  for (let i = 0; i < n; i++) put(line, 0, 1 - i / n, 0.25);
+  rectLine.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(line), 3));
+  const fill: number[] = [];
+  const m = BUILDING_FILL_CELLS;
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < m; j++) {
+      const u0 = i / m;
+      const u1 = (i + 1) / m;
+      const v0 = j / m;
+      const v1 = (j + 1) / m;
+      put(fill, u0, v0, 0.2);
+      put(fill, u1, v0, 0.2);
+      put(fill, u1, v1, 0.2);
+      put(fill, u0, v0, 0.2);
+      put(fill, u1, v1, 0.2);
+      put(fill, u0, v1, 0.2);
+    }
+  }
+  rectFill.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(fill), 3));
+  rectLine.visible = true;
+  rectFill.visible = true;
+}
+
+/** Plan for the building under the cursor: a dragged footprint, else the sidebar size at the cursor. */
+function buildingPlanAt(hit: { x: number; z: number }): BuildingPlan {
+  const rot = buildingPalette.rotationDeg * DEG;
+  const pv = buildGesture.preview();
+  if (pv) {
+    const dx = pv.to.x - pv.from.x;
+    const dz = pv.to.z - pv.from.z;
+    if (Math.hypot(dx, dz) >= DRAG_HEADING_MIN_M) {
+      const c = Math.cos(rot);
+      const s = Math.sin(rot);
+      return {
+        x: (pv.from.x + pv.to.x) / 2,
+        z: (pv.from.z + pv.to.z) / 2,
+        widthM: Math.min(BUILDING_SIDE_SPEC.max, Math.abs(dx * c - dz * s)),
+        depthM: Math.min(BUILDING_SIDE_SPEC.max, Math.abs(dx * s + dz * c)),
+        rotationY: rot,
+        dragged: true,
+      };
+    }
+  }
+  const from = pv?.from ?? hit;
+  return {
+    x: from.x,
+    z: from.z,
+    widthM: buildingPalette.widthM,
+    depthM: buildingPalette.depthM,
+    rotationY: rot,
+    dragged: false,
+  };
+}
+
+/** D-12 for a footprint: too small, or the centre or a corner on road paint or outside the area. */
+function checkBuildingPlan(plan: BuildingPlan): { ok: true } | { ok: false; reason: string } {
+  if (!area) return { ok: false, reason: NO_AREA_MSG };
+  if (plan.widthM < 1 || plan.depthM < 1) return { ok: false, reason: BUILDING_TOO_SMALL };
+  const pts: [number, number][] = [
+    [plan.x, plan.z],
+    ...footprintCorners(plan.x, plan.z, plan.widthM / 2, plan.depthM / 2, plan.rotationY),
+  ];
+  for (const [x, z] of pts) {
+    const c = canPlaceAt(area, x, z);
+    if (!c.ok) return c;
+  }
+  return { ok: true };
+}
+
+/** Ghost reason copy: show a refusal once, and restore the hint when it clears (D-12). */
+function setGhostState(refused: boolean, reason: string, kind: SceneryPlaceKind): void {
+  ghostRefused = refused;
+  if (refused) {
+    if (reason !== lastGhostReason) setStatus(reason, "error");
+    lastGhostReason = reason;
+  } else if (lastGhostReason !== "") {
+    lastGhostReason = "";
+    setStatus(PLACE_HINT[kind]);
+  }
+}
+
+function paintScatterRing(hit: { x: number; z: number }): void {
+  if (!area) return;
+  const outline = footprintOutline(
+    hit.x,
+    hit.z,
+    dispatcher.getOptions().radiusM,
+    "round",
+    RING_SEGMENTS,
+  );
+  const n = Math.min(RING_SEGMENTS, outline.length / 2);
+  const pos = ringGeometry.getAttribute("position") as THREE.BufferAttribute;
+  for (let i = 0; i < n; i++) {
+    const px = outline[i * 2];
+    const pz = outline[i * 2 + 1];
+    pos.setXYZ(i, px, heightAtArea(px, pz) + FOOTPRINT_LIFT_M, pz);
+  }
+  ringGeometry.setDrawRange(0, n);
+  pos.needsUpdate = true;
+  const mat = cursorRing.material as THREE.LineBasicMaterial;
+  mat.color.setHex(SELECT_ACCENT);
+  mat.opacity = 0.5;
+  cursorRing.visible = true;
+}
+
+function buildingGhostMesh(
+  b: {
+    center: { x: number; y: number; z: number };
+    halfExtents: { x: number; y: number; z: number };
+    rotationY: number;
+  },
+  tint: number | undefined,
+): THREE.Mesh {
+  const style = resolveBuildingStyle(buildingPalette.style);
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(2 * b.halfExtents.x, 2 * b.halfExtents.y, 2 * b.halfExtents.z),
+    new THREE.MeshBasicMaterial({
+      color: tint ?? style?.wallColor ?? 0x9a9a98,
+      transparent: true,
+      opacity: GHOST_OPACITY,
+      depthWrite: false,
+    }),
+  );
+  mesh.position.set(b.center.x, b.center.y, b.center.z);
+  mesh.rotation.y = b.rotationY;
+  mesh.renderOrder = 1;
+  return mesh;
+}
+
+/**
+ * The cursor ghost for the armed Tree, Bush or Building (D-12): translucent copy of the real mesh,
+ * tinted red and refused on road paint or outside the area. Hidden when nothing is armed or the
+ * pointer is off the terrain. Scatter shows the brush ring instead of a single ghost.
+ */
+function updatePlaceGhost(): void {
+  if (ghost) {
+    scene.remove(ghost);
+    disposeObject(ghost);
+    ghost = null;
+  }
+  setRect(null);
+  const kind = dispatcher.placing();
+  const scenery = kind === "tree" || kind === "bush" || kind === "building";
+  if (!scenery) {
+    ghostRefused = false;
+    lastGhostReason = "";
+    return;
+  }
+  const hit = lastHit;
+  if (!area || !hit) {
+    ghostRefused = false;
+    cursorRing.visible = false;
+    return;
+  }
+  if (kind === "building") {
+    cursorRing.visible = false;
+    const plan = buildingPlanAt(hit);
+    const check = checkBuildingPlan(plan);
+    const tint = check.ok ? undefined : GHOST_REFUSED;
+    const seated = seatBuilding(heightAtArea, {
+      x: plan.x,
+      z: plan.z,
+      widthM: plan.widthM,
+      depthM: plan.depthM,
+      heightM: buildingPalette.heightM,
+      rotationY: plan.rotationY,
+      style: buildingPalette.style,
+    });
+    if (plan.dragged) setRect(plan);
+    if (seated.building) {
+      ghost = buildingGhostMesh(seated.building, tint);
+      scene.add(ghost);
+    }
+    setGhostState(!check.ok, check.ok ? "" : check.reason, kind);
+    return;
+  }
+  const p = pointPalette[kind];
+  if (p.scatter) {
+    paintScatterRing(hit);
+    setGhostState(false, "", kind);
+    return;
+  }
+  cursorRing.visible = false;
+  const check = canPlaceAt(area, hit.x, hit.z);
+  const feature: TerrainPointFeature = {
+    id: "ghost",
+    kind,
+    variant: p.variant,
+    x: hit.x,
+    z: hit.z,
+    rotationY: p.randomRotation ? 0 : p.rotationDeg * DEG,
+    scale: p.scale,
+  };
+  ghost = buildFeaturePreview(feature, heightAtArea, {
+    opacity: GHOST_OPACITY,
+    ...(check.ok ? {} : { tint: GHOST_REFUSED }),
+  });
+  scene.add(ghost);
+  setGhostState(!check.ok, check.ok ? "" : check.reason, kind);
+}
+
+/** A palette value changed (variant, size, rotation, scatter): the cursor ghost follows it. */
 function onPaletteChanged(): void {
-  // The cursor ghost follows the palette (wired with the placement gestures).
+  updatePlaceGhost();
+}
+
+/** Click placement of one tree or bush (D-16: one undo step). */
+function placePointAt(kind: PointPlaceKind, x: number, z: number): void {
+  if (!area) return;
+  const check = canPlaceAt(area, x, z);
+  if (!check.ok) {
+    setStatus(check.reason, "error");
+    return;
+  }
+  const p = pointPalette[kind];
+  const add = addPointFeature(area.features ?? [], currentFeatureSeed(), {
+    kind,
+    variant: p.variant,
+    x,
+    z,
+    rotationY: p.randomRotation ? nextRand() * Math.PI * 2 : p.rotationDeg * DEG,
+    scale: p.scale,
+  });
+  if (add.error !== undefined) {
+    setStatus(add.error, "error");
+    return;
+  }
+  const guard = sceneryAreaWith();
+  if (guard) {
+    const budget = checkSceneryBudget(guard, { features: add.features });
+    if (!budget.ok) {
+      refuseBudget(budget.reason);
+      return;
+    }
+  }
+  featureSeed = add.nextSeed;
+  applyResult(dispatcher.commitScenery({ features: add.features }), 0);
+  updateHistoryButtons();
+  setBudgetMessage("");
+  setStatus(`Placed ${kind}. Ctrl+Z undoes it.`, "ok");
+}
+
+/** One scatter stamp inside the brush circle, fitted to the triangle budget (D-09). */
+function scatterStamp(d: NonNullable<typeof scatterDrag>, x: number, z: number): void {
+  if (!area) return;
+  const p = pointPalette[d.kind];
+  d.last = { x, z };
+  d.moves++;
+  const seed = (Math.imul(d.moves, 2654435761) + d.base) >>> 0;
+  const pts = scatterPoints({
+    cx: x,
+    cz: z,
+    radiusM: dispatcher.getOptions().radiusM,
+    densityPer100m2: p.densityPer100m2,
+    seed,
+  });
+  let running: readonly TerrainFeature[] = [...(area.features ?? []), ...d.work];
+  let idSeed = currentFeatureSeed();
+  const candidates: TerrainFeature[] = [];
+  for (const pt of pts) {
+    if (!canPlaceAt(area, pt.x, pt.z).ok) continue;
+    const add = addPointFeature(running, idSeed, {
+      kind: d.kind,
+      variant: p.variant,
+      x: pt.x,
+      z: pt.z,
+      rotationY: p.randomRotation ? nextRand() * Math.PI * 2 : p.rotationDeg * DEG,
+      scale: p.scale,
+    });
+    if (add.error !== undefined) {
+      d.limitMsg = add.error;
+      break;
+    }
+    running = add.features;
+    idSeed = add.nextSeed;
+    const made = running[running.length - 1];
+    if (made) candidates.push(made);
+  }
+  featureSeed = idSeed;
+  const guard = sceneryAreaWith(running.slice(0, running.length - candidates.length));
+  if (!guard) return;
+  const fit = fitScatterToBudget(guard, candidates);
+  d.work.push(...fit.accepted);
+  d.skipped += fit.skipped;
+  sceneryView?.setFeatures([...(area.features ?? []), ...d.work]);
+  refreshBudgetReadoutWith([...(area.features ?? []), ...d.work]);
+}
+
+/** The budget readout for a working copy that is not committed yet. */
+function refreshBudgetReadoutWith(features: readonly TerrainFeature[]): void {
+  if (!budgetEl || !area) return;
+  const triangles = estimateSceneryTriangles(features, area.buildings, {
+    drawStyleless: !area.legacyGlbBuildings,
+  });
+  budgetEl.textContent = `Scenery triangles: ${triangles.toLocaleString("en-US")} / 40,000`;
+}
+
+function finishScatter(): void {
+  const d = scatterDrag;
+  scatterDrag = null;
+  if (!d || !area) return;
+  const placed = d.work.length;
+  if (placed > 0) {
+    applyResult(dispatcher.commitScenery({ features: [...(area.features ?? []), ...d.work] }), 0);
+    updateHistoryButtons();
+  } else {
+    sceneryView?.setFeatures(area.features ?? []);
+    refreshBudgetReadout();
+  }
+  let msg: string;
+  if (d.skipped > 0) {
+    msg = `Placed ${placed}, skipped ${d.skipped}: scenery triangle limit (40,000)`;
+    refuseBudget(msg);
+  } else if (d.limitMsg !== "") {
+    msg = `Placed ${placed}. ${d.limitMsg}`;
+    setBudgetMessage("");
+    setStatus(msg, "error");
+  } else if (placed === 0) {
+    setBudgetMessage("");
+    setStatus("Nothing placed: those spots are on a road or outside the area", "error");
+  } else {
+    setBudgetMessage("");
+    setStatus(`Placed ${placed}. Ctrl+Z undoes it.`, "ok");
+  }
+  updatePlaceGhost();
+}
+
+function commitBuildingPlan(plan: BuildingPlan): void {
+  if (!area) return;
+  if (area.buildings.length >= MAX_BUILDINGS) {
+    setStatus(
+      `Limit reached: ${MAX_BUILDINGS} buildings per map. Delete some to place more`,
+      "error",
+    );
+    return;
+  }
+  const check = checkBuildingPlan(plan);
+  if (!check.ok) {
+    setStatus(check.reason, "error");
+    return;
+  }
+  const seated = seatBuilding(heightAtArea, {
+    x: plan.x,
+    z: plan.z,
+    widthM: plan.widthM,
+    depthM: plan.depthM,
+    heightM: buildingPalette.heightM,
+    rotationY: plan.rotationY,
+    style: buildingPalette.style,
+  });
+  if (seated.error !== undefined) {
+    setStatus(seated.error, "error");
+    return;
+  }
+  const next = [...area.buildings, seated.building];
+  const guard = sceneryAreaWith();
+  if (guard) {
+    const budget = checkSceneryBudget(guard, { buildings: next });
+    if (!budget.ok) {
+      refuseBudget(budget.reason);
+      return;
+    }
+  }
+  if (plan.dragged) {
+    const w = Math.round(plan.widthM * 10) / 10;
+    const dd = Math.round(plan.depthM * 10) / 10;
+    buildingPalette.widthM = w;
+    buildingPalette.depthM = dd;
+    buildingBoxes?.width.set(w);
+    buildingBoxes?.depth.set(dd);
+  }
+  applyResult(dispatcher.commitScenery({ buildings: next }), 0);
+  updateHistoryButtons();
+  setBudgetMessage("");
+  setStatus("Placed building. Ctrl+Z undoes it.", "ok");
+}
+
+function sceneryPointerDown(e: PointerEvent, kind: SceneryPlaceKind): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) {
+    setStatus("That spot is outside the map area", "error");
+    return;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  if (kind === "building") {
+    canvas.setPointerCapture(e.pointerId);
+    activePointerId = e.pointerId;
+    buildGesture.down(hit.x, hit.z);
+    updatePlaceGhost();
+    return;
+  }
+  if (pointPalette[kind].scatter) {
+    canvas.setPointerCapture(e.pointerId);
+    activePointerId = e.pointerId;
+    scatterDrag = {
+      kind,
+      pointerId: e.pointerId,
+      base: (Math.floor(nextRand() * 4294967296) ^ currentFeatureSeed()) >>> 0,
+      moves: 0,
+      work: [],
+      skipped: 0,
+      last: null,
+      limitMsg: "",
+    };
+    scatterStamp(scatterDrag, hit.x, hit.z);
+    updatePlaceGhost();
+    return;
+  }
+  placePointAt(kind, hit.x, hit.z);
+}
+
+function sceneryPointerMove(e: PointerEvent): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) return;
+  lastHit = { x: hit.x, z: hit.z };
+  const d = scatterDrag;
+  if (d) {
+    const gap = dispatcher.getOptions().radiusM * SCATTER_STAMP_FACTOR;
+    if (d.last === null || Math.hypot(hit.x - d.last.x, hit.z - d.last.z) >= gap) {
+      scatterStamp(d, hit.x, hit.z);
+    }
+    updatePlaceGhost();
+    return;
+  }
+  buildGesture.move(hit.x, hit.z);
+  const plan = buildingPlanAt(lastHit);
+  if (plan.dragged) {
+    setStatus(`${fmt3(plan.widthM)} x ${fmt3(plan.depthM)} m, ${buildingPalette.rotationDeg}°`);
+  }
+  updatePlaceGhost();
+}
+
+function sceneryPointerUp(e: PointerEvent): void {
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+  activePointerId = null;
+  if (scatterDrag) {
+    finishScatter();
+    return;
+  }
+  if (!buildGesture.active() || !area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (hit) {
+    buildGesture.move(hit.x, hit.z);
+    lastHit = { x: hit.x, z: hit.z };
+  }
+  const at = lastHit;
+  const plan = at ? buildingPlanAt(at) : null;
+  buildGesture.up();
+  setRect(null);
+  if (ghost) {
+    scene.remove(ghost);
+    disposeObject(ghost);
+    ghost = null;
+  }
+  if (plan) commitBuildingPlan(plan);
+  updatePlaceGhost();
+}
+
+/** Wheel while a footprint drag is live: 15 degrees per notch (outside a drag the wheel zooms). */
+function rotateBuildingDrag(dir: 1 | -1): void {
+  const deg = (buildingPalette.rotationDeg + dir * ROTATION_STEP_DEG + 360) % 360;
+  buildingPalette.rotationDeg = deg;
+  buildingBoxes?.rotation.set(deg);
+  setStatus(`${deg}°`);
+  updatePlaceGhost();
+}
+
+/** Esc, pointer cancel, leave and dialogs abandon a live scatter or footprint drag (nothing committed). */
+function cancelSceneryGesture(): void {
+  const had = sceneryGestureActive();
+  if (!had) return;
+  scatterDrag = null;
+  buildGesture.cancel();
+  if (area) {
+    sceneryView?.setFeatures(area.features ?? []);
+    refreshBudgetReadout();
+  }
+  if (activePointerId !== null && canvas.hasPointerCapture(activePointerId)) {
+    canvas.releasePointerCapture(activePointerId);
+  }
+  activePointerId = null;
+  updatePlaceGhost();
 }
 
 function resize(): void {
@@ -1260,6 +1889,9 @@ function installArea(next: TerrainArea): void {
   setPreview(null);
   setGesturePreview(null, null);
   startGesture.cancel();
+  scatterDrag = null;
+  buildGesture.cancel();
+  featureSeed = featureIdSeed(next.features ?? []);
   startDrag = null;
   startDraft = null;
   selectedStartId = null;
@@ -1582,10 +2214,18 @@ function ringRadius(): number {
 function paintRing(hit: { x: number; z: number }): void {
   paintRingShapes(hit);
   updateFootprintGrid(hit);
+  if (dispatcher.placing() !== null) updatePlaceGhost();
 }
 
 function paintRingShapes(hit: { x: number; z: number }): void {
   if (!area) return;
+  if (dispatcher.placing() !== null) {
+    // Place kinds draw their own ghost or scatter ring (updatePlaceGhost).
+    cursorRing.visible = false;
+    clearBoxOutline();
+    return;
+  }
+  (cursorRing.material as THREE.LineBasicMaterial).opacity = 1;
   if (tool === "select") {
     cursorRing.visible = false;
     const w = pushPull ? null : dispatcher.selectionPreview(hit.x, hit.z);
@@ -1943,6 +2583,7 @@ function updateCursor(clientX: number, clientY: number): void {
     if (!stroking) clearBoxOutline();
     lastHit = null;
     updateFootprintGrid(null);
+    updatePlaceGhost();
     applyCanvasCursor();
     shell.info.set("cursor", "off the terrain");
     shell.info.set("surface", "");
@@ -1950,7 +2591,6 @@ function updateCursor(clientX: number, clientY: number): void {
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
-  if (dispatcher.placing() !== null) cursorRing.visible = false;
   updateLockHover(hit.x, hit.z);
   maybeRebuildContours(hit.x, hit.z);
   shell.info.set(
@@ -1965,9 +2605,11 @@ function updateCursor(clientX: number, clientY: number): void {
 function applyCanvasCursor(): void {
   canvas.style.cursor = pushPull
     ? "ns-resize"
-    : (tool === "select" || dispatcher.placing() !== null) && lastHit !== null
-      ? "crosshair"
-      : "";
+    : ghostRefused && lastHit !== null
+      ? "not-allowed"
+      : (tool === "select" || dispatcher.placing() !== null) && lastHit !== null
+        ? "crosshair"
+        : "";
 }
 
 // ---------------------------------------------------------------- stroke application
@@ -2306,7 +2948,12 @@ canvas.addEventListener("pointerdown", (e) => {
     if (!stroking && !pushPull && !opHold) startPointerDown(e);
     return;
   }
-  if (placing !== null) return; // the other Place kinds arrive in later plans
+  if (placing === "building" || placing === "tree" || placing === "bush") {
+    if (!stroking && !pushPull && !opHold && !sceneryGestureActive())
+      sceneryPointerDown(e, placing);
+    return;
+  }
+  if (placing !== null) return; // hedge, fence and ramp arrive in plan 10
   canvas.setPointerCapture(e.pointerId);
   activePointerId = e.pointerId;
   strokeEvent(e, "down");
@@ -2326,11 +2973,19 @@ canvas.addEventListener("pointermove", (e) => {
     startPointerMove(e);
     return;
   }
+  if (sceneryGestureActive()) {
+    sceneryPointerMove(e);
+    return;
+  }
   if (stroking) strokeEvent(e, "move");
 });
 canvas.addEventListener("pointerup", (e) => {
   if (e.button === 0 && (startGesture.active() || startDrag)) {
     startPointerUp(e);
+    return;
+  }
+  if (e.button === 0 && sceneryGestureActive()) {
+    sceneryPointerUp(e);
     return;
   }
   if (pushPull && e.pointerId === pushPull.pointerId && e.button === 0) {
@@ -2356,16 +3011,19 @@ canvas.addEventListener("pointerup", (e) => {
 });
 canvas.addEventListener("pointercancel", (e) => {
   cancelStartGesture();
+  cancelSceneryGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (stroking) strokeEvent(e, "up");
   activePointerId = null;
 });
 canvas.addEventListener("pointerleave", () => {
   cancelStartGesture();
+  cancelSceneryGesture();
   if (!stroking) {
     cursorRing.visible = false;
     clearBoxOutline();
     lastHit = null; // Drive here must never use a stale cursor position (D-06)
+    updatePlaceGhost();
   }
 });
 
@@ -2513,7 +3171,7 @@ function deleteSelectedStart(): boolean {
 }
 
 function undoRedo(kind: "undo" | "redo"): void {
-  if (!area || stroking || pushPull || opHold) return;
+  if (!area || stroking || pushPull || opHold || sceneryGestureActive()) return;
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
@@ -3192,6 +3850,7 @@ async function contourIntervalDialog(): Promise<void> {
 
 function cancelActiveStroke(): void {
   cancelStartGesture();
+  cancelSceneryGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (!stroking) return;
   stroking = false;
@@ -3341,6 +4000,7 @@ function syncToolbar(): void {
     }
   }
   updateSurfaceReadout();
+  updatePlaceGhost();
   const shape = dispatcher.getOptions().brushShape;
   for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
   shell.setSidebarTitle(st.title, st.subtitle);
@@ -3662,6 +4322,11 @@ window.addEventListener("keydown", (e) => {
       }
       if (startGesture.active() || startDrag) {
         cancelStartGesture();
+        setStatus("Placement cancelled.");
+        return;
+      }
+      if (sceneryGestureActive()) {
+        cancelSceneryGesture();
         setStatus("Placement cancelled.");
         return;
       }
