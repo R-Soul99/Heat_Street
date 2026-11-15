@@ -167,6 +167,7 @@ import { applyAllInterpolated } from "./render/interpolator";
 import { loadMapView, type MapWorldView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
+import { createSceneryView } from "./render/scenery-view";
 import { createStationMarkers } from "./render/station-markers";
 import { createSurfaceFx } from "./render/surface-fx";
 import { buildTerrainView, type TerrainView } from "./render/terrain-view";
@@ -382,6 +383,7 @@ try {
   let mapView: MapWorldView;
   let terrainView: TerrainView | undefined;
   let terrainPhysicsGrid: TerrainGrid | undefined;
+  let terrainSightTransparent: ReadonlySet<number> = new Set<number>();
   if (terrainArea !== undefined) {
     // One grid for BOTH the collider and the view, so they share triangles.
     const physicsGrid = physicsGridForArea(terrainArea);
@@ -403,6 +405,7 @@ try {
         paint: terrainArea.paint,
         graph,
         buildings: terrainArea.buildings,
+        features: terrainArea.features ?? [],
         crests,
         groundSurface: terrainArea.groundSurface,
         spawnOverride,
@@ -416,6 +419,7 @@ try {
       CAR_CLASS.frontDriveShare,
     );
     scene = terrainScene;
+    terrainSightTransparent = terrainScene.sightTransparentHandles;
     // The visible berm is built from the very boxes the collider uses (D-09).
     const tView = buildTerrainView(physicsGrid, terrainArea.paint, {
       crests,
@@ -431,8 +435,17 @@ try {
       for (const mesh of buildingsView.roadMeshes) mesh.removeFromParent();
       buildingsView.terrainMesh?.removeFromParent();
     }
+    // 07.1.3 D-11/D-13: palette scenery plus terrain-native buildings (style-less ones only on
+    // maps that do not bake their buildings into the glb). Same ground as the physics grid.
+    const sceneryView = createSceneryView(
+      terrainArea.features ?? [],
+      terrainArea.buildings,
+      (x, z) => sampleTerrainHeight(physicsGrid, x, z),
+      { drawStyleless: !terrainArea.legacyGlbBuildings },
+    );
     const group = new THREE.Group();
     group.add(tView.group);
+    group.add(sceneryView.group);
     if (buildingsView !== undefined) group.add(buildingsView.group);
     mapView = {
       group,
@@ -443,6 +456,7 @@ try {
       crestMeshes: tView.crestMeshes,
       dispose(): void {
         tView.dispose();
+        sceneryView.dispose();
         buildingsView?.dispose();
       },
     };
@@ -583,13 +597,15 @@ try {
     brake: 0,
     handbrake: true,
   });
-  // Cars never block line of sight; only buildings and terrain do.
+  // Cars never block line of sight; only buildings, hedges and terrain do. Tree trunks and
+  // fences are see-through (07.1.3 D-10).
   const pursuitCarColliders = new Set<number>(
     pursuit === undefined
-      ? []
+      ? [...terrainSightTransparent]
       : [
           scene.vehicle.body.collider(0).handle,
           ...pursuit.fleet.cars.map((c) => c.vehicle.body.collider(0).handle),
+          ...terrainSightTransparent,
         ],
   );
   // How long the player's car has been continuously on its roof/side (up-vector

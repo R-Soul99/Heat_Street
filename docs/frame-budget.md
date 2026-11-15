@@ -307,3 +307,21 @@ The user chose to raise the target rather than cull chunk or shadow draws. Measu
 while render CPU averaged 1.2-1.4 ms of its 6.0 ms slice, so the count was not predicting cost. New target `< 80` (65 plus about 20% headroom,
 the margin used for the other targets); `SCENE_TARGETS.drawCalls` is 80. Render CPU 6.0 ms and every other budget are unchanged. The plan 09
 draw-side cull stays unbuilt and would be the next step only if render ms went over 6.0.
+
+## Scenery (07.1.3 plan 08)
+
+Scenery draws through `src/render/scenery-view.ts` (see `docs/scenery.md`): InstancedMesh and merged
+meshes, no shadows.
+
+| Quantity | Headless result (tests/scenery-view.test.ts) | Limit |
+|---|---|---|
+| Draw calls, every catalog variant on one map | 11 or fewer | 12 |
+| Draw calls, dense worst-case fixture | 11 or fewer | 12 |
+| Triangles, dense worst-case fixture | 37,900 | 40,000 |
+
+| Measured in a browser (render CPU ms, draw calls on the dense map) | Result |
+|---|---|
+| Plan 11 human check | not yet measured |
+
+The headless numbers are counted from the built geometry. No browser frame time has been measured
+here; the empty row is for plan 11's human measurement.
