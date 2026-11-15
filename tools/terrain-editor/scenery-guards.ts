@@ -18,8 +18,10 @@ import {
   moveFeature,
   OUTSIDE_AREA_REASON,
   type PlaceArea,
+  rotateFeature,
   type ScenerySelection,
   seatBuilding,
+  updateRamp,
 } from "./features.ts";
 
 export const BUDGET_REASON =
@@ -271,4 +273,71 @@ export function reseatBuildingsAfterSculpt(
     return next;
   });
   return changed ? out : buildings;
+}
+
+/** Wraps an angle to (-pi, pi]. */
+function wrapAngle(r: number): number {
+  const t = ((((r + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+  return t === -Math.PI ? Math.PI : t;
+}
+
+/**
+ * Turns the selected building, ramp or tree/bush by deltaRad about its own centre after the same
+ * checks a placement gets (a building cannot swing a corner onto road paint). Lines do not rotate.
+ * Positive deltaRad is counter-clockwise seen from above for buildings and plants; ramps use the
+ * crest heading convention (clockwise), which the caller flips for the arrow keys.
+ */
+export function rotateSceneryItem(
+  area: SceneryArea,
+  selection: ScenerySelection,
+  deltaRad: number,
+): MoveResult {
+  if (selection.kind === "feature") {
+    const features = area.features ?? [];
+    const f = features.find((x) => x.id === selection.id);
+    if (f === undefined) return { ok: false, reason: NOTHING_SELECTED };
+    if ("points" in f) return { ok: false, reason: "Lines cannot be rotated" };
+    return { ok: true, features: rotateFeature(features, f.id, wrapAngle(f.rotationY + deltaRad)) };
+  }
+  if (selection.kind === "building") {
+    const buildings = area.buildings ?? [];
+    const b = buildings[selection.index];
+    if (b === undefined) return { ok: false, reason: NOTHING_SELECTED };
+    const rotationY = wrapAngle(b.rotationY + deltaRad);
+    for (const [px, pz] of footprintCorners(
+      b.center.x,
+      b.center.z,
+      b.halfExtents.x,
+      b.halfExtents.z,
+      rotationY,
+    )) {
+      const c = canPlaceAt(area, px, pz);
+      if (!c.ok) return c;
+    }
+    let turned: TerrainBuilding;
+    if (b.style !== undefined) {
+      const heightAt = areaHeightFn(area);
+      const seated = seatBuilding(heightAt, {
+        x: b.center.x,
+        z: b.center.z,
+        widthM: b.halfExtents.x * 2,
+        depthM: b.halfExtents.z * 2,
+        heightM: visibleHeightOf(b, heightAt),
+        rotationY,
+        style: b.style,
+      });
+      if (seated.building === undefined) return { ok: false, reason: seated.error };
+      turned = seated.building;
+    } else {
+      turned = { ...b, rotationY };
+    }
+    return { ok: true, buildings: buildings.map((o, i) => (i === selection.index ? turned : o)) };
+  }
+  const objects = area.objects ?? [];
+  const o = objects.find((v) => v.crest.id === selection.id && v.crest.ramp !== undefined);
+  if (o === undefined || o.crest.ramp === undefined) return { ok: false, reason: NOTHING_SELECTED };
+  const r = updateRamp(objects, selection.id, {
+    headingRad: wrapAngle(o.crest.ramp.headingRad + deltaRad),
+  });
+  return r.ok ? { ok: true, objects: r.objects } : r;
 }

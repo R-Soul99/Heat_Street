@@ -119,10 +119,12 @@ import {
   moveFeature,
   pickFeatureByRay,
   RAMP_FOOT_RADIUS_M,
+  type RampPatch,
   removeInMask,
   type ScenerySelection,
   scatterPoints,
   seatBuilding,
+  updateRamp,
 } from "./features.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import { createDragGesture, createLineBuilder, DRAG_HEADING_MIN_M } from "./place-tool.ts";
@@ -146,6 +148,7 @@ import {
   fitScatterToBudget,
   type MoveResult,
   moveSceneryItem,
+  rotateSceneryItem,
   type SceneryArea,
 } from "./scenery-guards.ts";
 import {
@@ -2448,6 +2451,7 @@ function refreshSceneryBoxes(): void {
   if (hb) hoverBox.box.copy(hb);
   hoverBox.visible = hb !== null;
   if (deleteSceneryBtn) deleteSceneryBtn.disabled = !(area && dispatcher.getSelectionMask());
+  refreshSelectedPanel();
 }
 
 function selectScenery(sel: ScenerySelection | null): void {
@@ -2538,7 +2542,11 @@ function scenerySelectDown(e: PointerEvent): boolean {
     result: null,
   };
   selectScenery(sel);
-  setStatus("Drag to move, Delete removes it, Esc cancels.");
+  setStatus(
+    isRotatable(sel)
+      ? "Drag to move, Left/Right arrows turn it, Delete removes it."
+      : "Drag to move, Delete removes it.",
+  );
   return true;
 }
 
@@ -2716,6 +2724,135 @@ async function deleteSceneryInSelection(): Promise<void> {
   updateHistoryButtons();
   refreshSceneryBoxes();
   setStatus(`Deleted ${n} item${n === 1 ? "" : "s"}. Ctrl+Z undoes it.`, "ok");
+}
+
+// ---- keyboard rotation and the selected-item panel (plan 11 fixes)
+
+/** True for items the arrow keys can turn (buildings, ramps, trees, bushes; not lines). */
+function isRotatable(sel: ScenerySelection): boolean {
+  if (sel.kind !== "feature") return true;
+  const f = (area?.features ?? []).find((v) => v.id === sel.id);
+  return f !== undefined && !("points" in f);
+}
+
+/** Left/Right with a selected item turns it by 15 degrees, one undo step per press. */
+function rotateSelectedScenery(dir: 1 | -1): boolean {
+  if (!area || moveDrag || !selectedScenery || !selectableNow()) return false;
+  const sel = selectedScenery;
+  if (!sceneryExists(sel) || !isRotatable(sel)) return false;
+  const guard = sceneryAreaFull();
+  if (!guard) return false;
+  // Left = counter-clockwise seen from above; crest headings run the other way round.
+  const delta = (sel.kind === "ramp" ? -dir : dir) * ROTATION_STEP_DEG * DEG;
+  const res = rotateSceneryItem(guard, sel, delta);
+  if (!res.ok) {
+    setStatus(res.reason, "error");
+    return true;
+  }
+  const parts: {
+    features?: readonly TerrainFeature[];
+    buildings?: readonly TerrainBuilding[];
+    objects?: readonly TerrainObject[];
+  } = {};
+  if (res.features) parts.features = res.features;
+  if (res.buildings) parts.buildings = res.buildings;
+  if (res.objects) parts.objects = res.objects;
+  applyResult(dispatcher.commitScenery(parts), 0);
+  updateHistoryButtons();
+  setStatus("Turned 15 degrees. Ctrl+Z undoes it.", "ok");
+  return true;
+}
+
+/** Sidebar section for the selected placed item (ramp values, rotation hint, triangle count). */
+let selectedPanelEl: HTMLElement | null = null;
+let selectedPanelKey = "";
+let panelEditing = false;
+
+function selectedRamp(): TerrainObject | undefined {
+  const sel = selectedScenery;
+  if (!area || sel?.kind !== "ramp") return undefined;
+  return area.objects.find((o) => o.crest.id === sel.id && o.crest.ramp !== undefined);
+}
+
+function selectionPanelKey(): string {
+  if (!selectedScenery || !selectableNow()) return "";
+  const r = selectedRamp();
+  const ramp = r?.crest.ramp;
+  return ramp
+    ? `${JSON.stringify(selectedScenery)}|${r.crest.heightM}|${ramp.angleDeg}|${ramp.widthM}`
+    : JSON.stringify(selectedScenery);
+}
+
+/** Changes the selected ramp's values: one undo step per change, the mesh rebuilds. */
+function editSelectedRamp(patch: RampPatch): void {
+  const sel = selectedScenery;
+  if (!area || sel?.kind !== "ramp") return;
+  const r = updateRamp(area.objects, sel.id, patch);
+  if (!r.ok) {
+    setStatus(r.reason, "error");
+    return;
+  }
+  panelEditing = true;
+  applyResult(dispatcher.commitScenery({ objects: r.objects }), 0);
+  panelEditing = false;
+  selectedPanelKey = selectionPanelKey();
+  updateHistoryButtons();
+  setStatus("Ramp changed. Ctrl+Z undoes it.", "ok");
+}
+
+function refreshSelectedPanel(): void {
+  const host = selectedPanelEl;
+  if (!host || panelEditing) return;
+  const key = selectionPanelKey();
+  if (key === selectedPanelKey) return;
+  selectedPanelKey = key;
+  host.replaceChildren();
+  const sel = selectedScenery;
+  if (!sel || key === "" || !area) return;
+  const title =
+    sel.kind === "ramp"
+      ? "Selected ramp"
+      : sel.kind === "building"
+        ? "Selected building"
+        : "Selected item";
+  const head = el("div", undefined, title);
+  head.style.fontWeight = "600";
+  const kids: HTMLElement[] = [head];
+  const ramp = selectedRamp();
+  if (ramp?.crest.ramp) {
+    kids.push(
+      optStepper(
+        "Height",
+        "Ramp lip height in metres",
+        RAMP_HEIGHT_SPEC,
+        ramp.crest.heightM,
+        "m",
+        (v) => editSelectedRamp({ heightM: v }),
+      ).field,
+      optStepper(
+        "Angle",
+        "Launch angle in degrees",
+        RAMP_ANGLE_SPEC,
+        ramp.crest.ramp.angleDeg,
+        "°",
+        (v) => editSelectedRamp({ angleDeg: v }),
+      ).field,
+      optStepper(
+        "Width",
+        "Ramp width in metres",
+        RAMP_WIDTH_SPEC,
+        ramp.crest.ramp.widthM,
+        "m",
+        (v) => editSelectedRamp({ widthM: v }),
+      ).field,
+    );
+  }
+  if (isRotatable(sel)) kids.push(note("Left and Right arrows turn it 15 degrees."));
+  kids.push(note("Drag to move, Delete removes it."));
+  const tri = el("div", "muted");
+  tri.textContent = `Scenery triangles: ${estimateSceneryTriangles(area.features ?? [], area.buildings, { drawStyleless: !area.legacyGlbBuildings }).toLocaleString("en-US")} / 40,000`;
+  kids.push(tri);
+  host.append(...kids);
 }
 
 function resize(): void {
@@ -4632,6 +4769,10 @@ function buildSidebar(): void {
         roadsCountEl,
       ]),
     );
+    selectedPanelEl = el("div");
+    selectedPanelKey = "";
+    f.append(selectedPanelEl);
+    refreshSelectedPanel();
     deleteSceneryBtn = createButton({
       label: "Delete scenery in selection",
       tip: "Remove every tree, bush, hedge, fence and building inside the box selection (Ctrl+Z undoes it)",
@@ -5423,6 +5564,15 @@ window.addEventListener("keydown", (e) => {
       lineRemoveLast();
       return;
     }
+  }
+  if (
+    (e.code === "ArrowLeft" || e.code === "ArrowRight") &&
+    !e.shiftKey &&
+    !e.repeat &&
+    rotateSelectedScenery(e.code === "ArrowLeft" ? 1 : -1)
+  ) {
+    e.preventDefault();
+    return;
   }
   if (e.code === "Delete" && (deleteSelectedScenery() || deleteSelectedStart())) {
     e.preventDefault();

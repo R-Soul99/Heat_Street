@@ -30,6 +30,7 @@ import {
   scaleFeature,
   scatterPoints,
   seatBuilding,
+  updateRamp,
 } from "./features.ts";
 
 /** 100 m square at origin (0,0); a road strip over x 40..44 for every z. */
@@ -447,5 +448,28 @@ describe("pickFeatureByRay", () => {
       kind: "feature",
       id: "front",
     });
+  });
+});
+
+describe("updateRamp", () => {
+  const objects = addRampObject([], 10, 10, 0, { heightM: 2, angleDeg: 20, widthM: 10 });
+  it("changes height, angle, width and heading and keeps the foot radius", () => {
+    const r = updateRamp(objects, "ramp-1", {
+      heightM: 3,
+      angleDeg: 30,
+      widthM: 12,
+      headingRad: 1,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const c = r.objects[0]?.crest;
+      expect(c?.heightM).toBe(3);
+      expect(c?.ramp).toEqual({ headingRad: 1, widthM: 12, angleDeg: 30, footRadiusM: 150 });
+      expect(c?.centerX).toBe(10);
+    }
+    expect(objects[0]?.crest.heightM).toBe(2); // input untouched
+  });
+  it("refuses an unknown id", () => {
+    expect(updateRamp(objects, "nope", { heightM: 3 }).ok).toBe(false);
   });
 });

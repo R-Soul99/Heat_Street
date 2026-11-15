@@ -17,6 +17,7 @@ import {
   moveSceneryItem,
   NOTHING_SELECTED,
   reseatBuildingsAfterSculpt,
+  rotateSceneryItem,
   type SceneryArea,
 } from "./scenery-guards.ts";
 
@@ -264,5 +265,74 @@ describe("reseatBuildingsAfterSculpt", () => {
     const before = (x: number, z: number) => sampleTerrainHeight(grid, x, z);
     const out = reseatBuildingsAfterSculpt([styled], before, before, win);
     expect(out[0]).toBe(styled);
+  });
+});
+
+describe("rotateSceneryItem", () => {
+  const long = (x: number, rotationY: number, style?: string): TerrainBuilding => ({
+    center: { x, y: 1, z: 50 },
+    halfExtents: { x: 2, y: 1, z: 8 },
+    rotationY,
+    ...(style !== undefined ? { style } : {}),
+  });
+
+  it("turns a building about its centre", () => {
+    const area = moveArea({ buildings: [long(20, 0)] });
+    const r = rotateSceneryItem(area, { kind: "building", index: 0 }, Math.PI / 12);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.buildings?.[0]?.rotationY).toBeCloseTo(Math.PI / 12, 6);
+      expect(r.buildings?.[0]?.center).toEqual({ x: 20, y: 1, z: 50 });
+    }
+  });
+
+  it("refuses a turn that swings a corner onto road paint", () => {
+    // Road is x 40..44. Quarter turn puts the 8 m half-length along x: 34 + 8 = 42.
+    const area = moveArea({ buildings: [long(34, 0)] });
+    const r = rotateSceneryItem(area, { kind: "building", index: 0 }, Math.PI / 2);
+    expect(r).toEqual({ ok: false, reason: ON_ROAD_REASON });
+  });
+
+  it("wraps the angle and re-seats a styled building", () => {
+    const area = moveArea({ buildings: [long(20, 3.1, "shed")] });
+    const r = rotateSceneryItem(area, { kind: "building", index: 0 }, 0.5);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const rot = r.buildings?.[0]?.rotationY ?? 0;
+      expect(rot).toBeGreaterThan(-Math.PI);
+      expect(rot).toBeLessThanOrEqual(Math.PI);
+      expect(rot).toBeCloseTo(3.6 - 2 * Math.PI, 6);
+    }
+  });
+
+  it("turns a ramp heading and a tree, and not a line", () => {
+    const objects = addRampObject([], 20, 20, 0, { heightM: 2, angleDeg: 20, widthM: 10 });
+    const tree: TerrainFeature = {
+      id: "t",
+      kind: "tree",
+      variant: "oak",
+      x: 10,
+      z: 10,
+      rotationY: 0,
+      scale: 1,
+    };
+    const line: TerrainFeature = {
+      id: "l",
+      kind: "fence",
+      variant: "picket",
+      points: [
+        [10, 60],
+        [30, 60],
+      ],
+      heightM: 1.2,
+    };
+    const area = moveArea({ objects, features: [tree, line] });
+    const ramp = rotateSceneryItem(area, { kind: "ramp", id: "ramp-1" }, 0.25);
+    expect(ramp.ok).toBe(true);
+    if (ramp.ok) expect(ramp.objects?.[0]?.crest.ramp?.headingRad).toBeCloseTo(0.25, 6);
+    const t = rotateSceneryItem(area, { kind: "feature", id: "t" }, 0.25);
+    expect(t.ok).toBe(true);
+    if (t.ok) expect((t.features?.[0] as { rotationY: number }).rotationY).toBeCloseTo(0.25, 6);
+    expect(rotateSceneryItem(area, { kind: "feature", id: "l" }, 0.25).ok).toBe(false);
   });
 });

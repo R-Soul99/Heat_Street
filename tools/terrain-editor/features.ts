@@ -2,7 +2,7 @@
 // Every function returns NEW arrays and never mutates its inputs or the elements in
 // them (undo snapshots share element objects). editor.ts only routes input to these.
 
-import type { AuthoredCrest } from "../../src/core/crest-geometry.ts";
+import { type AuthoredCrest, rampLengthM } from "../../src/core/crest-geometry.ts";
 import { resolveVariant, type SceneryKind } from "../../src/core/scenery-catalog.ts";
 import { lineSegments } from "../../src/core/scenery-geometry.ts";
 import { terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
@@ -19,6 +19,7 @@ import {
   type TerrainPointFeature,
 } from "../../src/core/terrain-format.ts";
 import type { TerrainGrid } from "../../src/core/terrain-grid.ts";
+import { MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
 import { isRoadAt, type PaintMap } from "../../src/core/terrain-paint.ts";
 
 /** What the placement checks need from the live area. */
@@ -348,6 +349,41 @@ export function addRampObject(
     },
   };
   return [...objects, { kind: "crest", crest }];
+}
+
+/** The ramp values the sidebar and arrow keys can change after placement. */
+export interface RampPatch {
+  readonly heightM?: number;
+  readonly angleDeg?: number;
+  readonly widthM?: number;
+  readonly headingRad?: number;
+}
+
+export const RAMP_TOO_LONG = "That ramp would be longer than the map area allows";
+
+export type RampEdit =
+  | { ok: true; objects: readonly TerrainObject[] }
+  | { ok: false; reason: string };
+
+/** Changes one ramp's height, angle, width or heading. The foot radius and position are kept. */
+export function updateRamp(
+  objects: readonly TerrainObject[],
+  id: string,
+  patch: RampPatch,
+): RampEdit {
+  const o = objects.find((v) => v.crest.id === id && v.crest.ramp !== undefined);
+  if (o === undefined || o.crest.ramp === undefined)
+    return { ok: false, reason: "Nothing selected" };
+  const ramp = {
+    ...o.crest.ramp,
+    ...(patch.widthM !== undefined ? { widthM: patch.widthM } : {}),
+    ...(patch.angleDeg !== undefined ? { angleDeg: patch.angleDeg } : {}),
+    ...(patch.headingRad !== undefined ? { headingRad: patch.headingRad } : {}),
+  };
+  const heightM = patch.heightM ?? o.crest.heightM;
+  if (rampLengthM(heightM, ramp) > MAX_AREA_SIZE_M) return { ok: false, reason: RAMP_TOO_LONG };
+  const crest: AuthoredCrest = { ...o.crest, heightM, ramp };
+  return { ok: true, objects: objects.map((v) => (v === o ? { kind: "crest", crest } : v)) };
 }
 
 export function deleteRamp(
