@@ -332,7 +332,8 @@ describe("rotateSceneryItem", () => {
     if (ramp.ok) expect(ramp.objects?.[0]?.crest.ramp?.headingRad).toBeCloseTo(0.25, 6);
     const t = rotateSceneryItem(area, { kind: "feature", id: "t" }, 0.25);
     expect(t.ok).toBe(true);
-    if (t.ok) expect((t.features?.[0] as { rotationY: number }).rotationY).toBeCloseTo(0.25, 6);
+    if (t.ok)
+      expect(((t.features ?? [])[0] as { rotationY: number }).rotationY).toBeCloseTo(0.25, 6);
     expect(rotateSceneryItem(area, { kind: "feature", id: "l" }, 0.25).ok).toBe(false);
   });
 });
