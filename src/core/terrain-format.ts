@@ -35,6 +35,7 @@
 import { type AuthoredCrest, type RampSpec, rampLengthM } from "./crest-geometry.ts";
 import type { MapCollisionBuilding } from "./map-collision.ts";
 import { parseRoadGraph, type RoadGraph } from "./road-graph.ts";
+import { resolveBuildingStyle, resolveVariant } from "./scenery-catalog.ts";
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import { createTerrainGrid, type TerrainGrid } from "./terrain-grid.ts";
 import { MAX_AREA_SIZE_M } from "./terrain-limits.ts";
@@ -381,7 +382,7 @@ export interface TerrainSidecar {
   readonly nextEdgeId: number;
   readonly graph: RoadGraph;
   readonly objects: readonly TerrainObject[];
-  readonly buildings: readonly MapCollisionBuilding[];
+  readonly buildings: readonly TerrainBuilding[];
   /**
    * Quick 261110-rdx (DD-2): ids of road-graph edges the editor has UNLOCKED (not held by the
    * road mask). Absent or empty = every road locked. Written only when non-empty so all-locked
@@ -393,7 +394,45 @@ export interface TerrainSidecar {
    * Written only when non-empty so existing sidecars serialise exactly as before.
    */
   readonly startPoints?: readonly TerrainStartPoint[];
+  /** 07.1.3 D-07: scenery (trees, bushes, hedges, fences). Written only when non-empty. */
+  readonly features?: readonly TerrainFeature[];
 }
+
+/** 07.1.3 D-07: a placed tree or bush. `variant` is a scenery-catalog id (D-08). */
+export type TerrainPointFeature = {
+  readonly id: string;
+  readonly kind: "tree" | "bush";
+  readonly variant: string;
+  readonly x: number;
+  readonly z: number;
+  readonly rotationY: number;
+  readonly scale: number;
+};
+
+/** 07.1.3 D-07: a hedge or fence polyline. */
+export type TerrainLineFeature = {
+  readonly id: string;
+  readonly kind: "hedge" | "fence";
+  readonly variant: string;
+  readonly points: readonly (readonly [number, number])[];
+  readonly heightM: number;
+};
+
+export type TerrainFeature = TerrainPointFeature | TerrainLineFeature;
+
+/** A building plus an optional catalog style id (07.1.3 D-07). */
+export interface TerrainBuilding extends MapCollisionBuilding {
+  readonly style?: string;
+}
+
+export const MAX_POINT_FEATURES = 4000;
+export const MAX_LINE_FEATURES = 500;
+export const MAX_LINE_POINTS = 64;
+export const MAX_BUILDINGS = 2000;
+export const MIN_FEATURE_SCALE = 0.5;
+export const MAX_FEATURE_SCALE = 2;
+export const MAX_LINE_HEIGHT_M = 6;
+export const MAX_FEATURE_ID_CHARS = 32;
 
 /** 07.1.3 D-01: a named spawn pose on the map. headingRad uses the VehiclePose yaw convention. */
 export interface TerrainStartPoint {
@@ -474,7 +513,7 @@ function reqRange(
 }
 
 /** Largest crest / ramp height accepted from a sidecar (m). */
-const MAX_CREST_HEIGHT_M = 200;
+export const MAX_CREST_HEIGHT_M = 200;
 
 function parseRamp(label: string, raw: unknown, ctx: string): RampSpec {
   if (!isRec(raw)) fail(label, `${ctx} must be an object`);
@@ -513,11 +552,18 @@ function parseObject(label: string, raw: unknown, index: number): TerrainObject 
   return { kind: "crest", crest: { ...base, ramp } };
 }
 
-function parseBuilding(label: string, raw: unknown, index: number): MapCollisionBuilding {
+function parseBuilding(label: string, raw: unknown, index: number): TerrainBuilding {
   const ctx = `buildings[${index}]`;
   if (!isRec(raw)) fail(label, `${ctx} must be an object`);
   const he = reqRec(label, raw, "halfExtents", ctx);
   const hctx = `${ctx}.halfExtents`;
+  let style: string | undefined;
+  if (raw.style !== undefined) {
+    if (typeof raw.style !== "string" || resolveBuildingStyle(raw.style) === undefined) {
+      fail(label, `${ctx}.style unknown building style ${JSON.stringify(raw.style)}`);
+    }
+    style = raw.style;
+  }
   return {
     center: reqVec3(label, raw, "center", ctx),
     halfExtents: {
@@ -526,7 +572,94 @@ function parseBuilding(label: string, raw: unknown, index: number): MapCollision
       z: reqRange(label, he, "z", hctx, 0, MAX_AREA_SIZE_M),
     },
     rotationY: reqNum(label, raw, "rotationY", ctx),
+    ...(style !== undefined ? { style } : {}),
   };
+}
+
+function reqCoord(label: string, o: Rec, key: string, ctx: string): number {
+  const v = reqNum(label, o, key, ctx);
+  if (Math.abs(v) > MAX_COORD_ABS_M) fail(label, `${ctx}.${key} out of range, got ${v}`);
+  return v;
+}
+
+function parseFeatures(label: string, raw: unknown): TerrainFeature[] {
+  if (!Array.isArray(raw)) fail(label, "root.features must be an array");
+  const ids = new Set<string>();
+  const out: TerrainFeature[] = [];
+  let pointCount = 0;
+  let lineCount = 0;
+  for (const [i, e] of (raw as unknown[]).entries()) {
+    const ctx = `features[${i}]`;
+    if (!isRec(e)) fail(label, `${ctx} must be an object`);
+    const id = reqStr(label, e, "id", ctx);
+    if (id.length < 1 || id.length > MAX_FEATURE_ID_CHARS) {
+      fail(label, `${ctx}.id must be 1..${MAX_FEATURE_ID_CHARS} characters`);
+    }
+    if (ids.has(id)) fail(label, `${ctx}.id duplicate feature id ${JSON.stringify(id)}`);
+    ids.add(id);
+    const kind = e.kind;
+    const variantId = reqStr(label, e, "variant", ctx);
+    if (kind === "tree" || kind === "bush") {
+      if (++pointCount > MAX_POINT_FEATURES) {
+        fail(label, `root.features has more than ${MAX_POINT_FEATURES} point features`);
+      }
+      if (resolveVariant(kind, variantId) === undefined) {
+        fail(label, `${ctx}.variant unknown ${kind} variant ${JSON.stringify(variantId)}`);
+      }
+      const scale = reqNum(label, e, "scale", ctx);
+      if (scale < MIN_FEATURE_SCALE || scale > MAX_FEATURE_SCALE) {
+        fail(
+          label,
+          `${ctx}.scale must be in [${MIN_FEATURE_SCALE}, ${MAX_FEATURE_SCALE}], got ${scale}`,
+        );
+      }
+      out.push({
+        id,
+        kind,
+        variant: variantId,
+        x: reqCoord(label, e, "x", ctx),
+        z: reqCoord(label, e, "z", ctx),
+        rotationY: reqNum(label, e, "rotationY", ctx),
+        scale,
+      });
+    } else if (kind === "hedge" || kind === "fence") {
+      if (++lineCount > MAX_LINE_FEATURES) {
+        fail(label, `root.features has more than ${MAX_LINE_FEATURES} line features`);
+      }
+      const variant =
+        kind === "hedge" ? resolveVariant("hedge", variantId) : resolveVariant("fence", variantId);
+      if (variant === undefined) {
+        fail(label, `${ctx}.variant unknown ${kind} variant ${JSON.stringify(variantId)}`);
+      }
+      const rawPts = e.points;
+      if (!Array.isArray(rawPts) || rawPts.length < 2 || rawPts.length > MAX_LINE_POINTS) {
+        fail(label, `${ctx}.points must be an array of 2..${MAX_LINE_POINTS} points`);
+      }
+      const points: [number, number][] = [];
+      for (const [j, p] of (rawPts as unknown[]).entries()) {
+        const pc = `${ctx}.points[${j}]`;
+        if (!Array.isArray(p) || p.length !== 2) fail(label, `${pc} must be [x, z]`);
+        const [px, pz] = p as unknown[];
+        for (const v of [px, pz]) {
+          if (typeof v !== "number" || !Number.isFinite(v) || Math.abs(v) > MAX_COORD_ABS_M) {
+            fail(label, `${pc} must hold finite coordinates within +-${MAX_COORD_ABS_M}`);
+          }
+        }
+        points.push([px as number, pz as number]);
+      }
+      const heightM = reqNum(label, e, "heightM", ctx);
+      if (heightM < variant.minHeightM || heightM > MAX_LINE_HEIGHT_M) {
+        fail(
+          label,
+          `${ctx}.heightM must be in [${variant.minHeightM}, ${MAX_LINE_HEIGHT_M}], got ${heightM}`,
+        );
+      }
+      out.push({ id, kind, variant: variantId, points, heightM });
+    } else {
+      fail(label, `${ctx}.kind unknown feature kind ${JSON.stringify(kind)}`);
+    }
+  }
+  return out;
 }
 
 function parseStartPoints(label: string, raw: unknown): TerrainStartPoint[] {
@@ -583,6 +716,7 @@ export function serializeTerrainSidecar(area: TerrainSidecar): string {
     center: { x: b.center.x, y: b.center.y, z: b.center.z },
     halfExtents: { x: b.halfExtents.x, y: b.halfExtents.y, z: b.halfExtents.z },
     rotationY: b.rotationY,
+    ...(b.style !== undefined ? { style: b.style } : {}),
   }));
   const wire = {
     kind: SIDECAR_KIND,
@@ -607,6 +741,29 @@ export function serializeTerrainSidecar(area: TerrainSidecar): string {
             z: p.z,
             headingRad: p.headingRad,
           })),
+        }
+      : {}),
+    ...(area.features !== undefined && area.features.length > 0
+      ? {
+          features: area.features.map((f) =>
+            !("points" in f)
+              ? {
+                  id: f.id,
+                  kind: f.kind,
+                  variant: f.variant,
+                  x: f.x,
+                  z: f.z,
+                  rotationY: f.rotationY,
+                  scale: f.scale,
+                }
+              : {
+                  id: f.id,
+                  kind: f.kind,
+                  variant: f.variant,
+                  points: f.points.map((p) => [p[0], p[1]]),
+                  heightM: f.heightM,
+                },
+          ),
         }
       : {}),
   };
@@ -673,6 +830,12 @@ export function parseTerrainSidecar(
     }
     crestIds.add(o.crest.id);
   }
+  if (parsed.buildings.length > MAX_BUILDINGS) {
+    fail(
+      sourceLabel,
+      `root.buildings has ${parsed.buildings.length} entries, max ${MAX_BUILDINGS}`,
+    );
+  }
   const buildings = parsed.buildings.map((b, i) => parseBuilding(sourceLabel, b, i));
 
   let unlockedEdgeIds: number[] = [];
@@ -697,6 +860,8 @@ export function parseTerrainSidecar(
   const startPoints =
     parsed.startPoints !== undefined ? parseStartPoints(sourceLabel, parsed.startPoints) : [];
 
+  const features = parsed.features !== undefined ? parseFeatures(sourceLabel, parsed.features) : [];
+
   return {
     areaId,
     name,
@@ -708,6 +873,7 @@ export function parseTerrainSidecar(
     buildings,
     ...(unlockedEdgeIds.length > 0 ? { unlockedEdgeIds } : {}),
     ...(startPoints.length > 0 ? { startPoints } : {}),
+    ...(features.length > 0 ? { features } : {}),
   };
 }
 
@@ -745,5 +911,6 @@ export async function loadTerrainArea(
     nextEdgeId: side.nextEdgeId,
     ...(side.unlockedEdgeIds !== undefined ? { unlockedEdgeIds: side.unlockedEdgeIds } : {}),
     ...(side.startPoints !== undefined ? { startPoints: side.startPoints } : {}),
+    ...(side.features !== undefined ? { features: side.features } : {}),
   };
 }

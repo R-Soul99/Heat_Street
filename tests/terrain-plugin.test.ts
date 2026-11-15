@@ -33,6 +33,16 @@ describe("validateSidecarPut (D-17 save guard on the server)", () => {
     pts[Math.floor(pts.length / 2)][1] += 60;
     expect(() => validateSidecarPut(JSON.stringify(json), "feel-test")).toThrow(/^terrain-save:/);
   });
+  it("rejects a sidecar with an unknown scenery variant (07.1.3 D-08)", async () => {
+    const text = await readFile(path.join("public", "maps", "feel-test.terrain.json"), "utf8");
+    const json = JSON.parse(text);
+    json.features = [
+      { id: "t1", kind: "tree", variant: "bogus", x: 0, z: 0, rotationY: 0, scale: 1 },
+    ];
+    expect(() => validateSidecarPut(JSON.stringify(json), "feel-test")).toThrow(
+      /features\[0\]\.variant/,
+    );
+  });
   it("still rejects malformed JSON as a format error", () => {
     expect(() => validateSidecarPut("{not json", "feel-test")).toThrow(
       /^(terrain-format|parseRoadGraph):/,

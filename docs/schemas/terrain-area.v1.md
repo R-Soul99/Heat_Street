@@ -87,8 +87,9 @@ Bits 4-6 are preserved.
 | `nextEdgeId` | integer | strictly greater than every edge id; never decreases |
 | `graph` | object | road graph v1, parsed by `parseRoadGraph` |
 | `objects` | array | `{ "kind": "crest", id, centerX, centerZ, radiusM, heightM, ramp? }`; `ramp` = `{ headingRad, widthM, angleDeg, footRadiusM }` |
-| `buildings` | array | `{ center {x,y,z}, halfExtents {x,y,z}, rotationY }` |
+| `buildings` | array | `{ center {x,y,z}, halfExtents {x,y,z}, rotationY, style? }`; max 2000. `style` (optional, omitted when absent) is a building style id: `shed`, `house`, `barn`, `shop`, `block`. |
 | `startPoints` | array (optional) | `{ id, name, x, z, headingRad }`; max 32 entries, unique non-empty ids, name 1..40 chars, abs(x/z) <= 100000. The first entry is the map default spawn (07.1.3 D-03). Omitted when empty; no version bump. Spawn priority: `?at=` > `?start=<id>` > first in-extent entry > road-graph spawn > grid centre. In `circuit-race` the course grid overrides the spawn, so `?start=` (like `?at=`) does not move the race start. |
+| `features` | array (optional) | scenery, omitted when empty. Point: `{ id, kind: "tree"\|"bush", variant, x, z, rotationY, scale }` (scale 0.5..2; max 4000). Line: `{ id, kind: "hedge"\|"fence", variant, points [[x,z],...], heightM }` (2..64 points; max 500 lines; heightM from the variant minimum (1.0 m) to 6). Ids unique, 1..32 chars; abs(coordinate) <= 100000. Variant ids come from `src/core/scenery-catalog.ts` and are never renamed: tree `pine`/`oak`/`dead`; bush `round`/`scrub`; hedge `box`; fence `post-rail`/`picket`/`chainlink`. |
 
 Every number must be finite. Unknown object kinds are rejected. Parsing rebuilds every field by
 name; unknown keys (including `__proto__`) are ignored.
