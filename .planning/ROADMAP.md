@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI) (completed 2026-09-21)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
-- [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
+- [x] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit (completed 2026-11-15)
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
 - [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
 - [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
@@ -551,7 +551,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6
 | 4.3. Terrain and Feel Follow-ups (INSERTED) | 12/12 | Complete | 2026-11-04 |
 | 5. Objectives, Navigation & Race Modes | 4/4 | Complete | 2026-09-21 |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
-| 7. NPC Driving AI & Circuit Racers | 7/7 | In Progress|  |
+| 7. NPC Driving AI & Circuit Racers | 7/7 | Complete    | 2026-11-15 |
 | 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
