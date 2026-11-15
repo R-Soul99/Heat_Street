@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Completed 07.1.3-07-PLAN.md
-last_updated: "2026-11-15T17:28:56.466Z"
+stopped_at: Completed 07.1.3-08-PLAN.md
+last_updated: "2026-11-15T17:32:57.798Z"
 last_activity: 2026-11-15
 progress:
   total_phases: 18
   completed_phases: 12
   total_plans: 148
-  completed_plans: 142
+  completed_plans: 143
   percent: 67
 ---
 
@@ -92,6 +92,7 @@ Progress: [██████████] 95%
 | Phase 07 P07 | 6h45m | 3 tasks | 20 files |
 | Phase 07.1.3 P04 | n/a | 3 tasks | 1 files |
 | Phase 07.1.3 P07 | 30min | 3 tasks | 11 files |
+| Phase 07.1.3 P08 | 20min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 07.1.3-06: scenery colliders share one lazy fixed body; line colliders min 0.4 m thick; 1.0 m hedge/fence minimum confirmed by kerb test
 - [Phase 07.1.3]: 07.1.3-04: D = Drive from start point, Shift+D = Drive here; start markers picked by 2 m ground distance
 - [Phase ?]: 07.1.3-07: building seat rule top=highest corner+visible height, bottom=lowest-0.3; ramps refused only outside area; sculpt re-seat rides in stroke diff
+- [Phase ?]: 07.1.3-08: merged building meshes use vertex colours; instanced scenery uses instanceColor
 
 ### Pending Todos
 
@@ -265,8 +267,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-15T17:28:56.445Z
-Stopped at: Completed 07.1.3-07-PLAN.md
+Last session: 2026-11-15T17:32:57.782Z
+Stopped at: Completed 07.1.3-08-PLAN.md
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
