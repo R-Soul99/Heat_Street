@@ -52,6 +52,7 @@ import {
 } from "../core/shoulder-clearance";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
+import { type BermBox, buildEdgeBerm, roadsClearOfGridEdge } from "../core/terrain-edge-berm";
 import type { TerrainGrid } from "../core/terrain-grid";
 import type { PaintMap } from "../core/terrain-paint";
 import type { VehicleTuning } from "../core/vehicle-tuning";
@@ -124,6 +125,12 @@ export interface MapScene {
 
   /** Reset the existing vehicle body in place to an authored pose. */
   resetVehicle(pose: VehiclePose): void;
+
+  /**
+   * Edge berm boxes around the compiled ground, when every road is clear of the
+   * ground edge (recompiled / editor maps). The view builds its mesh from these.
+   */
+  readonly edgeBerm?: readonly BermBox[];
 
   /** Terrain scenes only: a fresh wheel-ray patch for an extra vehicle (AI) built into the same world. */
   createWheelRayPatch?(): WheelRayPatch;
@@ -397,6 +404,26 @@ export function createMapScene(
     buildBuildingCollider(world, building);
   }
 
+  // Edge berm (07.1, same builder as terrain maps 04.3 D-06..D-10): only when no
+  // road comes near the ground edge, so older maps whose roads run off the
+  // ground keep their exact collider set (and medal times).
+  let edgeBerm: BermBox[] | undefined;
+  if (collision.heightfield !== undefined && roadsClearOfGridEdge(collision.heightfield, graph)) {
+    edgeBerm = buildEdgeBerm(collision.heightfield);
+    const bermBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    const groundSurface = groundSurfaceForArea(collision.areaId);
+    for (const box of edgeBerm) {
+      const collider = world.createCollider(
+        RAPIER.ColliderDesc.cuboid(box.hx, box.hy, box.hz)
+          .setTranslation(box.cx, box.cy, box.cz)
+          .setFriction(BUILDING_FRICTION)
+          .setRestitution(0),
+        bermBody,
+      );
+      surfaceMap.register(collider.handle, groundSurface);
+    }
+  }
+
   // Optional extra terrain (04.2 prototype gate course, debug `&gate` only):
   // one more heightfield collider with a position-based paint lookup. Absent
   // = scene unchanged.
@@ -432,6 +459,7 @@ export function createMapScene(
   const bodies: readonly RAPIER.RigidBody[] = [vehicle.body];
 
   return {
+    edgeBerm,
     bodies,
     vehicle,
     defaultSpawnPose,

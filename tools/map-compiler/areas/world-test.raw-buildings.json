@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-09T23:19:30.740Z",
+  "endpoint": "authored://heat-street/world-test",
+  "bbox": {
+    "south": 32.97294968451597,
+    "west": -84.03210163550982,
+    "north": 33.02705031548403,
+    "east": -83.96789836449018
+  },
+  "query": "authored world-test buildings (none)",
+  "response": {
+    "elements": []
+  }
+}

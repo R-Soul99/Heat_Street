@@ -8,10 +8,9 @@
  * the fix is a re-save from the editor, never a hand edit of the files.
  *
  * Known state of the saved map (recorded in 04.2-14-SUMMARY.md):
- * - The validator reports GEOMETRY_SELF_INTERSECTION on edge 0 (segments 299,
- *   305, 306: a tight fold where the ribbon winding flips). The editor saves
- *   despite it and the map loads and drives. The test pins that this is the
- *   ONLY failure category, so a new kind of breakage still fails loudly.
+ * - Edge 0 has tight folds (segments 299, 305, 306); since plan 07.1-14 the
+ *   ribbon builder pinches the folded inner rail, so the validator reports
+ *   no geometry failures at all.
  * - The road is one open edge (2 nodes, no junction) on grass + tarmac paint
  *   only; the plan's junction and off-road-paint checks are left as todos.
  */
@@ -52,15 +51,12 @@ describe("demo-hills (hand-sculpted demo map)", () => {
     expect(reparsed.edges.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("has no referential-integrity failures; the only geometry failure is the known edge-0 fold", async () => {
+  it("has no referential-integrity or geometry failures (folds are pinched by the ribbon builder)", async () => {
     const area = await loadDemo();
     const failures = validateGraph(area.graph, buildRoadGeometry(area.graph));
     expect(failures.filter((f) => f.category === "REFERENTIAL_INTEGRITY")).toEqual([]);
     const geometry = failures.filter((f) => f.category.startsWith("GEOMETRY_"));
-    for (const f of geometry) {
-      expect(f.category).toBe("GEOMETRY_SELF_INTERSECTION");
-      expect(f.id).toBe(0);
-    }
+    expect(geometry).toEqual([]);
   });
 
   it("has a default spawn on an existing node", async () => {

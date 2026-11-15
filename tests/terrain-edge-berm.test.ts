@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RoadGraph } from "../src/core/road-graph";
 import {
   BERM_HEIGHT_M,
   BERM_INSET_M,
@@ -7,6 +8,7 @@ import {
   BERM_THICKNESS_M,
   type BermBox,
   buildEdgeBerm,
+  roadsClearOfGridEdge,
 } from "../src/core/terrain-edge-berm";
 import { createTerrainGrid, type TerrainGrid } from "../src/core/terrain-grid";
 
@@ -105,5 +107,59 @@ describe("buildEdgeBerm", () => {
     const g = flat();
     for (let i = 0; i < g.heights.length; i++) g.heights[i] = Math.sin(i) * 2;
     expect(buildEdgeBerm(g)).toEqual(buildEdgeBerm(g));
+  });
+});
+
+describe("compiled-map berm (07.1)", () => {
+  // A compiled collision heightfield: non-square cells (1951.7 m x 767.7 m over 128x128, like map-1).
+  const rows = 4;
+  const cols = 4;
+  const hf = {
+    rows,
+    cols,
+    heights: new Float32Array((rows + 1) * (cols + 1)).fill(-0.1),
+    originX: -1000,
+    originZ: -400,
+    scaleX: 2000,
+    scaleZ: 800,
+  };
+  const graphWith = (points: [number, number, number][]) =>
+    ({ edges: [{ points }] }) as unknown as RoadGraph;
+
+  it("encloses the whole non-square grid", () => {
+    const boxes = buildEdgeBerm(hf);
+    const minX = Math.min(...boxes.map((b) => b.cx - b.hx));
+    const maxX = Math.max(...boxes.map((b) => b.cx + b.hx));
+    const minZ = Math.min(...boxes.map((b) => b.cz - b.hz));
+    const maxZ = Math.max(...boxes.map((b) => b.cz + b.hz));
+    expect(minX).toBeLessThan(hf.originX);
+    expect(maxX).toBeGreaterThan(hf.originX + hf.scaleX);
+    expect(minZ).toBeLessThan(hf.originZ);
+    expect(maxZ).toBeGreaterThan(hf.originZ + hf.scaleZ);
+    // Z-edge boxes span the Z extent, not the X cell size.
+    const zEdgeLen = boxes.filter((b) => b.hx < 5).reduce((s, b) => s + 2 * b.hz, 0);
+    expect(zEdgeLen).toBeCloseTo(2 * hf.scaleZ, 0);
+  });
+
+  it("is only allowed when every road point is clear of the grid edge", () => {
+    expect(
+      roadsClearOfGridEdge(
+        hf,
+        graphWith([
+          [0, 0, 0],
+          [900, 0, 300],
+        ]),
+      ),
+    ).toBe(true);
+    // A road running off the ground (older maps sized to junction nodes only).
+    expect(
+      roadsClearOfGridEdge(
+        hf,
+        graphWith([
+          [0, 0, 0],
+          [0, 0, -395],
+        ]),
+      ),
+    ).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type { Course } from "../core/course";
 import type { MedalProgressRecord } from "../core/medal-persistence";
 import type { MedalReferenceCourse } from "../core/medal-reference";
 import type { FrozenCompletion, Medal } from "../core/medal-timing";
+import type { ClassificationRow } from "../core/race-placement";
 
 export interface CourseCardModel {
   readonly courseId: string;
@@ -60,9 +61,70 @@ export function buildResultRows(completion: FrozenCompletion): readonly ResultRo
   }));
 }
 
+export interface RaceCardModel {
+  readonly courseId: string;
+  readonly title: string;
+  readonly modeLabel: "CIRCUIT RACE";
+  readonly bestTimeSec: number | null;
+  readonly bestFinish: number | null;
+  readonly fieldSize: number;
+  readonly selected: boolean;
+}
+
+/** Circuit Race card (D-06): best finish and best time from the `<id>.race` record, or `null` for both when unraced. */
+export function buildRaceCardModel(
+  course: Course,
+  raceCourseId: string,
+  progress: Readonly<Record<string, MedalProgressRecord>>,
+  selectedCourseId: string,
+  fieldSize: number,
+): RaceCardModel {
+  const saved = Object.hasOwn(progress, raceCourseId) ? progress[raceCourseId] : undefined;
+  return {
+    courseId: raceCourseId,
+    title: course.name,
+    modeLabel: "CIRCUIT RACE",
+    bestTimeSec: saved?.bestTimeSec ?? null,
+    bestFinish: saved === undefined ? null : (saved.bestFinish ?? null),
+    fieldSize,
+    selected: raceCourseId === selectedCourseId,
+  };
+}
+
+export interface RaceClassificationRowModel {
+  readonly text: string;
+  readonly isPlayer: boolean;
+  readonly projected: boolean;
+}
+
+/** `P1  YOU  8:01.22` for a finished racer, `P3  HIGHWAY YELLOW  PROJECTED` for a projected one. `names` is indexed by racerIndex. */
+export function buildRaceClassificationRows(
+  rows: readonly ClassificationRow[],
+  names: readonly string[],
+): readonly RaceClassificationRowModel[] {
+  return rows.map((row) => {
+    const name = names[row.racerIndex] ?? `CAR ${row.racerIndex + 1}`;
+    const result =
+      row.projected || row.effectiveSec === null ? "PROJECTED" : formatResultTime(row.effectiveSec);
+    return {
+      text: `P${row.position}  ${name}  ${result}`,
+      isPlayer: row.isPlayer,
+      projected: row.projected,
+    };
+  });
+}
+
+export interface RaceCardSource {
+  readonly course: Course;
+  readonly raceCourseId: string;
+  readonly fieldSize: number;
+}
+
 export interface ResultsView {
   updateCards(progress: Readonly<Record<string, MedalProgressRecord>>): void;
   showCompletion(completion: FrozenCompletion): void;
+  /** Circuit Race classification panel (D-07): `RACE RESULT  (RUNNING)` while cars are still crossing, `RACE RESULT` once final. */
+  showRaceClassification(rows: readonly RaceClassificationRowModel[], final: boolean): void;
   clearCompletion(): void;
   dispose(): void;
 }
@@ -89,6 +151,7 @@ export function createResultsView(
   references: readonly MedalReferenceCourse[],
   selectedCourseId: string,
   progress: Readonly<Record<string, MedalProgressRecord>>,
+  raceCard?: RaceCardSource,
 ): ResultsView {
   const root = document.createElement("aside");
   root.style.cssText =
@@ -143,6 +206,26 @@ export function createResultsView(
       );
       cards.appendChild(element);
     }
+    if (raceCard !== undefined) {
+      const card = buildRaceCardModel(
+        raceCard.course,
+        raceCard.raceCourseId,
+        nextProgress,
+        selectedCourseId,
+        raceCard.fieldSize,
+      );
+      const element = document.createElement("section");
+      element.style.cssText = `padding:8px;margin-bottom:8px;border:1px solid ${card.selected ? "#ffd447" : "#456"};background:rgba(20,35,42,.72)`;
+      element.append(
+        text(`${card.modeLabel}  ${card.title}`, "results-card-title"),
+        text(
+          card.bestFinish === null || card.bestTimeSec === null
+            ? "BEST FINISH UNRACED"
+            : `BEST FINISH P${card.bestFinish}/${card.fieldSize}  BEST ${formatResultTime(card.bestTimeSec)}`,
+        ),
+      );
+      cards.appendChild(element);
+    }
   }
 
   renderCards(progress);
@@ -165,6 +248,21 @@ export function createResultsView(
         rows.appendChild(element);
       }
       completion.appendChild(rows);
+      setCollapsed(false);
+    },
+    showRaceClassification(rows, final): void {
+      completion.replaceChildren(text(final ? "RACE RESULT" : "RACE RESULT  (RUNNING)"));
+      const list = document.createElement("div");
+      for (const row of rows) {
+        const element = text(row.text);
+        element.style.cssText = row.isPlayer
+          ? "color:#ffd447;background:rgba(255,212,71,.16);padding:3px"
+          : row.projected
+            ? "color:#9fb3bd;padding:3px"
+            : "padding:3px";
+        list.appendChild(element);
+      }
+      completion.appendChild(list);
       setCollapsed(false);
     },
     clearCompletion(): void {

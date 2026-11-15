@@ -17,12 +17,19 @@ import {
 } from "../map-compiler/validate/validator.ts";
 
 /**
- * Failures that never block a terrain save (D-16). A map can be mid-build
- * (disconnected pieces), and terrain maps never build ribbon meshes so a
- * self-intersection is cosmetic. DIRECTED_PATHABILITY deliberately blocks.
+ * Failures that never block a terrain save (D-16, GD-ROAD). A map can be
+ * mid-build: disconnected pieces (UNDIRECTED_REACHABILITY) and one-way traps
+ * (DIRECTED_PATHABILITY, which also fires for every node of a cut-off piece)
+ * are warnings only, and terrain maps never build ribbon meshes so a
+ * self-intersection is cosmetic. Corruption (REFERENTIAL_INTEGRITY, degenerate
+ * points, length mismatch) and GEOMETRY_GRADIENT still block.
  */
 export const NON_BLOCKING_ON_TERRAIN: ReadonlySet<ValidationFailureCategory> =
-  new Set<ValidationFailureCategory>(["UNDIRECTED_REACHABILITY", "GEOMETRY_SELF_INTERSECTION"]);
+  new Set<ValidationFailureCategory>([
+    "UNDIRECTED_REACHABILITY",
+    "DIRECTED_PATHABILITY",
+    "GEOMETRY_SELF_INTERSECTION",
+  ]);
 
 export const SAVE_GUARD_PREFIX = "terrain-save:";
 
@@ -59,7 +66,7 @@ export function staleRoadBlockMessage(
   if (stale.length === 0) return null;
   const ids = stale.map((s) => s.edgeId).join(", ");
   const worst = Math.max(...stale.map((s) => s.maxDeltaM)).toFixed(2);
-  return `Unlocked road(s) ${ids} no longer match the terrain (up to ${worst} m). Re-grade them, or Lock them (locking re-grades), before saving.`;
+  return `Unlocked road(s) ${ids} no longer match the terrain (up to ${worst} m). Unlocked roads must be re-graded or locked before saving. Select an area, then use Roads in the sidebar (Re-grade selection, Re-grade all unlocked or Lock all).`;
 }
 
 /** Throws a `terrain-save:` error when an unlocked road is stale. */

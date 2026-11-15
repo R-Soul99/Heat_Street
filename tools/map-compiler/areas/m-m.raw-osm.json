@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-13T21:03:53.417Z",
+  "endpoint": "authored://heat-street/m-m",
+  "bbox": {
+    "south": 32.99098322817199,
+    "west": -84.00267513629248,
+    "north": 33.00901677182801,
+    "east": -83.99732486370752
+  },
+  "query": "authored m-m (map editor, not OSM)",
+  "response": {
+    "elements": []
+  }
+}

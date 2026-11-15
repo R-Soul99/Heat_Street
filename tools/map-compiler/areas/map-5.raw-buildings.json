@@ -1,0 +1,14 @@
+{
+  "fetchedAt": "2026-11-13T22:14:44.559Z",
+  "endpoint": "authored://heat-street/map-5",
+  "bbox": {
+    "south": 32.997745807042996,
+    "west": -84.00267513629248,
+    "north": 33.002254192957004,
+    "east": -83.99732486370752
+  },
+  "query": "authored map-5 buildings (none)",
+  "response": {
+    "elements": []
+  }
+}

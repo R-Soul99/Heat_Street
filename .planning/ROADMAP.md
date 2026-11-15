@@ -19,11 +19,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Map Pipeline & First Area** - Offline OSM map-compiler producing one drivable area with a road graph (completed 2026-09-15)
 - [x] **Phase 4.1: Flatten Terrain / Remove DEM Elevation** (INSERTED) - Replace real-world DEM elevation with hand-authored flat/near-flat terrain, eliminating oversized road-shoulder skirts; supersedes part of ADR 0001 (closed 2026-11-02: absorbed by Phase 4.2)
 - [x] **Phase 4.2: Driveable Terrain** (INSERTED) - Heightfield terrain as single source of truth, surface paint map, road brush and 3D sculpt page; absorbs 4.1 (completed 2026-11-02)
-- [ ] **Phase 4.3: Terrain and Feel Follow-ups** (INSERTED) - Lift-off spin fix, terrain-edge boundary, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record
-- [ ] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI)
+- [x] **Phase 4.3: Terrain and Feel Follow-ups** (INSERTED) - Lift-off spin fix, terrain-edge boundary, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (completed 2026-11-04)
+- [x] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI) (completed 2026-09-21)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
-- [ ] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
+- [x] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit (completed 2026-11-15)
+- [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
+- [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
+- [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
+- [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 
 ## Phase Details
@@ -42,7 +46,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A profiler HUD toggled by a single key shows physics ms, draw calls, triangles and body count against a written frame budget
   5. The map-data decision (OpenStreetMap + open DEM, zero Google-sourced bytes) and the road-graph schema are recorded in the repo before any map work starts
 
-**Plans**: 7 plans
+**Plans**: 6/7 plans complete (07-07 open). Pursuit prototype (?pursuers=N chase cars + bust meter) merged 2026-11-07 as groundwork for Phase 8
 
 Plans:
 **Wave 1**
@@ -368,7 +372,151 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
+- [x] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
+
+### Phase 07.1: Editor UX Overhaul (INSERTED)
+
+**Goal:** The map editor and the terrain editor share one editor shell that uses the screen well. Neither page has a scrolling right sidebar any more. Layout: a thin top bar with dropdown menus (File/Area, Import, View, Help); a full-screen canvas; a floating left tool rail with an options flyout for the active tool; zoom, fit and pan controls bottom-right; Undo, Redo and Clear (with a confirm) top-right; and a bottom info bar showing area, world size, tile size, cursor x/y, counts, unsaved changes and the last status or error, so nothing fails silently. Tooltips can be switched on and off and explain each control. Number inputs have large up/down steppers and step with the arrow keys (Shift for bigger steps). Dropdowns are sized to their content. Derived values such as Real width display to 3 dp while keeping full precision internally.
+**Map editor:** Select tool: drag a box, then tickboxes for Roads/Buildings/Objects delete or disable what's inside, per type or all at once. Draw road: click centre-line points, double-click or Enter to finish, with width (m) and surface options. Eraser (click or drag). Undo/Redo. Clear all. A **New** button opens a popup with Width and Height fields and a Create button, which creates and opens a blank canvas of that size with clear validation errors. The same popup has an **Import image** button with its own Width field (height derived from the image aspect). Import creates a fresh map instead of laying the image over the existing one.
+**Terrain editor:** Separate Raise and Lower tool buttons with no Alt modifier (and find out why the current raise/lower doesn't work for the user). Grid select: drag a rectangle of cells, then ▲/▼ buttons raise or lower the selection by a step set on a collapsible slider. Ctrl+drag up/down pushes or pulls the selection by hand. Brush options live in the tool flyout. Every tool has a keyboard shortcut, and [ ] and the arrow keys adjust values.
+**Out of scope:** Placeable objects (trees, hedges, fences): separate later phase.
+**Requirements**: Working IDs EDUX-01 (shell layout, D-01/D-02), EDUX-02 (info bar, no silent failures, D-03), EDUX-03 (tooltips toggle, D-04), EDUX-04 (steppers, content-sized selects, 3 dp, D-05), EDUX-05 (New/Import popup, fresh map, D-06), EDUX-06 (map tools + Redo, D-07), EDUX-07 (terrain Raise/Lower, Grid select, push/pull, D-08), EDUX-08 (shortcuts, D-09), EDUX-09 (new maps register themselves). Tooling phase; not in v1.0 REQUIREMENTS.md
+**Depends on:** Phase 7
+**Plans:** 20/22 plans complete (completed 2026-11-14; 07.1-12/13 human-verification plans covered by 07.1-UAT round 1, no separate summaries; UAT round 2 12/12, SECURITY threats_open 0)
+
+Plans:
+
+**Wave 1**
+
+- [x] 07.1-01-PLAN.md — Shared shell pure logic: fmt3, prefs, snapshot undo/redo, stepper maths, shortcut resolution (+ tests) (wave 1)
+- [x] 07.1-02-PLAN.md — Authored-map registry: manifest + generated compiler/runtime registries; cli.ts and map-select consume them; popp registered (wave 1)
+- [x] 07.1-03-PLAN.md — Terrain core: separate Raise/Lower, no Alt, Block direction, Shift+click lock, height/held reporting, window ops (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 07.1-04-PLAN.md — Shared shell DOM: layout CSS, menubar, tool rail + flyout, info bar, dialog, tooltips toggle, steppers/selects (wave 2)
+- [x] 07.1-05-PLAN.md — Dev-server wiring: precise New-world errors, auto-registration on create/save, compile status, Drive here via server (wave 2)
+- [x] 07.1-06-PLAN.md — TDD: Grid select in the terrain dispatcher (selection, step raise/lower, Ctrl+drag push/pull) (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 07.1-07-PLAN.md — Map editor onto the shell: menus, rail, flyouts, info bar, Redo, Ctrl shortcuts, Clear all, 3 dp display (wave 3)
+- [x] 07.1-08-PLAN.md — Terrain editor onto the shell: rail with Raise/Lower, flyout brush options, New popup, info bar, keyboard (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07.1-09-PLAN.md — Map New popup: blank map or Import image (own Width) into a fresh map; inline validation (wave 4)
+- [x] 07.1-10-PLAN.md — Terrain Grid select UI + Ctrl+drag push/pull + raise/lower feedback fixes (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 07.1-11-PLAN.md — Map Select box (Roads/Buildings/Objects, delete/disable) and Eraser (wave 5)
+- [x] 07.1-12-PLAN.md — Human verification: terrain editor incl. raise/lower diagnosis (wave 5) (covered by 07.1-UAT.md round 1)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [x] 07.1-13-PLAN.md — Human verification: map editor incl. poppmap import into a fresh map (wave 6) (covered by 07.1-UAT.md round 1)
+
+**Gap closure (UAT 2026-11-13)**
+
+- [x] 07.1-17-PLAN.md — Shell: popup errors clear on edit, Shift+[ ] coarse, tooltips avoid other controls, registry-derived map-select test (wave 1)
+- [x] 07.1-18-PLAN.md — TDD: connectivity never blocks saving; road problems name road ends; fix planners (two-way, connect ends, close loop) (wave 1)
+- [x] 07.1-19-PLAN.md — Terrain: slope-limit setting (default 35), stamp rotation outline + Shift rotation, clear locked/unlocked roads (wave 1)
+- [x] 07.1-20-PLAN.md — Map editor: reproduce + fix blank map, start screen returning, Open in terrain editor handoff with visible errors (wave 1)
+- [x] 07.1-21-PLAN.md — Terrain: road fix buttons wired as one-step undos, quiet saves for warnings, visible ?area errors (wave 2)
+- [x] 07.1-22-PLAN.md — Map editor adopts the dock layout with visible view toggles (wave 2)
+
+### Phase 07.1.1: Editor Controls Polish (INSERTED)
+
+**Goal:** Both editors' controls are arranged logically, labelled descriptively, and compact, so a tool or setting can be found and changed without reading tooltips.
+**Requirements**: TBD
+**Scope (user, 2026-11-14, after 07.1 UAT round 2):**
+- Tool buttons rearranged more intelligently, in logical groups, with descriptive labels (e.g. the first 3 letters of each function's name on the button, not single letters).
+- Tooltips lighter and less persistent, with better presentation.
+- Undo/redo ("up/down") buttons stacked vertically on the left-hand side of the screen, not side by side.
+- Compact value controls in tool flyouts (e.g. Raise/Lower): a stepped knob to set values, value displays sized to their content (currently far too wide), and simple up/down arrows inside the value display instead of separate +/- buttons.
+- Also covers round-1 UAT follow-ups: unify the control layout across the terrain and map editors (visible toggle buttons over menu diving), and rethink the terrain editor tool/control layout.
+**Depends on:** Phase 07.1
+**Plans:** 6/6 plans complete
+
+Plans:
+
+**Wave 1**
+
+- [x] 07.1.1-01-PLAN.md — Pure helpers + tests: groupTools/displayLabel, tooltip timing (tipSchedule/tipPhase), scrubSteps/applySteps/wheelDir, canvas-local point (wave 1)
+- [x] 07.1.1-02-PLAN.md — Tool-list data modules for both editors: by-job groups, short labels, short tips + long tier; ShellTool fields (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 07.1.1-03-PLAN.md — Shared left sidebar (240px) with Raise/Lower pair, grouped full-word bottom toolbar, canvas offset; delete flyout/topbar/classic layout (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 07.1.1-04-PLAN.md — Compact value box (inside arrows, drag-scrub, wheel) for every stepper; lighter two-tier auto-fading tooltips (wave 3)
+- [x] 07.1.1-05-PLAN.md — Editor integration: terrain heading, map sidebar panels, scale-bar canvas coords, map ResizeObserver, to-terrain button (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07.1.1-06-PLAN.md — Phase gate (tsc, full vitest, biome, structural audit) + morning human UAT checklist (wave 4)
+
+### Phase 07.1.2: Selection-based editor tools (INSERTED)
+
+**Goal:** The terrain editor works select-then-act, like SketchUp: a mode (Select or Brush) says *where* an edit applies, and one set of operation buttons says *what* it does, replacing the overlapping single-purpose tools.
+**Requirements**: TBD
+**Scope (user, 2026-11-14, mockup `screenshots/ToolsLayout.png`, supersedes 07.1.1's bottom-toolbar arrangement):**
+- Layout: keep the left sidebar (large active-tool name + options). Tool buttons float over the top-left of the view; the bottom toolbar goes. Undo/Redo top-right with **Clear selection beside Clear all**; view pad and info panel stay right.
+- **Select** (renamed from Grid select): drag a box; operations act on it. **Brush**: separate button next to Select; operations act under the cursor, with brush size and shape (square / circle) controls.
+- **Grid** and **Contour** controls next to Brush: toggle visibility and set granularity (grid spacing, contour interval).
+- Operations: **Raise / Lower** (big ▲▼ pair with labels; click steps, hold repeats), **Smooth**, **Flatten**, and new **Terrain** (set the selected area to a surface type).
+- **Paint Terrain** (renamed from Paint): the surface brush.
+- Roads as separate controls: **Paint** (road brush), **Erase** (road eraser), **Lock/unlock** (every road inside the selection), new **Delete road** (every road inside the selection).
+- Removed: Block, Smooth box (covered by Select + operations), Stamp/Wedge (dropped by user; other tools cover it).
+- Map editor follows the same conventions wherever the same control applies to both editors.
+- Bug: sculpting extreme slopes next to a **locked** road can warp the road's edges; a locked road must stay untouched by surrounding edits.
+**Depends on:** Phase 07.1.1
+**Plans:** 15/15 plans complete
+
+Plans:
+
+**Wave 1**
+
+- [x] 07.1.2-01-PLAN.md — D-23 locked-road edge warp: failing regression test first, then opt-in padM sculpt hold (wave 1)
+- [x] 07.1.2-02-PLAN.md — Pure foundations: CellMask selection, Grid spacing filter, preset stepping, hold-to-repeat timer (wave 1)
+- [x] 07.1.2-03-PLAN.md — Toolbar data (modes, operations, road column, toggles), hotkey table, pure toolbar-state logic (wave 1)
+- [x] 07.1.2-06-PLAN.md — Shell: floating toolbar, 24px sidebar title, optional Clear selection / Clear all in the history pad; bottom toolbar removed (wave 1)
+
+**Wave 2**
+
+- [x] 07.1.2-04-PLAN.md — Mask operations: hard-step raise/lower, flatten to average, one-pass smooth, terrain fill (wave 2)
+- [x] 07.1.2-05-PLAN.md — Road region ops: delete road cut at selection edge, whole-edge lookup for lock/unlock (wave 2)
+- [x] 07.1.2-09-PLAN.md — Map editor conventions: floating buttons, box select add/subtract + Delete, Grid spacing in metres (wave 2)
+
+**Wave 3-4**
+
+- [x] 07.1.2-07-PLAN.md — Dispatcher: mode, mask selection, Alt push/pull, operations, hold-repeat as one undo (wave 3)
+- [x] 07.1.2-08-PLAN.md — Dispatcher road actions (Lock/Unlock/Delete road/Re-grade selection) + save-guard wording (wave 4)
+
+**Wave 5-7**
+
+- [x] 07.1.2-10-PLAN.md — Terrain editor: floating toolbar wiring, hold-repeat, selection visuals, Alt handling, hotkeys (wave 5)
+- [x] 07.1.2-11-PLAN.md — Terrain editor: mode sidebar, surface picker, Roads section; remove old tools (wave 6)
+- [x] 07.1.2-12-PLAN.md — Hotkey audit, full npm run check gate, HUMAN-UAT checklist (wave 7)
+
+**Gap closure (UAT round 1 layout, D-32..D-38)**
+
+- [x] 07.1.2-13-PLAN.md — Shell: one slim top bar with groups and drop-down menus; Undo/Redo and Clear selection/Clear all in the bar; history pad removed; sidebar View section host (wave 1)
+- [x] 07.1.2-14-PLAN.md — Terrain editor: D-32 bar order, Road ▾ and Terrain ▾ drop-downs, brush Shape/Size in the sidebar, no surfaces in the Brush panel, Grid/Contours toggles with View section; hotkeys unchanged (wave 2)
+- [x] 07.1.2-15-PLAN.md — Map editor top bar (D-38), npm run check gate, HUMAN-UAT layout checks updated (wave 3)
+
+### Phase 07.1.3: Editor feature palette (INSERTED)
+
+**Goal:** A palette for placing map features: buildings, ramps, and scenery such as trees, hedges, bushes and fences, built to take more feature types later.
+**Requirements**: TBD
+**Depends on:** Phase 07.1.2
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 07.1.3 to break down)
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
@@ -390,7 +538,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6 -> 7 -> 7.1 -> 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -400,10 +548,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 | 4. Map Pipeline & First Area | 11/11 | Complete   | 2026-09-15 |
 | 4.1. Flatten Terrain / Remove DEM Elevation (INSERTED) | 9/11 | Closed (absorbed by 4.2) | 2026-11-02 |
 | 4.2. Driveable Terrain (INSERTED) | 15/15 | Complete | 2026-11-03 |
-| 4.3. Terrain and Feel Follow-ups (INSERTED) | 10/12 | In Progress|  |
-| 5. Objectives, Navigation & Race Modes | 3/4 | In Progress|  |
+| 4.3. Terrain and Feel Follow-ups (INSERTED) | 12/12 | Complete | 2026-11-04 |
+| 5. Objectives, Navigation & Race Modes | 4/4 | Complete | 2026-09-21 |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
-| 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
+| 7. NPC Driving AI & Circuit Racers | 7/7 | Complete    | 2026-11-15 |
+| 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
 ## Notes
@@ -422,4 +571,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 5 -> 6 -> 7 -> 8
 - Helicopter camera is prototyped early (Phase 3) with a go/no-go gate, not treated as late polish
 - One mode fully shippable — including medals, HUD and audio — before mode #2 gains AI (the Phase 5/6 gate)
 
-**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay, VR challenge-mission mode (MODE-01, neon-wireframe training-suite look), launch-pad arena (MODE-02), demolition derby with a damage model (MODE-03), structural building destruction (WORLD-02 — needs its own research pass; destroyed state must reset per-run to protect medal-time integrity).
+**Deferred to v2** (tracked in REQUIREMENTS.md, deliberately not in this roadmap): Survival mode, Areas 2-3 and area-unlock progression, heat tiers 4-5, pursuit breakers and hiding spots, PB ghost playback, additional cars, ambient traffic, post-run replay, VR challenge-mission mode (MODE-01, neon-wireframe training-suite look), launch-pad arena (MODE-02), demolition derby with a damage model (MODE-03), off-road point-to-point stages with an off-road vehicle class, heavy trucks/monster trucks and a surface-FX upgrade (MODE-04, VEH-06, VEH-07, SURF-03), structural building destruction (WORLD-02 — needs its own research pass; destroyed state must reset per-run to protect medal-time integrity).

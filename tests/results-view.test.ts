@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Course } from "../src/core/course";
-import { buildCourseCardModels, buildResultRows, formatResultTime } from "../src/hud/results-view";
+import {
+  buildCourseCardModels,
+  buildRaceCardModel,
+  buildRaceClassificationRows,
+  buildResultRows,
+  formatResultTime,
+} from "../src/hud/results-view";
 
 const courses: Course[] = [
   {
@@ -78,5 +84,62 @@ describe("results view models", () => {
     expect(rows.map((row) => row.slowest)).toEqual([false, true]);
     expect(rows[1]).toMatchObject({ label: "L2 a->b", deltaSec: 2.5 });
     expect(formatResultTime(62.346)).toBe("1:02.35");
+  });
+});
+
+describe("circuit race view models (07-07)", () => {
+  const circuit = courses[1];
+
+  it("builds the race card from the race record, or null for both when absent", () => {
+    const withRecord = buildRaceCardModel(
+      circuit,
+      "circuit.race",
+      {
+        "circuit.race": {
+          courseId: "circuit.race",
+          bestTimeSec: 483.12,
+          medal: "none",
+          bestFinish: 2,
+        },
+      },
+      "circuit.race",
+      4,
+    );
+    expect(withRecord).toEqual({
+      courseId: "circuit.race",
+      title: "Three-Lap Loop",
+      modeLabel: "CIRCUIT RACE",
+      bestTimeSec: 483.12,
+      bestFinish: 2,
+      fieldSize: 4,
+      selected: true,
+    });
+
+    const absent = buildRaceCardModel(
+      circuit,
+      "circuit.race",
+      { circuit: { courseId: "circuit", bestTimeSec: 470, medal: "silver" } },
+      "circuit",
+      4,
+    );
+    expect(absent).toMatchObject({ bestTimeSec: null, bestFinish: null, selected: false });
+  });
+
+  it("renders finished and projected classification rows", () => {
+    const rows = buildRaceClassificationRows(
+      [
+        { position: 1, racerIndex: 3, isPlayer: true, effectiveSec: 481.22, projected: false },
+        { position: 2, racerIndex: 0, isPlayer: false, effectiveSec: 483.5, projected: false },
+        { position: 3, racerIndex: 2, isPlayer: false, effectiveSec: null, projected: true },
+      ],
+      ["POLICE BLUE", "RACING GREEN", "HIGHWAY YELLOW", "YOU"],
+    );
+    expect(rows[0]).toEqual({ text: "P1  YOU  8:01.22", isPlayer: true, projected: false });
+    expect(rows[1].text).toBe("P2  POLICE BLUE  8:03.50");
+    expect(rows[2]).toEqual({
+      text: "P3  HIGHWAY YELLOW  PROJECTED",
+      isPlayer: false,
+      projected: true,
+    });
   });
 });

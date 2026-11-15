@@ -1,6 +1,6 @@
 /**
  * Sculpt brushes for the terrain editor (phase 04.2, D-10 minus the road
- * brush): raise/lower, smooth, flatten, wedge/mound stamps, surface paint and
+ * brush): raise/lower, smooth, flatten, surface paint and
  * paint erase, plus the stroke recorder that produces changed-cell diffs for
  * undo (D-11).
  *
@@ -16,12 +16,21 @@
  * Layering: pure core, no three/rapier/DOM.
  */
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
-import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
+import type { TerrainGrid } from "./terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
 import { type CellWindow, expandWindow, limitSlope } from "./terrain-slope.ts";
 
 export type Falloff = "linear" | "smooth";
+
+/** Footprint shape of a radius brush: a disc, or an axis-aligned square (radius = half side). */
+export type BrushShape = "round" | "square";
+
+/** Distance metric for a brush footprint: Euclidean for round, Chebyshev for square. */
+export function brushDistance(shape: BrushShape | undefined, dx: number, dz: number): number {
+  return shape === "square" ? Math.max(Math.abs(dx), Math.abs(dz)) : Math.hypot(dx, dz);
+}
 
 export interface BrushParams {
   x: number;
@@ -29,6 +38,8 @@ export interface BrushParams {
   radiusM: number;
   strength: number;
   falloff: Falloff;
+  /** Footprint shape; omitted = "round". */
+  shape?: BrushShape;
 }
 
 export interface PaintRect {
@@ -71,6 +82,10 @@ export interface BrushResult {
   window?: CellWindow;
   /** True when the slope limiter had to move vertices. */
   slopeClamped: boolean;
+  /** Signed change of largest magnitude actually written (after the slope limiter). */
+  maxDeltaM: number;
+  /** Vertices in the touched window skipped because a road holds them. */
+  heldCount: number;
 }
 
 export interface PaintResult {
@@ -87,15 +102,38 @@ export interface HeightOpOptions {
    * for the op's own window: masked vertices are held by every height op (WR-03).
    */
   roadMask?: (win: CellWindow) => Uint8Array;
+  /** Steepest slope (degrees) the limiter may leave. Defaults to MAX_SLOPE_DEG. */
+  maxSlopeDeg?: number;
 }
 
 export const MIN_RADIUS_M = 0.5;
 export const MAX_RADIUS_M = 200;
+
+/**
+ * Steps a brush radius by whole terrain cells: radius = N x cellSizeM, N >= 1.
+ * A radius that is not a whole number of cells first snaps to the nearest N.
+ */
+export function stepRadiusCells(
+  radiusM: number,
+  cellSizeM: number,
+  dir: -1 | 1,
+  maxM: number = MAX_RADIUS_M,
+): number {
+  if (!Number.isFinite(radiusM) || !Number.isFinite(cellSizeM) || cellSizeM <= 0) {
+    return Math.min(
+      MAX_RADIUS_M,
+      Math.max(MIN_RADIUS_M, Number.isFinite(radiusM) ? radiusM : MIN_RADIUS_M),
+    );
+  }
+  const cells = Math.max(1, Math.round(radiusM / cellSizeM));
+  const maxCells = Math.max(1, Math.floor(maxM / cellSizeM));
+  return Math.min(maxCells, Math.max(1, cells + dir)) * cellSizeM;
+}
 const RELAX = 0.25;
 /** A pair only counts as pre-existing over-cap beyond this (Float32 / 0.01 m save quantisation noise). */
 const PREEXISTING_TOL_M = 0.02;
 
-const NO_OP: BrushResult = { slopeClamped: false };
+const noOp = (heldCount = 0): BrushResult => ({ slopeClamped: false, maxDeltaM: 0, heldCount });
 
 function falloffAt(kind: Falloff, d: number, r: number): number {
   const t = d / r;
@@ -118,6 +156,7 @@ function sanitize(p: BrushParams): BrushParams | null {
     radiusM: Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, p.radiusM)),
     strength: Math.min(1, Math.max(0, p.strength)),
     falloff: p.falloff === "linear" ? "linear" : "smooth",
+    shape: p.shape === "square" ? "square" : "round",
   };
 }
 
@@ -148,10 +187,11 @@ function freezePreexistingSteep(
   win: CellWindow,
   opChanged: (r: number, c: number) => boolean,
   into: Uint8Array | undefined,
+  maxSlopeDeg: number = MAX_SLOPE_DEG,
 ): Uint8Array | undefined {
   const stride = grid.rows + 1;
   const h = grid.heights;
-  const axis = Math.tan((MAX_SLOPE_DEG * Math.PI) / 180) * grid.cellSizeM;
+  const axis = Math.tan((maxSlopeDeg * Math.PI) / 180) * grid.cellSizeM;
   const d = axis + PREEXISTING_TOL_M;
   const dd = axis * Math.SQRT2 + PREEXISTING_TOL_M;
   let mask = into;
@@ -190,6 +230,7 @@ function runHeightOp(
   relax: boolean,
   opts: HeightOpOptions = {},
 ): BrushResult {
+  const slopeDeg = opts.maxSlopeDeg ?? MAX_SLOPE_DEG;
   const stride = grid.rows + 1;
   const rowsN = touched.maxRow - touched.minRow + 1;
   const colsN = touched.maxCol - touched.minCol + 1;
@@ -211,17 +252,20 @@ function runHeightOp(
   // sculpting over a road never moves road terrain away from its graph y.
   const hold = opts.roadMask?.(touched);
   let maxDelta = 0;
+  let heldCount = 0;
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
     for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
       const x = grid.originX + c * grid.cellSizeM;
       const z = grid.originZ + r * grid.cellSizeM;
-      const v = hold?.[r + c * stride] ? old[k] : compute(x, z, old[k], (rr, cc) => snap(rr, cc));
+      const isHeld = !!hold?.[r + c * stride];
+      if (isHeld) heldCount++;
+      const v = isHeld ? old[k] : compute(x, z, old[k], (rr, cc) => snap(rr, cc));
       next[k] = Number.isFinite(v) ? v : old[k];
       maxDelta = Math.max(maxDelta, Math.abs(Math.fround(next[k]) - old[k]));
     }
   }
-  if (maxDelta === 0) return NO_OP;
+  if (maxDelta === 0) return noOp(heldCount);
 
   const dirty = expandWindow(
     {
@@ -232,7 +276,7 @@ function runHeightOp(
     },
     grid,
     maxDelta,
-    MAX_SLOPE_DEG,
+    slopeDeg,
   );
   rec?.beforeHeightsWrite(dirty);
 
@@ -244,7 +288,13 @@ function runHeightOp(
     const kk = r - touched.minRow + (c - touched.minCol) * rowsN;
     return Math.fround(next[kk]) !== old[kk];
   };
-  const limiterMask = freezePreexistingSteep(grid, dirty, opChanged, opts.roadMask?.(dirty));
+  const limiterMask = freezePreexistingSteep(
+    grid,
+    dirty,
+    opChanged,
+    opts.roadMask?.(dirty),
+    slopeDeg,
+  );
 
   k = 0;
   for (let c = touched.minCol; c <= touched.maxCol; c++) {
@@ -285,8 +335,16 @@ function runHeightOp(
     }
   }
 
-  const res = limitSlope(grid, dirty, { maxSlopeDeg: MAX_SLOPE_DEG, mask: limiterMask });
-  return { window: dirty, slopeClamped: res.changed.length > 0 };
+  const res = limitSlope(grid, dirty, { maxSlopeDeg: slopeDeg, mask: limiterMask });
+  let signed = 0;
+  k = 0;
+  for (let c = touched.minCol; c <= touched.maxCol; c++) {
+    for (let r = touched.minRow; r <= touched.maxRow; r++, k++) {
+      const d = grid.heights[r + c * stride] - old[k];
+      if (Math.abs(d) > Math.abs(signed)) signed = d;
+    }
+  }
+  return { window: dirty, slopeClamped: res.changed.length > 0, maxDeltaM: signed, heldCount };
 }
 
 export function raiseLower(
@@ -298,14 +356,14 @@ export function raiseLower(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p || !Number.isFinite(rateM)) return NO_OP;
+  if (!p || !Number.isFinite(rateM)) return noOp();
   const w = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!w) return NO_OP;
+  if (!w) return noOp();
   return runHeightOp(
     grid,
     w,
     (x, z, h) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       return f > 0 ? h + sign * rateM * p.strength * f : h;
     },
     rec,
@@ -321,9 +379,9 @@ export function smoothBrush(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p) return NO_OP;
+  if (!p) return noOp();
   const cw = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!cw) return NO_OP;
+  if (!cw) return noOp();
   // Widen by one so the kernel reads real neighbours at the footprint edge.
   const w = {
     minRow: Math.max(0, cw.minRow - 1),
@@ -338,7 +396,7 @@ export function smoothBrush(
     grid,
     w,
     (x, z, h, snap) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       if (f <= 0) return h;
       const col = Math.round((x - grid.originX) / grid.cellSizeM);
       const row = Math.round((z - grid.originZ) / grid.cellSizeM);
@@ -361,6 +419,8 @@ export function smoothBrush(
   );
 }
 
+// raiseBlock / blockWindowAt / BLOCK_* are no longer used by the editor; they are kept because the
+// road-lock golden tests (tests/terrain-road-lock*.test.ts) pin their behaviour.
 export const BLOCK_CELLS_MIN = 1;
 export const BLOCK_CELLS_MAX = 64;
 export const BLOCK_STEP_MIN_M = 0.25;
@@ -406,22 +466,77 @@ export function raiseBlock(
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
 ): BrushResult {
-  if (!Number.isFinite(params.stepM) || !Number.isFinite(params.blockCells)) return NO_OP;
+  if (!Number.isFinite(params.stepM) || !Number.isFinite(params.blockCells)) return noOp();
   const stepM = Math.min(BLOCK_STEP_MAX_M, Math.max(BLOCK_STEP_MIN_M, params.stepM));
   const win = blockWindowAt(grid, params.x, params.z, params.blockCells);
-  if (!win) return NO_OP;
+  if (!win) return noOp();
+  return raiseWindow(grid, win, sign * stepM, rec, opts);
+}
+
+/**
+ * Raise (or lower, negative) every vertex of `win` by exactly `deltaM`. Sharp
+ * edges (no relax); the slope limiter, road holds and recorder still apply.
+ */
+export function raiseWindow(
+  grid: TerrainGrid,
+  win: CellWindow,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM)) return noOp();
+  const w = clipWindow(grid, win);
+  if (!w) return noOp();
+  return runHeightOp(grid, w, (_x, _z, h) => h + deltaM, rec, false, opts);
+}
+
+function clipWindow(grid: TerrainGrid, win: CellWindow): CellWindow | null {
+  const w = {
+    minRow: Math.max(0, Math.floor(win.minRow)),
+    minCol: Math.max(0, Math.floor(win.minCol)),
+    maxRow: Math.min(grid.rows, Math.ceil(win.maxRow)),
+    maxCol: Math.min(grid.cols, Math.ceil(win.maxCol)),
+  };
+  return w.minRow <= w.maxRow && w.minCol <= w.maxCol ? w : null;
+}
+
+/** Copy of the window's heights in the column-major order runHeightOp uses. */
+export function snapshotWindow(grid: TerrainGrid, win: CellWindow): Float32Array {
+  const w = clipWindow(grid, win);
+  if (!w) return new Float32Array(0);
   const stride = grid.rows + 1;
-  const mask = opts?.roadMask?.(win);
+  const out = new Float32Array((w.maxRow - w.minRow + 1) * (w.maxCol - w.minCol + 1));
+  let k = 0;
+  for (let c = w.minCol; c <= w.maxCol; c++) {
+    for (let r = w.minRow; r <= w.maxRow; r++) out[k++] = grid.heights[r + c * stride];
+  }
+  return out;
+}
+
+/**
+ * Absolute push/pull: sets each window vertex to `base[k] + deltaM` (base from
+ * snapshotWindow). Incremental `h + step` would ratchet under the slope limiter.
+ */
+export function setWindowFromBase(
+  grid: TerrainGrid,
+  win: CellWindow,
+  base: Float32Array,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM)) return noOp();
+  const w = clipWindow(grid, win);
+  if (!w) return noOp();
+  const rowsN = w.maxRow - w.minRow + 1;
+  if (base.length !== rowsN * (w.maxCol - w.minCol + 1)) return noOp();
   return runHeightOp(
     grid,
-    win,
-    (x, z, h) => {
-      if (mask) {
-        const col = Math.round((x - grid.originX) / grid.cellSizeM);
-        const row = Math.round((z - grid.originZ) / grid.cellSizeM);
-        if (mask[row + col * stride]) return h;
-      }
-      return h + sign * stepM;
+    w,
+    (x, z, _h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM) - w.minCol;
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM) - w.minRow;
+      return base[row + col * rowsN] + deltaM;
     },
     rec,
     false,
@@ -439,11 +554,11 @@ export function raiseBlock(
 export function smoothRegion(
   grid: TerrainGrid,
   region: CellWindow,
-  params: { strength: number; passes: number },
+  params: { strength: number; passes: number; selected?: Uint8Array },
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
 ): BrushResult {
-  if (!Number.isFinite(params.strength) || !Number.isFinite(params.passes)) return NO_OP;
+  if (!Number.isFinite(params.strength) || !Number.isFinite(params.passes)) return noOp();
   const strength = Math.min(1, Math.max(0, params.strength));
   const passes = Math.min(SMOOTH_PASSES_MAX, Math.max(1, Math.round(params.passes)));
   const win: CellWindow = {
@@ -452,11 +567,20 @@ export function smoothRegion(
     maxRow: Math.min(grid.rows, Math.ceil(region.maxRow)),
     maxCol: Math.min(grid.cols, Math.ceil(region.maxCol)),
   };
-  if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return NO_OP;
+  if (!(win.minRow <= win.maxRow && win.minCol <= win.maxCol) || strength === 0) return noOp();
   const stride = grid.rows + 1;
   const rowsN = win.maxRow - win.minRow + 1;
   const colsN = win.maxCol - win.minCol + 1;
-  const mask = opts?.roadMask?.(win);
+  const roadMask = opts?.roadMask?.(win);
+  const selected = params.selected;
+  if (selected && selected.length !== grid.heights.length) return noOp();
+  // Unselected vertices are treated exactly like held road vertices.
+  const mask: Uint8Array | undefined =
+    roadMask || selected
+      ? Uint8Array.from({ length: grid.heights.length }, (_, i) =>
+          (roadMask?.[i] ?? 0) !== 0 || (selected !== undefined && !selected[i]) ? 1 : 0,
+        )
+      : undefined;
   let cur = new Float64Array(rowsN * colsN);
   let nxt = new Float64Array(rowsN * colsN);
   for (let c = 0; c < colsN; c++) {
@@ -509,6 +633,86 @@ export function smoothRegion(
   );
 }
 
+/**
+ * D-08 / D-24: absolute hard-step push/pull of the selected vertices to
+ * `base + deltaM` (base snapshotted over `baseWin`, normally mask.bounds()).
+ * Unselected vertices are left alone; road holds and the slope limiter apply
+ * through runHeightOp.
+ */
+export function setMaskFromBase(
+  grid: TerrainGrid,
+  mask: CellMask,
+  base: Float32Array,
+  baseWin: CellWindow,
+  deltaM: number,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult {
+  if (!Number.isFinite(deltaM) || mask.isEmpty()) return noOp();
+  const w = clipWindow(grid, baseWin);
+  if (!w) return noOp();
+  const rowsN = w.maxRow - w.minRow + 1;
+  if (base.length !== rowsN * (w.maxCol - w.minCol + 1)) return noOp();
+  const sel = mask.vertexMask(grid);
+  const stride = grid.rows + 1;
+  return runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      if (!sel[row + col * stride]) return h;
+      return base[row - w.minRow + (col - w.minCol) * rowsN] + deltaM;
+    },
+    rec,
+    false,
+    opts,
+  );
+}
+
+/** D-28: mean height of every selected vertex, road-held ones included. Null when empty. */
+export function maskAverageHeight(grid: TerrainGrid, mask: CellMask): number | null {
+  if (mask.isEmpty()) return null;
+  const sel = mask.vertexMask(grid);
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < sel.length; i++) {
+    if (!sel[i]) continue;
+    sum += grid.heights[i];
+    n++;
+  }
+  return n > 0 ? sum / n : null;
+}
+
+/** D-09: level every selected un-held vertex to the selection average. */
+export function flattenMaskToAverage(
+  grid: TerrainGrid,
+  mask: CellMask,
+  rec?: StrokeRecorder,
+  opts?: HeightOpOptions,
+): BrushResult & { targetM?: number } {
+  const target = maskAverageHeight(grid, mask);
+  const b = mask.bounds();
+  if (target === null || !b) return noOp();
+  const w = clipWindow(grid, b);
+  if (!w) return noOp();
+  const sel = mask.vertexMask(grid);
+  const stride = grid.rows + 1;
+  const res = runHeightOp(
+    grid,
+    w,
+    (x, z, h) => {
+      const col = Math.round((x - grid.originX) / grid.cellSizeM);
+      const row = Math.round((z - grid.originZ) / grid.cellSizeM);
+      return sel[row + col * stride] ? target : h;
+    },
+    rec,
+    false,
+    opts,
+  );
+  return { ...res, targetM: target };
+}
+
 export function flattenBrush(
   grid: TerrainGrid,
   params: BrushParams,
@@ -517,83 +721,18 @@ export function flattenBrush(
   opts?: HeightOpOptions,
 ): BrushResult {
   const p = sanitize(params);
-  if (!p || !Number.isFinite(targetM)) return NO_OP;
+  if (!p || !Number.isFinite(targetM)) return noOp();
   const w = circleWindow(grid, p.x, p.z, p.radiusM);
-  if (!w) return NO_OP;
+  if (!w) return noOp();
   return runHeightOp(
     grid,
     w,
     (x, z, h) => {
-      const f = falloffAt(p.falloff, Math.hypot(x - p.x, z - p.z), p.radiusM);
+      const f = falloffAt(p.falloff, brushDistance(p.shape, x - p.x, z - p.z), p.radiusM);
       return f > 0 ? h + (targetM - h) * p.strength * f : h;
     },
     rec,
     false,
-    opts,
-  );
-}
-
-export interface StampParams {
-  kind: "wedge" | "mound";
-  x: number;
-  z: number;
-  rotationRad: number;
-  lengthM: number;
-  widthM: number;
-  heightM: number;
-}
-
-/** Wedge: ramp rising along local +X over lengthM then dropping. Mound: cosine dome of radius widthM/2. Max-blended onto existing terrain. */
-export function stampTerrain(
-  grid: TerrainGrid,
-  s: StampParams,
-  rec?: StrokeRecorder,
-  opts?: HeightOpOptions,
-): BrushResult {
-  if (
-    !Number.isFinite(s.x) ||
-    !Number.isFinite(s.z) ||
-    !Number.isFinite(s.rotationRad) ||
-    !Number.isFinite(s.lengthM) ||
-    !Number.isFinite(s.widthM) ||
-    !Number.isFinite(s.heightM)
-  ) {
-    return NO_OP;
-  }
-  const clampSize = (v: number): number => Math.min(MAX_RADIUS_M * 2, Math.max(1, v));
-  const length = clampSize(s.lengthM);
-  const width = clampSize(s.widthM);
-  const height = Math.min(200, Math.max(-200, s.heightM));
-  const reach = s.kind === "wedge" ? Math.hypot(length / 2, width / 2) : width / 2;
-  const w = circleWindow(grid, s.x, s.z, reach);
-  if (!w) return NO_OP;
-  const cos = Math.cos(s.rotationRad);
-  const sin = Math.sin(s.rotationRad);
-  const base = sampleTerrainHeight(grid, s.x, s.z);
-  return runHeightOp(
-    grid,
-    w,
-    (x, z, h) => {
-      const dx = x - s.x;
-      const dz = z - s.z;
-      const lx = dx * cos + dz * sin;
-      const lz = -dx * sin + dz * cos;
-      let offset = 0;
-      if (s.kind === "wedge") {
-        if (Math.abs(lx) <= length / 2 && Math.abs(lz) <= width / 2) {
-          offset = (height * (lx + length / 2)) / length;
-        }
-      } else {
-        const R = width / 2;
-        const d = Math.hypot(lx, lz);
-        if (d < R) offset = height * 0.5 * (1 + Math.cos((Math.PI * d) / R));
-      }
-      if (offset === 0) return h;
-      const target = base + offset;
-      return height >= 0 ? Math.max(h, target) : Math.min(h, target);
-    },
-    rec,
-    true,
     opts,
   );
 }
@@ -629,7 +768,13 @@ function paintDisc(
       const cx = paint.originX + (px + 0.5) * m;
       const dx = cx - p.x;
       const dz = cz - p.z;
-      if (dx * dx + dz * dz > r2) continue;
+      if (
+        p.shape === "square"
+          ? Math.max(Math.abs(dx), Math.abs(dz)) > p.radiusM
+          : dx * dx + dz * dz > r2
+      ) {
+        continue;
+      }
       const i = pz * paint.width + px;
       const v = write(paint.data[i]);
       if (v !== paint.data[i]) {
@@ -654,6 +799,50 @@ export function paintSurface(
   return paintDisc(paint, params, rec, (old) =>
     (old & PAINT_ROAD_FLAG) !== 0 && opts.overRoads !== true ? old : value,
   );
+}
+
+/**
+ * D-11 / D-13: fills every paint pixel whose centre lies in a selected cell with
+ * `surface`. Road-flagged pixels are kept. One beforePaintWrite = one undo diff.
+ */
+export function paintMask(
+  paint: PaintMap,
+  grid: TerrainGrid,
+  mask: CellMask,
+  surface: SurfaceType,
+  rec?: StrokeRecorder,
+): PaintResult {
+  if (!SURFACE_TYPES.includes(surface)) return { pixelsChanged: 0 };
+  const b = mask.bounds();
+  const m = paint.metresPerPixel;
+  if (!b || !(m > 0)) return { pixelsChanged: 0 };
+  const x0 = grid.originX + b.minCol * grid.cellSizeM;
+  const x1 = grid.originX + b.maxCol * grid.cellSizeM;
+  const z0 = grid.originZ + b.minRow * grid.cellSizeM;
+  const z1 = grid.originZ + b.maxRow * grid.cellSizeM;
+  const rect = {
+    minPx: Math.max(0, Math.floor((x0 - paint.originX) / m)),
+    maxPx: Math.min(paint.width - 1, Math.ceil((x1 - paint.originX) / m)),
+    minPz: Math.max(0, Math.floor((z0 - paint.originZ) / m)),
+    maxPz: Math.min(paint.height - 1, Math.ceil((z1 - paint.originZ) / m)),
+  };
+  if (rect.minPx > rect.maxPx || rect.minPz > rect.maxPz) return { pixelsChanged: 0 };
+  rec?.beforePaintWrite(rect);
+  const value = encodePaintValue(surface, false);
+  let changed = 0;
+  for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
+    const cz = paint.originZ + (pz + 0.5) * m;
+    for (let px = rect.minPx; px <= rect.maxPx; px++) {
+      const cx = paint.originX + (px + 0.5) * m;
+      if (!mask.cellAtXZ(grid, cx, cz)) continue;
+      const i = pz * paint.width + px;
+      const old = paint.data[i];
+      if ((old & PAINT_ROAD_FLAG) !== 0 || old === value) continue;
+      paint.data[i] = value;
+      changed++;
+    }
+  }
+  return { rect, pixelsChanged: changed };
 }
 
 /** Clears the road flag and resets to the area's ground surface inside the radius. */

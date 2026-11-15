@@ -35,12 +35,12 @@ function failure(category: ValidationFailure["category"]): ValidationFailure {
 }
 
 describe("save-guard rule", () => {
-  it("exempts exactly UNDIRECTED_REACHABILITY and GEOMETRY_SELF_INTERSECTION", () => {
+  it("exempts exactly the connectivity checks and GEOMETRY_SELF_INTERSECTION (GD-ROAD)", () => {
     expect([...NON_BLOCKING_ON_TERRAIN].sort()).toEqual([
+      "DIRECTED_PATHABILITY",
       "GEOMETRY_SELF_INTERSECTION",
       "UNDIRECTED_REACHABILITY",
     ]);
-    expect(NON_BLOCKING_ON_TERRAIN.has("DIRECTED_PATHABILITY")).toBe(false);
   });
 
   it("saveBlockMessage is null for no failures and formatted otherwise", () => {
@@ -96,8 +96,31 @@ describe("save-guard rule", () => {
       lengthM: 50,
     };
     const island = { ...g, nodes, edges: [...g.edges, edge] } as unknown as RoadGraph;
-    const cats = blockingRoadFailures(island).map((f) => f.category);
-    expect(cats).not.toContain("UNDIRECTED_REACHABILITY");
+    expect(blockingRoadFailures(island)).toEqual([]);
+    expect(() => assertSaveableGraph(island)).not.toThrow();
+  });
+
+  it("a genuine one-way trap never blocks", () => {
+    const g = shippedGraph("grid-test");
+    const [n0] = g.nodes;
+    const [e0] = g.edges;
+    if (!n0 || !e0) throw new Error("fixture has no nodes/edges");
+    const a = g.nodes.length;
+    const nodes = [...g.nodes, { ...n0, id: a, x: n0.x + 30, junction: false }];
+    const edge = {
+      ...e0,
+      id: g.edges.length,
+      from: n0.id,
+      to: a,
+      oneway: true,
+      points: [
+        [n0.x, n0.y, n0.z],
+        [n0.x + 30, n0.y, n0.z],
+      ],
+      lengthM: 30,
+    };
+    const trap = { ...g, nodes, edges: [...g.edges, edge] } as unknown as RoadGraph;
+    expect(blockingRoadFailures(trap)).toEqual([]);
   });
 
   it("a repeated edge point blocks", () => {
@@ -173,7 +196,9 @@ describe("stale unlocked road guard (quick 261110-rdx)", () => {
     for (let i = 0; i < a.grid.heights.length; i++) a.grid.heights[i] += 3;
     const msg = staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds);
     expect(msg).toContain(String(id));
-    expect(msg).toContain("Re-grade");
+    expect(msg).toContain("m).");
+    expect(msg).toContain("Roads in the sidebar");
+    expect(msg).not.toContain("Lock tool");
     expect(() => assertGradedRoads(a)).toThrow(new RegExp(`^${SAVE_GUARD_PREFIX}`));
     regradeRoads(a, [id]);
     expect(staleRoadBlockMessage(a.grid, a.graph, a.unlockedEdgeIds)).toBeNull();

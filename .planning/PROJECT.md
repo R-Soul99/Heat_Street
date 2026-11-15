@@ -76,6 +76,7 @@ value.
 | Narrative kept light — mission briefs + radio chatter only, no cutscenes/dialogue | Matches player's own low patience for story and the chase-movie tone; costs nothing extra to build on top of planned heat-system feedback | — Pending |
 | Map scale (one large mixed-terrain map vs. several smaller maps) left open | Not critical to decide now; the player's own Google Maps extraction tool can produce either, decision deferred to implementation | — Pending |
 | Terrain heightfield + paint map is the single source of truth; real-world DEM elevation dropped (ADR 0001 amendment) | DEM elevation produced oversized road-shoulder skirts and bumps; hand-sculpted hills drive smoothly | ✓ Good (Phase 4.2) |
+| Map and terrain editors share one editor shell (dock layout, info box, menus, dialogs); connectivity warnings never block a terrain save, only real corruption does | One code-driven toolchain for authoring maps; editor friction was slowing map work | ✓ Good (Phase 07.1) |
 
 ## Evolution
 
@@ -95,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-03 after Phase 4.2 (Driveable Terrain) completion*
+*Last updated: 2026-11-14 after Phase 07.1 (Editor UX Overhaul)*

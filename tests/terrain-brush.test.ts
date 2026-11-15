@@ -3,15 +3,19 @@ import {
   BLOCK_CELLS_MAX,
   type BrushParams,
   blockWindowAt,
+  brushDistance,
   createStrokeRecorder,
   erasePaintDisc,
   flattenBrush,
   paintSurface,
   raiseBlock,
   raiseLower,
+  raiseWindow,
+  setWindowFromBase,
   smoothBrush,
   smoothRegion,
-  stampTerrain,
+  snapshotWindow,
+  stepRadiusCells,
 } from "../src/core/terrain-brush.ts";
 import { createTerrainGrid, terrainIndex } from "../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../src/core/terrain-limits.ts";
@@ -99,6 +103,22 @@ describe("raiseLower", () => {
     expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
   });
 
+  it("honours opts.maxSlopeDeg (60 allows steeper than the default 35)", () => {
+    const run = (opts?: { maxSlopeDeg: number }) => {
+      const g = grid();
+      for (let i = 0; i < 40; i++) {
+        raiseLower(g, brush({ radiusM: 4, strength: 1 }), 1, 5, undefined, opts);
+      }
+      return maxSlopeDegIn(g, whole(g));
+    };
+    const def = run();
+    const steep = run({ maxSlopeDeg: 60 });
+    expect(def).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
+    expect(steep).toBeGreaterThan(def + 5);
+    expect(steep).toBeLessThanOrEqual(60 + 1e-3);
+    expect(run({ maxSlopeDeg: MAX_SLOPE_DEG })).toBeCloseTo(def, 9);
+  });
+
   it("WR-03: a tiny dab on pre-existing over-cap terrain changes nothing outside its radius", () => {
     // Converted-DEM style: a uniform 45 degree slope, already steeper than the cap.
     const g = grid();
@@ -151,74 +171,6 @@ describe("smooth and flatten", () => {
     expect(edge).toBeGreaterThan(1);
     expect(edge).toBeLessThan(5);
     expect(at(g, 30, 0)).toBe(1);
-  });
-});
-
-describe("stampTerrain", () => {
-  it("wedge rises along local +X, mound is a dome, both obey the cap", () => {
-    const g = grid();
-    const res = stampTerrain(g, {
-      kind: "wedge",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 24,
-      widthM: 12,
-      heightM: 4,
-    });
-    expect(res.window).toBeDefined();
-    expect(at(g, 9, 0)).toBeGreaterThan(at(g, -9, 0));
-    expect(at(g, 9, 0)).toBeGreaterThan(at(g, 0, 0));
-    expect(at(g, 0, 20)).toBe(0);
-    expect(maxSlopeDegIn(g, whole(g))).toBeLessThanOrEqual(MAX_SLOPE_DEG + 1e-3);
-
-    const m = grid();
-    stampTerrain(m, {
-      kind: "mound",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 20,
-      widthM: 20,
-      heightM: 3,
-    });
-    expect(at(m, 0, 0)).toBeGreaterThan(2);
-    expect(at(m, 0, 0)).toBeGreaterThan(at(m, 6, 0));
-    expect(at(m, 6, 0)).toBeGreaterThan(at(m, 9, 0));
-    expect(at(m, 12, 0)).toBe(0);
-  });
-
-  it("rotation PI/2 turns the footprint", () => {
-    const g = grid();
-    stampTerrain(g, {
-      kind: "wedge",
-      x: 0,
-      z: 0,
-      rotationRad: Math.PI / 2,
-      lengthM: 24,
-      widthM: 12,
-      heightM: 4,
-    });
-    expect(at(g, 0, 9)).toBeGreaterThan(at(g, 0, -9));
-    expect(at(g, 9, 0)).toBeCloseTo(at(g, -9, 0), 3);
-  });
-
-  it("max-blends: never lowers taller existing terrain", () => {
-    const g = grid();
-    g.heights.fill(10);
-    const centre = terrainIndex(g, 30, 30);
-    g.heights[centre] = 12;
-    stampTerrain(g, {
-      kind: "mound",
-      x: 0,
-      z: 0,
-      rotationRad: 0,
-      lengthM: 10,
-      widthM: 10,
-      heightM: 1,
-    });
-    expect(at(g, 0, 0)).toBeGreaterThanOrEqual(12 - 1e-3);
-    expect(at(g, 3, 0)).toBeGreaterThanOrEqual(10);
   });
 });
 
@@ -414,17 +366,6 @@ describe("road mask holds vertices in every height op (WR-03 / D-16)", () => {
     heldAndMoved(g);
   });
 
-  it("stampTerrain", () => {
-    const g = grid();
-    stampTerrain(
-      g,
-      { kind: "mound", x: 0, z: 0, rotationRad: 0, lengthM: 20, widthM: 30, heightM: 3 },
-      undefined,
-      roadAtCentre(g),
-    );
-    heldAndMoved(g);
-  });
-
   it("smoothBrush", () => {
     const g = grid();
     let s = 99;
@@ -506,5 +447,118 @@ describe("smoothRegion", () => {
     smoothRegion(a, win, { strength: 1, passes: 1 });
     smoothRegion(b, win, { strength: 1, passes: 4 });
     expect(variance(b)).toBeLessThan(variance(a));
+  });
+});
+
+describe("height reporting and window ops (07.1-03)", () => {
+  const win = { minRow: 28, minCol: 28, maxRow: 32, maxCol: 32 };
+
+  it("raiseLower reports maxDeltaM and heldCount", () => {
+    const g = grid();
+    const r = raiseLower(g, brush({ strength: 1 }), 1);
+    expect(r.maxDeltaM).toBeGreaterThan(0.5);
+    expect(r.heldCount).toBe(0);
+    const l = raiseLower(g, brush({ strength: 1 }), -1);
+    expect(l.maxDeltaM).toBeLessThan(0);
+  });
+
+  it("reports held vertices when a road mask holds everything", () => {
+    const g = grid();
+    const roadMask = () => new Uint8Array(g.heights.length).fill(1);
+    const r = raiseLower(g, brush({ strength: 1 }), 1, 1, undefined, { roadMask });
+    expect(r.window).toBeUndefined();
+    expect(r.maxDeltaM).toBe(0);
+    expect(r.heldCount).toBeGreaterThan(0);
+  });
+
+  it("raiseWindow raises every vertex by exactly the delta, one diff", () => {
+    const g = grid();
+    const p = createPaintMap({
+      originX: -90,
+      originZ: -90,
+      widthM: 180,
+      depthM: 180,
+      metresPerPixel: 1,
+      fill: "grass",
+    });
+    const rec = createStrokeRecorder(g, p);
+    const res = raiseWindow(g, win, 1, rec);
+    expect(res.maxDeltaM).toBeCloseTo(1, 5);
+    for (let c = 28; c <= 32; c++) {
+      for (let r = 28; r <= 32; r++) expect(g.heights[terrainIndex(g, r, c)]).toBeCloseTo(1, 5);
+    }
+    expect(rec.commit()?.heights).toBeDefined();
+  });
+
+  it("raiseWindow holds road-masked vertices and counts them", () => {
+    const g = grid();
+    const held = terrainIndex(g, 30, 30);
+    const roadMask = () => {
+      const m = new Uint8Array(g.heights.length);
+      m[held] = 1;
+      return m;
+    };
+    const res = raiseWindow(g, win, 1, undefined, { roadMask });
+    expect(g.heights[held]).toBe(0);
+    expect(res.heldCount).toBe(1);
+  });
+
+  it("setWindowFromBase is absolute and restores the base", () => {
+    const g = grid();
+    const base = snapshotWindow(g, win);
+    setWindowFromBase(g, win, base, 2.5);
+    expect(g.heights[terrainIndex(g, 30, 30)]).toBeCloseTo(2.5, 5);
+    setWindowFromBase(g, win, base, 0);
+    expect(g.heights[terrainIndex(g, 30, 30)]).toBe(0);
+    expect(g.heights[terrainIndex(g, 28, 28)]).toBe(0);
+  });
+});
+
+describe("brush shape and cell radius stepping (quick 261111-x00)", () => {
+  it("brushDistance: round is Euclidean, square is Chebyshev", () => {
+    expect(brushDistance("round", 3, 4)).toBe(5);
+    expect(brushDistance("square", 3, -4)).toBe(4);
+    expect(brushDistance(undefined, 3, 4)).toBe(5);
+  });
+
+  it("a square brush moves a corner vertex that the round brush leaves alone", () => {
+    const sq = grid();
+    raiseLower(sq, brush({ radiusM: 12, shape: "square" }), 1);
+    const rd = grid();
+    raiseLower(rd, brush({ radiusM: 12, shape: "round" }), 1);
+    expect(at(sq, 9, 9)).toBeGreaterThan(0);
+    expect(at(rd, 9, 9)).toBe(0);
+    const omitted = grid();
+    raiseLower(omitted, brush({ radiusM: 12 }), 1);
+    expect(Array.from(omitted.heights)).toEqual(Array.from(rd.heights));
+  });
+
+  it("a square paint brush paints the corners of its square", () => {
+    const mkp = () =>
+      createPaintMap({
+        originX: -30,
+        originZ: -30,
+        widthM: 60,
+        depthM: 60,
+        metresPerPixel: 0.5,
+        fill: "grass",
+      });
+    const sq = mkp();
+    paintSurface(sq, brush({ radiusM: 12, shape: "square" }), "gravel");
+    const rd = mkp();
+    paintSurface(rd, brush({ radiusM: 12 }), "gravel");
+    const idx = Math.floor((10 + 30) / 0.5) + Math.floor((10 + 30) / 0.5) * sq.width;
+    expect(decodePaintSurface(sq.data[idx])).toBe("gravel");
+    expect(decodePaintSurface(rd.data[idx])).toBe("grass");
+  });
+
+  it("stepRadiusCells steps whole cells and clamps", () => {
+    expect(stepRadiusCells(12, 3, 1)).toBe(15);
+    expect(stepRadiusCells(12, 3, -1)).toBe(9);
+    expect(stepRadiusCells(11, 3, 1)).toBe(15);
+    expect(stepRadiusCells(3, 3, -1)).toBe(3);
+    expect(stepRadiusCells(200, 3, 1)).toBe(Math.floor(200 / 3) * 3);
+    expect(stepRadiusCells(Number.NaN, 3, 1)).toBe(0.5);
+    expect(stepRadiusCells(12, Number.NaN, 1)).toBe(12);
   });
 });

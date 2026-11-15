@@ -4,42 +4,14 @@
  * `model.test.ts`. The editor edits the same `<areaId>.raw-osm.json` /
  * `<areaId>.raw-buildings.json` files the map compiler reads.
  */
+import type { LatLon, Projector, RawEnvelope, RawWay } from "./world.ts";
+import { worldFromBbox } from "./world.ts";
 
-export interface LatLon {
-  lat: number;
-  lon: number;
-}
+export type { LatLon, Projector, RawEnvelope, RawWay } from "./world.ts";
 
-export interface RawWay {
-  type: "way";
-  id: number;
-  nodes?: number[];
-  geometry: LatLon[];
-  tags?: Record<string, string>;
-}
-
-export interface RawEnvelope {
-  fetchedAt: string;
-  endpoint: string;
-  bbox: { south: number; west: number; north: number; east: number };
-  query: string;
-  response: { elements: RawWay[] };
-}
-
-/** Local metres: x east, y north, relative to the envelope bbox centre. */
-export interface Projector {
-  toLocal(p: LatLon): { x: number; y: number };
-  toLatLon(p: { x: number; y: number }): LatLon;
-}
-
+/** Local metres: x east, y north, origin at the world's south-west corner (see `world.ts`). */
 export function makeProjector(bbox: RawEnvelope["bbox"]): Projector {
-  const lat0 = (bbox.south + bbox.north) / 2;
-  const lon0 = (bbox.west + bbox.east) / 2;
-  const mPerDegLon = 111_320 * Math.cos((lat0 * Math.PI) / 180);
-  return {
-    toLocal: (p) => ({ x: (p.lon - lon0) * mPerDegLon, y: (p.lat - lat0) * 110_540 }),
-    toLatLon: (p) => ({ lon: lon0 + p.x / mPerDegLon, lat: lat0 + p.y / 110_540 }),
-  };
+  return worldFromBbox(bbox).projector;
 }
 
 /** The six game surfaces, and the OSM `surface=` value the editor writes for each. */

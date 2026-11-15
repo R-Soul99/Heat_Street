@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Phase 04.3 complete (12/12) — ready to discuss Phase 05
-last_updated: 2026-11-04T22:08:37.882Z
-last_activity: 2026-11-03 -- Phase 04.3 execution started
+stopped_at: Phase 7 complete (7/7) — ready to discuss Phase 07.1
+last_updated: 2026-11-15T05:48:33.236Z
+last_activity: 2026-11-15
 progress:
-  total_phases: 11
-  completed_phases: 8
-  total_plans: 94
-  completed_plans: 93
+  total_phases: 15
+  completed_phases: 11
+  total_plans: 137
+  completed_plans: 135
   percent: 73
 ---
 
@@ -21,23 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08)
 
 **Core value:** The driving itself must feel weighty, cinematic, and replayable — big slides, tire smoke, jumps, and a heavy rear-wheel-drive-loose feel — with medal-time chasing giving every route long-term replay value.
-**Current focus:** Phase 05 — objectives navigation race modes
+**Current focus:** Phase 07.1 — editor ux overhaul
 
 ## Current Position
 
-Phase: 05
+Phase: 07.1
 Plan: Not started
-Next: plan 12, re-record juliette-ga and grid-test medals from clean human runs (feel-test excluded)
-Last activity: 2026-11-04
+Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; phase 7: all 7 plans done (07-07 human-approved 2026-11-15), awaiting phase verification
+Last activity: 2026-11-15
 
-Progress (phases 1-4.1 of 9, the only ones planned so far): [██████████] 100% of 51 known plans
 Progress: [██████████] 99%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 41
+- Total plans completed: 68
 - Average duration: 15 min
 - Total execution time: 1.7 hours
 
@@ -49,6 +48,8 @@ Progress: [██████████] 99%
 | 01 | 7 | - | - |
 | 04.2 | 15 | - | - |
 | 04.3 | 12 | - | - |
+| 07.1 | 20 | - | - |
+| 7 | 7 | - | - |
 
 **Per-plan detail:**
 
@@ -88,6 +89,7 @@ Progress: [██████████] 99%
 | Phase 04.2 P05 | 40min | 3 tasks | 7 files |
 | Phase 04.2 P09 | 35min | 2 tasks | 2 files |
 | Phase 04.2 P15 | 60 min | 3 tasks | 13 files |
+| Phase 07 P07 | 6h45m | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -96,6 +98,10 @@ Progress: [██████████] 99%
 - Phase 4.1 inserted after Phase 4: Flatten Terrain / Remove DEM Elevation — drop real-world DEM elevation in favor of hand-authored flat/near-flat terrain, fixing oversized road-shoulder skirts; supersedes part of ADR 0001 (URGENT)
 - Phase 04.2 inserted after Phase 4: Driveable Terrain: terrain-as-single-source-of-truth heightfield, paint map, road brush, 3D sculpt page. Absorbs and closes 4.1. See .planning/gsd-brief-driveable-terrain.md
 - Phase 04.3 inserted after Phase 4.2: Terrain and Feel Follow-ups: lift-off spin, terrain edge, wider roads, juliette render budget, editor save guard, square raise/lower + smoothing tool, medal re-record (URGENT)
+- Phase 07.1 inserted after Phase 7: Editor UX Overhaul. Unified editor shell for the map and terrain editors (top menus, floating tool rail, info bar, tooltips), map-editor select/draw/erase/clear and a New/Import popup, and terrain-editor separate raise/lower plus grid select. Raised by the user while importing poppmap (URGENT)
+- Phase 07.1.1 inserted after Phase 07.1: Editor Controls Polish: logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls; unified editor layout (URGENT)
+- Phase 07.1.2 inserted after Phase 07.1.1: Selection-based editor tools (select-then-act, from user mockup) (URGENT)
+- Phase 07.1.3 inserted after Phase 07.1.2: Editor feature palette (buildings, ramps, scenery)
 
 ### Decisions
 
@@ -248,12 +254,14 @@ Items acknowledged and carried forward from previous milestone close:
 | 261004-otc | Arcade front-drive thrust for FWD/AWD: front-axle share applied as a chassis impulse along heading (scaled by front contact) so throttle works while cornering; FWD engine force back to 4800. Feel not yet user-verified | 2026-10-04 | ca9daae | [261004-otc-arcade-front-drive-thrust-for-fwd-and-aw](./quick/261004-otc-arcade-front-drive-thrust-for-fwd-and-aw/) |
 | 261104-o1l | Playground map step 2: dome field, gap jumps with landing ramps, ovals | 2026-11-04 | ec9d016 | [261104-o1l-playground-map-step-2-dome-field-big-ram](./quick/261104-o1l-playground-map-step-2-dome-field-big-ram/) |
 | 261104-vdb | Playground map step 3: five surface strips (grass, sand, mud, gravel, dirt road) | 2026-11-04 | 0c3d810 | [261104-vdb-playground-map-step-3-terrain-surface-gr](./quick/261104-vdb-playground-map-step-3-terrain-surface-gr/) |
+| 261111-x00 | Terrain editor gap closure: yellow round/square brush footprint, grid only under the brush (grid-offset root cause fixed), separate Grid/Contours buttons, Alt+wheel radius in cells, zoom-scaled contours, opt-in dock layout | 2026-11-11 | 64c8570 | [261111-x00-terrain-editor-gap-closure-brush-overlay](./quick/261111-x00-terrain-editor-gap-closure-brush-overlay/) |
+| 261113-vei | Wheel (plain or Ctrl) zooms to cursor in both editors; terrain middle-drag orbits about cursor point, Shift+middle-drag pans | 2026-11-13 | 370fe9f | [261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra](./quick/261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra/) |
 
 ## Session Continuity
 
-Last session: 2026-11-03T12:38:20.001Z
-Stopped at: Phase 04.3 context gathered
-Resume file: .planning/phases/04.3-terrain-and-feel-follow-ups/04.3-CONTEXT.md
+Last session: 2026-11-15T05:44:15.649Z
+Stopped at: Phase 07.1.2 context gathered
+Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR

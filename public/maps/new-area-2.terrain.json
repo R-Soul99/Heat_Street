@@ -1,0 +1,41 @@
+{
+  "kind": "heat-street.terrain-area",
+  "formatVersion": 1,
+  "areaId": "new-area-2",
+  "name": "new-area-2",
+  "groundSurface": "grass",
+  "legacyGlbBuildings": false,
+  "nextEdgeId": 0,
+  "graph": {
+    "schemaVersion": 1,
+    "areaId": "new-area-2",
+    "name": "new-area-2",
+    "source": {
+      "osmExtract": "none",
+      "osmSnapshot": "none",
+      "demSource": "authored in terrain editor",
+      "compilerVersion": "terrain-editor"
+    },
+    "attribution": {
+      "osm": "",
+      "osmLicense": "",
+      "osmLicenseUrl": "",
+      "dem": ""
+    },
+    "origin": {
+      "lat": 0,
+      "lon": 0,
+      "projection": "local"
+    },
+    "bounds": {
+      "minX": -250.5,
+      "minZ": -250.5,
+      "maxX": 250.5,
+      "maxZ": 250.5
+    },
+    "nodes": [],
+    "edges": []
+  },
+  "objects": [],
+  "buildings": []
+}

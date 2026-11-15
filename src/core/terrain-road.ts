@@ -34,12 +34,15 @@ import {
   type PaintRect,
   type StrokeDiff,
 } from "./terrain-brush.ts";
+import type { CellMask } from "./terrain-cell-mask.ts";
 import {
   addRoadStroke,
   ensureDefaultSpawn,
   eraseGraphDisc,
+  eraseGraphMask,
   findStrokeCrossings,
   type GraphEditState,
+  refineAgainstMask,
 } from "./terrain-graph.ts";
 import { sampleTerrainHeight, type TerrainGrid } from "./terrain-grid.ts";
 import { DEFAULT_MAX_BANK_DEG, MAX_SLOPE_DEG } from "./terrain-limits.ts";
@@ -510,10 +513,39 @@ function roadVertexMaskFromGraph(
   }
 }
 
+/** ORs every vertex's 8 neighbours (inside `area`) into the mask (one-vertex dilation). */
+function dilate8(mask: Uint8Array, grid: TerrainGrid, area: CellWindow): void {
+  const stride = grid.rows + 1;
+  const src = Uint8Array.from(mask);
+  const c0 = Math.max(0, area.minCol);
+  const c1 = Math.min(grid.cols, area.maxCol);
+  const r0 = Math.max(0, area.minRow);
+  const r1 = Math.min(grid.rows, area.maxRow);
+  for (let c = c0; c <= c1; c++) {
+    for (let r = r0; r <= r1; r++) {
+      if (src[r + c * stride] === 0) continue;
+      for (let dc = -1; dc <= 1; dc++) {
+        const cc = c + dc;
+        if (cc < c0 || cc > c1) continue;
+        for (let dr = -1; dr <= 1; dr++) {
+          const rr = r + dr;
+          if (rr < r0 || rr > r1) continue;
+          mask[rr + cc * stride] = 1;
+        }
+      }
+    }
+  }
+}
+
 /**
  * Every vertex an existing road owns inside `area`: road-flagged paint plus the
  * full levelled radius around every graph edge. The slope limiter must treat
  * these as fixed, or earlier roads drift away from their graph y (D-16).
+ *
+ * `padM` (default 0, byte-identical to the old behaviour) widens the hold so every
+ * vertex of every cell a locked road touches is held (D-23). It is for SCULPT
+ * operations only; road strokes, `regradeInto` and `limitAroundBand` keep 0.
+ * Non-finite or negative values are treated as 0.
  */
 export function roadVertexMask(
   grid: TerrainGrid,
@@ -521,19 +553,29 @@ export function roadVertexMask(
   graph: RoadGraph,
   area: CellWindow,
   free?: ReadonlySet<number>,
+  padM = 0,
 ): Uint8Array {
+  const pad = Number.isFinite(padM) && padM > 0 ? padM : 0;
   const mask = roadVertexMaskFromPaint(grid, paint, area);
+  if (pad > 0) dilate8(mask, grid, area);
   if (free === undefined || free.size === 0) {
-    roadVertexMaskFromGraph(grid, graph, area, mask);
+    roadVertexMaskFromGraph(grid, graph, area, mask, undefined, pad);
     return mask;
   }
   // Quick 261110-rdx (DD-7): edges in `free` (unlocked) do not hold their own
   // vertices, neither through their paint (zone padded by one paint pixel) nor
   // through their levelled radius, unless a locked edge also owns the vertex.
   const held = new Uint8Array(mask.length);
-  roadVertexMaskFromGraph(grid, graph, area, held, (e) => !free.has(e.id));
+  roadVertexMaskFromGraph(grid, graph, area, held, (e) => !free.has(e.id), pad);
   const zone = new Uint8Array(mask.length);
-  roadVertexMaskFromGraph(grid, graph, area, zone, (e) => free.has(e.id), paint.metresPerPixel);
+  roadVertexMaskFromGraph(
+    grid,
+    graph,
+    area,
+    zone,
+    (e) => free.has(e.id),
+    pad + paint.metresPerPixel,
+  );
   for (let i = 0; i < mask.length; i++) {
     if (held[i]) mask[i] = 1;
     else if (zone[i]) mask[i] = 0;
@@ -1058,6 +1100,73 @@ export function eraseRoad(
     carryLock(area, rec, next.graph, erased.splitFrom);
   }
   return { diff: rec.commit(), removedEdgeIds, warnings };
+}
+
+/**
+ * Delete road inside a selection (07.1.2 D-15/D-26): road-flagged paint over
+ * selected cells reverts to ground, graph edges are cut at the selection edge
+ * (locked roads included), heights are never touched. One diff.
+ */
+export function eraseRoadRegion(
+  area: RoadEditTarget,
+  mask: CellMask,
+): { diff: StrokeDiff | undefined; removedEdgeIds: number[]; warnings: string[] } {
+  const none = { diff: undefined, removedEdgeIds: [] as number[], warnings: [] as string[] };
+  const bb = mask.bounds();
+  if (bb === null) return none;
+  const { grid, paint } = area;
+  const rec = createStrokeRecorder(grid, paint);
+  const m = paint.metresPerPixel;
+  const x0 = grid.originX + bb.minCol * grid.cellSizeM;
+  const x1 = grid.originX + bb.maxCol * grid.cellSizeM;
+  const z0 = grid.originZ + bb.minRow * grid.cellSizeM;
+  const z1 = grid.originZ + bb.maxRow * grid.cellSizeM;
+  const rect: PaintRect = {
+    minPx: Math.max(0, Math.floor((x0 - paint.originX) / m)),
+    maxPx: Math.min(paint.width - 1, Math.ceil((x1 - paint.originX) / m)),
+    minPz: Math.max(0, Math.floor((z0 - paint.originZ) / m)),
+    maxPz: Math.min(paint.height - 1, Math.ceil((z1 - paint.originZ) / m)),
+  };
+  if (rect.minPx <= rect.maxPx && rect.minPz <= rect.maxPz) {
+    rec.beforePaintWrite(rect);
+    const ground = encodePaintValue(area.groundSurface, false);
+    for (let pz = rect.minPz; pz <= rect.maxPz; pz++) {
+      const cz = paint.originZ + (pz + 0.5) * m;
+      for (let px = rect.minPx; px <= rect.maxPx; px++) {
+        const cx = paint.originX + (px + 0.5) * m;
+        const i = pz * paint.width + px;
+        if ((paint.data[i] & PAINT_ROAD_FLAG) === 0) continue;
+        if (mask.cellAtXZ(grid, cx, cz)) paint.data[i] = ground;
+      }
+    }
+  }
+  const before = { graph: area.graph, nextEdgeId: area.nextEdgeId };
+  const erased = eraseGraphMask(before, grid, mask);
+  let removedEdgeIds: number[] = [];
+  if (erased.state !== before) {
+    const next = ensureDefaultSpawn(erased.state);
+    area.graph = next.graph;
+    area.nextEdgeId = next.nextEdgeId;
+    removedEdgeIds = erased.removedEdgeIds;
+    rec.recordGraph(
+      JSON.stringify(before.graph),
+      JSON.stringify(next.graph),
+      before.nextEdgeId,
+      next.nextEdgeId,
+    );
+    carryLock(area, rec, next.graph, erased.splitFrom);
+  }
+  return { diff: rec.commit(), removedEdgeIds, warnings: [] };
+}
+
+/** Whole edge ids with any part over a selected cell (07.1.2 D-25). Pure. */
+export function edgeIdsInMask(graph: RoadGraph, grid: TerrainGrid, mask: CellMask): number[] {
+  if (mask.isEmpty()) return [];
+  const ids = new Set<number>();
+  for (const e of graph.edges) {
+    if (refineAgainstMask(e.points, grid, mask).keep.some((k) => !k)) ids.add(e.id);
+  }
+  return [...ids].sort((a, b) => a - b);
 }
 
 // ---------------------------------------------------------------- re-grade / lock (quick 261110-rdx)

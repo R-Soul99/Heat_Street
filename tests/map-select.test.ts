@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { AUTHORED_MAP_FORMATS, AUTHORED_MAP_IDS } from "../src/core/authored-maps.generated";
 import {
+  BUILTIN_MAP_IDS,
   KNOWN_MAP_IDS,
   MAP_FORMATS,
   MAP_LABELS,
@@ -29,8 +31,9 @@ describe("resolveMapId", () => {
       expect(resolveMapId(s)).toBe("juliette-ga");
     }
   });
-  it("lists exactly the known maps", () => {
-    expect([...KNOWN_MAP_IDS]).toEqual([
+  it("lists exactly the builtin plus authored maps", () => {
+    expect([...KNOWN_MAP_IDS]).toEqual([...BUILTIN_MAP_IDS, ...AUTHORED_MAP_IDS]);
+    expect([...BUILTIN_MAP_IDS]).toEqual([
       "juliette-ga",
       "grid-test",
       "feel-test",
@@ -42,6 +45,10 @@ describe("resolveMapId", () => {
       "straight-test",
       "arena-test",
     ]);
+  });
+  it("accepts authored maps from the manifest", () => {
+    expect(resolveMapId("?map=popp")).toBe("popp");
+    expect(MAP_FORMATS.popp).toBe("legacy");
   });
 });
 
@@ -65,8 +72,8 @@ describe("demo-hills and formats", () => {
     expect(resolveMapId("?map=demo-hills")).toBe("demo-hills");
     expect(MAP_LABELS["demo-hills"]).toBe("Demo hills (sculpted)");
   });
-  it("formats: migrated maps are terrain, the rest stay legacy (D-08)", () => {
-    const terrain = [
+  it("formats: built-ins are explicit, authored maps come from the registry (D-08)", () => {
+    const builtinTerrain = [
       "demo-hills",
       "feel-test",
       "grid-test",
@@ -75,8 +82,12 @@ describe("demo-hills and formats", () => {
       "straight-test",
       "arena-test",
     ];
-    for (const id of KNOWN_MAP_IDS) {
-      expect(MAP_FORMATS[id]).toBe(terrain.includes(id) ? "terrain" : "legacy");
+    for (const id of BUILTIN_MAP_IDS) {
+      expect(MAP_FORMATS[id]).toBe(builtinTerrain.includes(id) ? "terrain" : "legacy");
+    }
+    for (const id of AUTHORED_MAP_IDS) {
+      expect(KNOWN_MAP_IDS).toContain(id);
+      expect(MAP_FORMATS[id]).toBe(AUTHORED_MAP_FORMATS[id]);
     }
     expect(MAP_FORMATS["my-map"]).toBe("legacy");
     expect(MAP_FORMATS["newton-poppleford"]).toBe("legacy");

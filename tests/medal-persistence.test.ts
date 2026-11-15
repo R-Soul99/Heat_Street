@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyMedalProgress,
+  knownProgressCourseIds,
   loadMedalProgress,
+  MAX_RACE_FIELD_SIZE,
+  MEDAL_PROGRESS_KEY,
   MEDAL_PROGRESS_KIND,
   MEDAL_PROGRESS_VERSION,
   type MedalProgress,
   type MedalStorage,
   mergeMedalResult,
+  mergeRaceResult,
   parseMedalProgress,
+  raceVariantCourseId,
   saveMedalResult,
+  saveRaceResult,
   serializeMedalProgress,
 } from "../src/core/medal-persistence";
 
@@ -214,5 +220,187 @@ describe("injected storage adapter", () => {
       ),
     ).toBe(false);
     expect(storage.writes).toHaveLength(0);
+  });
+});
+
+describe("circuit race persistence (07-07, D-05/D-06)", () => {
+  const RACE_ID = "juliette-three-lap-loop.race";
+  const routeCourses = [
+    { id: "juliette-backroads", mode: "p2p" },
+    { id: "juliette-three-lap-loop", mode: "circuit" },
+  ] as const;
+
+  function raceBlob(record: Record<string, unknown>): string {
+    return JSON.stringify({
+      kind: MEDAL_PROGRESS_KIND,
+      version: MEDAL_PROGRESS_VERSION,
+      courses: {
+        [RACE_ID]: { courseId: RACE_ID, bestTimeSec: 480, medal: "none", ...record },
+        "juliette-backroads": {
+          courseId: "juliette-backroads",
+          bestTimeSec: 170,
+          medal: "gold",
+        },
+      },
+    });
+  }
+
+  it("keeps the storage key and version unchanged", () => {
+    expect(MEDAL_PROGRESS_KEY).toBe("heat-street.medals.v1");
+    expect(MEDAL_PROGRESS_VERSION).toBe(1);
+    expect(MAX_RACE_FIELD_SIZE).toBe(4);
+  });
+
+  it("derives the race variant id and lists every known progress id", () => {
+    expect(raceVariantCourseId("juliette-three-lap-loop")).toBe(RACE_ID);
+    expect(knownProgressCourseIds(routeCourses)).toEqual([
+      "juliette-backroads",
+      "juliette-three-lap-loop",
+      RACE_ID,
+    ]);
+  });
+
+  it("parses a pre-Phase-7 record without bestFinish and round-trips bestFinish", () => {
+    const known = knownProgressCourseIds(routeCourses);
+    const legacy = parseMedalProgress(raceBlob({}), known);
+    expect(legacy.courses[RACE_ID]).toEqual({ courseId: RACE_ID, bestTimeSec: 480, medal: "none" });
+    expect(Object.hasOwn(legacy.courses[RACE_ID], "bestFinish")).toBe(false);
+
+    const withFinish = parseMedalProgress(raceBlob({ bestFinish: 2 }), known);
+    expect(withFinish.courses[RACE_ID]?.bestFinish).toBe(2);
+    expect(parseMedalProgress(serializeMedalProgress(withFinish), known)).toEqual(withFinish);
+  });
+
+  it.each([0, 5, 2.5, "1", null, "NaN"])("drops a record whose bestFinish is %s", (value) => {
+    const known = knownProgressCourseIds(routeCourses);
+    const bestFinish = value === "NaN" ? Number.NaN : value;
+    const parsed = parseMedalProgress(raceBlob({ bestFinish }), known);
+    expect(parsed.courses[RACE_ID]).toBeUndefined();
+    expect(parsed.courses["juliette-backroads"]).toEqual({
+      courseId: "juliette-backroads",
+      bestTimeSec: 170,
+      medal: "gold",
+    });
+  });
+
+  it("creates, then improves time and finish independently", () => {
+    const first = mergeRaceResult(emptyMedalProgress(), RACE_ID, {
+      complete: true,
+      effectiveTimeSec: 490,
+      finishPosition: 3,
+    });
+    expect(first.courses[RACE_ID]).toEqual({
+      courseId: RACE_ID,
+      bestTimeSec: 490,
+      medal: "none",
+      bestFinish: 3,
+    });
+
+    const fasterWorse = mergeRaceResult(first, RACE_ID, {
+      complete: true,
+      effectiveTimeSec: 480,
+      finishPosition: 4,
+    });
+    expect(fasterWorse.courses[RACE_ID]).toMatchObject({ bestTimeSec: 480, bestFinish: 3 });
+
+    const betterSlower = mergeRaceResult(fasterWorse, RACE_ID, {
+      complete: true,
+      effectiveTimeSec: 500,
+      finishPosition: 1,
+    });
+    expect(betterSlower.courses[RACE_ID]).toMatchObject({ bestTimeSec: 480, bestFinish: 1 });
+
+    const neither = mergeRaceResult(betterSlower, RACE_ID, {
+      complete: true,
+      effectiveTimeSec: 600,
+      finishPosition: 2,
+    });
+    expect(neither).toBe(betterSlower);
+  });
+
+  it.each([
+    { complete: false, effectiveTimeSec: 480, finishPosition: 1 },
+    { complete: true, effectiveTimeSec: 0, finishPosition: 1 },
+    { complete: true, effectiveTimeSec: Number.NaN, finishPosition: 1 },
+    { complete: true, effectiveTimeSec: Number.POSITIVE_INFINITY, finishPosition: 1 },
+    { complete: true, effectiveTimeSec: 480, finishPosition: 0 },
+    { complete: true, effectiveTimeSec: 480, finishPosition: 5 },
+    { complete: true, effectiveTimeSec: 480, finishPosition: 1.5 },
+  ])("ignores an invalid race result %o", (attempt) => {
+    const progress = emptyMedalProgress();
+    expect(mergeRaceResult(progress, RACE_ID, attempt)).toBe(progress);
+  });
+
+  it("ignores unknown or unsafe ids", () => {
+    const progress = emptyMedalProgress();
+    const result = { complete: true, effectiveTimeSec: 480, finishPosition: 1 };
+    expect(mergeRaceResult(progress, "__proto__", result)).toBe(progress);
+    expect(mergeRaceResult(progress, "../x", result)).toBe(progress);
+    expect(mergeRaceResult(progress, RACE_ID, result, ["juliette-backroads"])).toBe(progress);
+  });
+
+  it("saveRaceResult returns false when nothing improved and never throws on storage failure", () => {
+    const known = knownProgressCourseIds(routeCourses);
+    const storage = memoryStorage();
+    const result = { complete: true, effectiveTimeSec: 480, finishPosition: 2 };
+    expect(saveRaceResult(storage, RACE_ID, result, known)).toBe(true);
+    expect(saveRaceResult(storage, RACE_ID, result, known)).toBe(false);
+    expect(storage.writes).toHaveLength(1);
+
+    const broken: MedalStorage = {
+      get: () => null,
+      set: () => {
+        throw new Error("quota");
+      },
+    };
+    expect(() => saveRaceResult(broken, RACE_ID, result, known)).not.toThrow();
+    expect(saveRaceResult(broken, RACE_ID, result, known)).toBe(false);
+  });
+
+  it("solo and race saves preserve each other's records", () => {
+    const known = knownProgressCourseIds(routeCourses);
+    const storage = memoryStorage();
+    expect(
+      saveRaceResult(
+        storage,
+        RACE_ID,
+        { complete: true, effectiveTimeSec: 482, finishPosition: 2 },
+        known,
+      ),
+    ).toBe(true);
+    expect(
+      saveMedalResult(
+        storage,
+        "juliette-three-lap-loop",
+        { complete: true, effectiveTimeSec: 470, medal: "silver" },
+        known,
+      ),
+    ).toBe(true);
+    const afterSolo = loadMedalProgress(storage, known).courses;
+    expect(afterSolo[RACE_ID]).toEqual({
+      courseId: RACE_ID,
+      bestTimeSec: 482,
+      medal: "none",
+      bestFinish: 2,
+    });
+    expect(afterSolo["juliette-three-lap-loop"]).toMatchObject({
+      bestTimeSec: 470,
+      medal: "silver",
+    });
+
+    expect(
+      saveRaceResult(
+        storage,
+        RACE_ID,
+        { complete: true, effectiveTimeSec: 478, finishPosition: 1 },
+        known,
+      ),
+    ).toBe(true);
+    const afterRace = loadMedalProgress(storage, known).courses;
+    expect(afterRace["juliette-three-lap-loop"]).toMatchObject({
+      bestTimeSec: 470,
+      medal: "silver",
+    });
+    expect(afterRace[RACE_ID]).toMatchObject({ bestTimeSec: 478, bestFinish: 1 });
   });
 });

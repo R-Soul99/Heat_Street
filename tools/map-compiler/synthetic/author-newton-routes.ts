@@ -164,7 +164,9 @@ async function run(): Promise<void> {
     swapIndex: number,
   ) => {
     const plain = buildCourse(mode, prefix, start, cps);
-    if (plain.usesDirt) return plain;
+    // An all-tarmac map (e.g. a traced editor map) has no dirt to visit: the
+    // dirt-road rule is a variety preference, not a reason to fail the compile.
+    if (plain.usesDirt || dirtNodes.length === 0) return plain;
     const anchor = cps[swapIndex] as RoadGraphNode;
     const sorted = [...dirtNodes].sort(
       (a, b) =>

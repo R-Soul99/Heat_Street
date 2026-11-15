@@ -9,6 +9,8 @@ import type {
 } from "../../../src/core/road-graph.ts";
 import {
   buildOffRoadRelief,
+  GROUND_MARGIN_M,
+  groundBounds,
   HEIGHTFIELD_RESOLUTION,
   HEIGHTFIELD_SINK_M,
   heightfieldHeightAt,
@@ -398,5 +400,35 @@ describe("parseMapCollision: heightfield block (collisionVersion 2)", () => {
       heightfield: { ...validHeightfieldRaw, heights: [1, 2, 3, 4, 5, 6, 7, 8, 12000] },
     });
     expect(() => parseMapCollision(rawOutOfRange, "juliette-ga", "test-fixture")).toThrow();
+  });
+});
+
+describe("groundBounds", () => {
+  it("covers road points that bulge past the node bounds, plus the margin", () => {
+    // Nodes at z=0, but the road curves down to z=-74 between them (the real map-1 case).
+    const graph = {
+      ...makeGraph(
+        [makeNode({ id: 0, x: 0, y: 0, z: 0 }), makeNode({ id: 1, x: 100, y: 0, z: 0 })],
+        [
+          makeEdge({
+            id: 0,
+            from: 0,
+            to: 1,
+            points: [
+              [0, 0, 0],
+              [50, 0, -74],
+              [100, 0, 0],
+            ],
+          }),
+        ],
+      ),
+      bounds: { minX: 0, minZ: 0, maxX: 100, maxZ: 0 },
+    };
+    expect(groundBounds(graph)).toEqual({
+      minX: -GROUND_MARGIN_M,
+      minZ: -74 - GROUND_MARGIN_M,
+      maxX: 100 + GROUND_MARGIN_M,
+      maxZ: GROUND_MARGIN_M,
+    });
   });
 });

@@ -400,7 +400,86 @@ function computeEdgeRails(edge: RoadGraphEdge): EdgeRails {
     perp[i] = p2;
   }
 
+  pinchFoldedRail(points, left);
+  pinchFoldedRail(points, right);
+
   return { points, left, right, perp };
+}
+
+/** Max pinch passes per rail; each pass collapses every currently-folded run. */
+const MAX_PINCH_PASSES = 8;
+
+/**
+ * Where an offset rail folds back on itself (a kink tighter than the half
+ * width makes the inner rail run against the centreline direction), collapses
+ * the folded run of rail vertices to one point so every strip triangle keeps
+ * the edge's winding. The centreline is untouched and the outer rail still
+ * sweeps the corner, so the tarmac covers the whole kink (overlap is fine).
+ * Vertex count and index layout never change. Rails that do not fold are
+ * left byte-identical. Mutates `rail` in place.
+ */
+function pinchFoldedRail(points: readonly Vec3[], rail: Vec3[]): void {
+  const n = rail.length;
+  for (let pass = 0; pass < MAX_PINCH_PASSES; pass++) {
+    const folded: boolean[] = new Array(n - 1);
+    let any = false;
+    for (let i = 0; i < n - 1; i++) {
+      const dot =
+        (rail[i + 1][0] - rail[i][0]) * (points[i + 1][0] - points[i][0]) +
+        (rail[i + 1][2] - rail[i][2]) * (points[i + 1][2] - points[i][2]);
+      folded[i] = dot < 0;
+      if (folded[i]) any = true;
+    }
+    if (!any) return;
+
+    let i = 0;
+    while (i < n - 1) {
+      if (!folded[i]) {
+        i++;
+        continue;
+      }
+      let b = i;
+      while (b + 1 < n - 1 && folded[b + 1]) b++;
+      // Folded segments i..b span vertices i..b+1; widen by one vertex a side.
+      const lo = Math.max(0, i - 1);
+      const hi = Math.min(n - 1, b + 2);
+      let px = 0;
+      let pz = 0;
+      const crossing =
+        lo > 0 && hi < n - 1
+          ? segmentCrossing(rail[lo - 1], rail[lo], rail[hi], rail[hi + 1])
+          : null;
+      if (crossing !== null) {
+        px = crossing.x;
+        pz = crossing.z;
+      } else {
+        for (let k = lo; k <= hi; k++) {
+          px += rail[k][0];
+          pz += rail[k][2];
+        }
+        px /= hi - lo + 1;
+        pz /= hi - lo + 1;
+      }
+      for (let k = lo; k <= hi; k++) rail[k] = [px, rail[k][1], pz];
+      i = b + 1;
+    }
+  }
+}
+
+/** Intersection of segments a0-a1 and b0-b1 in XZ, or null when they do not cross. */
+function segmentCrossing(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3): XZ | null {
+  const rx = a1[0] - a0[0];
+  const rz = a1[2] - a0[2];
+  const sx = b1[0] - b0[0];
+  const sz = b1[2] - b0[2];
+  const denom = rx * sz - rz * sx;
+  if (Math.abs(denom) < 1e-12) return null;
+  const qx = b0[0] - a0[0];
+  const qz = b0[2] - a0[2];
+  const t = (qx * sz - qz * sx) / denom;
+  const u = (qx * rz - qz * rx) / denom;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { x: a0[0] + t * rx, z: a0[2] + t * rz };
 }
 
 /**

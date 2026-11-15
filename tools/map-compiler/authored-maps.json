@@ -1,0 +1,70 @@
+[
+  {
+    "id": "popp",
+    "format": "legacy"
+  },
+  {
+    "id": "world-test",
+    "format": "legacy"
+  },
+  {
+    "id": "hills",
+    "format": "terrain"
+  },
+  {
+    "id": "popp3",
+    "format": "legacy"
+  },
+  {
+    "id": "popp-1",
+    "format": "legacy"
+  },
+  {
+    "id": "map-1",
+    "format": "legacy"
+  },
+  {
+    "id": "map-2",
+    "format": "legacy"
+  },
+  {
+    "id": "map-3",
+    "format": "legacy"
+  },
+  {
+    "id": "map-4",
+    "format": "legacy"
+  },
+  {
+    "id": "new-area-1",
+    "format": "terrain"
+  },
+  {
+    "id": "uat-test",
+    "format": "terrain"
+  },
+  {
+    "id": "new-map2",
+    "format": "legacy"
+  },
+  {
+    "id": "uat-map",
+    "format": "legacy"
+  },
+  {
+    "id": "popp-roads",
+    "format": "terrain"
+  },
+  {
+    "id": "new-area-2",
+    "format": "terrain"
+  },
+  {
+    "id": "m-m",
+    "format": "legacy"
+  },
+  {
+    "id": "map-5",
+    "format": "legacy"
+  }
+]

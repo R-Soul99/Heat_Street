@@ -1,10 +1,16 @@
+import {
+  AUTHORED_MAP_FORMATS,
+  AUTHORED_MAP_IDS,
+  AUTHORED_MAP_LABELS,
+} from "./authored-maps.generated.ts";
+
 /**
  * Allowlisted `?map=` selection. The result becomes part of fetch URLs in
  * `src/main.ts`, so only exact members of `KNOWN_MAP_IDS` are accepted
  * (array `includes`, never an object-key lookup, so prototype keys such as
  * `toString` cannot resolve). Anything else falls back to the default map.
  */
-export const KNOWN_MAP_IDS = [
+export const BUILTIN_MAP_IDS = [
   "juliette-ga",
   "grid-test",
   "feel-test",
@@ -16,6 +22,7 @@ export const KNOWN_MAP_IDS = [
   "straight-test",
   "arena-test",
 ] as const;
+export const KNOWN_MAP_IDS = [...BUILTIN_MAP_IDS, ...AUTHORED_MAP_IDS] as const;
 export type MapId = (typeof KNOWN_MAP_IDS)[number];
 export const DEFAULT_MAP_ID: MapId = "juliette-ga";
 
@@ -27,7 +34,7 @@ export function resolveMapId(search: string): MapId {
 }
 
 /** Human names for the in-game map menu. */
-export const MAP_LABELS: Readonly<Record<MapId, string>> = {
+const BUILTIN_LABELS: Readonly<Record<(typeof BUILTIN_MAP_IDS)[number], string>> = {
   "juliette-ga": "Juliette, GA",
   "grid-test": "Grid test",
   "feel-test": "Feel test (proving ground)",
@@ -39,13 +46,17 @@ export const MAP_LABELS: Readonly<Record<MapId, string>> = {
   "straight-test": "Straight test (one 4 km road)",
   "arena-test": "Arena test (editable copy of straight test)",
 };
+export const MAP_LABELS: Readonly<Record<MapId, string>> = {
+  ...BUILTIN_LABELS,
+  ...AUTHORED_MAP_LABELS,
+};
 
 /**
  * Per-map data format. Chosen from this static allowlisted table, never by
  * probing URLs (D-08: the legacy ribbon loader stays for non-migrated maps).
  */
 export type MapFormat = "legacy" | "terrain";
-export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
+const BUILTIN_FORMATS: Readonly<Record<(typeof BUILTIN_MAP_IDS)[number], MapFormat>> = {
   "juliette-ga": "terrain",
   "grid-test": "terrain",
   "feel-test": "terrain",
@@ -56,6 +67,10 @@ export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
   playground: "terrain",
   "straight-test": "terrain",
   "arena-test": "terrain",
+};
+export const MAP_FORMATS: Readonly<Record<MapId, MapFormat>> = {
+  ...BUILTIN_FORMATS,
+  ...AUTHORED_MAP_FORMATS,
 };
 
 const DECIMAL = /^-?\d+(\.\d+)?$/;
