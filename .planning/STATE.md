@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
 stopped_at: Phase 07.1.3 UI-SPEC approved
-last_updated: "2026-11-15T12:47:56.139Z"
+last_updated: "2026-11-15T12:52:41.219Z"
 last_activity: 2026-11-15
 progress:
   total_phases: 18
   completed_phases: 12
   total_plans: 148
-  completed_plans: 139
+  completed_plans: 140
   percent: 67
 ---
 
@@ -195,6 +195,7 @@ Recent decisions affecting current work:
 - [Phase 04.2]: 04.2-15: Medal references for juliette-ga and grid-test re-recorded on terrain (handlingContentVersion 261101-terrain, shipped feel-preset car); PROVISIONAL, re-record after handling work
 - [Phase 04.2]: 04.2-15: ai-lap/ai-field pin a frozen 06-03 legacy Juliette reference (AI pace calibrated against it; Circuit Race off on terrain)
 - [Phase 04.2]: 04.2-15: Phase 4.1 closed, absorbed by 4.2 (04.1-10/11 superseded by 04.2-06/15)
+- [Phase ?]: 07.1.3-06: scenery colliders share one lazy fixed body; line colliders min 0.4 m thick; 1.0 m hedge/fence minimum confirmed by kerb test
 
 ### Pending Todos
 
@@ -260,7 +261,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-15T12:47:56.124Z
+Last session: 2026-11-15T12:52:37.213Z
 Stopped at: Phase 07.1.3 UI-SPEC approved
 Resume file: None
 
