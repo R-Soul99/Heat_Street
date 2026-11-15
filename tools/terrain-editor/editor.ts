@@ -117,7 +117,7 @@ import {
   footprintCorners,
   LINE_TOO_FEW_POINTS,
   moveFeature,
-  pickFeatureAt,
+  pickFeatureByRay,
   RAMP_FOOT_RADIUS_M,
   removeInMask,
   type ScenerySelection,
@@ -2455,18 +2455,33 @@ function selectScenery(sel: ScenerySelection | null): void {
   refreshSceneryBoxes();
 }
 
-function updateSceneryHover(hit: { x: number; z: number } | null): void {
+/** What is under the cursor: the first scenery mesh box the view ray hits, else the ground test. */
+function pickSceneryAt(clientX: number, clientY: number): ScenerySelection | undefined {
+  if (!area) return undefined;
+  const hit = pickTerrain(clientX, clientY); // also aims the shared raycaster
+  const r = raycaster.ray;
+  return pickFeatureByRay(
+    area.features ?? [],
+    area.buildings,
+    area.objects,
+    heightAtArea,
+    {
+      ox: r.origin.x,
+      oy: r.origin.y,
+      oz: r.origin.z,
+      dx: r.direction.x,
+      dy: r.direction.y,
+      dz: r.direction.z,
+    },
+    hit ? { x: hit.x, z: hit.z } : null,
+    SCENERY_PICK_RADIUS_M,
+  );
+}
+
+function updateSceneryHover(at: { x: number; y: number } | null): void {
   let next: ScenerySelection | null = null;
-  if (hit && area && selectableNow() && !moveDrag && !stroking) {
-    next =
-      pickFeatureAt(
-        area.features ?? [],
-        area.buildings,
-        area.objects,
-        hit.x,
-        hit.z,
-        SCENERY_PICK_RADIUS_M,
-      ) ?? null;
+  if (at && area && selectableNow() && !moveDrag && !stroking) {
+    next = pickSceneryAt(at.x, at.y) ?? null;
   }
   const same =
     next === hoverScenery ||
@@ -2503,14 +2518,7 @@ function scenerySelectDown(e: PointerEvent): boolean {
   if (!area) return false;
   const hit = pickTerrain(e.clientX, e.clientY);
   if (!hit) return false;
-  const sel = pickFeatureAt(
-    area.features ?? [],
-    area.buildings,
-    area.objects,
-    hit.x,
-    hit.z,
-    SCENERY_PICK_RADIUS_M,
-  );
+  const sel = pickSceneryAt(e.clientX, e.clientY);
   if (!sel) {
     if (selectedScenery) selectScenery(null);
     return false;
@@ -3560,7 +3568,7 @@ function updateCursor(clientX: number, clientY: number): void {
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
-  updateSceneryHover(lastHit);
+  updateSceneryHover({ x: clientX, y: clientY });
   paintRing(hit);
   updateLockHover(hit.x, hit.z);
   maybeRebuildContours(hit.x, hit.z);

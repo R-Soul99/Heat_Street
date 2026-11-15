@@ -24,6 +24,7 @@ import {
   ON_ROAD_REASON,
   OUTSIDE_AREA_REASON,
   pickFeatureAt,
+  pickFeatureByRay,
   removeInMask,
   rotateFeature,
   scaleFeature,
@@ -375,5 +376,76 @@ describe("pickFeatureAt", () => {
       { id: "b", kind: "bush", variant: "round", x: 1, z: 0, rotationY: 0, scale: 1 },
     ];
     expect(pickFeatureAt(two, [], [], 0.9, 0, 3)).toEqual({ kind: "feature", id: "b" });
+  });
+});
+
+describe("pickFeatureByRay", () => {
+  const flat = () => 0;
+  const tree: TerrainFeature = {
+    id: "t1",
+    kind: "tree",
+    variant: "oak",
+    x: 0,
+    z: 0,
+    rotationY: 0,
+    scale: 1,
+  };
+  const hedge: TerrainFeature = {
+    id: "h1",
+    kind: "hedge",
+    variant: "box",
+    points: [
+      [20, -5],
+      [20, 5],
+    ],
+    heightM: 2,
+  };
+  // Helicopter-style ray: from above and to the south, aimed at a point in the canopy.
+  const toward = (x: number, y: number, z: number) => ({
+    ox: x,
+    oy: y + 40,
+    oz: z + 40,
+    dx: 0,
+    dy: -40,
+    dz: -40,
+  });
+
+  it("selects a tree by clicking its canopy, away from its trunk base", () => {
+    // Canopy top (y 8) is hit well before the ground behind it, which is ~8 m north of the trunk.
+    const ray = toward(0, 8, 0);
+    const ground = { x: 0, z: -8 };
+    expect(pickFeatureByRay([tree], [], [], flat, ray, ground, 1.5)).toEqual({
+      kind: "feature",
+      id: "t1",
+    });
+    // The old ground-distance test misses from that ground point.
+    expect(pickFeatureAt([tree], [], [], ground.x, ground.z, 1.5)).toBeUndefined();
+  });
+
+  it("selects a hedge by clicking along its height", () => {
+    const ray = toward(20, 1.8, 0);
+    expect(pickFeatureByRay([hedge], [], [], flat, ray, { x: 20, z: -2 }, 1.5)).toEqual({
+      kind: "feature",
+      id: "h1",
+    });
+  });
+
+  it("falls back to the ground test, and returns undefined on a clean miss", () => {
+    const ray = toward(50, 0, 50);
+    expect(pickFeatureByRay([tree], [], [], flat, ray, { x: 1, z: 0 }, 1.5)).toEqual({
+      kind: "feature",
+      id: "t1",
+    });
+    expect(pickFeatureByRay([tree], [], [], flat, ray, { x: 50, z: 50 }, 1.5)).toBeUndefined();
+    expect(pickFeatureByRay([tree], [], [], flat, ray, null, 1.5)).toBeUndefined();
+  });
+
+  it("picks the nearer of two overlapping items along the ray", () => {
+    const front: TerrainFeature = { ...tree, id: "front", z: 10 };
+    const ray = { ox: 0, oy: 3, oz: 40, dx: 0, dy: 0, dz: -1 };
+    expect(pickFeatureByRay([tree, front], [], [], flat, ray, null, 1.5)).toEqual({
+      kind: "feature",
+      id: "front",
+    });
   });
 });

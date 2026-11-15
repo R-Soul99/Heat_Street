@@ -3,7 +3,8 @@
 // them (undo snapshots share element objects). editor.ts only routes input to these.
 
 import type { AuthoredCrest } from "../../src/core/crest-geometry.ts";
-import type { SceneryKind } from "../../src/core/scenery-catalog.ts";
+import { resolveVariant, type SceneryKind } from "../../src/core/scenery-catalog.ts";
+import { lineSegments } from "../../src/core/scenery-geometry.ts";
 import { terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
 import {
   MAX_FEATURE_SCALE,
@@ -488,4 +489,141 @@ export function pickFeatureAt(
     if (d <= radiusM) consider(d, { kind: "ramp", id: o.crest.id });
   }
   return best;
+}
+
+// ---------------------------------------------------------------- ray picking
+
+/** A world-space ray (direction need not be unit length). */
+export interface PickRay {
+  readonly ox: number;
+  readonly oy: number;
+  readonly oz: number;
+  readonly dx: number;
+  readonly dy: number;
+  readonly dz: number;
+}
+
+interface PickBox {
+  readonly cx: number;
+  readonly cy: number;
+  readonly cz: number;
+  readonly hx: number;
+  readonly hy: number;
+  readonly hz: number;
+  readonly rotationY: number;
+}
+
+/** Ray against a Y-rotated box (slab test in the box frame). Returns the entry t, or undefined. */
+function rayHitsBox(r: PickRay, b: PickBox): number | undefined {
+  const c = Math.cos(b.rotationY);
+  const s = Math.sin(b.rotationY);
+  const ox = r.ox - b.cx;
+  const oz = r.oz - b.cz;
+  const o = [ox * c - oz * s, r.oy - b.cy, ox * s + oz * c];
+  const d = [r.dx * c - r.dz * s, r.dy, r.dx * s + r.dz * c];
+  const h = [b.hx, b.hy, b.hz];
+  let tMin = 0;
+  let tMax = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < 3; i++) {
+    const oi = o[i] as number;
+    const di = d[i] as number;
+    const hi = h[i] as number;
+    if (Math.abs(di) < 1e-9) {
+      if (Math.abs(oi) > hi) return undefined;
+      continue;
+    }
+    let t0 = (-hi - oi) / di;
+    let t1 = (hi - oi) / di;
+    if (t0 > t1) [t0, t1] = [t1, t0];
+    tMin = Math.max(tMin, t0);
+    tMax = Math.min(tMax, t1);
+    if (tMin > tMax) return undefined;
+  }
+  return tMin;
+}
+
+/** Visible bounds of one feature as boxes (display-size, a little generous for easy clicking). */
+function featurePickBoxes(f: TerrainFeature, heightAt: HeightFn): PickBox[] {
+  if ("points" in f) {
+    const out: PickBox[] = [];
+    for (const s of lineSegments(f.points, heightAt, f.heightM, 0.6)) {
+      out.push({
+        cx: s.x,
+        cy: s.y + f.heightM / 2,
+        cz: s.z,
+        hx: s.lengthM / 2,
+        hy: f.heightM / 2 + 0.1,
+        hz: 0.4,
+        rotationY: s.rotationY,
+      });
+    }
+    return out;
+  }
+  const y = heightAt(f.x, f.z);
+  if (f.kind === "bush") {
+    const v = resolveVariant("bush", f.variant);
+    if (v === undefined) return [];
+    const r = v.radiusM * f.scale;
+    const h = v.heightM * f.scale;
+    return [{ cx: f.x, cy: y + h / 2, cz: f.z, hx: r, hy: h / 2, hz: r, rotationY: 0 }];
+  }
+  const v = resolveVariant("tree", f.variant);
+  if (v === undefined) return [];
+  const s = f.scale;
+  const trunkH = v.trunkHeightM * s;
+  const tr = Math.max(v.trunkRadiusM * s, 0.4);
+  const boxes: PickBox[] = [
+    { cx: f.x, cy: y + trunkH / 2, cz: f.z, hx: tr, hy: trunkH / 2, hz: tr, rotationY: 0 },
+  ];
+  if (v.canopy.shape !== "none") {
+    const h = v.canopy.heightM * s;
+    const r = v.canopy.radiusM * s;
+    boxes.push({ cx: f.x, cy: y + trunkH + h / 2, cz: f.z, hx: r, hy: h / 2, hz: r, rotationY: 0 });
+  }
+  return boxes;
+}
+
+/**
+ * Picks the placed item the ray hits first: trees by trunk and canopy, bushes by body, lines by
+ * their full height, buildings by their box. Ramps (flat on the ground) and anything the ray
+ * misses fall back to the ground-distance test at `ground` (the terrain hit under the cursor).
+ */
+export function pickFeatureByRay(
+  features: readonly TerrainFeature[],
+  buildings: readonly TerrainBuilding[],
+  objects: readonly TerrainObject[],
+  heightAt: HeightFn,
+  ray: PickRay,
+  ground: { readonly x: number; readonly z: number } | null,
+  radiusM: number,
+): ScenerySelection | undefined {
+  let best: ScenerySelection | undefined;
+  let bestT = Number.POSITIVE_INFINITY;
+  const consider = (t: number | undefined, sel: ScenerySelection): void => {
+    if (t !== undefined && t < bestT) {
+      bestT = t;
+      best = sel;
+    }
+  };
+  for (const f of features) {
+    for (const b of featurePickBoxes(f, heightAt))
+      consider(rayHitsBox(ray, b), { kind: "feature", id: f.id });
+  }
+  buildings.forEach((b, index) => {
+    consider(
+      rayHitsBox(ray, {
+        cx: b.center.x,
+        cy: b.center.y,
+        cz: b.center.z,
+        hx: b.halfExtents.x,
+        hy: b.halfExtents.y,
+        hz: b.halfExtents.z,
+        rotationY: b.rotationY,
+      }),
+      { kind: "building", index },
+    );
+  });
+  if (best !== undefined) return best;
+  if (ground === null) return undefined;
+  return pickFeatureAt(features, buildings, objects, ground.x, ground.z, radiusM);
 }
