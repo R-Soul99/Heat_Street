@@ -517,7 +517,7 @@ Plans:
 **Requirements**: TBD
 **Briefs:** `.planning/plans-ahead/01-start-points.md` (do first), then `.planning/plans-ahead/02-scenery-palette.md`. Summarised in `07.1.3-CONTEXT.md`.
 **Depends on:** Phase 07.1.2
-**Plans:** 9/11 plans executed
+**Plans:** 10/11 plans executed
 
 Plans:
 - [x] 07.1.3-01-PLAN.md — Start-point sidecar field and game spawn resolution (D-01, D-02, D-04, D-18)
@@ -529,7 +529,7 @@ Plans:
 - [x] 07.1.3-07-PLAN.md — Pure feature/building/ramp ops, placement guards (road, triangle limit, moves), scenery undo parts (D-09, D-12, D-14, D-16)
 - [x] 07.1.3-08-PLAN.md — Shared scenery view, crest-view extraction, game wiring, docs (D-09, D-11, D-13, D-17, D-19)
 - [x] 07.1.3-09-PLAN.md — Editor palette: scenery view, swatches, trees/bushes/scatter/buildings (D-13, D-21)
-- [ ] 07.1.3-10-PLAN.md — Editor hedge/fence lines and ramps (D-09, D-12, D-14)
+- [x] 07.1.3-10-PLAN.md — Editor hedge/fence lines and ramps (D-09, D-12, D-14)
 - [ ] 07.1.3-11-PLAN.md — Editor select/move/delete for scenery; 5-minute check and budget reading
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
