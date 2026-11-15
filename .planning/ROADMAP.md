@@ -372,7 +372,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
+- [x] 07-07-PLAN.md — Finish/interrupt/projection, best-finish persistence, Circuit Race card, end-of-phase sign-off (wave 6)
 
 ### Phase 07.1: Editor UX Overhaul (INSERTED)
 
@@ -551,7 +551,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6
 | 4.3. Terrain and Feel Follow-ups (INSERTED) | 12/12 | Complete | 2026-11-04 |
 | 5. Objectives, Navigation & Race Modes | 4/4 | Complete | 2026-09-21 |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
-| 7. NPC Driving AI & Circuit Racers | 6/7 | In Progress|  |
+| 7. NPC Driving AI & Circuit Racers | 7/7 | In Progress|  |
 | 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 
