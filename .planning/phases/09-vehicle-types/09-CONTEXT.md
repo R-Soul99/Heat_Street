@@ -26,7 +26,7 @@ The brief is the specification. Its stages (0 to 8) map to plans roughly one to 
 - **D-06:** Per-vehicle surface grip multipliers (`surfaceGripScale`) on the class spec; all 1.0 for existing classes.
 - **D-07:** AI keeps driving the muscle car. **Default pending user confirmation (ASK in brief D7).**
 - **D-08:** Non-`rwd` runs show a time but do not save a medal; match how `fwd`/`awd` are treated today and raise it with the user if that differs.
-- **D-09:** A golden test (stage 0) pins `rwd`, `fwd`, `awd` end states on a fixed input tape and stays unmodified and green through the whole phase.
+- **D-09:** A golden test (stage 0) pins `rwd`, `fwd`, `awd` end states on a fixed input tape and stays green through the whole phase. Its job is to catch accidental changes, not to protect medal times (user, 2026-11-15: medal times need not be retained at this stage). It may be updated only for a deliberate handling change the user has approved.
 - **D-10:** The monster truck is a time-boxed spike (stage 6) with a written result and a stop for the user before the pickup and monster truck are built. If it fails, do not start an arcade-assist layer or a physics-engine change without the user.
 
 ### Claude's Discretion

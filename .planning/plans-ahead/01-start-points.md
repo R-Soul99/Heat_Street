@@ -3,7 +3,7 @@
 > **Corrections (2026-11-15):** research for Phase 07.1.3 checked this brief against the code and found
 > some claims wrong or stale. Where they differ,
 > `.planning/phases/07.1.3-editor-feature-palette/07.1.3-RESEARCH.md` (section "Brief Verification") wins.
-> Main ones: solo `p2p` and `circuit` also start at the default spawn, so the sidecar default must apply in free drive only; hotkey `P` is taken; start-point ids need a counter outside the list; `loadTerrainArea` must pass the new field through.
+> Main ones: solo `p2p` and `circuit` also start at the default spawn, and the user decided (2026-11-15, CONTEXT D-18) that the sidecar default applies in all three with no mode gate; hotkey `P` is taken; start-point ids need a counter outside the list; `loadTerrainArea` must pass the new field through.
 
 Read `README.md` in this folder first (rules that apply to every plan).
 

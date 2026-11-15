@@ -48,9 +48,13 @@ memory and the existing code.
 7. **Saved browser tuning hides new defaults.** The `?debug` tuning panel saves
    to `localStorage` per vehicle class. After changing a default, test with a
    clean profile or clear the key, or the change will appear to do nothing.
-8. **Medal times depend on handling.** Any change to the shipped `rwd` car's
-   behaviour invalidates recorded medals. Plans 3 and 5 must leave the `rwd`
-   car's physics bit-identical; each says how to prove it.
+8. **No unintended handling changes.** Plans 3 and 5 must not change how the
+   existing `rwd`, `fwd` and `awd` cars drive by accident; each says how to
+   prove it (a golden test). Existing medal times do **not** need protecting
+   at this stage (user decision 2026-11-15): they will be re-recorded once
+   handling, vehicles and maps settle. So a deliberate, user-approved handling
+   change may update the golden test, and no plan should add complexity only
+   to keep old medal times valid.
 9. **Fix the car, not the terrain.** Do not reshape maps or ramps to hide a
    handling problem.
 10. **Keep human checks short.** The user dislikes re-driving the same long

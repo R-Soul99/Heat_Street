@@ -61,6 +61,7 @@ Gate look, exact warning thresholds, wave split.
 - Medal recording per stage and vehicle (with the user, after handling is settled)
 - AI opponents on stages
 - Dust-cloud line-of-sight evasion (seed)
+- Authoring road race routes (race nodes and checkpoints) in the editor (user request 2026-11-15; todo `2026-11-15-author-race-routes-in-the-editor.md`). Keep the gate-authoring tool general enough to be reused for it.
 
 </deferred>
 
