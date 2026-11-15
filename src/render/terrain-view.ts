@@ -14,7 +14,7 @@
  * Layering: reads sim data only; imports three + pure src/core, never Rapier.
  */
 import * as THREE from "three";
-import { type AuthoredCrest, buildCrestGeometry } from "../core/crest-geometry.ts";
+import type { AuthoredCrest } from "../core/crest-geometry.ts";
 import { sampleHeightfieldBilinear } from "../core/heightfield-sample.ts";
 import type { SurfaceType } from "../core/surface-types.ts";
 import type { BermBox } from "../core/terrain-edge-berm.ts";
@@ -31,6 +31,7 @@ import {
   type PaintMap,
   paintIndexAt,
 } from "../core/terrain-paint.ts";
+import { buildCrestMeshes } from "./crest-view.ts";
 import { buildBermMesh } from "./edge-berm-mesh.ts";
 
 export const TERRAIN_CHUNK_CELLS = 64;
@@ -273,27 +274,11 @@ export function buildTerrainView(
   }
 
   // Crest meshes (flat-shaded domes seated on the same terrain), not in `group`.
-  const crestMeshes: THREE.Mesh[] = [];
-  if (opts.crests !== undefined && opts.crests.length > 0) {
-    const entries = buildCrestGeometry(opts.crests, (x, z) =>
-      sampleHeightfieldBilinear(grid, x, z),
-    );
-    for (const entry of entries) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(entry.positions, 3));
-      geo.setIndex(new THREE.BufferAttribute(entry.indices, 1));
-      geo.setAttribute("normal", new THREE.BufferAttribute(faceWeightedNormals(entry), 3));
-      geo.computeBoundingSphere();
-      const mat = new THREE.MeshStandardMaterial({
-        color: palette[entry.surface] ?? palette.grass,
-        roughness: 0.95,
-        metalness: 0,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.receiveShadow = true;
-      crestMeshes.push(mesh);
-    }
-  }
+  const crestMeshes: THREE.Mesh[] = buildCrestMeshes(
+    opts.crests ?? [],
+    (x, z) => sampleHeightfieldBilinear(grid, x, z),
+    palette,
+  );
 
   // Edge berm (04.3 D-09): ONE merged mesh built from the same boxes the physics
   // scene collides with. Game view only; the editor passes no edgeBerm.
@@ -400,40 +385,4 @@ export function buildTerrainView(
       }
     },
   };
-}
-
-/** Area-weighted vertex normals for crest entries (CCW-from-+Y winding). */
-function faceWeightedNormals(entry: {
-  positions: Float32Array;
-  indices: Uint32Array;
-}): Float32Array {
-  const p = entry.positions;
-  const n = new Float32Array(p.length);
-  const idx = entry.indices;
-  for (let t = 0; t < idx.length; t += 3) {
-    const a = idx[t] * 3;
-    const b = idx[t + 1] * 3;
-    const c = idx[t + 2] * 3;
-    const ux = p[b] - p[a];
-    const uy = p[b + 1] - p[a + 1];
-    const uz = p[b + 2] - p[a + 2];
-    const vx = p[c] - p[a];
-    const vy = p[c + 1] - p[a + 1];
-    const vz = p[c + 2] - p[a + 2];
-    const nx = uy * vz - uz * vy;
-    const ny = uz * vx - ux * vz;
-    const nz = ux * vy - uy * vx;
-    for (const i of [a, b, c]) {
-      n[i] += nx;
-      n[i + 1] += ny;
-      n[i + 2] += nz;
-    }
-  }
-  for (let i = 0; i < n.length; i += 3) {
-    const len = Math.hypot(n[i], n[i + 1], n[i + 2]) || 1;
-    n[i] /= len;
-    n[i + 1] /= len;
-    n[i + 2] /= len;
-  }
-  return n;
 }
