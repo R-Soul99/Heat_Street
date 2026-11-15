@@ -35,9 +35,12 @@ function build(): { features: TerrainFeature[]; buildings: TerrainBuilding[] } {
   }
   const lineKinds: { kind: "hedge" | "fence"; variant: string }[] = [
     ...Array.from({ length: 30 }, () => ({ kind: "hedge" as const, variant: "box" })),
-    ...Array.from({ length: 10 }, () => ({ kind: "fence" as const, variant: "post-rail" })),
-    ...Array.from({ length: 10 }, () => ({ kind: "fence" as const, variant: "picket" })),
-    ...Array.from({ length: 10 }, () => ({ kind: "fence" as const, variant: "chainlink" })),
+    // Slatted pickets cost far more than the old solid panel (11 boxes per 8 m), so the fence mix is
+    // 1 post-rail + 3 picket + 6 chainlink lines: 252 + 3x1,452 + 6x492 = 7,560 triangles, the same
+    // fence total as before, so the 37,900 worst case and its headroom are unchanged.
+    ...Array.from({ length: 1 }, () => ({ kind: "fence" as const, variant: "post-rail" })),
+    ...Array.from({ length: 3 }, () => ({ kind: "fence" as const, variant: "picket" })),
+    ...Array.from({ length: 6 }, () => ({ kind: "fence" as const, variant: "chainlink" })),
   ];
   lineKinds.forEach((lk, i) => {
     features.push({

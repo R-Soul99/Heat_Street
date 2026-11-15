@@ -86,6 +86,10 @@ the average ground height so no end floats on a slope.
 | pitched roof (closed prism) | 8 |
 | flat roof (slab) | 12 |
 
-- The dense worst-case fixture (`tests/fixtures/dense-scenery.ts`) totals **37,900** triangles in
+- Fence cost per 8 m segment: post-rail 1 rail box, picket 11 boxes (a backing rail and ten slats,
+  one slat about every 0.8 m), chainlink 3 wire boxes, plus one post box per segment start and one
+  closing post per line (`fenceRailBoxCount`, 12 triangles each). The fence collider is still one
+  solid panel per segment, so a car cannot slip between slats.
+- The dense worst-case fixture (`tests/fixtures/dense-scenery.ts`; 30 hedges, 1 post-rail, 3 picket and 6 chainlink fence lines) totals **37,900** triangles in
   the sums above and in the meshes `createSceneryView` actually builds
   (`tests/scenery-view.test.ts` checks both and that the draw count stays at or under 12).

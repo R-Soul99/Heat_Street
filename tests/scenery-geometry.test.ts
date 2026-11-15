@@ -151,7 +151,8 @@ describe("featureInstances", () => {
     );
     expect(i.trees.find((t) => t.variant === "pine")?.transforms).toHaveLength(2);
     expect(i.bushes).toHaveLength(1);
-    expect(i.fenceRails).toHaveLength(3);
+    // 20 m picket = 3 segments of 6.67 m: backing rail + 8 slats each
+    expect(i.fenceRails).toHaveLength(27);
     expect(i.fencePosts).toHaveLength(4);
     const j = featureInstances(
       [
@@ -163,7 +164,7 @@ describe("featureInstances", () => {
       ],
       flat,
     );
-    expect(j.fenceRails).toHaveLength(2);
+    expect(j.fenceRails).toHaveLength(22);
     expect(j.fencePosts).toHaveLength(3);
   });
 });
@@ -203,6 +204,23 @@ describe("sceneryTriangles", () => {
         [],
         opt,
       ),
+    ).toBe(156); // 8 m picket: backing rail + 10 slats + start post + closing post = 13 boxes
+    const chain = line("fence", "chainlink", [
+      [0, 0],
+      [8, 0],
+    ]);
+    expect(sceneryTriangles([chain], [], opt)).toBe(60); // 3 wires + 2 posts
+    expect(
+      sceneryTriangles(
+        [
+          line("fence", "post-rail", [
+            [0, 0],
+            [8, 0],
+          ]),
+        ],
+        [],
+        opt,
+      ),
     ).toBe(36);
     const mk = (style?: string): TerrainBuilding => ({
       center: { x: 0, y: 0, z: 0 },
@@ -217,7 +235,7 @@ describe("sceneryTriangles", () => {
   });
   it("dense fixture is exactly 37900, under the limit", () => {
     // trees 300x15 + 300x30 + 200x10 = 15,500; bushes 400x20 = 8,000; hedges 300x12 = 3,600;
-    // fences 300x24 + 30x12 = 7,560; buildings 90x20 + 60x24 = 3,240; total 37,900
+    // fences 10 lines: 1 post-rail x252 + 3 picket x1,452 + 6 chainlink x492 = 7,560; buildings 90x20 + 60x24 = 3,240; total 37,900
     const n = sceneryTriangles(DENSE_FEATURES, DENSE_BUILDINGS, { includeStyleless: false });
     expect(n).toBe(37900);
     expect(n).toBeLessThanOrEqual(MAX_SCENERY_TRIANGLES);

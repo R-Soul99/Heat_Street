@@ -110,6 +110,21 @@ export interface LineSegment {
   readonly widthM: number;
 }
 
+/** Picket fences draw one slat roughly every PICKET_SPACING_M along each segment (gaps between them). */
+export const PICKET_SPACING_M = 0.8;
+/** Slat width along the fence, metres. */
+const PICKET_SLAT_M = 0.28;
+
+/**
+ * Boxes (not counting posts) one fence segment of lengthM draws: post-rail 1 rail; picket one
+ * backing rail plus the slats; chainlink a top, middle and bottom wire rail.
+ */
+export function fenceRailBoxCount(variant: string, lengthM: number): number {
+  if (variant === "picket") return 1 + Math.max(1, Math.round(lengthM / PICKET_SPACING_M));
+  if (variant === "chainlink") return 3;
+  return 1;
+}
+
 function splitCount(distM: number): number {
   if (distM < EPS_M) return 0;
   return Math.ceil(distM / MAX_SEGMENT_M - 1e-9);
@@ -243,18 +258,47 @@ export function featureInstances(
         const v = resolveVariant("fence", f.variant);
         if (v === undefined) continue;
         const segs = lineSegments(f.points, heightAt, f.heightM, v.thicknessM);
-        const rail = f.variant === "post-rail";
         for (const s of segs) {
-          fenceRails.push({
+          const rail = (yFrac: number, h: number): SegmentBox => ({
             x: s.x,
-            y: rail ? s.y + f.heightM * 0.7 : s.y + f.heightM / 2,
+            y: s.y + f.heightM * yFrac,
             z: s.z,
             lengthM: s.lengthM,
-            heightM: rail ? 0.3 : f.heightM,
+            heightM: h,
             widthM: v.thicknessM,
             rotationY: s.rotationY,
             variant: f.variant,
           });
+          if (f.variant === "picket") {
+            // Spaced slats on a backing rail: reads as a picket fence, not a solid wall.
+            fenceRails.push(rail(0.55, 0.1));
+            const n = Math.max(1, Math.round(s.lengthM / PICKET_SPACING_M));
+            const dirX = Math.cos(s.rotationY);
+            const dirZ = -Math.sin(s.rotationY);
+            const slatH = f.heightM * 0.9 + 0.1;
+            for (let k = 0; k < n; k++) {
+              const t = -s.lengthM / 2 + ((k + 0.5) * s.lengthM) / n;
+              const px = s.x + dirX * t;
+              const pz = s.z + dirZ * t;
+              fenceRails.push({
+                x: px,
+                y: heightAt(px, pz) - 0.1 + slatH / 2,
+                z: pz,
+                lengthM: PICKET_SLAT_M,
+                heightM: slatH,
+                widthM: v.thicknessM,
+                rotationY: s.rotationY,
+                variant: f.variant,
+              });
+            }
+          } else if (f.variant === "chainlink") {
+            // Posts plus top, middle and bottom wire: see-through, not a solid panel.
+            fenceRails.push(rail(1 - 0.04 / f.heightM, 0.08));
+            fenceRails.push(rail(0.5, 0.05));
+            fenceRails.push(rail(0.1, 0.05));
+          } else {
+            fenceRails.push(rail(0.7, 0.3));
+          }
           fencePosts.push({
             x: s.startX,
             y: s.startY,
@@ -344,14 +388,18 @@ export function sceneryTriangles(
   for (const f of features) {
     if ("points" in f) {
       let segs = 0;
+      let rails = 0;
       for (let i = 0; i + 1 < f.points.length; i++) {
         const a = f.points[i];
         const b = f.points[i + 1];
         if (a === undefined || b === undefined) continue;
-        segs += splitCount(Math.hypot(b[0] - a[0], b[1] - a[1]));
+        const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const n = splitCount(dist);
+        segs += n;
+        if (n > 0) rails += n * fenceRailBoxCount(f.variant, dist / n);
       }
       if (f.kind === "hedge") total += segs * T.unitBox;
-      else if (segs > 0) total += segs * 2 * T.unitBox + T.unitBox;
+      else if (segs > 0) total += (rails + segs + 1) * T.unitBox;
     } else if (f.kind === "bush") {
       total += T.bush;
     } else {

@@ -42,9 +42,11 @@ export interface HedgeVariant {
 }
 
 /**
- * A fence draws ONE rail/panel box per segment (picket and chainlink as a full-height thin panel,
- * post-rail as a 0.3 m rail at 70% of the height), plus one post at every segment start and one
- * closing post at the line's last point. Segments are at most 8 m, so posts are at most 8 m apart.
+ * A fence segment draws post-rail: one 0.3 m rail at 70% of the height; picket: a backing rail plus
+ * one slat about every 0.8 m (see `fenceRailBoxCount`); chainlink: top, middle and bottom wire
+ * rails. Every variant adds one post at each segment start and one closing post at the line's last
+ * point. Segments are at most 8 m, so posts are at most 8 m apart. The collider stays one solid
+ * panel per segment whatever is drawn.
  */
 export interface FenceVariant {
   readonly id: string;
