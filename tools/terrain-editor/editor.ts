@@ -873,12 +873,20 @@ let buildingBoxes: {
   rotation: ReturnType<typeof createStepper>;
 } | null = null;
 
+/** Writes the triangle count to the info bar (always visible) and the sidebar line when present. */
+function showBudgetText(triangles: number): void {
+  const text = `${triangles.toLocaleString("en-US")} / 40,000`;
+  shell.info.set("scenery", text);
+  if (budgetEl) budgetEl.textContent = `Scenery triangles: ${text}`;
+}
+
 function refreshBudgetReadout(): void {
-  if (!budgetEl || !area) return;
-  const triangles = estimateSceneryTriangles(area.features ?? [], area.buildings, {
-    drawStyleless: !area.legacyGlbBuildings,
-  });
-  budgetEl.textContent = `Scenery triangles: ${triangles.toLocaleString("en-US")} / 40,000`;
+  if (!area) return;
+  showBudgetText(
+    estimateSceneryTriangles(area.features ?? [], area.buildings, {
+      drawStyleless: !area.legacyGlbBuildings,
+    }),
+  );
 }
 
 /** Writes the budget message line (error colour, aria-live polite); empty clears it. */
@@ -1748,11 +1756,12 @@ function scatterStamp(d: NonNullable<typeof scatterDrag>, x: number, z: number):
 
 /** The budget readout for a working copy that is not committed yet. */
 function refreshBudgetReadoutWith(features: readonly TerrainFeature[]): void {
-  if (!budgetEl || !area) return;
-  const triangles = estimateSceneryTriangles(features, area.buildings, {
-    drawStyleless: !area.legacyGlbBuildings,
-  });
-  budgetEl.textContent = `Scenery triangles: ${triangles.toLocaleString("en-US")} / 40,000`;
+  if (!area) return;
+  showBudgetText(
+    estimateSceneryTriangles(features, area.buildings, {
+      drawStyleless: !area.legacyGlbBuildings,
+    }),
+  );
 }
 
 function finishScatter(): void {
@@ -2755,7 +2764,7 @@ async function confirmDiscard(): Promise<boolean> {
 
 function refreshInfo(): void {
   if (!area) {
-    for (const k of ["area", "size", "cell", "cursor", "surface", "roads", "change"])
+    for (const k of ["area", "size", "cell", "cursor", "surface", "roads", "scenery", "change"])
       shell.info.set(k, "");
     return;
   }
@@ -2869,6 +2878,7 @@ function installArea(next: TerrainArea): void {
   refreshOverlays();
   refreshRoadLockOverlay();
   refreshInfo();
+  refreshBudgetReadout();
   rebuildStartMarkers();
   syncToolbar();
 }
@@ -5286,6 +5296,11 @@ const shell = createShell({
     { key: "cursor", label: "Cursor", tip: "Cursor position and terrain height under it" },
     { key: "surface", label: "Surface", tip: "Surface type under the cursor" },
     { key: "roads", label: "Roads", tip: "Number of road segments in the area" },
+    {
+      key: "scenery",
+      label: "Scenery",
+      tip: "Scenery triangles used out of the 40,000 limit",
+    },
     { key: "change", label: "Change", tip: "Size of the last height edit" },
   ],
 });
