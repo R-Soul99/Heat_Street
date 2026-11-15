@@ -65,6 +65,9 @@ export function createNavigationArrow(project?: ScreenProjector): NavigationArro
   element.style.cssText = project
     ? "position:fixed;left:0;top:0;z-index:8;font:700 34px/1 sans-serif;color:#ffd447;text-shadow:0 0 12px #071015;pointer-events:none;will-change:transform"
     : "position:fixed;top:24px;left:50%;z-index:8;transform:translateX(-50%);font:700 34px/1 sans-serif;color:#ffd447;text-shadow:0 0 12px #071015;pointer-events:none";
+  // Hidden until the first update places it; otherwise it sits at the top-left corner (behind the
+  // debug map menu) on maps that never give it a waypoint.
+  element.style.visibility = "hidden";
   document.body.appendChild(element);
   return {
     update(snapshot): void {
