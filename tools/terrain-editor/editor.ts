@@ -9,6 +9,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { yawFromTravelDirection } from "../../src/core/heading.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
+import {
+  BUILDING_STYLES,
+  BUSH_VARIANTS,
+  resolveBuildingStyle,
+  TREE_VARIANTS,
+} from "../../src/core/scenery-catalog.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
 import { maskAverageHeight, stepRadiusCells } from "../../src/core/terrain-brush.ts";
 import { nearestEdgeHeading, terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
@@ -45,6 +51,11 @@ import {
 } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import {
+  createSceneryView,
+  estimateSceneryTriangles,
+  type SceneryView,
+} from "../../src/render/scenery-view.ts";
+import {
   buildTerrainView,
   TERRAIN_SURFACE_PALETTE,
   type TerrainView,
@@ -55,6 +66,7 @@ import {
   createSection,
   createSelect,
   createStepper,
+  createToggle,
   el,
 } from "../editor-shell/controls.ts";
 import { confirmDialog, openDialog } from "../editor-shell/dialog.ts";
@@ -687,6 +699,424 @@ function startPointAt(x: number, z: number): TerrainStartPoint | undefined {
   return best;
 }
 
+// ---------------------------------------------------------------- scenery view and palette (07.1.3 plan 09)
+
+const ROTATION_STEP_DEG = 15;
+/** Shown beside the triangle count; the refusal decision itself lives in scenery-guards.ts. */
+const BUDGET_ERROR_COLOUR = "#ff6b6b";
+
+let sceneryView: SceneryView | null = null;
+
+function heightAtArea(x: number, z: number): number {
+  return area ? sampleTerrainHeight(area.grid, x, z) : 0;
+}
+
+/** Features or buildings changed (edit, undo, redo): only the changed kind rebuilds. */
+function sceneryChanged(r: { featuresChanged?: boolean; buildingsChanged?: boolean }): void {
+  if (!area || !sceneryView) return;
+  if (r.featuresChanged) sceneryView.setFeatures(area.features ?? []);
+  if (r.buildingsChanged) sceneryView.setBuildings(area.buildings);
+  if (r.featuresChanged || r.buildingsChanged) refreshBudgetReadout();
+}
+
+/** Sculpting under scenery re-seats it on the new ground (buildings re-seat inside the stroke diff). */
+function reseatScenery(w: CellWindow): void {
+  if (!area || !sceneryView) return;
+  const g = area.grid;
+  const hit = (area.features ?? []).some((f) => {
+    const pts: readonly (readonly [number, number])[] = "points" in f ? f.points : [[f.x, f.z]];
+    let minC = Number.POSITIVE_INFINITY;
+    let maxC = Number.NEGATIVE_INFINITY;
+    let minR = Number.POSITIVE_INFINITY;
+    let maxR = Number.NEGATIVE_INFINITY;
+    for (const p of pts) {
+      const col = (p[0] - g.originX) / g.cellSizeM;
+      const row = (p[1] - g.originZ) / g.cellSizeM;
+      minC = Math.min(minC, col);
+      maxC = Math.max(maxC, col);
+      minR = Math.min(minR, row);
+      maxR = Math.max(maxR, row);
+    }
+    return (
+      maxC >= w.minCol - 1 && minC <= w.maxCol + 1 && maxR >= w.minRow - 1 && minR <= w.maxRow + 1
+    );
+  });
+  if (hit) sceneryView.reseat(heightAtArea);
+}
+
+type PointPlaceKind = "tree" | "bush";
+type SceneryPlaceKind = PointPlaceKind | "building";
+
+interface PointPalette {
+  variant: string;
+  scale: number;
+  randomRotation: boolean;
+  rotationDeg: number;
+  scatter: boolean;
+  densityPer100m2: number;
+}
+
+/** Remembered per kind for the session (D-15). */
+const pointPalette: Record<PointPlaceKind, PointPalette> = {
+  tree: {
+    variant: TREE_VARIANTS[0]?.id ?? "oak",
+    scale: 1,
+    randomRotation: true,
+    rotationDeg: 0,
+    scatter: false,
+    densityPer100m2: 5,
+  },
+  bush: {
+    variant: BUSH_VARIANTS[0]?.id ?? "round",
+    scale: 1,
+    randomRotation: true,
+    rotationDeg: 0,
+    scatter: false,
+    densityPer100m2: 5,
+  },
+};
+
+const buildingPalette = {
+  style: BUILDING_STYLES[0]?.id ?? "shed",
+  widthM: BUILDING_STYLES[0]?.defaultWidthM ?? 4,
+  depthM: BUILDING_STYLES[0]?.defaultDepthM ?? 3,
+  heightM: BUILDING_STYLES[0]?.defaultHeightM ?? 2.5,
+  rotationDeg: 0,
+};
+
+const SCALE_SPEC: StepperSpec = { step: 0.1, coarse: 0.5, min: 0.5, max: 2, decimals: 1 };
+const ROTATION_SPEC: StepperSpec = {
+  step: ROTATION_STEP_DEG,
+  coarse: 45,
+  min: 0,
+  max: 359,
+  decimals: 0,
+};
+const DENSITY_SPEC: StepperSpec = { step: 1, coarse: 5, min: 1, max: 20, decimals: 0 };
+const BUILDING_SIDE_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 1, max: 100, decimals: 1 };
+const BUILDING_HEIGHT_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 1, max: 60, decimals: 1 };
+
+let budgetEl: HTMLElement | null = null;
+let budgetMsgEl: HTMLElement | null = null;
+/** Last budget refusal or scatter-skip text; shown in the sidebar until the next change. */
+let budgetMessage = "";
+/** Steppers of the armed Building palette, so a dragged footprint can write its size back. */
+let buildingBoxes: {
+  width: ReturnType<typeof createStepper>;
+  depth: ReturnType<typeof createStepper>;
+  height: ReturnType<typeof createStepper>;
+  rotation: ReturnType<typeof createStepper>;
+} | null = null;
+
+function refreshBudgetReadout(): void {
+  if (!budgetEl || !area) return;
+  const triangles = estimateSceneryTriangles(area.features ?? [], area.buildings, {
+    drawStyleless: !area.legacyGlbBuildings,
+  });
+  budgetEl.textContent = `Scenery triangles: ${triangles.toLocaleString("en-US")} / 40,000`;
+}
+
+/** Writes the budget message line (error colour, aria-live polite); empty clears it. */
+function setBudgetMessage(text: string): void {
+  budgetMessage = text;
+  if (budgetMsgEl) budgetMsgEl.textContent = text;
+}
+
+function sentenceCase(id: string): string {
+  const t = id.replace(/-/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function hexColour(n: number): string {
+  return `#${n.toString(16).padStart(6, "0")}`;
+}
+
+/** Dark or light glyph colour for a flat tile (simple luminance test). */
+function glyphColourFor(n: number): string {
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 140 ? "#1d2026" : "#f2f2f2";
+}
+
+/** UI-SPEC rule: 3 columns if the count divides by 3, else 2 if by 2, else 1, so rows are always full. */
+function swatchColumns(n: number): number {
+  if (n % 3 === 0) return 3;
+  if (n % 2 === 0) return 2;
+  return 1;
+}
+
+interface SwatchItem {
+  id: string;
+  color: number;
+}
+
+/** A role=radiogroup of flat colour tiles with glyph and name (D-15). `list` = 1-column 40px rows. */
+function buildSwatchGroup(
+  kindWord: string,
+  glyph: string,
+  items: readonly SwatchItem[],
+  selected: string,
+  list: boolean,
+  onPick: (id: string) => void,
+): HTMLElement {
+  const group = el("div", "swatch-grid");
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", `${kindWord} variant`);
+  group.style.display = "grid";
+  group.style.gridTemplateColumns = `repeat(${list ? 1 : swatchColumns(items.length)}, 1fr)`;
+  group.style.gap = "4px";
+  group.style.padding = "4px 0";
+  const buttons: [string, HTMLButtonElement][] = [];
+  const sync = (now: string): void => {
+    for (const [id, b] of buttons) {
+      b.setAttribute("aria-checked", String(id === now));
+      b.style.outline = id === now ? "2px solid #4aa3ff" : "1px solid #555";
+      b.style.outlineOffset = id === now ? "1px" : "0";
+    }
+  };
+  for (const it of items) {
+    const name = sentenceCase(it.id);
+    const b = el("button", "swatch", undefined, `${kindWord}: ${name}`);
+    b.type = "button";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-label", `${kindWord} ${it.id}`);
+    b.style.padding = "0";
+    b.style.cursor = "pointer";
+    b.style.display = "flex";
+    b.style.flexDirection = list ? "row" : "column";
+    b.style.alignItems = "stretch";
+    b.style.overflow = "hidden";
+    b.style.background = "var(--panel-2,#262a32)";
+    b.style.color = "var(--text,#e6e6e6)";
+    b.style.height = list ? "40px" : "56px";
+    const tile = el("div", undefined, glyph);
+    tile.style.cssText = `display:flex;align-items:center;justify-content:center;background:${hexColour(it.color)};color:${glyphColourFor(it.color)};${list ? "width:40px;height:40px;flex:none" : "height:40px;flex:none"}`;
+    const label = el("div", undefined, name);
+    label.style.cssText = list
+      ? "display:flex;align-items:center;padding:0 8px;font-size:11px;flex:1"
+      : "height:16px;line-height:16px;font-size:11px;text-align:center";
+    b.append(tile, label);
+    b.addEventListener("click", () => {
+      sync(it.id);
+      onPick(it.id);
+    });
+    buttons.push([it.id, b]);
+    group.appendChild(b);
+  }
+  sync(selected);
+  return group;
+}
+
+/** Sidebar for an armed Building, Tree or Bush: hint, budget readout, swatches, option values (D-15). */
+function buildScenerySidebar(kind: SceneryPlaceKind, f: HTMLElement): void {
+  budgetEl = el("div", "muted");
+  budgetMsgEl = el("div");
+  budgetMsgEl.setAttribute("aria-live", "polite");
+  budgetMsgEl.style.color = BUDGET_ERROR_COLOUR;
+  budgetMsgEl.textContent = budgetMessage;
+  f.append(note(PLACE_HINT[kind]), budgetEl, budgetMsgEl);
+  refreshBudgetReadout();
+  buildingBoxes = null;
+
+  if (kind === "building") {
+    const pal = buildingPalette;
+    const swatches = buildSwatchGroup(
+      "Building",
+      "▣",
+      BUILDING_STYLES.map((s) => ({ id: s.id, color: s.wallColor })),
+      pal.style,
+      true,
+      (id) => {
+        const st = resolveBuildingStyle(id);
+        if (!st) return;
+        pal.style = id;
+        pal.widthM = st.defaultWidthM;
+        pal.depthM = st.defaultDepthM;
+        pal.heightM = st.defaultHeightM;
+        buildingBoxes?.width.set(pal.widthM);
+        buildingBoxes?.depth.set(pal.depthM);
+        buildingBoxes?.height.set(pal.heightM);
+        onPaletteChanged();
+      },
+    );
+    const width = optStepper(
+      "Width",
+      "Building width in metres",
+      BUILDING_SIDE_SPEC,
+      pal.widthM,
+      "m",
+      (v) => {
+        pal.widthM = v;
+        onPaletteChanged();
+      },
+      true,
+    );
+    const depth = optStepper(
+      "Depth",
+      "Building depth in metres",
+      BUILDING_SIDE_SPEC,
+      pal.depthM,
+      "m",
+      (v) => {
+        pal.depthM = v;
+        onPaletteChanged();
+      },
+    );
+    const height = optStepper(
+      "Height",
+      "Building height above the highest ground under it, in metres",
+      BUILDING_HEIGHT_SPEC,
+      pal.heightM,
+      "m",
+      (v) => {
+        pal.heightM = v;
+        onPaletteChanged();
+      },
+    );
+    const rotation = optStepper(
+      "Rotation",
+      "Building rotation in degrees (the wheel turns it 15 degrees while you drag)",
+      ROTATION_SPEC,
+      pal.rotationDeg,
+      "deg",
+      (v) => {
+        pal.rotationDeg = v;
+        onPaletteChanged();
+      },
+    );
+    buildingBoxes = {
+      width: width.stepper,
+      depth: depth.stepper,
+      height: height.stepper,
+      rotation: rotation.stepper,
+    };
+    f.append(
+      createField("Style", swatches, "Building style"),
+      width.field,
+      depth.field,
+      height.field,
+      rotation.field,
+    );
+    return;
+  }
+
+  const pal = pointPalette[kind];
+  const items: SwatchItem[] =
+    kind === "tree"
+      ? TREE_VARIANTS.map((v) => ({
+          id: v.id,
+          color: v.canopy.shape === "none" ? v.trunkColor : v.canopyColor,
+        }))
+      : BUSH_VARIANTS.map((v) => ({ id: v.id, color: v.color }));
+  const kindWord = kind === "tree" ? "Tree" : "Bush";
+  const swatches = buildSwatchGroup(
+    kindWord,
+    kind === "tree" ? "♣" : "✿",
+    items,
+    pal.variant,
+    false,
+    (id) => {
+      pal.variant = id;
+      onPaletteChanged();
+    },
+  );
+  const scale = optStepper(
+    "Scale",
+    "Size multiplier, 0.5 to 2",
+    SCALE_SPEC,
+    pal.scale,
+    "x",
+    (v) => {
+      pal.scale = v;
+      onPaletteChanged();
+    },
+    true,
+  );
+  const scaleActive = activeValue;
+
+  const rotationBox = el("div");
+  const rotationField = optStepper(
+    "Rotation",
+    "Fixed rotation in degrees",
+    ROTATION_SPEC,
+    pal.rotationDeg,
+    "deg",
+    (v) => {
+      pal.rotationDeg = v;
+      onPaletteChanged();
+    },
+  ).field;
+  const renderRotation = (): void => {
+    rotationBox.replaceChildren(...(pal.randomRotation ? [] : [rotationField]));
+  };
+  const randomToggle = createToggle({
+    label: "Random rotation",
+    checked: pal.randomRotation,
+    tip: "Give every placed instance a random rotation",
+    onChange: (v) => {
+      pal.randomRotation = v;
+      renderRotation();
+      onPaletteChanged();
+    },
+  });
+  renderRotation();
+
+  // Scatter section, closed by default. Radius shows only while Scatter is on.
+  const radiusBox = el("div");
+  const renderScatter = (): void => {
+    radiusBox.replaceChildren(
+      ...(pal.scatter
+        ? [
+            createField(
+              "Radius",
+              brushSizeStepper.el,
+              "Scatter radius in metres ([ ] also change it)",
+            ),
+          ]
+        : []),
+    );
+    activeValue = pal.scatter ? radiusActive : scaleActive;
+  };
+  const scatterToggle = createToggle({
+    label: "Scatter",
+    checked: pal.scatter,
+    tip: "Scatter: drag to paint many at once",
+    onChange: (v) => {
+      pal.scatter = v;
+      renderScatter();
+      onPaletteChanged();
+    },
+  });
+  const density = optStepper(
+    "Density",
+    "Instances per 100 m² of the brush circle",
+    DENSITY_SPEC,
+    pal.densityPer100m2,
+    "per 100 m²",
+    (v) => {
+      pal.densityPer100m2 = v;
+    },
+  );
+  renderScatter();
+  f.append(
+    createField("Variant", swatches, `${kindWord} variant`),
+    scale.field,
+    randomToggle.el,
+    rotationBox,
+    createSection("Scatter", "Scatter: drag to paint many at once", false, [
+      scatterToggle.el,
+      density.field,
+      radiusBox,
+    ]),
+  );
+}
+
+/** A palette value changed (variant, size, rotation, scatter): refresh whatever follows the cursor. */
+function onPaletteChanged(): void {
+  // The cursor ghost follows the palette (wired with the placement gestures).
+}
+
 function resize(): void {
   const w = Math.max(1, wrap.clientWidth);
   const h = Math.max(1, wrap.clientHeight);
@@ -808,10 +1238,22 @@ function installArea(next: TerrainArea): void {
     scene.remove(terrainView.group);
     terrainView.dispose();
   }
+  if (sceneryView) {
+    scene.remove(sceneryView.group);
+    sceneryView.dispose();
+  }
   stopOpHold();
   shell.bar?.closeMenus();
   area = next;
   dispatcher.clearHistory();
+  budgetMessage = "";
+  sceneryView = createSceneryView(
+    next.features ?? [],
+    next.buildings,
+    (x, z) => sampleTerrainHeight(next.grid, x, z),
+    { drawStyleless: true },
+  );
+  scene.add(sceneryView.group);
   pushPull = null; // dialogs cancel a live push/pull before an area is replaced
   dispatcher.clearSelection();
   shell.info.set("change", "");
@@ -1427,6 +1869,7 @@ function maybeRebuildContours(x: number, z: number): void {
 
 function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
   if (!w || !area) return;
+  reseatScenery(w);
   reseatStartMarkers(w);
   if (gridOn) {
     gridKey = "";
@@ -1741,8 +2184,12 @@ function applyResult(res: ToolResult, _ms: number): void {
       res.dirtyPaint !== undefined ||
       res.graphChanged ||
       res.lockChanged ||
-      res.startPointsChanged);
+      res.startPointsChanged ||
+      res.featuresChanged ||
+      res.buildingsChanged ||
+      res.objectsChanged);
   if (res.startPointsChanged) startPointsEdited();
+  sceneryChanged(res);
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
   refreshSelectionOutline();
   if (res.selectionChanged) syncToolbar();
@@ -1826,6 +2273,7 @@ function cancelPushPullDrag(message: string): void {
   const r = dispatcher.cancelPushPull();
   rebuild(r.dirtyHeights, { heights: true });
   refreshOverlaysAfterEdit(r.dirtyHeights);
+  sceneryChanged(r);
   refreshSelectionOutline();
   if (!pp.dirtyBefore) setDirty(false);
   shell.info.set("change", "");
@@ -2082,6 +2530,8 @@ function undoRedo(kind: "undo" | "redo"): void {
     refreshInfo();
   }
   if (r.startPointsChanged) startPointsEdited();
+  sceneryChanged(r);
+  setBudgetMessage("");
   refreshRoadProblems();
 }
 
@@ -2393,12 +2843,19 @@ function buildSidebar(): void {
   surfaceReadoutEl = null;
   selectionAvgEl = null;
   roadsCountEl = null;
+  budgetEl = null;
+  budgetMsgEl = null;
+  buildingBoxes = null;
   const o = dispatcher.getOptions();
   const f = shell.flyout;
   f.replaceChildren();
   const mode = dispatcher.getMode();
   const armed = dispatcher.getArmed();
   const placingKind = dispatcher.placing();
+  if (placingKind === "building" || placingKind === "tree" || placingKind === "bush") {
+    buildScenerySidebar(placingKind, f);
+    return;
+  }
   if (placingKind !== null) {
     f.append(note(PLACE_HINT[placingKind]));
     if (placingKind === "start") f.append(buildStartPointsSection(true));
