@@ -83,6 +83,7 @@ import {
   type PursuerRole,
 } from "./core/pursuer-driver";
 import { createRoleAssigner } from "./core/pursuit-roles";
+import { resolveRaceLaps } from "./core/race-laps";
 import { AI_PAINTS, AI_RACER_COUNT, PLAYER_GRID_SLOT, RACE_FIELD_SIZE } from "./core/race-start";
 import { createRaceState } from "./core/race-state";
 import { buildGridPoses, buildRacingLine } from "./core/racing-line";
@@ -880,11 +881,15 @@ try {
   // through the restart instead of wiping it the same frame it appears. A
   // restart that produced no classification (DNF) clears the panel.
   let keepRaceResultOnRestart = false;
+  // `?laps=N` (1-9, 07-07): practice override for this run only. A lap count
+  // other than the course's own is never saved, so the Circuit Race record
+  // always compares the standard race distance.
+  const raceLaps = rd === undefined ? undefined : resolveRaceLaps(location.search, rd.course.laps);
   const circuitRace =
     fleet === undefined || gridPoses === undefined || line === undefined || rd === undefined
       ? undefined
       : createCircuitRaceCoordinator({
-          course: rd.course,
+          course: raceLaps === undefined ? rd.course : { ...rd.course, laps: raceLaps.laps },
           navigation: rd.navigation,
           scene,
           fleet,
@@ -912,6 +917,7 @@ try {
           onRaceClassified: (result) => {
             keepRaceResultOnRestart = true;
             if (
+              raceLaps?.practice !== true &&
               saveRaceResult(
                 medalStorage,
                 raceVariantCourseId(rd.course.id),
@@ -931,6 +937,7 @@ try {
             keepRaceResultOnRestart = false;
           },
         });
+  if (circuitRace !== undefined) raceHud.showNote(raceLaps?.note ?? null);
   const raceCoordinator =
     fleet !== undefined || rd === undefined || medalProgress === undefined
       ? undefined

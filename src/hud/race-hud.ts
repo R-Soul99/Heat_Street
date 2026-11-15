@@ -34,6 +34,8 @@ export interface RaceHud {
   showCountdown(label: string | null): void;
   /** D-16 race-status line + race clock (Circuit Race only). `null` hides the status line; the solo `update()` timing path is unaffected. */
   updateRaceStatus(model: RaceStatusModel | null): void;
+  /** Small note under the race clock (e.g. "1-LAP PRACTICE - NOT SAVED", 07-07). `null` hides it. */
+  showNote(text: string | null): void;
   dispose(): void;
 }
 
@@ -69,7 +71,10 @@ export function createRaceHud(): RaceHud {
   thresholds.style.cssText = "margin-top:6px;font-size:11px;line-height:1.45;white-space:pre";
   const split = document.createElement("div");
   split.style.cssText = "margin-top:10px;color:#7ee8ff;font-size:12px;min-height:15px";
-  timingPanel.append(raceStatus, timer, thresholds, split);
+  const note = document.createElement("div");
+  note.style.cssText =
+    "margin-top:4px;font-size:11px;color:#ff9f43;letter-spacing:.08em;visibility:hidden";
+  timingPanel.append(raceStatus, timer, note, thresholds, split);
   // Circuit Race's 3-2-1-GO countdown (plan 07-02, D-04): centred, large,
   // hidden (not empty text) when there is nothing to show. Written with
   // `textContent` only, matching every other DOM write in this file --
@@ -124,6 +129,10 @@ export function createRaceHud(): RaceHud {
       raceStatus.style.visibility = "visible";
       raceStatus.textContent = formatRaceStatus(model);
       timer.textContent = formatTime(model.elapsedSec);
+    },
+    showNote(text: string | null): void {
+      note.textContent = text ?? "";
+      note.style.visibility = text === null ? "hidden" : "visible";
     },
     dispose(): void {
       root.remove();
