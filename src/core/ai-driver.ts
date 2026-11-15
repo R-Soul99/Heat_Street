@@ -29,6 +29,7 @@
  * rubber-banding/catch-up terms (D-09/CIRC-02: one fixed pace, never derived
  * from any racer's live state).
  */
+import { steerLockScale } from "./drivetrain";
 import { type InputFrame, type InputSource, NEUTRAL } from "./input-tape";
 import { nearestLineIndex, pointAhead, type RacingLine } from "./racing-line";
 import type { VehicleTuning } from "./vehicle-tuning";
@@ -48,6 +49,9 @@ export interface AiDriverParams {
   readonly lookAheadMaxM: number;
   readonly wheelbaseM: number;
   readonly maxSteerLockRad: number;
+  /** The car's own top speed and high-speed lock fraction (`steerLockScale`), so the driver asks for the steer the car will ACTUALLY apply after its speed-dependent lock fade. */
+  readonly topSpeedMs: number;
+  readonly highSpeedSteerFraction: number;
   readonly speedLeadSec: number;
   readonly throttleGain: number;
   readonly throttleFloor: number;
@@ -65,16 +69,16 @@ export interface AiDriverParams {
  */
 export function defaultAiDriverParams(tuning: VehicleTuning): AiDriverParams {
   return {
-    lookAheadGainSec: 0.9,
+    lookAheadGainSec: 0.7,
     lookAheadMinM: 6,
-    // 20 m, not 40 (07-07 pace rework): at Silver pace (40+ m/s) a 36-40 m
-    // look-ahead steered too lazily and the car weaved slowly up to 4 m off
-    // a fast dirt straight on terrain Juliette; 20 m keeps it within ~1 m of
-    // the carriageway with unchanged lap times. Slow legacy pace never
-    // reached the old cap, so it is unaffected.
-    lookAheadMaxM: 20,
+    // 0.7 s capped at 30 m (07-07): with the lock-fade-compensated steer
+    // below, 20 m oscillated at Gold pace and 40 m tracked slightly looser;
+    // 0.7 s / 30 m kept every lap within ~0.6 m of the road edge.
+    lookAheadMaxM: 30,
     wheelbaseM: 2 * tuning.wheels.halfWheelbase,
     maxSteerLockRad: tuning.drive.maxSteerLock,
+    topSpeedMs: tuning.drive.topSpeedMs,
+    highSpeedSteerFraction: tuning.drive.highSpeedSteerFraction,
     speedLeadSec: 0.5,
     throttleGain: 0.35,
     throttleFloor: 0.25,
@@ -253,6 +257,14 @@ export function createAiDriver(line: RacingLine, params: AiDriverParams): AiDriv
     const targetIndex = pointAhead(line, lineIndex, lookAheadM);
     const targetPoint = line.points[targetIndex];
 
+    // vehicle.ts shrinks the lock with speed (`steerLockScale`) so a keyboard
+    // tap cannot spin the car. Pure pursuit computes a wheel ANGLE, so divide
+    // by the lock the car will really have at this speed — otherwise at
+    // 40 m/s the AI asks for a fraction of the angle it needs and runs wide
+    // (07-07 pace rework). The car's own fade still applies on top.
+    const effectiveLockRad =
+      params.maxSteerLockRad *
+      steerLockScale(forwardSpeedMs, params.topSpeedMs, params.highSpeedSteerFraction);
     const steer = pursuitSteer(
       obs.x,
       obs.z,
@@ -261,7 +273,7 @@ export function createAiDriver(line: RacingLine, params: AiDriverParams): AiDriv
       targetPoint.z,
       lookAheadM,
       params.wheelbaseM,
-      params.maxSteerLockRad,
+      effectiveLockRad,
     );
 
     const speedTargetIndex = pointAhead(line, lineIndex, forwardSpeedMs * params.speedLeadSec);

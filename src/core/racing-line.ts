@@ -83,41 +83,46 @@ export interface RacingLineParams {
  * Racers drive the same car and tune as everyone else, with no speed edge.
  * Raise it to make the field faster; lower it to make them slower.
  *
- * [MEASURED 2026-11-14, plan 07-07 pace rework, `tests/ai-lap-terrain.test.ts`]
- * on the CURRENT terrain Juliette (`juliette-ga.terrain.bin/.json`, medals
- * `handlingContentVersion` "261104-liftwide": circuit reference 213.05 s over
- * 3 laps, so the Silver total is 245.01 s / 81.67 s a lap and Gold is
- * 213.05 s / 71.02 s a lap), shipped RWD car, 60 Hz, standing start at GO.
- * One AI car alone:
+ * TARGET (user decision, 07-07 re-test 2): as fast as the car can go while
+ * still driving clean laps, at or beyond Gold pace. Silver was far below how
+ * fast real players drive.
  *
- *   paceScale  lap 1   3 laps   notes
- *   0.455      152.5   456.5    the old value: about half Silver pace
- *   0.70       104.3   -
- *   0.85        87.6   261.1
- *   0.90        82.9   247.0    shipped: lap 1 +1.5%, 3 laps +0.8% over Silver
- *   0.92        81.6   243.0
- *   1.00        75.7   225.1    clean, near Gold pace
+ * [MEASURED 2026-11-15, `tests/ai-lap-terrain.test.ts`] on the CURRENT
+ * terrain Juliette (medals `handlingContentVersion` "261104-liftwide":
+ * circuit reference 213.05 s over 3 laps, so Gold is 213.05 s / 71.02 s a
+ * lap and Silver is 245.01 s / 81.67 s a lap), shipped RWD car, 60 Hz,
+ * standing start at GO, with the car-capability limits below (aAccel 6.5,
+ * aBrake 9, aLat 9, scaled per surface). One AI car, laps 1/2:
  *
- * The 3-AI, 3-lap field at 0.90 finishes in 247.0 / 248.5 / 249.9 s. That is
- * just slower than the 245.0 s Silver total, so a clean Silver-pace drive
- * just beats the field and a messy one (spins, a 5 s respawn) loses. Every
- * lap is clean: tilt under 15 deg, never more than about 1 m beyond the
- * carriageway edge, no handbrake, no throttle and brake together.
+ *   paceScale  lap 1 / lap 2   clean?
+ *   1.00       ~65.5 / ~64.5   yes
+ *   1.05        64.2 / 63.0    yes   <- shipped
+ *   1.10        62.9 / 61.7    yes   (last clean value: about 5% headroom)
+ *   1.20        62.7 / 67.7    NO: 26 m off the road at the dirt hairpin (arc ~1380)
+ *   1.30        61.9 / 59.9    NO: 24 m off at the same hairpin
+ *   1.40        71.7 / 69.5    NO: 56 m off, weaving on straights
  *
- * Why the old 0.455 was so slow: it was calibrated on the pre-04.2 legacy
- * ribbon map against the stale 06-03 Silver reference (161 s for one lap).
- * Circuit Race was switched off on terrain maps, so nobody re-measured it
- * after Juliette moved to terrain and the reference was re-recorded. The
- * legacy tests (`tests/ai-lap.test.ts`, `tests/ai-field.test.ts`) still pin
- * that legacy calibration explicitly through `LEGACY_06_03_LINE_PARAMS`.
+ * 3-AI, 3-lap field at 1.05: 190.3 / 191.6 / 192.8 s, about 10% faster than
+ * the Gold total, every car within 0.6 m of the road edge, tilt under 14 deg,
+ * never stuck, no handbrake. Earlier values: 0.455 (legacy-map calibration
+ * against the stale 06-03 Silver, ~152 s a lap here) and 0.9 with the old
+ * 3/6/7 limits and an uncompensated steer (~83 s a lap, "no challenge").
  *
- * Tried and rejected: scaling only the cornering grip (`aLatMaxMs2`) while
- * letting straights run flat out. On terrain Juliette it was erratic
- * (aLat 4 went 58 m off the line) and gave non-monotonic lap times, the same
- * failure the 2026-09-23 debug session recorded on the legacy map. Scaling
- * the whole profile is monotonic and repeatable (see the table).
+ * What was really capping pace (fixed alongside this value): (1) the AI's
+ * pure pursuit ignored the car's speed-dependent steering-lock fade
+ * (`steerLockScale`), so at 40 m/s it asked for a fraction of the wheel angle
+ * it needed and ran wide; (2) the speed profile's accel/brake limits
+ * (3 / 6 m/s^2) were well under the car's own (~6.5 m/s^2 0-60) and ignored
+ * surface grip, so the AI crawled out of corners yet overcooked dirt
+ * braking zones. Both are now the car's measured capability; this dial is
+ * the one remaining knob.
+ *
+ * Tried and rejected: scaling only the cornering grip (`aLatMaxMs2`) as the
+ * dial. It was erratic and non-monotonic on both the legacy and terrain maps.
+ * The legacy-map tests pin their own old calibration via
+ * `LEGACY_06_03_LINE_PARAMS`.
  */
-export const AI_PACE_CALIBRATION = 0.9;
+export const AI_PACE_CALIBRATION = 1.05;
 
 /**
  * The shipped RWD car's own top speed, m/s (`shippedTuning("rwd").drive
@@ -133,9 +138,12 @@ export const DEFAULT_RACING_LINE_PARAMS: RacingLineParams = Object.freeze({
   smoothingPasses: 4,
   edgeMarginM: 1.25,
   curvatureChordPoints: 3,
-  aLatMaxMs2: 7.0,
-  aBrakeMs2: 6.0,
-  aAccelMs2: 3.0,
+  // Car capability (07-07), each scaled per surface in `buildRacingLine`:
+  // ~0.9 g cornering, ~9 m/s^2 braking (measured ~7 on dirt at 0.78 grip),
+  // ~6.5 m/s^2 drive (the shipped car's 4.15 s 0-60).
+  aLatMaxMs2: 9.0,
+  aBrakeMs2: 9.0,
+  aAccelMs2: 6.5,
   topSpeedMs: RACING_LINE_TOP_SPEED_MS,
   paceScale: AI_PACE_CALIBRATION,
 });
@@ -147,6 +155,9 @@ export const DEFAULT_RACING_LINE_PARAMS: RacingLineParams = Object.freeze({
  */
 export const LEGACY_06_03_LINE_PARAMS: RacingLineParams = Object.freeze({
   ...DEFAULT_RACING_LINE_PARAMS,
+  aLatMaxMs2: 7.0,
+  aBrakeMs2: 6.0,
+  aAccelMs2: 3.0,
   topSpeedMs: 45,
   paceScale: 0.455,
 });
@@ -496,6 +507,14 @@ export function buildRacingLine(
     speed[i] = targetSpeedAtCurvature(curvature[i], params.aLatMaxMs2 * grip, params.topSpeedMs);
   }
 
+  // Longitudinal limits scale with each surface's forward grip, exactly as
+  // cornering scales with lateral grip above (07-07: an unscaled 9 m/s^2
+  // brake ran the car straight off the dirt hairpin it could only brake
+  // ~7 m/s^2 for). The weaker of the two points bounds each step.
+  const forwardGrip: number[] = new Array(n);
+  for (let i = 0; i < n; i++) forwardGrip[i] = surfaceProfiles[points[i].surface].forwardGrip;
+  const stepGrip = (i: number, next: number): number => Math.min(forwardGrip[i], forwardGrip[next]);
+
   // Braking-feasibility: two backward passes (walking against travel
   // direction), each only REDUCING a point's speed to what braking from the
   // NEXT point's speed allows.
@@ -503,7 +522,8 @@ export function buildRacingLine(
     for (let i = n - 1; i >= 0; i--) {
       const next = (i + 1) % n;
       const ds = i === n - 1 ? lapLengthM - arcM[i] : arcM[next] - arcM[i];
-      const bound = Math.sqrt(speed[next] * speed[next] + 2 * params.aBrakeMs2 * ds);
+      const aBrake = params.aBrakeMs2 * stepGrip(i, next);
+      const bound = Math.sqrt(speed[next] * speed[next] + 2 * aBrake * ds);
       if (speed[i] > bound) speed[i] = bound;
     }
   }
@@ -513,7 +533,8 @@ export function buildRacingLine(
     for (let i = 0; i < n; i++) {
       const next = (i + 1) % n;
       const ds = i === n - 1 ? lapLengthM - arcM[i] : arcM[next] - arcM[i];
-      const bound = Math.sqrt(speed[i] * speed[i] + 2 * params.aAccelMs2 * ds);
+      const aAccel = params.aAccelMs2 * stepGrip(i, next);
+      const bound = Math.sqrt(speed[i] * speed[i] + 2 * aAccel * ds);
       if (speed[next] > bound) speed[next] = bound;
     }
   }

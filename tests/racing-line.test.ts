@@ -138,8 +138,10 @@ describe("buildRacingLine: real Juliette circuit", () => {
           ? line.lapLengthM - line.points[i].arcM
           : line.points[next].arcM - line.points[i].arcM;
       const lhs = line.points[i].targetSpeedMs ** 2;
-      const rhs =
-        line.points[next].targetSpeedMs ** 2 + 2 * DEFAULT_RACING_LINE_PARAMS.aBrakeMs2 * ds;
+      // The profile is braking-feasible BEFORE the pace scale; scaling every
+      // speed by `paceScale` scales the implied deceleration by its square.
+      const { aBrakeMs2, paceScale } = DEFAULT_RACING_LINE_PARAMS;
+      const rhs = line.points[next].targetSpeedMs ** 2 + 2 * aBrakeMs2 * paceScale ** 2 * ds;
       expect(lhs).toBeLessThanOrEqual(rhs + 1e-6);
     }
   });
@@ -376,9 +378,10 @@ describe("racing-line pace constants (07-07)", () => {
     expect(DEFAULT_RACING_LINE_PARAMS.topSpeedMs).toBe(RACING_LINE_TOP_SPEED_MS);
   });
 
-  it("there is exactly one fixed pace dial, at most the car's own pace", () => {
+  it("there is exactly one fixed pace dial, inside the measured clean range", () => {
     expect(DEFAULT_RACING_LINE_PARAMS.paceScale).toBe(AI_PACE_CALIBRATION);
     expect(AI_PACE_CALIBRATION).toBeGreaterThan(0);
-    expect(AI_PACE_CALIBRATION).toBeLessThanOrEqual(1);
+    // 1.1 is the last value measured clean on terrain Juliette (1.2 runs off).
+    expect(AI_PACE_CALIBRATION).toBeLessThanOrEqual(1.1);
   });
 });
