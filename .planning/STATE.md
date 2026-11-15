@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Completed 07.1.3-08-PLAN.md
-last_updated: "2026-11-15T17:32:57.798Z"
+stopped_at: Completed 07.1.3-09-PLAN.md
+last_updated: "2026-11-15T17:42:46.460Z"
 last_activity: 2026-11-15
 progress:
   total_phases: 18
   completed_phases: 12
   total_plans: 148
-  completed_plans: 143
+  completed_plans: 144
   percent: 67
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 ## Current Position
 
 Phase: 07.1.3 (editor-feature-palette) — EXECUTING
-Plan: 5 of 11
+Plan: 6 of 11
 Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; phase 7: all 7 plans done (07-07 human-approved 2026-11-15), awaiting phase verification
 Last activity: 2026-11-15
 
-Progress: [██████████] 95%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -93,6 +93,7 @@ Progress: [██████████] 95%
 | Phase 07.1.3 P04 | n/a | 3 tasks | 1 files |
 | Phase 07.1.3 P07 | 30min | 3 tasks | 11 files |
 | Phase 07.1.3 P08 | 20min | 2 tasks | 7 files |
+| Phase 07.1.3 P09 | 35min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,7 @@ Recent decisions affecting current work:
 - [Phase 07.1.3]: 07.1.3-04: D = Drive from start point, Shift+D = Drive here; start markers picked by 2 m ground distance
 - [Phase ?]: 07.1.3-07: building seat rule top=highest corner+visible height, bottom=lowest-0.3; ramps refused only outside area; sculpt re-seat rides in stroke diff
 - [Phase ?]: 07.1.3-08: merged building meshes use vertex colours; instanced scenery uses instanceColor
+- [Phase ?]: 07.1.3-09: scatter drag previews through the scenery view; Radius lives in the Scatter section
 
 ### Pending Todos
 
@@ -267,8 +269,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-15T17:32:57.782Z
-Stopped at: Completed 07.1.3-08-PLAN.md
+Last session: 2026-11-15T17:42:46.437Z
+Stopped at: Completed 07.1.3-09-PLAN.md
 Resume file: None
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
