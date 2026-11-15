@@ -388,7 +388,25 @@ export interface TerrainSidecar {
    * areas serialise exactly as before. The game runtime ignores it.
    */
   readonly unlockedEdgeIds?: readonly number[];
+  /**
+   * 07.1.3 D-01/D-02: authored start points; the first entry is the map default (D-03).
+   * Written only when non-empty so existing sidecars serialise exactly as before.
+   */
+  readonly startPoints?: readonly TerrainStartPoint[];
 }
+
+/** 07.1.3 D-01: a named spawn pose on the map. headingRad uses the VehiclePose yaw convention. */
+export interface TerrainStartPoint {
+  readonly id: string;
+  readonly name: string;
+  readonly x: number;
+  readonly z: number;
+  readonly headingRad: number;
+}
+
+export const MAX_START_POINTS = 32;
+export const MAX_START_NAME_CHARS = 40;
+export const MAX_COORD_ABS_M = 100000;
 
 export interface TerrainArea extends TerrainSidecar {
   readonly grid: TerrainGrid;
@@ -511,6 +529,33 @@ function parseBuilding(label: string, raw: unknown, index: number): MapCollision
   };
 }
 
+function parseStartPoints(label: string, raw: unknown): TerrainStartPoint[] {
+  if (!Array.isArray(raw)) fail(label, "root.startPoints must be an array");
+  if (raw.length > MAX_START_POINTS) {
+    fail(label, `root.startPoints has ${raw.length} entries, max ${MAX_START_POINTS}`);
+  }
+  const ids = new Set<string>();
+  const out: TerrainStartPoint[] = [];
+  for (const [i, e] of (raw as unknown[]).entries()) {
+    const ctx = `startPoints[${i}]`;
+    if (!isRec(e)) fail(label, `${ctx} must be an object`);
+    const id = reqStr(label, e, "id", ctx);
+    if (id.length === 0) fail(label, `${ctx}.id must be non-empty`);
+    if (ids.has(id)) fail(label, `${ctx}.id duplicate start point id ${JSON.stringify(id)}`);
+    ids.add(id);
+    const name = reqStr(label, e, "name", ctx);
+    if (name.length < 1 || name.length > MAX_START_NAME_CHARS) {
+      fail(label, `${ctx}.name must be 1..${MAX_START_NAME_CHARS} characters`);
+    }
+    const x = reqNum(label, e, "x", ctx);
+    const z = reqNum(label, e, "z", ctx);
+    if (Math.abs(x) > MAX_COORD_ABS_M) fail(label, `${ctx}.x out of range, got ${x}`);
+    if (Math.abs(z) > MAX_COORD_ABS_M) fail(label, `${ctx}.z out of range, got ${z}`);
+    out.push({ id, name, x, z, headingRad: reqNum(label, e, "headingRad", ctx) });
+  }
+  return out;
+}
+
 export function serializeTerrainSidecar(area: TerrainSidecar): string {
   const objects = area.objects.map((o) => {
     const c = o.crest;
@@ -552,6 +597,17 @@ export function serializeTerrainSidecar(area: TerrainSidecar): string {
     buildings,
     ...(area.unlockedEdgeIds !== undefined && area.unlockedEdgeIds.length > 0
       ? { unlockedEdgeIds: [...area.unlockedEdgeIds].sort((a, b) => a - b) }
+      : {}),
+    ...(area.startPoints !== undefined && area.startPoints.length > 0
+      ? {
+          startPoints: area.startPoints.map((p) => ({
+            id: p.id,
+            name: p.name,
+            x: p.x,
+            z: p.z,
+            headingRad: p.headingRad,
+          })),
+        }
       : {}),
   };
   return `${JSON.stringify(wire, null, 2)}\n`;
@@ -638,6 +694,9 @@ export function parseTerrainSidecar(
     unlockedEdgeIds = unlockedEdgeIds.sort((a, b) => a - b);
   }
 
+  const startPoints =
+    parsed.startPoints !== undefined ? parseStartPoints(sourceLabel, parsed.startPoints) : [];
+
   return {
     areaId,
     name,
@@ -648,6 +707,7 @@ export function parseTerrainSidecar(
     objects,
     buildings,
     ...(unlockedEdgeIds.length > 0 ? { unlockedEdgeIds } : {}),
+    ...(startPoints.length > 0 ? { startPoints } : {}),
   };
 }
 
@@ -684,5 +744,6 @@ export async function loadTerrainArea(
     legacyGlbBuildings: side.legacyGlbBuildings,
     nextEdgeId: side.nextEdgeId,
     ...(side.unlockedEdgeIds !== undefined ? { unlockedEdgeIds: side.unlockedEdgeIds } : {}),
+    ...(side.startPoints !== undefined ? { startPoints: side.startPoints } : {}),
   };
 }

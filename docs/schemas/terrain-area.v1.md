@@ -88,6 +88,7 @@ Bits 4-6 are preserved.
 | `graph` | object | road graph v1, parsed by `parseRoadGraph` |
 | `objects` | array | `{ "kind": "crest", id, centerX, centerZ, radiusM, heightM, ramp? }`; `ramp` = `{ headingRad, widthM, angleDeg, footRadiusM }` |
 | `buildings` | array | `{ center {x,y,z}, halfExtents {x,y,z}, rotationY }` |
+| `startPoints` | array (optional) | `{ id, name, x, z, headingRad }`; max 32 entries, unique non-empty ids, name 1..40 chars, abs(x/z) <= 100000. The first entry is the map default spawn (07.1.3 D-03). Omitted when empty; no version bump. Spawn priority: `?at=` > `?start=<id>` > first in-extent entry > road-graph spawn > grid centre. In `circuit-race` the course grid overrides the spawn, so `?start=` (like `?at=`) does not move the race start. |
 
 Every number must be finite. Unknown object kinds are rejected. Parsing rebuilds every field by
 name; unknown keys (including `__proto__`) are ignored.
