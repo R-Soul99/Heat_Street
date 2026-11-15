@@ -17,9 +17,11 @@ import { sampleHeightfieldBilinear } from "../core/heightfield-sample";
 import type { InputFrame } from "../core/input-tape";
 import type { MapCollisionBuilding } from "../core/map-collision";
 import type { RoadGraph } from "../core/road-graph";
+import { buildingBoxes, featureColliders } from "../core/scenery-geometry";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
 import { type BermBox, buildEdgeBerm } from "../core/terrain-edge-berm";
+import type { TerrainBuilding, TerrainFeature } from "../core/terrain-format";
 import { sampleTerrainHeight, type TerrainGrid } from "../core/terrain-grid";
 import type { PaintMap } from "../core/terrain-paint";
 import type { VehicleTuning } from "../core/vehicle-tuning";
@@ -30,6 +32,7 @@ import {
   type MapScene,
   ROAD_FRICTION,
   SPAWN_CLEARANCE_M,
+  yRotationQuat,
 } from "./map-scene";
 import {
   createPaintLookup,
@@ -49,7 +52,9 @@ export interface TerrainSceneInput {
   readonly grid: TerrainGrid;
   readonly paint: PaintMap;
   readonly graph: RoadGraph;
-  readonly buildings: readonly MapCollisionBuilding[];
+  readonly buildings: readonly (MapCollisionBuilding | TerrainBuilding)[];
+  /** 07.1.3 D-10: scenery (trees, bushes, hedges, fences). Absent = none. */
+  readonly features?: readonly TerrainFeature[];
   readonly crests: readonly AuthoredCrest[];
   readonly groundSurface: SurfaceType;
   readonly spawnOverride?: { x: number; z: number; headingRad: number };
@@ -64,6 +69,11 @@ export interface TerrainSceneInput {
 /** The MapScene contract plus the berm boxes the view builds its mesh from. */
 export interface TerrainScene extends MapScene {
   readonly edgeBerm: readonly BermBox[];
+  /**
+   * Scenery colliders that pursuit line of sight passes through (tree trunks, fences). Add these to
+   * the ignore set given to `lineOfSightClear`; hedges and buildings stay blocking (D-10).
+   */
+  readonly sightTransparentHandles: ReadonlySet<number>;
   /**
    * A fresh wheel-ray patch over this scene's terrain grids (see
    * wheel-ray-patch.ts). The player's vehicle already carries one; AI cars
@@ -177,8 +187,54 @@ export function createTerrainScene(
     }
   }
 
+  // 07.1.3 D-10: scenery and styled buildings share ONE fixed body. Style-less buildings keep
+  // the existing per-building path.
+  const sightTransparentHandles = new Set<number>();
+  let sceneryBodyRef: RAPIER.RigidBody | undefined;
+  const sceneryBody = (): RAPIER.RigidBody => {
+    sceneryBodyRef ??= world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    return sceneryBodyRef;
+  };
+  const registerScenery = (collider: RAPIER.Collider): void => {
+    // A wheel standing on top of a piece reads ground (research Pitfall 6).
+    surfaceMap.register(collider.handle, input.groundSurface);
+  };
   for (const building of input.buildings) {
+    if ("style" in building && building.style !== undefined) continue;
     buildBuildingCollider(world, building);
+  }
+  const styled = input.buildings.filter(
+    (b): b is TerrainBuilding => "style" in b && b.style !== undefined,
+  );
+  for (const boxes of Object.values(buildingBoxes(styled, { includeStyleless: false }))) {
+    for (const b of boxes) {
+      registerScenery(
+        world.createCollider(
+          RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz)
+            .setTranslation(b.x, b.y, b.z)
+            .setRotation(yRotationQuat(b.rotationY))
+            .setFriction(BUILDING_FRICTION)
+            .setRestitution(0),
+          sceneryBody(),
+        ),
+      );
+    }
+  }
+  for (const spec of featureColliders(input.features ?? [], (x, z) =>
+    sampleTerrainHeight(input.grid, x, z),
+  )) {
+    const desc =
+      spec.shape === "cylinder"
+        ? RAPIER.ColliderDesc.cylinder(spec.halfHeight, spec.radius)
+        : RAPIER.ColliderDesc.cuboid(spec.hx, spec.hy, spec.hz).setRotation(
+            yRotationQuat(spec.rotationY),
+          );
+    const collider = world.createCollider(
+      desc.setTranslation(spec.x, spec.y, spec.z).setFriction(BUILDING_FRICTION).setRestitution(0),
+      sceneryBody(),
+    );
+    registerScenery(collider);
+    if (!spec.blocksSight) sightTransparentHandles.add(collider.handle);
   }
 
   // Edge berm (04.3 D-06..D-10): thick fixed cuboids around the grid bounds on
@@ -226,6 +282,7 @@ export function createTerrainScene(
     defaultSpawnPose,
     surfaces: surfaceContext,
     edgeBerm,
+    sightTransparentHandles,
 
     createWheelRayPatch(): WheelRayPatch {
       return createWheelRayPatch(world, patchTargets);

@@ -7,7 +7,11 @@ import type { MapCollisionBuilding } from "../src/core/map-collision";
 import type { RoadGraph } from "../src/core/road-graph";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
 import { BERM_INSET_M, BERM_THICKNESS_M, buildEdgeBerm } from "../src/core/terrain-edge-berm";
-import { loadTerrainArea } from "../src/core/terrain-format";
+import {
+  loadTerrainArea,
+  type TerrainBuilding,
+  type TerrainFeature,
+} from "../src/core/terrain-format";
 import { createTerrainGrid, sampleTerrainHeight, type TerrainGrid } from "../src/core/terrain-grid";
 import { createPaintMap } from "../src/core/terrain-paint";
 import { defaultTuning } from "../src/core/vehicle-tuning";
@@ -285,6 +289,103 @@ describe("createTerrainScene", () => {
     } finally {
       world.free();
     }
+  });
+});
+
+describe("scenery colliders (07.1.3 D-10)", () => {
+  const features: TerrainFeature[] = [
+    { id: "t", kind: "tree", variant: "pine", x: 10, z: 10, rotationY: 0, scale: 1 },
+    { id: "b", kind: "bush", variant: "round", x: -10, z: 10, rotationY: 0, scale: 1 },
+    {
+      id: "h",
+      kind: "hedge",
+      variant: "box",
+      points: [
+        [-20, -10],
+        [-8, -10],
+      ],
+      heightM: 1.5,
+    },
+    {
+      id: "f",
+      kind: "fence",
+      variant: "picket",
+      points: [
+        [8, -10],
+        [20, -10],
+      ],
+      heightM: 1.2,
+    },
+  ];
+  const cast = (world: RAPIER.World, x: number, z: number) =>
+    world.castRay(
+      new RAPIER.Ray({ x: x - 5, y: 0.8, z }, { x: 1, y: 0, z: 0 }),
+      10,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (c) => c.shapeType() !== RAPIER.ShapeType.HeightField,
+    );
+
+  it("uses one shared body; trunk solid, bush not; trunk and fence are sight-transparent", () => {
+    const grid = flatGrid();
+    const world = createWorld();
+    const world2 = createWorld();
+    try {
+      const scene = createTerrainScene(
+        world,
+        input(grid, { features }),
+        defaultTuning(),
+        defaultSurfaceProfiles(),
+      );
+      createTerrainScene(world2, input(grid), defaultTuning(), defaultSurfaceProfiles());
+      // scenery adds exactly one body however many pieces there are
+      expect(world.bodies.len() - world2.bodies.len()).toBe(1);
+      world.step();
+      expect(cast(world, 10, 10)).not.toBeNull();
+      expect(cast(world, -10, 10)).toBeNull();
+      const handles = scene.sightTransparentHandles;
+      const hedgeHit = cast(world, -14, -10);
+      const fenceHit = cast(world, 14, -10);
+      const trunkHit = cast(world, 10, 10);
+      expect(hedgeHit).not.toBeNull();
+      expect(handles.has(hedgeHit?.collider.handle ?? -1)).toBe(false);
+      expect(handles.has(fenceHit?.collider.handle ?? -1)).toBe(true);
+      expect(handles.has(trunkHit?.collider.handle ?? -1)).toBe(true);
+    } finally {
+      world.free();
+      world2.free();
+    }
+  });
+
+  it("styled building shares the scenery body, style-less keeps its own body", () => {
+    const grid = flatGrid();
+    const b = (style?: string): TerrainBuilding => ({
+      center: { x: 12, y: 3, z: 12 },
+      halfExtents: { x: 2, y: 3, z: 2 },
+      rotationY: 0,
+      ...(style !== undefined ? { style } : {}),
+    });
+    const count = (buildings: TerrainBuilding[]) => {
+      const w = createWorld();
+      try {
+        createTerrainScene(
+          w,
+          input(grid, { buildings }),
+          defaultTuning(),
+          defaultSurfaceProfiles(),
+        );
+        return w.bodies.len();
+      } finally {
+        w.free();
+      }
+    };
+    const none = count([]);
+    expect(count([b()])).toBe(none + 1);
+    expect(count([b("house")])).toBe(none + 1);
+    expect(count([b("house"), b("shed")])).toBe(none + 1);
   });
 });
 
