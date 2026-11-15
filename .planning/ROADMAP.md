@@ -27,8 +27,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
 - [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
 - [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
-- [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
+- [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
+- [ ] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car
+- [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor
+- [ ] **Phase 11: Art Pass** - Shaped car bodies and wheels; soft particles, dust trails, roost, landing bursts and continuous tyre tracks
 
 ## Phase Details
 
@@ -510,8 +513,9 @@ Plans:
 
 ### Phase 07.1.3: Editor feature palette (INSERTED)
 
-**Goal:** A palette for placing map features: buildings, ramps, and scenery such as trees, hedges, bushes and fences, built to take more feature types later.
+**Goal:** A palette for placing map features: start points for test drives, buildings, ramps, and scenery such as trees, hedges, bushes and fences, built to take more feature types later.
 **Requirements**: TBD
+**Briefs:** `.planning/plans-ahead/01-start-points.md` (do first), then `.planning/plans-ahead/02-scenery-palette.md`. Summarised in `07.1.3-CONTEXT.md`.
 **Depends on:** Phase 07.1.2
 **Plans:** 0 plans
 
@@ -535,10 +539,59 @@ Plans:
 **Plans**: TBD
 **UI hint**: yes
 
+### Phase 9: Vehicle Types
+
+**Goal**: Several vehicles drive differently because their bodies, wheels and suspension differ. The shipped muscle car's physics stay bit-identical.
+**Depends on**: Phase 7
+**Requirements**: VEH-06, VEH-07 (promoted from v2), plus the pending drivetrain todo
+**Brief:** `.planning/plans-ahead/03-vehicle-types.md`. Summarised in `09-CONTEXT.md`.
+**Success Criteria** (what must be TRUE):
+
+  1. `?car=rally`, `?car=buggy`, `?car=truck` and `?car=monster` each load with their own proportions, handling, saved tuning and tuning-panel ranges
+  2. A golden test proves the `rwd`, `fwd` and `awd` cars end a fixed input tape in exactly the same state as before the phase
+  3. The monster truck spike result is written up and the user has seen it before the pickup and monster truck are built
+  4. Each new vehicle meets its measured targets (0-60 time, settle time, tilt) and the user has driven each for a minute on the feel-test map
+
+**Plans**: TBD (run /gsd-plan-phase 9)
+
+### Phase 10: Off-road Stages
+
+**Goal**: A timed run from a start through ordered gates to a finish across open terrain, with no road needed, authored in the terrain editor
+**Depends on**: Phase 07.1.3 (start points and the Place tool group); Phase 9 for off-road vehicles (works with the muscle car without it)
+**Requirements**: MODE-04 (promoted from v2)
+**Brief:** `.planning/plans-ahead/04-off-road-stages.md`. Summarised in `10-CONTEXT.md`.
+**Success Criteria** (what must be TRUE):
+
+  1. `?map=<id>&mode=stage` runs a stage with gate markers, an arrow to the next gate, a timer, splits and a results screen
+  2. Gates count only in order and only when crossed forwards; respawn returns the car to the last gate passed
+  3. The user can place a start, gates and a finish in the terrain editor and press Test stage
+  4. Existing routes, courses and medals are untouched (`routes.json` and its parser unchanged)
+
+**Plans**: TBD (run /gsd-plan-phase 10)
+**UI hint**: yes
+
+### Phase 11: Art Pass
+
+**Goal**: Cars stop being boxes on wheels, and dust, smoke and tyre marks look like dust, smoke and tyre marks, with no physics change
+**Depends on**: Phase 9 (bodies and effect sizes are per vehicle)
+**Requirements**: SURF-03 (promoted from v2)
+**Brief:** `.planning/plans-ahead/05-art-pass.md`. Summarised in `11-CONTEXT.md`.
+**Success Criteria** (what must be TRUE):
+
+  1. Each vehicle has a recognisable low-poly body and wheels with visible spin, within 1,500 triangles and 2 draw calls per body
+  2. Particles are soft and round, grow and fade; loose ground gives rolling dust, roost and landing bursts
+  3. A long drift leaves smooth continuous tyre lines; the per-spawn decal allocation is gone
+  4. Vehicle and determinism tests are unchanged and the frame budget in `docs/frame-budget.md` still holds, with new measurements recorded
+
+**Plans**: TBD (run /gsd-plan-phase 11)
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6 -> 7 -> 7.1 -> 8
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6 -> 7 -> 7.1 -> 8 -> 9 -> 10 -> 11
+
+Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended order for the work in `.planning/plans-ahead/`: 07.1.3 -> 9 -> 10 -> 11.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -554,6 +607,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 4.1 -> 4.2 -> 4.3 -> 5 -> 6
 | 7. NPC Driving AI & Circuit Racers | 7/7 | Complete    | 2026-11-15 |
 | 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
+| 9. Vehicle Types | 0/TBD | Not started | - |
+| 10. Off-road Stages | 0/TBD | Not started | - |
+| 11. Art Pass | 0/TBD | Not started | - |
 
 ## Notes
 

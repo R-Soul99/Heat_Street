@@ -7,7 +7,7 @@ stopped_at: Phase 7 complete (7/7) — ready to discuss Phase 07.1
 last_updated: 2026-11-15T05:48:33.236Z
 last_activity: 2026-11-15
 progress:
-  total_phases: 15
+  total_phases: 18
   completed_phases: 11
   total_plans: 137
   completed_plans: 135
@@ -102,6 +102,7 @@ Progress: [██████████] 99%
 - Phase 07.1.1 inserted after Phase 07.1: Editor Controls Polish: logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls; unified editor layout (URGENT)
 - Phase 07.1.2 inserted after Phase 07.1.1: Selection-based editor tools (select-then-act, from user mockup) (URGENT)
 - Phase 07.1.3 inserted after Phase 07.1.2: Editor feature palette (buildings, ramps, scenery)
+- Phases 9 (Vehicle Types), 10 (Off-road Stages) and 11 (Art Pass) added 2026-11-15 from the briefs in .planning/plans-ahead/; Phase 07.1.3 widened to include start points. Each phase folder has a CONTEXT.md pointing at its brief
 
 ### Decisions
 

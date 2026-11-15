@@ -4,10 +4,10 @@ Written 2026-11-15 from a survey of the code on branch `ai/circuit-race-finish`.
 These are implementation plans for the larger pieces of work still to do. Each
 one is written so a smaller model can execute it without re-deriving the design.
 
-They are briefs, not GSD `PLAN.md` files. To run one through GSD, add the phase
-to `.planning/ROADMAP.md` and hand the brief to `/gsd-plan-phase` as its context
-(the same way `.planning/gsd-brief-driveable-terrain.md` fed Phase 04.2). Or
-execute a brief directly, stage by stage, with `/gsd-quick`.
+They are briefs, not GSD `PLAN.md` files. They are wired into GSD: each has a
+roadmap phase whose `CONTEXT.md` points at it, so `/gsd-plan-phase <N>` picks it
+up (07.1.3 for plans 1 and 2, 9 for plan 3, 10 for plan 4, 11 for plan 5).
+You can also execute a brief directly, stage by stage, with `/gsd-quick`.
 
 ## The plans, in recommended order
 
