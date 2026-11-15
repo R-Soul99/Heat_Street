@@ -1,5 +1,10 @@
 # Plan 2: Scenery palette (roadmap Phase 07.1.3)
 
+> **Corrections (2026-11-15):** research for Phase 07.1.3 checked this brief against the code and found
+> some claims wrong or stale. Where they differ,
+> `.planning/phases/07.1.3-editor-feature-palette/07.1.3-RESEARCH.md` (section "Brief Verification") wins.
+> Main ones: AI cars avoid no scenery today (the forward ray only sees cars); individually fading buildings conflict with the draw budget; `MAX_AREA_SIZE_M` is an edge length, not a coordinate bound; palette buildings on legacy-glb maps need drawing; scenery should share one fixed body and not cast shadows; low fences and hedges act as kerbs for the wheel rays.
+
 Read `README.md` in this folder first. Do Plan 1 first: this plan reuses its
 Place tool group, marker handling and undo part.
 
