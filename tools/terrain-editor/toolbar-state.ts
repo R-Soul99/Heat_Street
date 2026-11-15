@@ -1,12 +1,14 @@
 // Pure toolbar state and click/hotkey routing for the selection-based terrain editor (07.1.2).
 // No DOM: the editor renders what this returns.
-import type {
-  Mode,
-  Operation,
-  RoadAction,
-  RoadBrush,
-  ToolbarId,
-  ViewToggle,
+import {
+  type Mode,
+  type Operation,
+  PLACE_TOOL_KIND,
+  type PlaceKind,
+  type RoadAction,
+  type RoadBrush,
+  type ToolbarId,
+  type ViewToggle,
 } from "./rail-tools.ts";
 
 export const NO_SELECTION_STATUS = "Select an area first (drag on the map)";
@@ -18,6 +20,8 @@ export interface ToolbarInput {
   selectionCells: number;
   cellSizeM: number;
   armed: Operation | RoadBrush | null;
+  /** Armed Place kind (07.1.3). Non-null makes Place the exclusive mode. */
+  placing?: PlaceKind | null;
 }
 
 export interface ToolbarState {
@@ -38,7 +42,8 @@ export type ToolbarAction =
   | { kind: "apply"; op: Operation }
   | { kind: "roadAction"; action: RoadAction }
   | { kind: "toggle"; which: ViewToggle }
-  | { kind: "menu"; id: "road" | "terrain" }
+  | { kind: "place"; place: PlaceKind }
+  | { kind: "menu"; id: "road" | "terrain" | "place" }
   | { kind: "blocked"; status: string };
 
 const OPERATION_IDS: readonly ToolbarId[] = ["raise", "lower", "smooth", "flatten", "terrain"];
@@ -53,7 +58,19 @@ const ALL_IDS: readonly ToolbarId[] = [
   "grid",
   "contours",
   "road",
+  "place",
+  ...PLACE_TOOL_KIND.map((p) => p.id),
 ];
+
+const PLACE_LABEL: Record<PlaceKind, string> = {
+  start: "Start point",
+  building: "Building",
+  tree: "Tree",
+  bush: "Bush",
+  hedge: "Hedge",
+  fence: "Fence",
+  ramp: "Ramp",
+};
 
 const OP_LABEL: Record<Operation | RoadBrush, string> = {
   raise: "Raise",
@@ -78,9 +95,39 @@ function selectionSubtitle(cells: number, cellSizeM: number): string {
   return `${c} ${c === 1 ? "cell" : "cells"}, ${area} m2`;
 }
 
+function placingState(kind: PlaceKind): ToolbarState {
+  const enabled = {} as Record<ToolbarId, boolean>;
+  const pressed = {} as Record<ToolbarId, boolean>;
+  const disabledTip: Partial<Record<ToolbarId, string>> = {};
+  for (const id of ALL_IDS) {
+    enabled[id] = true;
+    pressed[id] = false;
+  }
+  pressed.place = true;
+  const armedId = PLACE_TOOL_KIND.find((p) => p.kind === kind)?.id;
+  if (armedId) pressed[armedId] = true;
+  for (const id of [...OPERATION_IDS, ...BRUSH_IDS, ...ROAD_ACTION_IDS]) {
+    // Terrain stays enabled in Select/Brush so its trigger always opens the surface list;
+    // while placing it is a terrain action, so it is disabled like the rest.
+    enabled[id] = false;
+    disabledTip[id] = SWITCH_TO_SELECT_STATUS;
+  }
+  return {
+    enabled,
+    pressed,
+    disabledTip,
+    roadFace: null,
+    title: "Place",
+    subtitle: PLACE_LABEL[kind],
+    brushControlsEnabled: false,
+    roadsSectionVisible: false,
+  };
+}
+
 export function toolbarState(i: ToolbarInput): ToolbarState {
   const hasSel = safe(i.selectionCells) > 0;
   const isSelect = i.mode === "select";
+  if (i.placing) return placingState(i.placing);
   const enabled = {} as Record<ToolbarId, boolean>;
   const pressed = {} as Record<ToolbarId, boolean>;
   const disabledTip: Partial<Record<ToolbarId, string>> = {};
@@ -130,6 +177,9 @@ export function resolveToolbarAction(i: ToolbarInput, id: ToolbarId): ToolbarAct
   const isSelect = i.mode === "select";
   if (id === "select" || id === "brush") return { kind: "mode", mode: id };
   if (id === "road") return { kind: "menu", id: "road" };
+  if (id === "place") return { kind: "menu", id: "place" };
+  const placed = PLACE_TOOL_KIND.find((p) => p.id === id);
+  if (placed) return { kind: "place", place: placed.kind };
   if (id === "grid" || id === "contours") return { kind: "toggle", which: id };
   if (id === "roadPaint" || id === "roadErase") return { kind: "arm", op: id, mode: "brush" };
   if (id === "lock" || id === "unlock" || id === "deleteRoad") {
@@ -138,9 +188,10 @@ export function resolveToolbarAction(i: ToolbarInput, id: ToolbarId): ToolbarAct
     return { kind: "roadAction", action: id };
   }
   // Operation: mode-sensitive.
-  if (!isSelect) return { kind: "arm", op: id, mode: "brush" };
+  const op = id as Operation;
+  if (!isSelect) return { kind: "arm", op, mode: "brush" };
   if (!hasSel) return { kind: "blocked", status: NO_SELECTION_STATUS };
-  return { kind: "apply", op: id };
+  return { kind: "apply", op };
 }
 
 /**

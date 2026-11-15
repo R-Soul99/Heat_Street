@@ -13,7 +13,26 @@ export type RoadBrush = "roadPaint" | "roadErase";
 export type RoadAction = "lock" | "unlock" | "deleteRoad";
 export type ViewToggle = "grid" | "contours";
 export type RoadMenu = "road";
-export type ToolbarId = Mode | Operation | RoadBrush | RoadAction | ViewToggle | RoadMenu;
+export const PLACE_KINDS = ["start", "building", "tree", "bush", "hedge", "fence", "ramp"] as const;
+export type PlaceKind = (typeof PLACE_KINDS)[number];
+export type PlaceToolId =
+  | "placeStart"
+  | "placeBuilding"
+  | "placeTree"
+  | "placeBush"
+  | "placeHedge"
+  | "placeFence"
+  | "placeRamp";
+export type PlaceMenu = "place";
+export type ToolbarId =
+  | Mode
+  | Operation
+  | RoadBrush
+  | RoadAction
+  | ViewToggle
+  | RoadMenu
+  | PlaceToolId
+  | PlaceMenu;
 /** The dispatcher's existing internal tool names. */
 export type BrushToolName = "raise" | "lower" | "smooth" | "flatten" | "paint" | "road" | "erase";
 
@@ -159,10 +178,90 @@ export const VIEW_TOGGLES: ToolbarTool[] = [
   },
 ];
 
+export const PLACE_TOOL_KIND: readonly { id: PlaceToolId; kind: PlaceKind }[] = [
+  { id: "placeStart", kind: "start" },
+  { id: "placeBuilding", kind: "building" },
+  { id: "placeTree", kind: "tree" },
+  { id: "placeBush", kind: "bush" },
+  { id: "placeHedge", kind: "hedge" },
+  { id: "placeFence", kind: "fence" },
+  { id: "placeRamp", kind: "ramp" },
+];
+
+export const PLACE_TOOLS: ToolbarTool[] = [
+  {
+    id: "placeStart",
+    label: "Start point",
+    icon: "⚑",
+    keyLabel: "1",
+    code: "Digit1",
+    tip: "Start point: click and drag to set position and facing",
+  },
+  {
+    id: "placeBuilding",
+    label: "Building",
+    icon: "▣",
+    keyLabel: "2",
+    code: "Digit2",
+    tip: "Building: drag a footprint",
+  },
+  {
+    id: "placeTree",
+    label: "Tree",
+    icon: "♣",
+    keyLabel: "3",
+    code: "Digit3",
+    tip: "Tree: click to plant, or scatter with a brush",
+  },
+  {
+    id: "placeBush",
+    label: "Bush",
+    icon: "✿",
+    keyLabel: "4",
+    code: "Digit4",
+    tip: "Bush: click to plant, or scatter with a brush",
+  },
+  {
+    id: "placeHedge",
+    label: "Hedge",
+    icon: "▤",
+    keyLabel: "5",
+    code: "Digit5",
+    tip: "Hedge: click points, Enter to finish",
+  },
+  {
+    id: "placeFence",
+    label: "Fence",
+    icon: "╫",
+    keyLabel: "6",
+    code: "Digit6",
+    tip: "Fence: click points, Enter to finish",
+  },
+  {
+    id: "placeRamp",
+    label: "Ramp",
+    icon: "◢",
+    keyLabel: "7",
+    code: "Digit7",
+    tip: "Ramp: click and drag to set direction",
+  },
+];
+
+/** The Place drop-down trigger. No hotkey of its own: keys 1 to 7 pick its tools directly. */
+export const PLACE_MENU: ShellTool & { id: "place" } = {
+  id: "place",
+  label: "Place",
+  icon: "✚",
+  tip: "Place: drop start points, buildings, trees and more",
+  tipLong:
+    "Keys 1 to 7 pick a kind directly. Placing is one undo step; sculpting under an item re-seats it.",
+};
+
 export const TOOLBAR_TOOLS: ToolbarTool[] = [
   ...MODES,
   ...OPERATIONS,
   ...ROAD_BUTTONS,
+  ...PLACE_TOOLS,
   ...VIEW_TOGGLES,
 ];
 
@@ -219,6 +318,20 @@ export const TERRAIN_BAR: BarGroup[] = [
           tool("lock"),
           tool("unlock"),
           tool("deleteRoad"),
+        ],
+      },
+      {
+        kind: "menu",
+        tool: PLACE_MENU,
+        items: [
+          tool("placeStart"),
+          { kind: "divider" },
+          tool("placeBuilding"),
+          tool("placeTree"),
+          tool("placeBush"),
+          tool("placeHedge"),
+          tool("placeFence"),
+          tool("placeRamp"),
         ],
       },
     ],

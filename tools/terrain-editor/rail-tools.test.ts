@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { barToolIds, validateBarSpec } from "../editor-shell/top-bar.ts";
 import {
   BRUSH_TOOL_FOR,
+  PLACE_KINDS,
+  PLACE_MENU,
+  PLACE_TOOLS,
   ROAD_MENU,
   TERRAIN_BAR,
   TERRAIN_HOTKEYS,
@@ -33,6 +36,13 @@ describe("toolbar data", () => {
         "Delete",
         "KeyC",
         "KeyX",
+        "Digit1",
+        "Digit2",
+        "Digit3",
+        "Digit4",
+        "Digit5",
+        "Digit6",
+        "Digit7",
       ]),
     );
   });
@@ -98,12 +108,41 @@ describe("toolbar data", () => {
       road?.kind === "menu" && road.items.flatMap((m) => (m.kind === "tool" ? [m.tool.id] : [])),
     ).toEqual(["roadPaint", "roadErase", "lock", "unlock", "deleteRoad"]);
     expect(g("view")?.items.map(name)).toEqual(["grid", "contours"]);
+    expect(g("menus")?.items.map(name)).toEqual(["menu", "menu", "menu"]);
+    const place = g("menus")?.items[2];
+    expect(place?.kind === "menu" && place.tool.id).toBe("place");
+    expect(place?.kind === "menu" && place.items.map(name)).toEqual([
+      "placeStart",
+      "divider",
+      "placeBuilding",
+      "placeTree",
+      "placeBush",
+      "placeHedge",
+      "placeFence",
+      "placeRamp",
+    ]);
+  });
+
+  it("PLACE_TOOLS follow the kinds and digit keys 1 to 7", () => {
+    expect(PLACE_KINDS).toEqual(["start", "building", "tree", "bush", "hedge", "fence", "ramp"]);
+    expect(PLACE_TOOLS.map((t) => t.code)).toEqual([1, 2, 3, 4, 5, 6, 7].map((n) => `Digit${n}`));
+    expect(PLACE_TOOLS.map((t) => t.keyLabel)).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+    for (const t of PLACE_TOOLS) expect(TERRAIN_HOTKEYS[t.code]).toBe(t.id);
+  });
+
+  it("PLACE_MENU follows tip rules with a distinct glyph", () => {
+    expect(PLACE_MENU.tip.startsWith("Place:")).toBe(true);
+    expect(PLACE_MENU.tip.endsWith(".")).toBe(false);
+    expect((PLACE_MENU as { code?: string }).code).toBeUndefined();
+    expect(TOOLBAR_TOOLS.map((t) => t.icon)).not.toContain(PLACE_MENU.icon);
+    expect(PLACE_MENU.icon).not.toBe(ROAD_MENU.icon);
   });
 
   it("every hotkey tool reaches a bar control", () => {
     const ids = barToolIds(TERRAIN_BAR);
     for (const t of TOOLBAR_TOOLS) expect(ids).toContain(t.id);
     expect(ids).toContain("road");
+    expect(ids).toContain("place");
   });
 
   it("ROAD_MENU follows tip rules with a distinct glyph", () => {

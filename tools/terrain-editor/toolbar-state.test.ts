@@ -178,3 +178,54 @@ describe("road trigger and hotkeys", () => {
     expect(resolveHotkey(sel(0), "roadPaint").openMenu).toBeUndefined();
   });
 });
+
+describe("Place state", () => {
+  const placing = (kind: NonNullable<ToolbarInput["placing"]>): ToolbarInput => ({
+    ...sel(5),
+    placing: kind,
+  });
+
+  it("reports Place pressed with select and brush released", () => {
+    const s = toolbarState(placing("tree"));
+    expect(s.pressed.place).toBe(true);
+    expect(s.pressed.placeTree).toBe(true);
+    expect(s.pressed.placeBush).toBe(false);
+    expect(s.pressed.select).toBe(false);
+    expect(s.pressed.brush).toBe(false);
+    expect(s.title).toBe("Place");
+    expect(s.subtitle).toBe("Tree");
+    expect(s.brushControlsEnabled).toBe(false);
+  });
+
+  it("disables terrain and road actions with the switch-to-Select tip", () => {
+    const s = toolbarState(placing("fence"));
+    for (const id of [
+      "raise",
+      "lower",
+      "smooth",
+      "flatten",
+      "terrain",
+      "roadPaint",
+      "roadErase",
+      "lock",
+      "unlock",
+      "deleteRoad",
+    ] as const) {
+      expect(s.enabled[id]).toBe(false);
+      expect(s.disabledTip[id]).toBe(SWITCH_TO_SELECT_STATUS);
+    }
+    expect(s.enabled.placeStart).toBe(true);
+    expect(s.enabled.place).toBe(true);
+  });
+
+  it("is unchanged when placing is null or omitted", () => {
+    expect(toolbarState({ ...sel(5), placing: null })).toEqual(toolbarState(sel(5)));
+    expect(toolbarState(sel(5)).pressed.place).toBe(false);
+  });
+
+  it("routes place ids", () => {
+    expect(resolveToolbarAction(sel(0), "placeTree")).toEqual({ kind: "place", place: "tree" });
+    expect(resolveToolbarAction(sel(0), "place")).toEqual({ kind: "menu", id: "place" });
+    expect(resolveHotkey(sel(0), "placeRamp").action).toEqual({ kind: "place", place: "ramp" });
+  });
+});
