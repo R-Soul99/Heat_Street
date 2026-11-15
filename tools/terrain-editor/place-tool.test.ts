@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { forwardFromYaw } from "../../src/core/heading.ts";
-import { createDragGesture, DRAG_HEADING_MIN_M } from "./place-tool.ts";
+import { createDragGesture, createLineBuilder, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 
 describe("createDragGesture", () => {
   it("yields position and heading for a long drag", () => {
@@ -39,5 +39,37 @@ describe("createDragGesture", () => {
     expect(g.active()).toBe(false);
     expect(g.up()).toBeUndefined();
     expect(g.preview()).toBeUndefined();
+  });
+});
+
+describe("createLineBuilder", () => {
+  it("adds, removes, measures and finishes", () => {
+    const b = createLineBuilder();
+    expect(b.active()).toBe(false);
+    b.add(0, 0);
+    b.add(3, 4);
+    b.add(3, 10);
+    expect(b.lengthM()).toBeCloseTo(11);
+    b.removeLast();
+    expect(b.points()).toHaveLength(2);
+    const r = b.finish();
+    expect(r.points).toEqual([
+      [0, 0],
+      [3, 4],
+    ]);
+    expect(b.active()).toBe(false);
+  });
+  it("refuses the 65th point", () => {
+    const b = createLineBuilder();
+    for (let i = 0; i < 64; i++) expect(b.add(i, 0).error).toBeUndefined();
+    expect(b.add(99, 0).error).toBe("A line can have at most 64 points");
+    expect(b.points()).toHaveLength(64);
+  });
+  it("finish with under 2 points is an error", () => {
+    const b = createLineBuilder();
+    b.add(1, 1);
+    expect(b.finish().error).toBe("A line needs at least 2 points");
+    b.cancel();
+    expect(b.active()).toBe(false);
   });
 });
