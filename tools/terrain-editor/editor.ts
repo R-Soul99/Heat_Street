@@ -7,21 +7,30 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { type AuthoredCrest, rampLengthM } from "../../src/core/crest-geometry.ts";
 import { yawFromTravelDirection } from "../../src/core/heading.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import {
   BUILDING_STYLES,
   BUSH_VARIANTS,
+  FENCE_VARIANTS,
+  HEDGE_VARIANTS,
   resolveBuildingStyle,
   TREE_VARIANTS,
 } from "../../src/core/scenery-catalog.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
 import { maskAverageHeight, stepRadiusCells } from "../../src/core/terrain-brush.ts";
-import { nearestEdgeHeading, terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
+import {
+  crestsFromObjects,
+  nearestEdgeHeading,
+  terrainGridExtent,
+} from "../../src/core/terrain-drive-setup.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
   MAX_BUILDINGS,
+  MAX_CREST_HEIGHT_M,
+  MAX_LINE_HEIGHT_M,
   MAX_START_NAME_CHARS,
   serializeTerrainSidecar,
   type TerrainArea,
@@ -53,6 +62,7 @@ import {
   staleUnlockedEdges,
 } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
+import { buildCrestMeshes } from "../../src/render/crest-view.ts";
 import {
   buildFeaturePreview,
   createSceneryView,
@@ -92,16 +102,21 @@ import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
 import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
 import {
+  addLineFeature,
   addPointFeature,
+  addRampObject,
   BUILDING_TOO_SMALL,
   canPlaceAt,
+  canPlaceLine,
   featureIdSeed,
   footprintCorners,
+  LINE_TOO_FEW_POINTS,
+  RAMP_FOOT_RADIUS_M,
   scatterPoints,
   seatBuilding,
 } from "./features.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
-import { createDragGesture, DRAG_HEADING_MIN_M } from "./place-tool.ts";
+import { createDragGesture, createLineBuilder, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 import {
   BRUSH_TOOL_FOR,
   PLACE_MENU,
@@ -116,7 +131,12 @@ import {
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
-import { checkSceneryBudget, fitScatterToBudget, type SceneryArea } from "./scenery-guards.ts";
+import {
+  canPlaceRampAt,
+  checkSceneryBudget,
+  fitScatterToBudget,
+  type SceneryArea,
+} from "./scenery-guards.ts";
 import {
   addStartPoint,
   defaultStartPoint,
@@ -734,7 +754,12 @@ function heightAtArea(x: number, z: number): number {
 }
 
 /** Features or buildings changed (edit, undo, redo): only the changed kind rebuilds. */
-function sceneryChanged(r: { featuresChanged?: boolean; buildingsChanged?: boolean }): void {
+function sceneryChanged(r: {
+  featuresChanged?: boolean;
+  buildingsChanged?: boolean;
+  objectsChanged?: boolean;
+}): void {
+  if (r.objectsChanged) rebuildRamps();
   if (!area || !sceneryView) return;
   if (r.featuresChanged) sceneryView.setFeatures(area.features ?? []);
   if (r.buildingsChanged) sceneryView.setBuildings(area.buildings);
@@ -743,6 +768,7 @@ function sceneryChanged(r: { featuresChanged?: boolean; buildingsChanged?: boole
 
 /** Sculpting under scenery re-seats it on the new ground (buildings re-seat inside the stroke diff). */
 function reseatScenery(w: CellWindow): void {
+  if (area && area.objects.length > 0) rebuildRamps(); // ramps are seated on the ground at build time
   if (!area || !sceneryView) return;
   const g = area.grid;
   const hit = (area.features ?? []).some((f) => {
@@ -768,6 +794,7 @@ function reseatScenery(w: CellWindow): void {
 
 type PointPlaceKind = "tree" | "bush";
 type SceneryPlaceKind = PointPlaceKind | "building";
+type LinePlaceKind = "hedge" | "fence";
 
 interface PointPalette {
   variant: string;
@@ -1134,6 +1161,133 @@ function buildScenerySidebar(kind: SceneryPlaceKind, f: HTMLElement): void {
   );
 }
 
+interface LineVariantInfo {
+  readonly id: string;
+  readonly color: number;
+  readonly minHeightM: number;
+  readonly defaultHeightM: number;
+}
+
+function lineVariants(kind: LinePlaceKind): readonly LineVariantInfo[] {
+  return kind === "hedge" ? HEDGE_VARIANTS : FENCE_VARIANTS;
+}
+
+/** Remembered per kind for the session (D-15); height starts at the catalog default. */
+const linePalette: Record<LinePlaceKind, { variant: string; heightM: number }> = {
+  hedge: {
+    variant: HEDGE_VARIANTS[0]?.id ?? "box",
+    heightM: HEDGE_VARIANTS[0]?.defaultHeightM ?? 1.5,
+  },
+  fence: {
+    variant: FENCE_VARIANTS[0]?.id ?? "post-rail",
+    heightM: FENCE_VARIANTS[0]?.defaultHeightM ?? 1.2,
+  },
+};
+
+/** Ramp defaults match the authored feel-test ramps (angle 20, width 10); ramp shape constants are unchanged. */
+const rampPalette = { heightM: 2, angleDeg: 20, widthM: 10 };
+const RAMP_HEIGHT_SPEC: StepperSpec = {
+  step: 0.5,
+  coarse: 2,
+  min: 0.5,
+  max: MAX_CREST_HEIGHT_M,
+  decimals: 1,
+};
+const RAMP_ANGLE_SPEC: StepperSpec = { step: 1, coarse: 5, min: 5, max: 80, decimals: 0 };
+const RAMP_WIDTH_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 1, max: 50, decimals: 1 };
+
+/** Sidebar for an armed Hedge or Fence: hint, budget lines, variant swatches, Height, running length (D-15). */
+function buildLineSidebar(kind: LinePlaceKind, f: HTMLElement): void {
+  budgetEl = el("div", "muted");
+  budgetMsgEl = el("div");
+  budgetMsgEl.setAttribute("aria-live", "polite");
+  budgetMsgEl.style.color = BUDGET_ERROR_COLOUR;
+  budgetMsgEl.textContent = budgetMessage;
+  const list = lineVariants(kind);
+  const pal = linePalette[kind];
+  const info = list.find((v) => v.id === pal.variant) ?? list[0];
+  const minH = info?.minHeightM ?? 1;
+  pal.heightM = Math.min(MAX_LINE_HEIGHT_M, Math.max(minH, pal.heightM));
+  const kindWord = kind === "hedge" ? "Hedge" : "Fence";
+  const swatches = buildSwatchGroup(
+    kindWord,
+    kind === "hedge" ? "▤" : "╫",
+    list.map((v) => ({ id: v.id, color: v.color })),
+    pal.variant,
+    false,
+    (id) => {
+      pal.variant = id;
+      const picked = list.find((v) => v.id === id);
+      if (picked) pal.heightM = picked.defaultHeightM;
+      buildSidebar(); // the Height minimum and default follow the variant
+      updatePlaceGhost();
+    },
+  );
+  const height = optStepper(
+    "Height",
+    "Height in metres",
+    { step: 0.1, coarse: 0.5, min: minH, max: MAX_LINE_HEIGHT_M, decimals: 1 },
+    pal.heightM,
+    "m",
+    (v) => {
+      pal.heightM = v;
+    },
+    true,
+  );
+  lineLengthEl = el("div", "muted");
+  refreshLineReadout();
+  f.append(
+    note(PLACE_HINT[kind]),
+    budgetEl,
+    budgetMsgEl,
+    createField("Variant", swatches, `${kindWord} variant`),
+    height.field,
+    lineLengthEl,
+  );
+  refreshBudgetReadout();
+}
+
+/** Sidebar for an armed Ramp: hint, Height, Angle, Width, direction readout (D-14). */
+function buildRampSidebar(f: HTMLElement): void {
+  const height = optStepper(
+    "Height",
+    "Ramp lip height in metres",
+    RAMP_HEIGHT_SPEC,
+    rampPalette.heightM,
+    "m",
+    (v) => {
+      rampPalette.heightM = v;
+      updatePlaceGhost();
+    },
+    true,
+  );
+  const angle = optStepper(
+    "Angle",
+    "Launch angle in degrees",
+    RAMP_ANGLE_SPEC,
+    rampPalette.angleDeg,
+    "°",
+    (v) => {
+      rampPalette.angleDeg = v;
+      updatePlaceGhost();
+    },
+  );
+  const width = optStepper(
+    "Width",
+    "Ramp width in metres",
+    RAMP_WIDTH_SPEC,
+    rampPalette.widthM,
+    "m",
+    (v) => {
+      rampPalette.widthM = v;
+      updatePlaceGhost();
+    },
+  );
+  rampDirEl = el("div", "muted");
+  rampDirEl.textContent = "Direction: drag to set";
+  f.append(note(PLACE_HINT.ramp), height.field, angle.field, width.field, rampDirEl);
+}
+
 // ---------------------------------------------------------------- scenery placement (07.1.3 plan 09)
 
 const DEG = Math.PI / 180;
@@ -1207,8 +1361,11 @@ let ghost: THREE.Object3D | null = null;
 let ghostRefused = false;
 let lastGhostReason = "";
 
+const rampGesture = createDragGesture();
+const lineBuilder = createLineBuilder();
+
 function sceneryGestureActive(): boolean {
-  return scatterDrag !== null || buildGesture.active();
+  return scatterDrag !== null || buildGesture.active() || rampGesture.active();
 }
 
 // Building footprint overlay: terrain-hugging accent outline plus a 0.25 fill (same as Select).
@@ -1330,7 +1487,7 @@ function checkBuildingPlan(plan: BuildingPlan): { ok: true } | { ok: false; reas
 }
 
 /** Ghost reason copy: show a refusal once, and restore the hint when it clears (D-12). */
-function setGhostState(refused: boolean, reason: string, kind: SceneryPlaceKind): void {
+function setGhostState(refused: boolean, reason: string, kind: PlaceKind): void {
   ghostRefused = refused;
   if (refused) {
     if (reason !== lastGhostReason) setStatus(reason, "error");
@@ -1402,6 +1559,16 @@ function updatePlaceGhost(): void {
   }
   setRect(null);
   const kind = dispatcher.placing();
+  const lineKind = kind === "hedge" || kind === "fence" ? kind : null;
+  updateLineOverlay(lineKind);
+  if (lineKind !== null) {
+    cursorRing.visible = false;
+    return;
+  }
+  if (kind === "ramp") {
+    updateRampPreview();
+    return;
+  }
   const scenery = kind === "tree" || kind === "bush" || kind === "building";
   if (!scenery) {
     ghostRefused = false;
@@ -1686,6 +1853,11 @@ function sceneryPointerMove(e: PointerEvent): void {
     updatePlaceGhost();
     return;
   }
+  if (rampGesture.active()) {
+    rampGesture.move(hit.x, hit.z);
+    updatePlaceGhost();
+    return;
+  }
   buildGesture.move(hit.x, hit.z);
   const plan = buildingPlanAt(lastHit);
   if (plan.dragged) {
@@ -1699,6 +1871,10 @@ function sceneryPointerUp(e: PointerEvent): void {
   activePointerId = null;
   if (scatterDrag) {
     finishScatter();
+    return;
+  }
+  if (rampGesture.active()) {
+    rampPointerUp(e);
     return;
   }
   if (!buildGesture.active() || !area) return;
@@ -1720,6 +1896,388 @@ function sceneryPointerUp(e: PointerEvent): void {
   updatePlaceGhost();
 }
 
+// ---------------------------------------------------------------- hedge, fence and ramp placement (07.1.3 plan 10)
+
+/** A click closer than this to the previous point is ignored (a double-click must not add a twin point). */
+const LINE_DUP_RADIUS_M = 0.5;
+const LINE_SAMPLE_M = 2;
+const LINE_DOT_PX = 6;
+const ARROW_LIFT_M = 0.4;
+
+let lineKindActive: LinePlaceKind | null = null;
+let lineOverlay: THREE.Group | null = null;
+let lineLengthEl: HTMLElement | null = null;
+let rampDirEl: HTMLElement | null = null;
+let rampsGroup: THREE.Group | null = null;
+/** Direction of the last ramp, used by the hover ghost before a drag sets a new one. */
+let lastRampHeading = 0;
+
+function lineReadoutText(): string {
+  const n = lineBuilder.points().length;
+  return `${fmt3(lineBuilder.lengthM())} m, ${n} ${n === 1 ? "point" : "points"}`;
+}
+
+function refreshLineReadout(): void {
+  if (lineLengthEl) lineLengthEl.textContent = lineReadoutText();
+}
+
+/** Terrain-hugging vertices from a to b (inclusive), about LINE_SAMPLE_M apart. */
+function hugPositions(
+  out: number[],
+  a: readonly [number, number],
+  b: readonly [number, number],
+  lift: number,
+  first: boolean,
+): void {
+  const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LINE_SAMPLE_M));
+  for (let i = first ? 0 : 1; i <= n; i++) {
+    const t = i / n;
+    const x = a[0] + (b[0] - a[0]) * t;
+    const z = a[1] + (b[1] - a[1]) * t;
+    out.push(x, heightAtArea(x, z) + lift, z);
+  }
+}
+
+function makeOverlayLine(positions: number[], colour: number): THREE.Line {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+  const line = new THREE.Line(
+    geo,
+    new THREE.LineBasicMaterial({ color: colour, depthTest: false, transparent: true }),
+  );
+  line.renderOrder = 998;
+  line.frustumCulled = false;
+  return line;
+}
+
+/**
+ * Hedge and fence preview (UI-SPEC line preview): accent dots at the points, an accent polyline,
+ * and a ghost segment to the cursor, red when that segment would cross road paint or leave the area.
+ * Refusal decisions come from canPlaceLine; this only draws them. WebGL lines are 1 px wide.
+ */
+function updateLineOverlay(kind: LinePlaceKind | null): void {
+  if (lineOverlay) {
+    scene.remove(lineOverlay);
+    disposeObject(lineOverlay);
+    lineOverlay = null;
+  }
+  if (!area || kind === null) return;
+  const pts = lineBuilder.points();
+  const hit = lastHit;
+  let refused = false;
+  let reason = "";
+  if (hit) {
+    const last = pts[pts.length - 1];
+    const check = last
+      ? canPlaceLine(area, [last, [hit.x, hit.z]])
+      : canPlaceAt(area, hit.x, hit.z);
+    if (!check.ok) {
+      refused = true;
+      reason = check.reason;
+    }
+  }
+  setGhostState(refused, reason, kind);
+  const group = new THREE.Group();
+  if (pts.length > 0) {
+    const dots: number[] = [];
+    const path: number[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i] as readonly [number, number];
+      dots.push(p[0], heightAtArea(p[0], p[1]) + FOOTPRINT_LIFT_M, p[1]);
+      const prev = pts[i - 1];
+      if (prev) hugPositions(path, prev, p, FOOTPRINT_LIFT_M, false);
+      else path.push(p[0], heightAtArea(p[0], p[1]) + FOOTPRINT_LIFT_M, p[1]);
+    }
+    if (pts.length > 1) group.add(makeOverlayLine(path, SELECT_ACCENT));
+    const dotGeo = new THREE.BufferGeometry();
+    dotGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(dots), 3));
+    const dotPoints = new THREE.Points(
+      dotGeo,
+      new THREE.PointsMaterial({
+        color: SELECT_ACCENT,
+        size: LINE_DOT_PX,
+        sizeAttenuation: false,
+        depthTest: false,
+        transparent: true,
+      }),
+    );
+    dotPoints.renderOrder = 999;
+    dotPoints.frustumCulled = false;
+    group.add(dotPoints);
+    const last = pts[pts.length - 1] as readonly [number, number];
+    if (hit) {
+      const seg: number[] = [];
+      hugPositions(seg, last, [hit.x, hit.z], FOOTPRINT_LIFT_M, true);
+      group.add(makeOverlayLine(seg, refused ? GHOST_REFUSED : SELECT_ACCENT));
+    }
+  }
+  if (group.children.length > 0) {
+    scene.add(group);
+    lineOverlay = group;
+  }
+}
+
+/** Esc, a kind switch or a new area abandons the line in progress (nothing committed). */
+function cancelLine(): void {
+  const had = lineBuilder.active();
+  lineBuilder.cancel();
+  lineKindActive = null;
+  if (!had) return;
+  refreshLineReadout();
+  updatePlaceGhost();
+}
+
+function linePointerDown(e: PointerEvent, kind: LinePlaceKind): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) {
+    setStatus("That spot is outside the map area", "error");
+    return;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  if (lineKindActive !== kind) {
+    lineBuilder.cancel();
+    lineKindActive = kind;
+  }
+  const last = lineBuilder.points()[lineBuilder.points().length - 1];
+  if (last && Math.hypot(hit.x - last[0], hit.z - last[1]) < LINE_DUP_RADIUS_M) return;
+  const check = last ? canPlaceLine(area, [last, [hit.x, hit.z]]) : canPlaceAt(area, hit.x, hit.z);
+  if (!check.ok) {
+    setStatus(check.reason, "error"); // a refused click adds nothing (D-12)
+    return;
+  }
+  const add = lineBuilder.add(hit.x, hit.z);
+  if (add.error !== undefined) {
+    setStatus(add.error, "error");
+    return;
+  }
+  setBudgetMessage("");
+  refreshLineReadout();
+  updatePlaceGhost();
+  setStatus(`${lineReadoutText()}. Enter finishes, Backspace removes the last point.`);
+}
+
+function lineRemoveLast(): void {
+  lineBuilder.removeLast();
+  if (!lineBuilder.active()) lineKindActive = null;
+  setBudgetMessage("");
+  refreshLineReadout();
+  updatePlaceGhost();
+  setStatus(lineBuilder.active() ? lineReadoutText() : "Line cleared.");
+}
+
+/** Enter or double-click: commit the line as one undo step, unless the 40,000-triangle limit refuses it (D-09). */
+function finishLine(): void {
+  const kind = lineKindActive;
+  if (!area || kind === null) return;
+  const pts = lineBuilder.points();
+  if (pts.length < 2) {
+    setStatus(LINE_TOO_FEW_POINTS, "error");
+    return;
+  }
+  const whole = canPlaceLine(area, pts);
+  if (!whole.ok) {
+    setStatus(whole.reason, "error");
+    return;
+  }
+  const pal = linePalette[kind];
+  const add = addLineFeature(area.features ?? [], currentFeatureSeed(), {
+    kind,
+    variant: pal.variant,
+    points: pts,
+    heightM: pal.heightM,
+  });
+  if (add.error !== undefined) {
+    setStatus(add.error, "error");
+    return;
+  }
+  const guard = sceneryAreaWith();
+  if (guard) {
+    const budget = checkSceneryBudget(guard, { features: add.features });
+    if (!budget.ok) {
+      // Stay in progress so Backspace can shorten the line.
+      refuseBudget(budget.reason);
+      return;
+    }
+  }
+  lineBuilder.finish();
+  lineKindActive = null;
+  featureSeed = add.nextSeed;
+  applyResult(dispatcher.commitScenery({ features: add.features }), 0);
+  updateHistoryButtons();
+  setBudgetMessage("");
+  refreshLineReadout();
+  updatePlaceGhost();
+  setStatus(`Placed ${kind}. Ctrl+Z undoes it.`, "ok");
+}
+
+// Ramps are crest objects drawn with the game's crest builder (not the scenery view).
+
+/** Draws every ramp and crest of the area; rebuilt on install, edit, undo, redo and sculpting. */
+function rebuildRamps(): void {
+  if (rampsGroup) {
+    scene.remove(rampsGroup);
+    disposeObject(rampsGroup);
+    rampsGroup = null;
+  }
+  if (!area) return;
+  const crests = crestsFromObjects(area.objects);
+  if (crests.length === 0) return;
+  const group = new THREE.Group();
+  group.add(...buildCrestMeshes(crests, heightAtArea, TERRAIN_SURFACE_PALETTE));
+  scene.add(group);
+  rampsGroup = group;
+}
+
+function rampSpecAt(x: number, z: number, headingRad: number): AuthoredCrest {
+  return {
+    id: "ghost",
+    centerX: x,
+    centerZ: z,
+    radiusM: 0,
+    heightM: rampPalette.heightM,
+    ramp: {
+      headingRad,
+      widthM: rampPalette.widthM,
+      angleDeg: rampPalette.angleDeg,
+      footRadiusM: RAMP_FOOT_RADIUS_M,
+    },
+  };
+}
+
+/** Ghost ramp (game builder, translucent) at the press point plus a direction arrow to the cursor. */
+function updateRampPreview(): void {
+  cursorRing.visible = false;
+  const hit = lastHit;
+  if (!area || !hit) {
+    ghostRefused = false;
+    return;
+  }
+  const pv = rampGesture.preview();
+  let x = hit.x;
+  let z = hit.z;
+  let heading = lastRampHeading;
+  let dragging = false;
+  if (pv) {
+    x = pv.from.x;
+    z = pv.from.z;
+    const dx = pv.to.x - pv.from.x;
+    const dz = pv.to.z - pv.from.z;
+    if (Math.hypot(dx, dz) >= DRAG_HEADING_MIN_M) {
+      heading = Math.atan2(dz, dx); // crest headings: 0 = +x, +pi/2 = +z
+      dragging = true;
+    }
+  }
+  const check = canPlaceRampAt(area, x, z);
+  const group = new THREE.Group();
+  for (const mesh of buildCrestMeshes(
+    [rampSpecAt(x, z, heading)],
+    heightAtArea,
+    TERRAIN_SURFACE_PALETTE,
+  )) {
+    const mat = mesh.material as THREE.MeshStandardMaterial;
+    mat.transparent = true;
+    mat.opacity = GHOST_OPACITY;
+    mat.depthWrite = false;
+    if (!check.ok) mat.color.setHex(GHOST_REFUSED);
+    group.add(mesh);
+  }
+  if (pv && dragging) {
+    const dx = pv.to.x - pv.from.x;
+    const dz = pv.to.z - pv.from.z;
+    const len = Math.hypot(dx, dz);
+    const head = Math.min(4, len * 0.25);
+    const ux = dx / len;
+    const uz = dz / len;
+    const tip: [number, number] = [pv.to.x, pv.to.z];
+    const wing = (side: number): [number, number] => [
+      tip[0] - ux * head - uz * head * 0.5 * side,
+      tip[1] - uz * head + ux * head * 0.5 * side,
+    ];
+    const pos: number[] = [];
+    const at = (p: readonly [number, number]): void => {
+      pos.push(p[0], heightAtArea(p[0], p[1]) + ARROW_LIFT_M, p[1]);
+    };
+    at([pv.from.x, pv.from.z]);
+    at(tip);
+    at(wing(1));
+    at(tip);
+    at(wing(-1));
+    group.add(makeOverlayLine(pos, SELECT_ACCENT));
+    const deg = Math.round(yawToHeadingDeg(yawFromTravelDirection(dx, dz)));
+    if (rampDirEl) rampDirEl.textContent = `Direction: ${deg}°`;
+    setStatus(`Direction ${deg}°. Release to place the ramp.`);
+  }
+  ghost = group;
+  scene.add(group);
+  setGhostState(!check.ok, check.ok ? "" : check.reason, "ramp");
+}
+
+function rampPointerDown(e: PointerEvent): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) {
+    setStatus("That spot is outside the map area", "error");
+    return;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  const check = canPlaceRampAt(area, hit.x, hit.z);
+  if (!check.ok) {
+    setStatus(check.reason, "error");
+    return;
+  }
+  canvas.setPointerCapture(e.pointerId);
+  activePointerId = e.pointerId;
+  rampGesture.down(hit.x, hit.z);
+  updatePlaceGhost();
+}
+
+/** Release commits one ramp as one undo step, or refuses (no direction, too long, outside the area). */
+function rampPointerUp(e: PointerEvent): void {
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (hit) {
+    rampGesture.move(hit.x, hit.z);
+    lastHit = { x: hit.x, z: hit.z };
+  }
+  const pv = rampGesture.preview();
+  rampGesture.up();
+  if (!area || !pv) {
+    updatePlaceGhost();
+    return;
+  }
+  const dx = pv.to.x - pv.from.x;
+  const dz = pv.to.z - pv.from.z;
+  const fail = (msg: string): void => {
+    setStatus(msg, "error");
+    updatePlaceGhost();
+  };
+  if (Math.hypot(dx, dz) < DRAG_HEADING_MIN_M) {
+    fail("Drag toward the way the ramp should face");
+    return;
+  }
+  const check = canPlaceRampAt(area, pv.from.x, pv.from.z);
+  if (!check.ok) {
+    fail(check.reason);
+    return;
+  }
+  const heading = Math.atan2(dz, dx);
+  const spec = rampSpecAt(pv.from.x, pv.from.z, heading);
+  if (spec.ramp && rampLengthM(spec.heightM, spec.ramp) > MAX_AREA_SIZE_M) {
+    fail("That ramp is too long. Raise the angle or lower the height");
+    return;
+  }
+  const next = addRampObject(area.objects, pv.from.x, pv.from.z, heading, {
+    heightM: rampPalette.heightM,
+    angleDeg: rampPalette.angleDeg,
+    widthM: rampPalette.widthM,
+  });
+  lastRampHeading = heading;
+  applyResult(dispatcher.commitScenery({ objects: next }), 0);
+  updateHistoryButtons();
+  updatePlaceGhost();
+  setStatus("Placed ramp. Ctrl+Z undoes it.", "ok");
+}
+
 /** Wheel while a footprint drag is live: 15 degrees per notch (outside a drag the wheel zooms). */
 function rotateBuildingDrag(dir: 1 | -1): void {
   const deg = (buildingPalette.rotationDeg + dir * ROTATION_STEP_DEG + 360) % 360;
@@ -1735,6 +2293,7 @@ function cancelSceneryGesture(): void {
   if (!had) return;
   scatterDrag = null;
   buildGesture.cancel();
+  rampGesture.cancel();
   if (area) {
     sceneryView?.setFeatures(area.features ?? []);
     refreshBudgetReadout();
@@ -1901,6 +2460,9 @@ function installArea(next: TerrainArea): void {
   updateHistoryButtons();
   terrainView = buildTerrainView(next.grid, next.paint);
   scene.add(terrainView.group);
+  rampGesture.cancel();
+  cancelLine();
+  rebuildRamps();
   $("empty").style.display = "none";
   frameArea(next);
   cursorRing.visible = false;
@@ -2953,7 +3515,14 @@ canvas.addEventListener("pointerdown", (e) => {
       sceneryPointerDown(e, placing);
     return;
   }
-  if (placing !== null) return; // hedge, fence and ramp arrive in plan 10
+  if (placing === "hedge" || placing === "fence") {
+    if (!stroking && !pushPull && !opHold) linePointerDown(e, placing);
+    return;
+  }
+  if (placing === "ramp") {
+    if (!stroking && !pushPull && !opHold && !sceneryGestureActive()) rampPointerDown(e);
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   activePointerId = e.pointerId;
   strokeEvent(e, "down");
@@ -3015,6 +3584,13 @@ canvas.addEventListener("pointercancel", (e) => {
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (stroking) strokeEvent(e, "up");
   activePointerId = null;
+});
+// Double-click finishes a hedge or fence; the two clicks add one point (a twin point is ignored).
+canvas.addEventListener("dblclick", (e) => {
+  if (lineBuilder.active() && lineKindActive !== null && dispatcher.placing() === lineKindActive) {
+    e.preventDefault();
+    finishLine();
+  }
 });
 canvas.addEventListener("pointerleave", () => {
   cancelStartGesture();
@@ -3171,7 +3747,9 @@ function deleteSelectedStart(): boolean {
 }
 
 function undoRedo(kind: "undo" | "redo"): void {
-  if (!area || stroking || pushPull || opHold || sceneryGestureActive()) return;
+  if (!area || stroking || pushPull || opHold || sceneryGestureActive() || lineBuilder.active()) {
+    return;
+  }
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
   if (!r) return;
   rebuild(r.dirtyHeights, { heights: true });
@@ -3504,12 +4082,23 @@ function buildSidebar(): void {
   budgetEl = null;
   budgetMsgEl = null;
   buildingBoxes = null;
+  lineLengthEl = null;
+  rampDirEl = null;
   const o = dispatcher.getOptions();
   const f = shell.flyout;
   f.replaceChildren();
   const mode = dispatcher.getMode();
   const armed = dispatcher.getArmed();
   const placingKind = dispatcher.placing();
+  if (lineKindActive !== null && lineKindActive !== placingKind) cancelLine();
+  if (placingKind === "hedge" || placingKind === "fence") {
+    buildLineSidebar(placingKind, f);
+    return;
+  }
+  if (placingKind === "ramp") {
+    buildRampSidebar(f);
+    return;
+  }
   if (placingKind === "building" || placingKind === "tree" || placingKind === "bush") {
     buildScenerySidebar(placingKind, f);
     return;
@@ -4330,6 +4919,11 @@ window.addEventListener("keydown", (e) => {
         setStatus("Placement cancelled.");
         return;
       }
+      if (lineBuilder.active()) {
+        cancelLine();
+        setStatus("Line cancelled.");
+        return;
+      }
       if (dispatcher.placing() !== null) {
         stopOpHold();
         dispatcher.setPlacing(null);
@@ -4368,6 +4962,19 @@ window.addEventListener("keydown", (e) => {
       break;
   }
   if (textFocused || dialogOpen || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (lineBuilder.active() && lineKindActive !== null && dispatcher.placing() === lineKindActive) {
+    // Line in progress: Enter finishes, Backspace drops the last point (never in TERRAIN_HOTKEYS).
+    if ((e.code === "Enter" || e.code === "NumpadEnter") && !e.repeat) {
+      e.preventDefault();
+      finishLine();
+      return;
+    }
+    if (e.code === "Backspace") {
+      e.preventDefault();
+      lineRemoveLast();
+      return;
+    }
+  }
   if (e.code === "Delete" && deleteSelectedStart()) {
     e.preventDefault();
     return;
