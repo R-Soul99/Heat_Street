@@ -68,7 +68,8 @@ function transform(
 
 function makeMaterial(opts: { vertexColors?: boolean; preview?: PreviewOptions }) {
   const mat = new THREE.MeshStandardMaterial({
-    color: opts.preview?.tint ?? 0xffffff,
+    // A preview tint rides on the instance colours (colour x tint would turn green foliage brown).
+    color: 0xffffff,
     roughness: 0.9,
     metalness: 0,
     vertexColors: opts.vertexColors === true,
@@ -94,7 +95,7 @@ function makeInstanced(
   const c = new THREE.Color();
   items.forEach((it, i) => {
     mesh.setMatrixAt(i, it.m);
-    mesh.setColorAt(i, c.setHex(it.color));
+    mesh.setColorAt(i, c.setHex(preview?.tint ?? it.color));
   });
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor !== null) mesh.instanceColor.needsUpdate = true;

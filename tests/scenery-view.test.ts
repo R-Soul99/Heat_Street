@@ -238,4 +238,15 @@ describe("scenery view behaviour", () => {
       expect(mat.opacity).toBe(0.5);
     }
   });
+
+  it("feature preview tint replaces every instance colour", () => {
+    const g = buildFeaturePreview(pt("tree", "pine"), flat, { opacity: 0.5, tint: 0xff6b6b });
+    for (const m of drawables(g)) {
+      const inst = m as THREE.InstancedMesh;
+      const c = new THREE.Color();
+      inst.getColorAt(0, c);
+      expect(c.getHex()).toBe(0xff6b6b);
+      expect((inst.material as THREE.MeshStandardMaterial).color.getHex()).toBe(0xffffff);
+    }
+  });
 });
