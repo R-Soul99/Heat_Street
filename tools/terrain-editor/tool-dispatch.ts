@@ -37,6 +37,7 @@ import {
   createCellMask,
   type MaskOp,
 } from "../../src/core/terrain-cell-mask.ts";
+import type { TerrainStartPoint } from "../../src/core/terrain-format.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import {
@@ -60,6 +61,7 @@ import {
   type BrushToolName,
   type Mode,
   type Operation,
+  type PlaceKind,
   type RoadAction,
   type RoadBrush,
 } from "./rail-tools.ts";
@@ -114,6 +116,8 @@ export interface ToolResult {
   graphChanged: boolean;
   /** Quick 261110-rdx: the unlocked-road list changed (repaint the lock overlay, mark dirty). */
   lockChanged: boolean;
+  /** 07.1.3: the start-point list changed (refresh markers and list, mark dirty). */
+  startPointsChanged: boolean;
   /** The mask selection changed (a Select-mode drag finished). */
   selectionChanged: boolean;
   slopeClamped: boolean;
@@ -134,6 +138,7 @@ export interface UndoRedoResult {
   dirtyPaint?: CellWindow;
   graphChanged: boolean;
   lockChanged: boolean;
+  startPointsChanged: boolean;
 }
 
 export interface Modifiers {
@@ -191,6 +196,7 @@ function emptyResult(): ToolResult {
   return {
     graphChanged: false,
     lockChanged: false,
+    startPointsChanged: false,
     selectionChanged: false,
     slopeClamped: false,
     warnings: [],
@@ -213,6 +219,7 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.dirtyPaint = unionWindow(into.dirtyPaint, r.dirtyPaint);
   into.graphChanged ||= r.graphChanged;
   into.lockChanged ||= r.lockChanged;
+  into.startPointsChanged ||= r.startPointsChanged;
   into.selectionChanged ||= r.selectionChanged;
   into.slopeClamped ||= r.slopeClamped;
   if (r.heightDeltaM !== undefined) into.heightDeltaM = r.heightDeltaM;
@@ -253,10 +260,23 @@ function paintRectToCells(
 function windowsOfDiff(
   area: EditArea,
   diff: StrokeDiff | undefined,
-): { heights?: CellWindow; paint?: CellWindow; graph: boolean; lock: boolean } {
-  const out: { heights?: CellWindow; paint?: CellWindow; graph: boolean; lock: boolean } = {
+): {
+  heights?: CellWindow;
+  paint?: CellWindow;
+  graph: boolean;
+  lock: boolean;
+  startPoints: boolean;
+} {
+  const out: {
+    heights?: CellWindow;
+    paint?: CellWindow;
+    graph: boolean;
+    lock: boolean;
+    startPoints: boolean;
+  } = {
     graph: false,
     lock: false,
+    startPoints: false,
   };
   if (!diff) return out;
   if (diff.heights) {
@@ -287,6 +307,7 @@ function windowsOfDiff(
   }
   out.graph = diff.graph !== undefined;
   out.lock = diff.lock !== undefined;
+  out.startPoints = diff.startPoints !== undefined;
   return out;
 }
 
@@ -299,7 +320,13 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
   const hAfter = new Map<number, number>();
   let graph: StrokeDiff["graph"];
   let lock: StrokeDiff["lock"];
+  let startPoints: StrokeDiff["startPoints"];
   for (const d of diffs) {
+    if (d.startPoints) {
+      startPoints = startPoints
+        ? { before: startPoints.before, after: d.startPoints.after }
+        : d.startPoints;
+    }
     if (d.lock) lock = lock ? { before: lock.before, after: d.lock.after } : d.lock;
     if (d.paint) {
       d.paint.indices.forEach((idx, k) => {
@@ -345,6 +372,7 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
         : undefined,
     graph,
     ...(lock ? { lock } : {}),
+    ...(startPoints ? { startPoints } : {}),
   };
 }
 
@@ -371,6 +399,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
   let mode: Mode = "select";
   let armed: Operation | RoadBrush | null = null;
   let brushTool: Tool | null = null;
+  // 07.1.3: an armed Place kind. While set the editor routes pointer input to the place
+  // tool and the dispatcher refuses strokes. Mode is unchanged (select | brush).
+  let placing: PlaceKind | null = null;
   const activeTool = (): Tool | null => (mode === "select" ? "select" : brushTool);
   let stroke: Stroke | null = null;
   const presetDefaults = ROAD_PRESETS.street;
@@ -499,6 +530,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       dirtyPaint: r.paintRect ? paintRectToCells(area, r.paintRect) : undefined,
       graphChanged: r.graphChanged,
       lockChanged: r.lockChanged,
+      startPointsChanged: r.startPointsChanged,
     };
   }
 
@@ -548,8 +580,11 @@ export function createToolDispatcher(getArea: () => EditArea) {
   const fmtChange = (r: { maxHeightChangeM: number; maxGradePct: number }): string =>
     `max height change ${r.maxHeightChangeM.toFixed(2)} m, max grade ${r.maxGradePct.toFixed(1)}%`;
 
-  /** Pushes a lock / re-grade diff as ONE undo entry and reports what changed. */
-  function commitLockDiff(area: EditArea, diff: StrokeDiff | undefined): ToolResult {
+  /**
+   * Pushes a diff as ONE undo entry on the single stack (D-16) and reports what changed.
+   * Reused by lock / re-grade and by scenery edits (start points, later features).
+   */
+  function commitSceneryDiff(area: EditArea, diff: StrokeDiff | undefined): ToolResult {
     const res = emptyResult();
     if (!diff) return res;
     stack.push(diff);
@@ -558,7 +593,13 @@ export function createToolDispatcher(getArea: () => EditArea) {
     res.dirtyPaint = w.paint;
     res.graphChanged = w.graph;
     res.lockChanged = w.lock;
+    res.startPointsChanged = w.startPoints;
     return res;
+  }
+
+  /** Pushes a lock / re-grade diff as ONE undo entry and reports what changed. */
+  function commitLockDiff(area: EditArea, diff: StrokeDiff | undefined): ToolResult {
+    return commitSceneryDiff(area, diff);
   }
 
   /**
@@ -623,6 +664,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (stroke?.tool === "select")
         stroke = null; // drop the unreleased rubber band
       else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      placing = null;
       mode = next;
     },
     getArmed: (): Operation | RoadBrush | null => armed,
@@ -632,7 +674,23 @@ export function createToolDispatcher(getArea: () => EditArea) {
         stroke = null; // drop the unreleased rubber band
       else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       selectBrushTool(op);
+      placing = null;
       mode = "brush";
+    },
+    placing: (): PlaceKind | null => placing,
+    /** Arms (or with null clears) a Place kind; drops any unreleased stroke first. */
+    setPlacing(kind: PlaceKind | null): void {
+      if (stroke?.tool === "select") stroke = null;
+      else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
+      placing = kind;
+    },
+    /** One undo step for a start-point list edit; a deep-equal list pushes nothing. */
+    commitStartPoints(next: readonly TerrainStartPoint[]): ToolResult {
+      const area = getArea();
+      const before = area.startPoints ?? [];
+      if (JSON.stringify(before) === JSON.stringify(next)) return emptyResult();
+      area.startPoints = [...next];
+      return commitSceneryDiff(area, { startPoints: { before, after: next } });
     },
     getSelectionMask: (): CellMask | null => liveSelection(),
     selectionCellCount: (): number => liveSelection()?.cellCount() ?? 0,
@@ -1071,6 +1129,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
     pointerDown(x: number, z: number, mods: Modifiers): ToolResult {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
+      if (placing !== null) return emptyResult();
       if (stroke) this.pointerUp(x, z);
       const tool = activeTool();
       if (tool === null) {
@@ -1118,6 +1177,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
     pointerMove(x: number, z: number, _mods?: Modifiers): ToolResult {
       const s = stroke;
+      if (placing !== null) return emptyResult();
       if (!s || !Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
       const res = emptyResult();
       if (s.tool === "road") {
@@ -1142,7 +1202,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
 
     pointerUp(x: number, z: number): ToolResult {
       const s = stroke;
-      if (!s) return emptyResult();
+      if (!s || placing !== null) return emptyResult();
       const area = getArea();
       const res = emptyResult();
       const finite = Number.isFinite(x) && Number.isFinite(z);

@@ -17,6 +17,7 @@
  */
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import type { CellMask } from "./terrain-cell-mask.ts";
+import type { TerrainStartPoint } from "./terrain-format.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
@@ -61,6 +62,11 @@ export interface StrokeDiff {
   };
   /** Quick 261110-rdx: unlocked-edge-id list snapshots (DD-5), sorted ascending. */
   readonly lock?: { before: readonly number[]; after: readonly number[] };
+  /** 07.1.3 D-16: whole-array start-point snapshots (elements shared, never mutated). */
+  readonly startPoints?: {
+    before: readonly TerrainStartPoint[];
+    after: readonly TerrainStartPoint[];
+  };
 }
 
 export interface StrokeRecorder {

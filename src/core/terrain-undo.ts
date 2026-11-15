@@ -10,6 +10,7 @@
  */
 import { parseRoadGraph, type RoadGraph } from "./road-graph.ts";
 import type { PaintRect, StrokeDiff } from "./terrain-brush.ts";
+import type { TerrainStartPoint } from "./terrain-format.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import type { PaintMap } from "./terrain-paint.ts";
 import type { CellWindow } from "./terrain-slope.ts";
@@ -24,6 +25,8 @@ export interface UndoTarget {
   nextEdgeId: number;
   /** Quick 261110-rdx: unlocked road-edge ids (absent/empty = all locked). */
   unlockedEdgeIds?: number[];
+  /** 07.1.3 D-03: named spawn poses; first entry is the default. */
+  startPoints?: TerrainStartPoint[];
 }
 
 export interface ApplyResult {
@@ -32,6 +35,8 @@ export interface ApplyResult {
   graphChanged: boolean;
   /** True when the unlocked-edge list was restored by this diff. */
   lockChanged: boolean;
+  /** True when the start-point list was restored by this diff. */
+  startPointsChanged: boolean;
 }
 
 export function applyStrokeDiff(
@@ -39,7 +44,11 @@ export function applyStrokeDiff(
   diff: StrokeDiff,
   side: "before" | "after",
 ): ApplyResult {
-  const result: ApplyResult = { graphChanged: false, lockChanged: false };
+  const result: ApplyResult = {
+    graphChanged: false,
+    lockChanged: false,
+    startPointsChanged: false,
+  };
 
   if (diff.heights) {
     const { indices } = diff.heights;
@@ -94,6 +103,11 @@ export function applyStrokeDiff(
   if (diff.lock) {
     area.unlockedEdgeIds = [...diff.lock[side]];
     result.lockChanged = true;
+  }
+
+  if (diff.startPoints) {
+    area.startPoints = [...diff.startPoints[side]];
+    result.startPointsChanged = true;
   }
   return result;
 }

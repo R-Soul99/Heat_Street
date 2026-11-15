@@ -234,3 +234,27 @@ describe("lock snapshots (quick 261110-rdx)", () => {
     expect(area.unlockedEdgeIds).toEqual([1]);
   });
 });
+
+describe("start-point diff part", () => {
+  const sp = (n: number) => ({ id: `start-${n}`, name: `Start ${n}`, x: n, z: 0, headingRad: 0 });
+
+  it("applyStrokeDiff writes the chosen side and flags startPointsChanged", () => {
+    const area = makeArea();
+    const before = [sp(1)];
+    const after = [sp(1), sp(2)];
+    area.startPoints = [...after];
+    const diff = { startPoints: { before, after } };
+    const r1 = applyStrokeDiff(area, diff, "before");
+    expect(r1.startPointsChanged).toBe(true);
+    expect(area.startPoints).toEqual(before);
+    expect(area.startPoints).not.toBe(before);
+    const r2 = applyStrokeDiff(area, diff, "after");
+    expect(r2.startPointsChanged).toBe(true);
+    expect(area.startPoints).toEqual(after);
+  });
+
+  it("other diffs leave startPointsChanged false", () => {
+    const area = makeArea();
+    expect(applyStrokeDiff(area, dab(area, 0), "before").startPointsChanged).toBe(false);
+  });
+});

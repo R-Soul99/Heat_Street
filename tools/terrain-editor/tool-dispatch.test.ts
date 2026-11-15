@@ -1263,3 +1263,72 @@ describe("selection operations (07.1.2-07)", () => {
     expect(d.getOptions().selectStepM).toBe(2);
   });
 });
+
+describe("start-point undo (07.1.3 D-16)", () => {
+  const sp = (n: number) => ({
+    id: `start-${n}`,
+    name: `Start ${n}`,
+    x: n,
+    z: n * 2,
+    headingRad: 0.5,
+  });
+
+  it("commitStartPoints is one undo step; undo and redo restore exact arrays", () => {
+    const { area, d } = setup();
+    const a = [sp(1)];
+    const r = d.commitStartPoints(a);
+    expect(r.startPointsChanged).toBe(true);
+    expect(area.startPoints).toEqual(a);
+    const b = [sp(1), sp(2)];
+    d.commitStartPoints(b);
+    const u = d.undo();
+    expect(u !== false && u.startPointsChanged).toBe(true);
+    expect(area.startPoints).toEqual(a);
+    d.undo();
+    expect(area.startPoints).toEqual([]);
+    const rd = d.redo();
+    expect(rd !== false && rd.startPointsChanged).toBe(true);
+    expect(area.startPoints).toEqual(a);
+    d.redo();
+    expect(area.startPoints).toEqual(b);
+  });
+
+  it("a deep-equal list pushes nothing", () => {
+    const { area, d } = setup();
+    d.commitStartPoints([sp(1)]);
+    const r = d.commitStartPoints([sp(1)]);
+    expect(r.startPointsChanged).toBe(false);
+    d.undo();
+    expect(area.startPoints).toEqual([]);
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("interleaves with sculpt steps on the single stack", () => {
+    const { area, d } = setup();
+    raiseBox(d, 0, 0, 12, 1);
+    d.commitStartPoints([sp(1)]);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
+    d.undo();
+    expect(area.startPoints).toEqual([]);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeGreaterThan(0);
+    d.undo();
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+  });
+
+  it("placing state refuses strokes and clears on mode change", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    d.setPlacing("start");
+    expect(d.placing()).toBe("start");
+    d.pointerDown(0, 0, {});
+    d.pointerMove(5, 0, {});
+    d.pointerUp(5, 0);
+    expect(d.canUndo()).toBe(false);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+    d.setMode("select");
+    expect(d.placing()).toBeNull();
+    d.setPlacing("tree");
+    d.setPlacing(null);
+    expect(d.placing()).toBeNull();
+  });
+});
