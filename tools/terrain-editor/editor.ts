@@ -7,14 +7,18 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { yawFromTravelDirection } from "../../src/core/heading.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import { SURFACE_TYPES, type SurfaceType } from "../../src/core/surface-types.ts";
 import { maskAverageHeight, stepRadiusCells } from "../../src/core/terrain-brush.ts";
+import { nearestEdgeHeading, terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
 import {
   encodeTerrainBinary,
   loadTerrainArea,
+  MAX_START_NAME_CHARS,
   serializeTerrainSidecar,
   type TerrainArea,
+  type TerrainStartPoint,
 } from "../../src/core/terrain-format.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { DEFAULT_CELL_SIZE_M, MAX_AREA_SIZE_M } from "../../src/core/terrain-limits.ts";
@@ -70,9 +74,13 @@ import { menuFace } from "../editor-shell/top-bar.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
+import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
+import { createDragGesture, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 import {
   BRUSH_TOOL_FOR,
+  PLACE_MENU,
+  type PlaceKind,
   ROAD_BUTTONS,
   ROAD_MENU,
   TERRAIN_BAR,
@@ -83,6 +91,16 @@ import {
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
+import {
+  addStartPoint,
+  defaultStartPoint,
+  makeDefault,
+  moveStartPoint,
+  removeStartPoint,
+  renameStartPoint,
+  startIdSeed,
+  turnStartPoint,
+} from "./start-points.ts";
 import {
   createToolDispatcher,
   type EditArea,
@@ -488,6 +506,187 @@ const dispatcher = createToolDispatcher(() => {
   return area as unknown as EditArea;
 });
 
+// ---------------------------------------------------------------- start points (07.1.3)
+
+const START_DEFAULT_COLOR = 0x66cc99;
+const START_OTHER_COLOR = 0xffb347;
+const START_PICK_RADIUS_M = 2;
+const START_RING_RADIUS_M = 1.6;
+const START_TAG_LIFT_M = 3.6;
+
+/** Never-reused id counter for new start points (D-03); never reset on undo. */
+let startSeed = 1;
+let selectedStartId: string | null = null;
+/** Live preview list while a marker is being dragged or turned (committed on pointer-up). */
+let startDraft: readonly TerrainStartPoint[] | null = null;
+const startMarkers = new THREE.Group();
+scene.add(startMarkers);
+const startTags: { el: HTMLElement; pos: THREE.Vector3 }[] = [];
+const startTagLayer = el("div");
+startTagLayer.style.cssText =
+  "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5";
+wrap.appendChild(startTagLayer);
+const gestureMaterial = new THREE.LineBasicMaterial({
+  color: SELECT_ACCENT,
+  depthTest: false,
+  transparent: true,
+});
+let gestureLine: THREE.Line | null = null;
+const startGesture = createDragGesture();
+/** A marker press in progress: move (plain drag) or turn (Shift-drag). */
+let startDrag: { id: string; mode: "move" | "turn"; pointerId: number; moved: boolean } | null =
+  null;
+
+function currentStarts(): readonly TerrainStartPoint[] {
+  return startDraft ?? area?.startPoints ?? [];
+}
+
+function setGesturePreview(
+  from: { x: number; z: number } | null,
+  to: { x: number; z: number } | null,
+): void {
+  if (gestureLine) {
+    scene.remove(gestureLine);
+    gestureLine.geometry.dispose();
+    gestureLine = null;
+  }
+  if (!from || !to || !area) return;
+  const g = area.grid;
+  const arr = new Float32Array([
+    from.x,
+    sampleTerrainHeight(g, from.x, from.z) + 0.5,
+    from.z,
+    to.x,
+    sampleTerrainHeight(g, to.x, to.z) + 0.5,
+    to.z,
+  ]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+  gestureLine = new THREE.Line(geo, gestureMaterial);
+  gestureLine.renderOrder = 998;
+  gestureLine.frustumCulled = false;
+  scene.add(gestureLine);
+}
+
+function arrowGeometry(): THREE.BufferGeometry {
+  // 3 m long, 1.2 m wide, pointing along local -Z (forward at yaw 0).
+  const v = [
+    0, 0, -1.5, -0.6, 0, -0.3, 0.6, 0, -0.3, -0.2, 0, -0.3, -0.2, 0, 1.5, 0.2, 0, 1.5, -0.2, 0,
+    -0.3, 0.2, 0, 1.5, 0.2, 0, -0.3,
+  ];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(v), 3));
+  return geo;
+}
+
+function disposeStartMarkers(): void {
+  for (const child of [...startMarkers.children]) {
+    startMarkers.remove(child);
+    child.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+      const mat = m.material as THREE.Material | undefined;
+      if (mat) mat.dispose();
+    });
+  }
+  for (const t of startTags) t.el.remove();
+  startTags.length = 0;
+}
+
+/** Rebuilds every start-point marker (pole, flag, ground arrow, selection ring) and name tags. */
+function rebuildStartMarkers(): void {
+  disposeStartMarkers();
+  if (!area) return;
+  const list = currentStarts();
+  const first = defaultStartPoint(list);
+  for (const p of list) {
+    const isDefault = first !== undefined && p.id === first.id;
+    const color = isDefault ? START_DEFAULT_COLOR : START_OTHER_COLOR;
+    const y = sampleTerrainHeight(area.grid, p.x, p.z);
+    const group = new THREE.Group();
+    group.position.set(p.x, y, p.z);
+    group.rotation.y = p.headingRad;
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 3, 6),
+      new THREE.MeshBasicMaterial({ color }),
+    );
+    pole.position.y = 1.5;
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 0.7),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }),
+    );
+    // Flag trails behind the facing direction (+Z local), top of the pole.
+    flag.rotation.y = Math.PI / 2;
+    flag.position.set(0, 2.65, 0.6);
+    const arrow = new THREE.Mesh(
+      arrowGeometry(),
+      new THREE.MeshBasicMaterial({
+        color,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.9,
+      }),
+    );
+    arrow.position.y = 0.15;
+    arrow.renderOrder = 997;
+    group.add(pole, flag, arrow);
+    if (p.id === selectedStartId) {
+      const pts: number[] = [];
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2;
+        pts.push(Math.cos(a) * START_RING_RADIUS_M, 0.2, Math.sin(a) * START_RING_RADIUS_M);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
+      const ring = new THREE.LineLoop(
+        geo,
+        new THREE.LineBasicMaterial({ color: SELECT_ACCENT, depthTest: false, transparent: true }),
+      );
+      ring.renderOrder = 998;
+      ring.frustumCulled = false;
+      group.add(ring);
+    }
+    group.userData.startId = p.id;
+    startMarkers.add(group);
+    if (isDefault || p.id === selectedStartId) {
+      const tag = el("div", undefined, p.name);
+      tag.style.cssText =
+        "position:absolute;font-size:11px;padding:4px;background:var(--panel,#222);color:#fff;border:1px solid #000;white-space:nowrap;transform:translate(-50%,-100%)";
+      startTagLayer.appendChild(tag);
+      startTags.push({ el: tag, pos: new THREE.Vector3(p.x, y + START_TAG_LIFT_M, p.z) });
+    }
+  }
+}
+
+const tagProbe = new THREE.Vector3();
+/** Per-frame: place the DOM name tags over their markers. */
+function positionStartTags(): void {
+  if (startTags.length === 0) return;
+  const w = Math.max(1, wrap.clientWidth);
+  const h = Math.max(1, wrap.clientHeight);
+  for (const t of startTags) {
+    tagProbe.copy(t.pos).project(camera);
+    const visible = tagProbe.z > -1 && tagProbe.z < 1;
+    t.el.style.display = visible ? "block" : "none";
+    t.el.style.left = `${((tagProbe.x + 1) / 2) * w}px`;
+    t.el.style.top = `${((1 - tagProbe.y) / 2) * h}px`;
+  }
+}
+
+function startPointAt(x: number, z: number): TerrainStartPoint | undefined {
+  let best: TerrainStartPoint | undefined;
+  let bestD = START_PICK_RADIUS_M;
+  for (const p of currentStarts()) {
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d <= bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
 function resize(): void {
   const w = Math.max(1, wrap.clientWidth);
   const h = Math.max(1, wrap.clientHeight);
@@ -617,6 +816,12 @@ function installArea(next: TerrainArea): void {
   dispatcher.clearSelection();
   shell.info.set("change", "");
   setPreview(null);
+  setGesturePreview(null, null);
+  startGesture.cancel();
+  startDrag = null;
+  startDraft = null;
+  selectedStartId = null;
+  startSeed = startIdSeed(next.startPoints ?? []);
   stroking = false;
   slopeAmber = false;
   updateHistoryButtons();
@@ -631,6 +836,7 @@ function installArea(next: TerrainArea): void {
   refreshOverlays();
   refreshRoadLockOverlay();
   refreshInfo();
+  rebuildStartMarkers();
   syncToolbar();
 }
 
@@ -1221,6 +1427,7 @@ function maybeRebuildContours(x: number, z: number): void {
 
 function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
   if (!w || !area) return;
+  reseatStartMarkers(w);
   if (gridOn) {
     gridKey = "";
     updateFootprintGrid(lastHit);
@@ -1239,6 +1446,18 @@ function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
       g.originZ + overlayCentre.row * g.cellSizeM,
     );
   }
+}
+
+/** Sculpting under a start marker re-seats it on the new ground. */
+function reseatStartMarkers(w: CellWindow): void {
+  if (!area) return;
+  const g = area.grid;
+  const hit = currentStarts().some((p) => {
+    const col = (p.x - g.originX) / g.cellSizeM;
+    const row = (p.z - g.originZ) / g.cellSizeM;
+    return col >= w.minCol - 1 && col <= w.maxCol + 1 && row >= w.minRow - 1 && row <= w.maxRow + 1;
+  });
+  if (hit) rebuildStartMarkers();
 }
 
 function refreshOverlays(): void {
@@ -1288,6 +1507,7 @@ function updateCursor(clientX: number, clientY: number): void {
   }
   lastHit = { x: hit.x, z: hit.z };
   paintRing(hit);
+  if (dispatcher.placing() !== null) cursorRing.visible = false;
   updateLockHover(hit.x, hit.z);
   maybeRebuildContours(hit.x, hit.z);
   shell.info.set(
@@ -1302,7 +1522,7 @@ function updateCursor(clientX: number, clientY: number): void {
 function applyCanvasCursor(): void {
   canvas.style.cursor = pushPull
     ? "ns-resize"
-    : tool === "select" && lastHit !== null
+    : (tool === "select" || dispatcher.placing() !== null) && lastHit !== null
       ? "crosshair"
       : "";
 }
@@ -1520,7 +1740,9 @@ function applyResult(res: ToolResult, _ms: number): void {
     (res.dirtyHeights !== undefined ||
       res.dirtyPaint !== undefined ||
       res.graphChanged ||
-      res.lockChanged);
+      res.lockChanged ||
+      res.startPointsChanged);
+  if (res.startPointsChanged) startPointsEdited();
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
   refreshSelectionOutline();
   if (res.selectionChanged) syncToolbar();
@@ -1631,6 +1853,12 @@ canvas.addEventListener("pointerdown", (e) => {
     setStatus("Push/pull the selection: drag up or down. Shift = fine, Esc cancels.");
     return;
   }
+  const placing = dispatcher.placing();
+  if (placing === "start") {
+    if (!stroking && !pushPull && !opHold) startPointerDown(e);
+    return;
+  }
+  if (placing !== null) return; // the other Place kinds arrive in later plans
   canvas.setPointerCapture(e.pointerId);
   activePointerId = e.pointerId;
   strokeEvent(e, "down");
@@ -1646,9 +1874,17 @@ canvas.addEventListener("pointermove", (e) => {
     if (res.status === undefined) setStatus(`Push/pull ${pushPullText(pushPull.lastDeltaM)}`);
     return;
   }
+  if (startGesture.active() || startDrag) {
+    startPointerMove(e);
+    return;
+  }
   if (stroking) strokeEvent(e, "move");
 });
 canvas.addEventListener("pointerup", (e) => {
+  if (e.button === 0 && (startGesture.active() || startDrag)) {
+    startPointerUp(e);
+    return;
+  }
   if (pushPull && e.pointerId === pushPull.pointerId && e.button === 0) {
     const pp = pushPull;
     pushPull = null;
@@ -1671,16 +1907,162 @@ canvas.addEventListener("pointerup", (e) => {
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointercancel", (e) => {
+  cancelStartGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (stroking) strokeEvent(e, "up");
   activePointerId = null;
 });
 canvas.addEventListener("pointerleave", () => {
+  cancelStartGesture();
   if (!stroking) {
     cursorRing.visible = false;
     clearBoxOutline();
+    lastHit = null; // Drive here must never use a stale cursor position (D-06)
   }
 });
+
+// ---------------------------------------------------------------- start point gestures (D-05)
+
+function selectStart(id: string): void {
+  if (!area || !(area.startPoints ?? []).some((p) => p.id === id)) return;
+  selectedStartId = id;
+  rebuildStartMarkers();
+  highlightStartRows();
+  updateDriveButton();
+}
+
+function startPointerDown(e: PointerEvent): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) {
+    setStatus("Start points must be inside the map area", "error");
+    return;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  canvas.setPointerCapture(e.pointerId);
+  activePointerId = e.pointerId;
+  const marker = startPointAt(hit.x, hit.z);
+  if (marker) {
+    selectStart(marker.id);
+    startDrag = {
+      id: marker.id,
+      mode: e.shiftKey ? "turn" : "move",
+      pointerId: e.pointerId,
+      moved: false,
+    };
+    return;
+  }
+  startGesture.down(hit.x, hit.z);
+}
+
+function startPointerMove(e: PointerEvent): void {
+  if (!area) return;
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) return;
+  if (startDrag) {
+    const list = area.startPoints ?? [];
+    const p = list.find((q) => q.id === startDrag?.id);
+    if (!p) return;
+    if (startDrag.mode === "move") {
+      startDraft = moveStartPoint(list, p.id, hit.x, hit.z);
+    } else {
+      const dx = hit.x - p.x;
+      const dz = hit.z - p.z;
+      if (Math.hypot(dx, dz) < DRAG_HEADING_MIN_M) return;
+      startDraft = turnStartPoint(list, p.id, yawFromTravelDirection(dx, dz));
+    }
+    startDrag.moved = true;
+    rebuildStartMarkers();
+    return;
+  }
+  startGesture.move(hit.x, hit.z);
+  const pv = startGesture.preview();
+  setGesturePreview(pv?.from ?? null, pv?.to ?? null);
+}
+
+function startPointerUp(e: PointerEvent): void {
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+  activePointerId = null;
+  if (!area) return;
+  if (startDrag) {
+    const d = startDrag;
+    const draft = startDraft;
+    startDrag = null;
+    startDraft = null;
+    if (draft && d.moved) {
+      applyResult(dispatcher.commitStartPoints(draft), 0);
+      updateHistoryButtons();
+      setStatus(d.mode === "move" ? "Moved start point." : "Turned start point.", "ok");
+    } else {
+      rebuildStartMarkers();
+    }
+    return;
+  }
+  const r = startGesture.up();
+  setGesturePreview(null, null);
+  if (!r) return;
+  const ext = terrainGridExtent(area.grid);
+  if (r.x < ext.minX || r.x > ext.maxX || r.z < ext.minZ || r.z > ext.maxZ) {
+    setStatus("Start points must be inside the map area", "error");
+    return;
+  }
+  const heading = r.headingRad ?? nearestEdgeHeading(area.graph, r.x, r.z) ?? 0;
+  const res = addStartPoint(area.startPoints ?? [], startSeed, r.x, r.z, heading);
+  if (res.error !== undefined) {
+    setStatus(res.error, "error");
+    return;
+  }
+  startSeed = res.nextSeed;
+  const added = res.list[res.list.length - 1];
+  if (!added) return;
+  selectedStartId = added.id;
+  applyResult(dispatcher.commitStartPoints(res.list), 0);
+  updateHistoryButtons();
+  setStatus(`Placed ${added.name}. Ctrl+Z undoes it.`, "ok");
+}
+
+function cancelStartGesture(): void {
+  const had = startGesture.active() || startDrag !== null;
+  startGesture.cancel();
+  setGesturePreview(null, null);
+  if (startDrag) {
+    startDrag = null;
+    startDraft = null;
+    rebuildStartMarkers();
+  }
+  if (had && activePointerId !== null && canvas.hasPointerCapture(activePointerId)) {
+    canvas.releasePointerCapture(activePointerId);
+  }
+  if (had) activePointerId = null;
+}
+
+/** One undo step for a list edit from the sidebar or the keyboard. */
+function commitStarts(next: readonly TerrainStartPoint[]): void {
+  if (!area || stroking || pushPull || opHold) return;
+  applyResult(dispatcher.commitStartPoints(next), 0);
+  updateHistoryButtons();
+}
+
+/** Start-point list changed (edit, undo or redo): markers, list and selection follow. */
+function startPointsEdited(): void {
+  const ids = new Set((area?.startPoints ?? []).map((q) => q.id));
+  if (selectedStartId !== null && !ids.has(selectedStartId)) selectedStartId = null;
+  rebuildStartMarkers();
+  refreshStartList();
+  syncToolbar();
+}
+
+function deleteSelectedStart(): boolean {
+  if (!area || selectedStartId === null) return false;
+  const placing = dispatcher.placing() === "start";
+  const selectMode = dispatcher.getMode() === "select" && dispatcher.placing() === null;
+  if (!placing && !(selectMode && dispatcher.selectionCellCount() === 0)) return false;
+  const list = area.startPoints ?? [];
+  if (!list.some((q) => q.id === selectedStartId)) return false;
+  commitStarts(removeStartPoint(list, selectedStartId));
+  setStatus("Deleted start point. Ctrl+Z undoes it.", "ok");
+  return true;
+}
 
 function undoRedo(kind: "undo" | "redo"): void {
   if (!area || stroking || pushPull || opHold) return;
@@ -1699,6 +2081,7 @@ function undoRedo(kind: "undo" | "redo"): void {
     validateRoads();
     refreshInfo();
   }
+  if (r.startPointsChanged) startPointsEdited();
   refreshRoadProblems();
 }
 
@@ -1844,7 +2227,167 @@ function updateRoadsCountEl(): void {
 }
 
 /** Sidebar content for the current mode and armed brush (D-12, D-18, D-27). */
+const PLACE_HINT: Record<PlaceKind, string> = {
+  start: "Click and drag: where the car starts, and which way it faces.",
+  building: "Drag a footprint. Wheel rotates 15 degrees.",
+  tree: "Click to place. Scatter paints many.",
+  bush: "Click to place. Scatter paints many.",
+  hedge: "Click points. Enter or double-click finishes, Esc cancels.",
+  fence: "Click points. Enter or double-click finishes, Esc cancels.",
+  ramp: "Press, then drag toward the way it should face.",
+};
+
+let startListBox: HTMLElement | null = null;
+let driveFromBtn: HTMLButtonElement | null = null;
+
+function selectedOrDefaultStart(): TerrainStartPoint | undefined {
+  const list = area?.startPoints ?? [];
+  return list.find((q) => q.id === selectedStartId) ?? defaultStartPoint(list);
+}
+
+function updateDriveButton(): void {
+  if (!driveFromBtn) return;
+  const sp = selectedOrDefaultStart();
+  driveFromBtn.textContent = `Drive from: ${sp ? sp.name : "(none)"}`;
+  driveFromBtn.setAttribute("aria-disabled", String(!sp));
+  driveFromBtn.style.opacity = sp ? "" : "0.55";
+}
+
+function highlightStartRows(): void {
+  if (!startListBox) return;
+  for (const row of Array.from(startListBox.children) as HTMLElement[]) {
+    if (row.dataset.startId === undefined) continue;
+    row.style.borderLeftColor = row.dataset.startId === selectedStartId ? "#4aa3ff" : "transparent";
+  }
+}
+
+function startRow(p: TerrainStartPoint, index: number, isDefault: boolean): HTMLElement {
+  const row = el("div");
+  row.dataset.startId = p.id;
+  row.style.cssText =
+    "display:flex;gap:4px;height:32px;align-items:center;border-left:2px solid transparent;padding-left:2px";
+  row.addEventListener("click", () => selectStart(p.id));
+  const squareBtn = (b: HTMLButtonElement, aria: string): HTMLButtonElement => {
+    b.style.cssText = "width:32px;height:32px;padding:0;flex:none";
+    b.setAttribute("aria-label", aria);
+    return b;
+  };
+  const star = squareBtn(
+    createButton({
+      label: isDefault ? "★" : "☆",
+      tip: "Make default: use this start in the game",
+      onClick: () => commitStarts(makeDefault(area?.startPoints ?? [], p.id)),
+    }),
+    isDefault ? `${p.name} is the default start` : `Make ${p.name} the default start`,
+  );
+  star.disabled = isDefault;
+  const input = el(
+    "input",
+    undefined,
+    undefined,
+    "Rename this start point (Enter keeps it, Esc reverts)",
+  );
+  input.type = "text";
+  input.maxLength = MAX_START_NAME_CHARS;
+  input.value = p.name;
+  input.setAttribute("aria-label", `Name of start point ${index + 1}`);
+  input.style.cssText = "flex:1;min-width:0;height:28px";
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.stopPropagation();
+      input.blur();
+    } else if (ev.key === "Escape") {
+      ev.stopPropagation();
+      input.value = p.name;
+      input.blur();
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (input.value.trim() === p.name) {
+      input.value = p.name;
+      return;
+    }
+    const list = area?.startPoints ?? [];
+    const next = renameStartPoint(list, p.id, input.value);
+    if (next === list) {
+      input.value = p.name;
+      setStatus(`Start point names are 1 to ${MAX_START_NAME_CHARS} characters`, "error");
+      return;
+    }
+    commitStarts(next);
+  });
+  const goTo = squareBtn(
+    createButton({
+      label: "⌖",
+      tip: "Go to: centre the view on this start point",
+      onClick: () => {
+        if (!area) return;
+        const t = (area.startPoints ?? []).find((q) => q.id === p.id);
+        if (!t) return;
+        const off = camera.position.clone().sub(controls.target);
+        controls.target.set(t.x, sampleTerrainHeight(area.grid, t.x, t.z), t.z);
+        camera.position.copy(controls.target).add(off);
+        controls.update();
+        selectStart(p.id);
+      },
+    }),
+    `Go to ${p.name}`,
+  );
+  const del = squareBtn(
+    createButton({
+      label: "✕",
+      tip: "Delete this start point (Ctrl+Z undoes it)",
+      onClick: () => commitStarts(removeStartPoint(area?.startPoints ?? [], p.id)),
+    }),
+    `Delete ${p.name}`,
+  );
+  row.append(star, input, goTo, del);
+  return row;
+}
+
+/** Rebuilds the Start points rows from area.startPoints (names come from files: textContent / value only). */
+function refreshStartList(): void {
+  if (!startListBox) return;
+  startListBox.replaceChildren();
+  const list = area?.startPoints ?? [];
+  if (list.length === 0) {
+    startListBox.append(
+      el("div", "muted", "No start points"),
+      el(
+        "div",
+        "muted",
+        "Pick Place > Start point, then click and drag on the map to set where and which way.",
+      ),
+    );
+  }
+  list.forEach((p, i) => {
+    startListBox?.appendChild(startRow(p, i, i === 0));
+  });
+  highlightStartRows();
+  updateDriveButton();
+}
+
+function buildStartPointsSection(open: boolean): HTMLDetailsElement {
+  startListBox = el("div");
+  startListBox.style.cssText =
+    "display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;margin:4px 0";
+  driveFromBtn = createButton({
+    label: "Drive from: (none)",
+    tip: "Save, then open the game on the selected start point (D)",
+    onClick: () => void driveFrom(),
+  });
+  driveFromBtn.style.width = "100%";
+  const section = createSection("Start points", "Where the car starts in the game", open, [
+    startListBox,
+    driveFromBtn,
+  ]);
+  refreshStartList();
+  return section;
+}
+
 function buildSidebar(): void {
+  startListBox = null;
+  driveFromBtn = null;
   activeValue = null;
   selectionReadoutEl = null;
   surfaceReadoutEl = null;
@@ -1855,6 +2398,12 @@ function buildSidebar(): void {
   f.replaceChildren();
   const mode = dispatcher.getMode();
   const armed = dispatcher.getArmed();
+  const placingKind = dispatcher.placing();
+  if (placingKind !== null) {
+    f.append(note(PLACE_HINT[placingKind]));
+    if (placingKind === "start") f.append(buildStartPointsSection(true));
+    return;
+  }
 
   const strength = (): HTMLElement =>
     optStepper(
@@ -1948,6 +2497,7 @@ function buildSidebar(): void {
         roadsCountEl,
       ]),
     );
+    if ((area?.startPoints?.length ?? 0) > 0) f.append(buildStartPointsSection(false));
     updateRoadsCountEl();
     refreshSelectionOutline();
     return;
@@ -2063,26 +2613,61 @@ async function smoothWholeMap(): Promise<void> {
 }
 // ---------------------------------------------------------------- drive here
 
-async function driveHere(): Promise<void> {
-  if (!area) return;
-  const id = area.areaId;
-  const spot = lastHit ?? { x: controls.target.x, z: controls.target.z };
-  if (!(await save())) return;
-  let drivable = false;
+async function isDrivable(id: string): Promise<boolean> {
   try {
     const res = await fetch(`/__terrain/drivable/${id}`);
-    drivable = res.ok && ((await res.json()) as { drivable?: boolean }).drivable === true;
+    return res.ok && ((await res.json()) as { drivable?: boolean }).drivable === true;
   } catch {
-    drivable = false;
+    return false;
   }
-  if (!drivable) {
-    const text = "Drive here: this area is not registered yet. Save it once, then try again.";
-    fail(text);
-    return;
-  }
-  const url = `/?map=${id}&at=${spot.x.toFixed(1)},${spot.z.toFixed(1)}&debug`;
+}
+
+function openDriveUrl(url: string): void {
   const w = window.open(url, "_blank");
   if (!w) log(`Pop-up blocked. Open ${url} manually.`);
+}
+
+/** Drive from the selected start point, else the default one (D-06). */
+async function driveFrom(): Promise<void> {
+  if (!area) return;
+  const sp = selectedOrDefaultStart();
+  if (!sp) {
+    setStatus("Place a start point first, or use Drive here.", "error");
+    return;
+  }
+  const id = area.areaId;
+  const startId = sp.id;
+  if (!(await save())) return;
+  if (!(await isDrivable(id))) {
+    fail("Drive from: this area is not registered yet. Save it once, then try again.");
+    return;
+  }
+  openDriveUrl(buildDriveUrl(id, { start: startId }));
+}
+
+/**
+ * Drive from a spot. The keyboard path passes the cursor point captured at keydown; the
+ * menu path passes nothing and uses the view centre. The spot and the facing are read BEFORE
+ * the awaited save, so a moving cursor or camera never changes them (D-06).
+ */
+async function driveHere(spot?: { x: number; z: number }): Promise<void> {
+  if (!area) return;
+  const id = area.areaId;
+  const fromMenu = spot === undefined;
+  const at = spot ?? { x: controls.target.x, z: controls.target.z };
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const headingDeg =
+    Math.hypot(dir.x, dir.z) > 1e-4
+      ? yawToHeadingDeg(yawFromTravelDirection(dir.x, dir.z))
+      : undefined;
+  if (!(await save())) return;
+  if (!(await isDrivable(id))) {
+    fail("Drive here: this area is not registered yet. Save it once, then try again.");
+    return;
+  }
+  if (fromMenu) setStatus("Driving from the centre of the view");
+  openDriveUrl(buildDriveUrl(id, { at, ...(headingDeg !== undefined ? { headingDeg } : {}) }));
 }
 
 // ---------------------------------------------------------------- wiring
@@ -2149,6 +2734,7 @@ async function contourIntervalDialog(): Promise<void> {
 }
 
 function cancelActiveStroke(): void {
+  cancelStartGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
   if (!stroking) return;
   stroking = false;
@@ -2243,6 +2829,7 @@ function toolbarInput(): ToolbarInput {
     selectionCells: dispatcher.selectionCellCount(),
     cellSizeM: area?.grid.cellSizeM ?? 1,
     armed: dispatcher.getArmed(),
+    placing: dispatcher.placing(),
   };
 }
 
@@ -2272,14 +2859,15 @@ function syncToolFromDispatcher(): void {
 function syncToolbar(): void {
   const input = toolbarInput();
   const st = toolbarState(input);
-  const key = `${input.mode}|${input.armed ?? ""}`;
+  const hasStarts = (area?.startPoints?.length ?? 0) > 0 ? 1 : 0;
+  const key = `${input.mode}|${input.armed ?? ""}|${input.placing ?? ""}|${hasStarts}`;
   if (key !== sidebarKey) {
     sidebarKey = key;
     buildSidebar();
   }
   const f = shell.bar;
   if (f) {
-    for (const t of [...TOOLBAR_TOOLS, ROAD_MENU]) {
+    for (const t of [...TOOLBAR_TOOLS, ROAD_MENU, PLACE_MENU]) {
       f.setEnabled(t.id, st.enabled[t.id], st.disabledTip[t.id]);
       const pressed =
         t.id === "grid" ? gridOn : t.id === "contours" ? contoursOn : st.pressed[t.id];
@@ -2372,12 +2960,28 @@ function runToolbarAction(id: ToolbarId): void {
       stroking = stroking && dispatcher.isStroking();
       syncToolFromDispatcher();
       break;
+    case "place":
+      stopOpHold();
+      cancelActiveStroke();
+      dispatcher.setPlacing(act.place);
+      stroking = stroking && dispatcher.isStroking();
+      syncToolFromDispatcher();
+      setStatus(PLACE_HINT[act.place]);
+      break;
     case "apply":
+      if (dispatcher.placing() !== null) {
+        setStatus("Switch to Select mode (S) to use this");
+        break;
+      }
       stopOpHold(); // keep the editor's hold and the dispatcher's repeat session in step
       runLockAction(() => dispatcher.applyOperation(act.op));
       shell.bar?.flash(id);
       break;
     case "roadAction":
+      if (dispatcher.placing() !== null) {
+        setStatus("Switch to Select mode (S) to use this");
+        break;
+      }
       runLockAction(() => dispatcher.applyRoadAction(act.action));
       break;
     case "toggle":
@@ -2434,9 +3038,17 @@ const shell = createShell({
         },
         {
           id: "drive",
-          label: "Drive here",
-          tip: "Save, then open the game at the cursor position",
+          label: "Drive from start point",
+          tip: "Save, then open the game on the selected start point, else the default one",
           shortcut: "D",
+          run: () => void driveFrom(),
+          enabled: () => area !== null,
+        },
+        {
+          id: "drive-here",
+          label: "Drive here",
+          tip: "Save, then open the game at the centre of the view, facing the way the camera looks",
+          shortcut: "Shift+D",
           run: () => void driveHere(),
           enabled: () => area !== null,
         },
@@ -2556,6 +3168,7 @@ const BINDINGS: Binding[] = [
   ...STANDARD_BINDINGS,
   { id: "topdown", code: "KeyT", label: "T" },
   { id: "drive", code: "KeyD", label: "D" },
+  { id: "driveHere", code: "KeyD", shift: true, label: "Shift+D" },
 ];
 
 window.addEventListener("shell:dialog-open", () => cancelActiveStroke());
@@ -2590,6 +3203,19 @@ window.addEventListener("keydown", (e) => {
         cancelPushPullDrag("Push/pull cancelled.");
         return;
       }
+      if (startGesture.active() || startDrag) {
+        cancelStartGesture();
+        setStatus("Placement cancelled.");
+        return;
+      }
+      if (dispatcher.placing() !== null) {
+        stopOpHold();
+        dispatcher.setPlacing(null);
+        syncToolFromDispatcher();
+        syncToolbar();
+        setStatus("Stopped placing.");
+        return;
+      }
       if (tool === "select" && stroking) {
         // Abandon a rubber-band drag without changing the selection.
         dispatcher.cancelSelectDrag();
@@ -2608,12 +3234,22 @@ window.addEventListener("keydown", (e) => {
       setTopDown(!topDown);
       return;
     case "drive":
-      void driveHere();
+      void driveFrom();
       return;
+    case "driveHere": {
+      // Captured synchronously: the cursor point at keypress, never a stale one (D-06).
+      const spot = lastHit ? { x: lastHit.x, z: lastHit.z } : undefined;
+      void driveHere(spot);
+      return;
+    }
     default:
       break;
   }
   if (textFocused || dialogOpen || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.code === "Delete" && deleteSelectedStart()) {
+    e.preventDefault();
+    return;
+  }
   const tid = TERRAIN_HOTKEYS[e.code];
   if (tid) {
     e.preventDefault();
@@ -2678,6 +3314,7 @@ function frame(): void {
   updateZoomHint();
   terrainView?.updateTextures(controls.target.x, controls.target.z);
   renderer.render(scene, camera);
+  positionStartTags();
   requestAnimationFrame(frame);
 }
 
