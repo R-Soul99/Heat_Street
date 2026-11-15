@@ -12,10 +12,13 @@ import { createPaintMap } from "../src/core/terrain-paint.ts";
 const MAPS = "public/maps";
 
 function baseSidecar(): Record<string, unknown> {
-  return JSON.parse(readFileSync(`${MAPS}/demo-hills.terrain.json`, "utf8")) as Record<
+  const raw = JSON.parse(readFileSync(`${MAPS}/demo-hills.terrain.json`, "utf8")) as Record<
     string,
     unknown
   >;
+  // The saved map may gain scenery from the editor; these tests need a bare one.
+  const { features: _f, ...bare } = raw;
+  return { ...bare, buildings: [] };
 }
 
 const BUILD = { center: { x: 0, y: 1, z: 0 }, halfExtents: { x: 2, y: 1, z: 2 }, rotationY: 0 };
