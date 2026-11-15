@@ -258,3 +258,49 @@ describe("start-point diff part", () => {
     expect(applyStrokeDiff(area, dab(area, 0), "before").startPointsChanged).toBe(false);
   });
 });
+
+describe("scenery diff parts", () => {
+  const feat = (n: number) => ({
+    id: `f-${n}`,
+    kind: "tree" as const,
+    variant: "oak",
+    x: n,
+    z: 0,
+    rotationY: 0,
+    scale: 1,
+  });
+  const bld = (y: number) => ({
+    center: { x: 0, y, z: 0 },
+    halfExtents: { x: 2, y: 1, z: 2 },
+    rotationY: 0,
+    style: "shed",
+  });
+  const ramp = (id: string) => ({
+    kind: "crest" as const,
+    crest: { id, centerX: 0, centerZ: 0, radiusM: 0, heightM: 2 },
+  });
+
+  it("writes features, buildings and objects from the chosen side and flags each", () => {
+    const area = makeArea();
+    const diff = {
+      features: { before: [feat(1)], after: [feat(1), feat(2)] },
+      buildings: { before: [bld(1)], after: [bld(3)] },
+      objects: { before: [], after: [ramp("ramp-1")] },
+    };
+    const r1 = applyStrokeDiff(area, diff, "after");
+    expect(r1.featuresChanged && r1.buildingsChanged && r1.objectsChanged).toBe(true);
+    expect(area.features).toHaveLength(2);
+    expect(area.buildings?.[0]?.center.y).toBe(3);
+    expect(area.objects).toHaveLength(1);
+    applyStrokeDiff(area, diff, "before");
+    expect(area.features).toEqual([feat(1)]);
+    expect(area.buildings?.[0]?.center.y).toBe(1);
+    expect(area.objects).toEqual([]);
+  });
+
+  it("other diffs leave the scenery flags false", () => {
+    const area = makeArea();
+    const r = applyStrokeDiff(area, dab(area, 0), "before");
+    expect(r.featuresChanged || r.buildingsChanged || r.objectsChanged).toBe(false);
+  });
+});

@@ -17,7 +17,12 @@
  */
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import type { CellMask } from "./terrain-cell-mask.ts";
-import type { TerrainStartPoint } from "./terrain-format.ts";
+import type {
+  TerrainBuilding,
+  TerrainFeature,
+  TerrainObject,
+  TerrainStartPoint,
+} from "./terrain-format.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "./terrain-limits.ts";
 import { encodePaintValue, PAINT_ROAD_FLAG, type PaintMap } from "./terrain-paint.ts";
@@ -67,6 +72,10 @@ export interface StrokeDiff {
     before: readonly TerrainStartPoint[];
     after: readonly TerrainStartPoint[];
   };
+  /** 07.1.3 D-16: whole-array scenery snapshots (elements shared, never mutated). */
+  readonly features?: { before: readonly TerrainFeature[]; after: readonly TerrainFeature[] };
+  readonly buildings?: { before: readonly TerrainBuilding[]; after: readonly TerrainBuilding[] };
+  readonly objects?: { before: readonly TerrainObject[]; after: readonly TerrainObject[] };
 }
 
 export interface StrokeRecorder {

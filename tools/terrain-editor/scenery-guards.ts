@@ -208,6 +208,32 @@ export interface WorldWindow {
 
 const SAME_EPS_M = 1e-9;
 
+function touchesWindow(b: TerrainBuilding, window: WorldWindow): boolean {
+  const corners = footprintCorners(
+    b.center.x,
+    b.center.z,
+    b.halfExtents.x,
+    b.halfExtents.z,
+    b.rotationY,
+  );
+  const xs = corners.map((c) => c[0]);
+  const zs = corners.map((c) => c[1]);
+  return !(
+    Math.max(...xs) < window.minX ||
+    Math.min(...xs) > window.maxX ||
+    Math.max(...zs) < window.minZ ||
+    Math.min(...zs) > window.maxZ
+  );
+}
+
+/** True when any styled building's footprint touches the window (cheap pre-check before a re-seat). */
+export function styledBuildingTouchesWindow(
+  buildings: readonly TerrainBuilding[],
+  window: WorldWindow,
+): boolean {
+  return buildings.some((b) => b.style !== undefined && touchesWindow(b, window));
+}
+
 /**
  * Re-seats styled buildings whose footprint touches the sculpted window. The visible height
  * (top above the highest ground, measured on the BEFORE terrain) is kept; the box is seated
@@ -223,23 +249,7 @@ export function reseatBuildingsAfterSculpt(
   let changed = false;
   const out = buildings.map((b) => {
     if (b.style === undefined) return b;
-    const corners = footprintCorners(
-      b.center.x,
-      b.center.z,
-      b.halfExtents.x,
-      b.halfExtents.z,
-      b.rotationY,
-    );
-    const xs = corners.map((c) => c[0]);
-    const zs = corners.map((c) => c[1]);
-    if (
-      Math.max(...xs) < window.minX ||
-      Math.min(...xs) > window.maxX ||
-      Math.max(...zs) < window.minZ ||
-      Math.min(...zs) > window.maxZ
-    ) {
-      return b;
-    }
+    if (!touchesWindow(b, window)) return b;
     const seated = seatBuilding(afterHeightAt, {
       x: b.center.x,
       z: b.center.z,

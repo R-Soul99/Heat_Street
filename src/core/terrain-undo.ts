@@ -10,7 +10,12 @@
  */
 import { parseRoadGraph, type RoadGraph } from "./road-graph.ts";
 import type { PaintRect, StrokeDiff } from "./terrain-brush.ts";
-import type { TerrainStartPoint } from "./terrain-format.ts";
+import type {
+  TerrainBuilding,
+  TerrainFeature,
+  TerrainObject,
+  TerrainStartPoint,
+} from "./terrain-format.ts";
 import type { TerrainGrid } from "./terrain-grid.ts";
 import type { PaintMap } from "./terrain-paint.ts";
 import type { CellWindow } from "./terrain-slope.ts";
@@ -27,6 +32,10 @@ export interface UndoTarget {
   unlockedEdgeIds?: number[];
   /** 07.1.3 D-03: named spawn poses; first entry is the default. */
   startPoints?: TerrainStartPoint[];
+  /** 07.1.3 D-07/D-16: scenery arrays; written only by applyStrokeDiff and commitScenery. */
+  features?: TerrainFeature[];
+  buildings?: TerrainBuilding[];
+  objects?: TerrainObject[];
 }
 
 export interface ApplyResult {
@@ -37,6 +46,10 @@ export interface ApplyResult {
   lockChanged: boolean;
   /** True when the start-point list was restored by this diff. */
   startPointsChanged: boolean;
+  /** True when the features / buildings / ramp objects were restored by this diff. */
+  featuresChanged: boolean;
+  buildingsChanged: boolean;
+  objectsChanged: boolean;
 }
 
 export function applyStrokeDiff(
@@ -48,6 +61,9 @@ export function applyStrokeDiff(
     graphChanged: false,
     lockChanged: false,
     startPointsChanged: false,
+    featuresChanged: false,
+    buildingsChanged: false,
+    objectsChanged: false,
   };
 
   if (diff.heights) {
@@ -108,6 +124,19 @@ export function applyStrokeDiff(
   if (diff.startPoints) {
     area.startPoints = [...diff.startPoints[side]];
     result.startPointsChanged = true;
+  }
+
+  if (diff.features) {
+    area.features = [...diff.features[side]];
+    result.featuresChanged = true;
+  }
+  if (diff.buildings) {
+    area.buildings = [...diff.buildings[side]];
+    result.buildingsChanged = true;
+  }
+  if (diff.objects) {
+    area.objects = [...diff.objects[side]];
+    result.objectsChanged = true;
   }
   return result;
 }

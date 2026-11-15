@@ -37,7 +37,12 @@ import {
   createCellMask,
   type MaskOp,
 } from "../../src/core/terrain-cell-mask.ts";
-import type { TerrainStartPoint } from "../../src/core/terrain-format.ts";
+import type {
+  TerrainBuilding,
+  TerrainFeature,
+  TerrainObject,
+  TerrainStartPoint,
+} from "../../src/core/terrain-format.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import {
@@ -76,6 +81,11 @@ import {
   smoothEdgeHeights,
   twoWayCandidates,
 } from "./road-problems.ts";
+import {
+  reseatBuildingsAfterSculpt,
+  styledBuildingTouchesWindow,
+  type WorldWindow,
+} from "./scenery-guards.ts";
 import { NO_SELECTION_STATUS, SWITCH_TO_SELECT_STATUS } from "./toolbar-state.ts";
 
 /** Road preset whose class matches the edge (fix strokes look like the road they extend). */
@@ -118,6 +128,10 @@ export interface ToolResult {
   lockChanged: boolean;
   /** 07.1.3: the start-point list changed (refresh markers and list, mark dirty). */
   startPointsChanged: boolean;
+  /** 07.1.3: scenery arrays changed (rebuild scenery meshes, mark dirty). */
+  featuresChanged: boolean;
+  buildingsChanged: boolean;
+  objectsChanged: boolean;
   /** The mask selection changed (a Select-mode drag finished). */
   selectionChanged: boolean;
   slopeClamped: boolean;
@@ -139,6 +153,9 @@ export interface UndoRedoResult {
   graphChanged: boolean;
   lockChanged: boolean;
   startPointsChanged: boolean;
+  featuresChanged: boolean;
+  buildingsChanged: boolean;
+  objectsChanged: boolean;
 }
 
 export interface Modifiers {
@@ -197,6 +214,9 @@ function emptyResult(): ToolResult {
     graphChanged: false,
     lockChanged: false,
     startPointsChanged: false,
+    featuresChanged: false,
+    buildingsChanged: false,
+    objectsChanged: false,
     selectionChanged: false,
     slopeClamped: false,
     warnings: [],
@@ -220,6 +240,9 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.graphChanged ||= r.graphChanged;
   into.lockChanged ||= r.lockChanged;
   into.startPointsChanged ||= r.startPointsChanged;
+  into.featuresChanged ||= r.featuresChanged;
+  into.buildingsChanged ||= r.buildingsChanged;
+  into.objectsChanged ||= r.objectsChanged;
   into.selectionChanged ||= r.selectionChanged;
   into.slopeClamped ||= r.slopeClamped;
   if (r.heightDeltaM !== undefined) into.heightDeltaM = r.heightDeltaM;
@@ -257,26 +280,25 @@ function paintRectToCells(
   };
 }
 
-function windowsOfDiff(
-  area: EditArea,
-  diff: StrokeDiff | undefined,
-): {
+interface DiffWindows {
   heights?: CellWindow;
   paint?: CellWindow;
   graph: boolean;
   lock: boolean;
   startPoints: boolean;
-} {
-  const out: {
-    heights?: CellWindow;
-    paint?: CellWindow;
-    graph: boolean;
-    lock: boolean;
-    startPoints: boolean;
-  } = {
+  features: boolean;
+  buildings: boolean;
+  objects: boolean;
+}
+
+function windowsOfDiff(area: EditArea, diff: StrokeDiff | undefined): DiffWindows {
+  const out: DiffWindows = {
     graph: false,
     lock: false,
     startPoints: false,
+    features: false,
+    buildings: false,
+    objects: false,
   };
   if (!diff) return out;
   if (diff.heights) {
@@ -308,6 +330,9 @@ function windowsOfDiff(
   out.graph = diff.graph !== undefined;
   out.lock = diff.lock !== undefined;
   out.startPoints = diff.startPoints !== undefined;
+  out.features = diff.features !== undefined;
+  out.buildings = diff.buildings !== undefined;
+  out.objects = diff.objects !== undefined;
   return out;
 }
 
@@ -321,7 +346,19 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
   let graph: StrokeDiff["graph"];
   let lock: StrokeDiff["lock"];
   let startPoints: StrokeDiff["startPoints"];
+  let features: StrokeDiff["features"];
+  let buildings: StrokeDiff["buildings"];
+  let objects: StrokeDiff["objects"];
   for (const d of diffs) {
+    if (d.features) {
+      features = features ? { before: features.before, after: d.features.after } : d.features;
+    }
+    if (d.buildings) {
+      buildings = buildings ? { before: buildings.before, after: d.buildings.after } : d.buildings;
+    }
+    if (d.objects) {
+      objects = objects ? { before: objects.before, after: d.objects.after } : d.objects;
+    }
     if (d.startPoints) {
       startPoints = startPoints
         ? { before: startPoints.before, after: d.startPoints.after }
@@ -373,6 +410,9 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
     graph,
     ...(lock ? { lock } : {}),
     ...(startPoints ? { startPoints } : {}),
+    ...(features ? { features } : {}),
+    ...(buildings ? { buildings } : {}),
+    ...(objects ? { objects } : {}),
   };
 }
 
@@ -497,8 +537,71 @@ export function createToolDispatcher(getArea: () => EditArea) {
   }
 
   function finish(diff: StrokeDiff | undefined): void {
-    if (diff) stack.push(diff);
+    if (diff) pushDiff(getArea(), diff);
     stroke = null;
+  }
+
+  /** World rectangle (one cell of margin) covering the vertices a heights part wrote. */
+  function worldWindowOfHeights(area: EditArea, indices: Uint32Array): WorldWindow {
+    const g = area.grid;
+    const stride = g.rows + 1;
+    let minRow = Number.POSITIVE_INFINITY;
+    let maxRow = -1;
+    let minCol = Number.POSITIVE_INFINITY;
+    let maxCol = -1;
+    for (const i of indices) {
+      const row = i % stride;
+      const col = (i - row) / stride;
+      if (row < minRow) minRow = row;
+      if (row > maxRow) maxRow = row;
+      if (col < minCol) minCol = col;
+      if (col > maxCol) maxCol = col;
+    }
+    return {
+      minX: g.originX + (minCol - 1) * g.cellSizeM,
+      maxX: g.originX + (maxCol + 1) * g.cellSizeM,
+      minZ: g.originZ + (minRow - 1) * g.cellSizeM,
+      maxZ: g.originZ + (maxRow + 1) * g.cellSizeM,
+    };
+  }
+
+  /**
+   * 07.1.3: styled buildings under a sculpt rise and fall with the terrain. The re-seat
+   * rides in the SAME diff (a buildings part), so the stroke stays one undo step and undo
+   * restores the stored box exactly. The grid is already sculpted when this runs, so the
+   * BEFORE heights come from a copy with the diff's before values written back. The copy
+   * is only made when a styled building touches the window. Style-less buildings never move.
+   */
+  function withBuildingReseat(area: EditArea, diff: StrokeDiff): StrokeDiff {
+    const heights = diff.heights;
+    const live = area.buildings;
+    if (!heights || diff.buildings || !live || live.length === 0) return diff;
+    const win = worldWindowOfHeights(area, heights.indices);
+    if (!styledBuildingTouchesWindow(live, win)) return diff;
+    const g = area.grid;
+    const beforeHeights = Float32Array.from(g.heights);
+    heights.indices.forEach((idx, k) => {
+      if (idx < beforeHeights.length) beforeHeights[idx] = heights.before[k] as number;
+    });
+    const beforeGrid = { ...g, heights: beforeHeights };
+    const next = reseatBuildingsAfterSculpt(
+      live,
+      (x, z) => sampleTerrainHeight(beforeGrid, x, z),
+      (x, z) => sampleTerrainHeight(g, x, z),
+      win,
+    );
+    if (next === live) return diff;
+    const before = [...live];
+    const after = [...next];
+    area.buildings = after;
+    return { ...diff, buildings: { before, after } };
+  }
+
+  /** Pushes one diff as ONE undo entry, folding in the building re-seat for sculpt diffs. */
+  function pushDiff(area: EditArea, diff: StrokeDiff): StrokeDiff {
+    const out = withBuildingReseat(area, diff);
+    stack.push(out);
+    return out;
   }
 
   /** Vertex window spanned by two world points, at least one cell, clipped to the grid. */
@@ -531,6 +634,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       graphChanged: r.graphChanged,
       lockChanged: r.lockChanged,
       startPointsChanged: r.startPointsChanged,
+      featuresChanged: r.featuresChanged,
+      buildingsChanged: r.buildingsChanged,
+      objectsChanged: r.objectsChanged,
     };
   }
 
@@ -587,13 +693,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
   function commitSceneryDiff(area: EditArea, diff: StrokeDiff | undefined): ToolResult {
     const res = emptyResult();
     if (!diff) return res;
-    stack.push(diff);
-    const w = windowsOfDiff(area, diff);
+    const pushed = pushDiff(area, diff);
+    const w = windowsOfDiff(area, pushed);
     res.dirtyHeights = w.heights;
     res.dirtyPaint = w.paint;
     res.graphChanged = w.graph;
     res.lockChanged = w.lock;
     res.startPointsChanged = w.startPoints;
+    res.featuresChanged = w.features;
+    res.buildingsChanged = w.buildings;
+    res.objectsChanged = w.objects;
     return res;
   }
 
@@ -691,6 +800,42 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (JSON.stringify(before) === JSON.stringify(next)) return emptyResult();
       area.startPoints = [...next];
       return commitSceneryDiff(area, { startPoints: { before, after: next } });
+    },
+    /**
+     * One undo step for any mix of feature, building and ramp-object edits (D-16). Only
+     * the parts that differ from the live area are recorded; nothing differing pushes
+     * nothing. Together with applyStrokeDiff this is the only write path for these arrays.
+     */
+    commitScenery(next: {
+      features?: readonly TerrainFeature[];
+      buildings?: readonly TerrainBuilding[];
+      objects?: readonly TerrainObject[];
+    }): ToolResult {
+      const area = getArea();
+      const differs = <T>(a: readonly T[], b: readonly T[] | undefined): b is readonly T[] =>
+        b !== undefined && JSON.stringify(a) !== JSON.stringify(b);
+      const curF = area.features ?? [];
+      const curB = area.buildings ?? [];
+      const curO = area.objects ?? [];
+      const diff: {
+        features?: { before: readonly TerrainFeature[]; after: readonly TerrainFeature[] };
+        buildings?: { before: readonly TerrainBuilding[]; after: readonly TerrainBuilding[] };
+        objects?: { before: readonly TerrainObject[]; after: readonly TerrainObject[] };
+      } = {};
+      if (differs(curF, next.features)) {
+        diff.features = { before: [...curF], after: [...next.features] };
+        area.features = [...next.features];
+      }
+      if (differs(curB, next.buildings)) {
+        diff.buildings = { before: [...curB], after: [...next.buildings] };
+        area.buildings = [...next.buildings];
+      }
+      if (differs(curO, next.objects)) {
+        diff.objects = { before: [...curO], after: [...next.objects] };
+        area.objects = [...next.objects];
+      }
+      if (!diff.features && !diff.buildings && !diff.objects) return emptyResult();
+      return commitSceneryDiff(area, diff);
     },
     getSelectionMask: (): CellMask | null => liveSelection(),
     selectionCellCount: (): number => liveSelection()?.cellCount() ?? 0,
@@ -963,12 +1108,12 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (op === "flatten") {
         const r = flattenMaskToAverage(area.grid, sel, rec, heightOpOptions(area, options));
         const diff = rec.commit();
-        if (diff) stack.push(diff);
+        if (diff) pushDiff(area, diff);
         return heightResult(r);
       }
       const r = paintMask(area.paint, area.grid, sel, options.surface, rec);
       const diff = rec.commit();
-      if (diff) stack.push(diff);
+      if (diff) pushDiff(area, diff);
       const res = emptyResult();
       if (r.rect) res.dirtyPaint = paintRectToCells(area, r.rect);
       return res;
@@ -1043,8 +1188,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const res = emptyResult();
       const diff = rp.recorder.commit();
       if (diff) {
-        stack.push(diff);
-        res.dirtyHeights = windowsOfDiff(getArea(), diff).heights;
+        const pushed = pushDiff(getArea(), diff);
+        res.dirtyHeights = windowsOfDiff(getArea(), pushed).heights;
+        res.buildingsChanged = pushed.buildings !== undefined;
       }
       return res;
     },
@@ -1094,8 +1240,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const res = emptyResult();
       const diff = pp.recorder.commit();
       if (diff) {
-        stack.push(diff);
-        res.dirtyHeights = windowsOfDiff(getArea(), diff).heights;
+        const pushed = pushDiff(getArea(), diff);
+        res.dirtyHeights = windowsOfDiff(getArea(), pushed).heights;
+        res.buildingsChanged = pushed.buildings !== undefined;
       }
       return res;
     },

@@ -1332,3 +1332,92 @@ describe("start-point undo (07.1.3 D-16)", () => {
     expect(d.placing()).toBeNull();
   });
 });
+
+describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
+  const tree = (n: number) => ({
+    id: `f-${n}`,
+    kind: "tree" as const,
+    variant: "oak",
+    x: n * 3,
+    z: 50,
+    rotationY: 0,
+    scale: 1,
+  });
+  const shed = (x: number, z: number, style?: string) => ({
+    center: { x, y: 1.1, z },
+    halfExtents: { x: 2, y: 1.4, z: 2 },
+    rotationY: 0,
+    ...(style !== undefined ? { style } : {}),
+  });
+
+  it("commitScenery is one step; undo and redo restore every part", () => {
+    const { area, d } = setup();
+    const r = d.commitScenery({
+      features: [tree(1)],
+      buildings: [shed(0, 0, "shed")],
+      objects: [
+        { kind: "crest", crest: { id: "ramp-1", centerX: 5, centerZ: 5, radiusM: 0, heightM: 2 } },
+      ],
+    });
+    expect(r.featuresChanged && r.buildingsChanged && r.objectsChanged).toBe(true);
+    expect(area.features).toHaveLength(1);
+    const u = d.undo();
+    expect(u !== false && u.featuresChanged && u.buildingsChanged && u.objectsChanged).toBe(true);
+    expect(area.features ?? []).toEqual([]);
+    expect(area.buildings ?? []).toEqual([]);
+    expect(area.objects ?? []).toEqual([]);
+    expect(d.canUndo()).toBe(false);
+    d.redo();
+    expect(area.features).toHaveLength(1);
+    expect(area.buildings).toHaveLength(1);
+    expect(area.objects).toHaveLength(1);
+  });
+
+  it("only records the parts that differ and skips deep-equal input", () => {
+    const { area, d } = setup();
+    d.commitScenery({ features: [tree(1)] });
+    const same = d.commitScenery({ features: [tree(1)], buildings: [] });
+    expect(same.featuresChanged || same.buildingsChanged).toBe(false);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(area.features ?? []).toEqual([]);
+  });
+
+  it("box-delete of 3 features and 1 building is one undo step", () => {
+    const { area, d } = setup();
+    d.commitScenery({
+      features: [tree(1), tree(2), tree(3)],
+      buildings: [shed(0, 0, "shed")],
+    });
+    d.commitScenery({ features: [], buildings: [] });
+    expect(area.features).toEqual([]);
+    expect(area.buildings).toEqual([]);
+    d.undo();
+    expect(area.features).toHaveLength(3);
+    expect(area.buildings).toHaveLength(1);
+  });
+
+  it("styled buildings follow a sculpt in the same undo step; style-less ones stay put", () => {
+    const { area, d } = setup();
+    const styled = shed(0, 0, "shed");
+    const legacy = shed(12, 0);
+    d.commitScenery({ buildings: [styled, legacy] });
+    const topBefore = styled.center.y + styled.halfExtents.y;
+    raiseBox(d, 6, 0, 24, 2);
+    const b0 = area.buildings?.[0];
+    const b1 = area.buildings?.[1];
+    expect(b0 && b0.center.y + b0.halfExtents.y).toBeCloseTo(topBefore + 2, 3);
+    expect(b1).toEqual(legacy);
+    d.undo();
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+    expect(area.buildings?.[0]).toEqual(styled);
+    expect(area.buildings?.[1]).toEqual(legacy);
+    d.redo();
+    const again = area.buildings?.[0];
+    expect(again && again.center.y + again.halfExtents.y).toBeCloseTo(topBefore + 2, 3);
+    // Undoing past the stroke leaves only the scenery commit; one more undo removes it.
+    d.undo();
+    d.undo();
+    expect(area.buildings ?? []).toEqual([]);
+  });
+});
