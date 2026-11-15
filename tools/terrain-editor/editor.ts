@@ -120,6 +120,7 @@ import {
   pickFeatureByRay,
   RAMP_FOOT_RADIUS_M,
   type RampPatch,
+  rampFootprint,
   removeInMask,
   type ScenerySelection,
   scatterPoints,
@@ -2429,10 +2430,21 @@ function sceneryBounds(sel: ScenerySelection): THREE.Box3 | null {
     return box;
   }
   const o = area.objects.find((v) => v.crest.id === sel.id && v.crest.ramp !== undefined);
-  const ramp = o?.crest.ramp;
-  if (!o || !ramp) return null;
-  const r = rampLengthM(o.crest.heightM, ramp) + ramp.widthM / 2;
-  grow(o.crest.centerX, o.crest.centerZ, r, o.crest.heightM + 0.5);
+  if (!o?.crest.ramp) return null;
+  const fp = rampFootprint(o.crest);
+  const c = Math.cos(fp.rotationY);
+  const sn = Math.sin(fp.rotationY);
+  for (const [lx, lz] of [
+    [-fp.hx, -fp.hz],
+    [fp.hx, -fp.hz],
+    [fp.hx, fp.hz],
+    [-fp.hx, fp.hz],
+  ] as const) {
+    // inverse of the box-frame transform used by the pick tests
+    const wx = fp.cx + lx * c + lz * sn;
+    const wz = fp.cz - lx * sn + lz * c;
+    grow(wx, wz, 0, o.crest.heightM + 0.5);
+  }
   return box;
 }
 

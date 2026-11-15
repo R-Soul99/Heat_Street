@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { rampLengthM } from "../../src/core/crest-geometry.ts";
 import type { RoadGraph } from "../../src/core/road-graph.ts";
 import {
   MAX_LINE_FEATURES,
@@ -448,6 +449,41 @@ describe("pickFeatureByRay", () => {
       kind: "feature",
       id: "front",
     });
+  });
+});
+
+describe("pickFeatureByRay ramps", () => {
+  const flat = () => 0;
+  const objects = addRampObject([], 10, 10, 0, { heightM: 2, angleDeg: 20, widthM: 10 });
+  const crest = objects[0]?.crest;
+  const len = crest?.ramp ? rampLengthM(crest.heightM, crest.ramp) : 0;
+  const toward = (x: number, y: number, z: number) => ({
+    ox: x,
+    oy: y + 40,
+    oz: z + 40,
+    dx: 0,
+    dy: -40,
+    dz: -40,
+  });
+  it("picks a ramp by its middle and by its top end, not only its start", () => {
+    expect(len).toBeGreaterThan(4);
+    const mid = toward(10 + len / 2, 0.5, 10);
+    expect(pickFeatureByRay([], [], objects, flat, mid, null, 1.5)).toEqual({
+      kind: "ramp",
+      id: "ramp-1",
+    });
+    const top = toward(10 + len - 0.3, 1.8, 10);
+    expect(pickFeatureByRay([], [], objects, flat, top, null, 1.5)).toEqual({
+      kind: "ramp",
+      id: "ramp-1",
+    });
+  });
+  it("ground pick covers the whole footprint and misses beside it", () => {
+    expect(pickFeatureAt([], [], objects, 10 + len * 0.8, 12, 0.5)).toEqual({
+      kind: "ramp",
+      id: "ramp-1",
+    });
+    expect(pickFeatureAt([], [], objects, 10 + len * 0.5, 30, 0.5)).toBeUndefined();
   });
 });
 

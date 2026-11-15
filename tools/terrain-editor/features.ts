@@ -463,6 +463,32 @@ export function removeInMask(
 
 // ---------------------------------------------------------------- picking
 
+/**
+ * Ground footprint of a ramp as an oriented rectangle in the box frame used by the pick tests.
+ * A ramp's (centerX, centerZ) is the START of its foot; it runs rampLengthM along its heading
+ * (0 = +x, +pi/2 = +z), so the box centre is half a length along and the box yaw is -heading.
+ */
+export function rampFootprint(crest: AuthoredCrest): {
+  cx: number;
+  cz: number;
+  hx: number;
+  hz: number;
+  rotationY: number;
+} {
+  const ramp = crest.ramp;
+  if (ramp === undefined) {
+    return { cx: crest.centerX, cz: crest.centerZ, hx: 0, hz: 0, rotationY: 0 };
+  }
+  const len = rampLengthM(crest.heightM, ramp);
+  return {
+    cx: crest.centerX + (Math.cos(ramp.headingRad) * len) / 2,
+    cz: crest.centerZ + (Math.sin(ramp.headingRad) * len) / 2,
+    hx: len / 2,
+    hz: ramp.widthM / 2,
+    rotationY: -ramp.headingRad,
+  };
+}
+
 function distToSegment(
   px: number,
   pz: number,
@@ -521,7 +547,17 @@ export function pickFeatureAt(
   });
   for (const o of objects) {
     if (o.crest.ramp === undefined) continue;
-    const d = Math.hypot(x - o.crest.centerX, z - o.crest.centerZ);
+    // The whole ramp footprint is clickable, not just its start point.
+    const { cx, cz, hx, hz, rotationY } = rampFootprint(o.crest);
+    const c = Math.cos(rotationY);
+    const s = Math.sin(rotationY);
+    const ox = x - cx;
+    const oz = z - cz;
+    const lx = ox * c - oz * s;
+    const lz = ox * s + oz * c;
+    const dx = Math.max(Math.abs(lx) - hx, 0);
+    const dz = Math.max(Math.abs(lz) - hz, 0);
+    const d = Math.hypot(dx, dz);
     if (d <= radiusM) consider(d, { kind: "ramp", id: o.crest.id });
   }
   return best;
@@ -621,8 +657,8 @@ function featurePickBoxes(f: TerrainFeature, heightAt: HeightFn): PickBox[] {
 
 /**
  * Picks the placed item the ray hits first: trees by trunk and canopy, bushes by body, lines by
- * their full height, buildings by their box. Ramps (flat on the ground) and anything the ray
- * misses fall back to the ground-distance test at `ground` (the terrain hit under the cursor).
+ * their full height, buildings by their box, ramps by their footprint box. Anything the ray
+ * misses falls back to the ground-distance test at `ground` (the terrain hit under the cursor).
  */
 export function pickFeatureByRay(
   features: readonly TerrainFeature[],
@@ -659,6 +695,24 @@ export function pickFeatureByRay(
       { kind: "building", index },
     );
   });
+  for (const o of objects) {
+    if (o.crest.ramp === undefined) continue;
+    const fp = rampFootprint(o.crest);
+    const y0 = Math.min(heightAt(o.crest.centerX, o.crest.centerZ), heightAt(fp.cx, fp.cz));
+    const h = o.crest.heightM + 0.4;
+    consider(
+      rayHitsBox(ray, {
+        cx: fp.cx,
+        cy: y0 + h / 2 - 0.2,
+        cz: fp.cz,
+        hx: fp.hx,
+        hy: h / 2,
+        hz: fp.hz,
+        rotationY: fp.rotationY,
+      }),
+      { kind: "ramp", id: o.crest.id },
+    );
+  }
   if (best !== undefined) return best;
   if (ground === null) return undefined;
   return pickFeatureAt(features, buildings, objects, ground.x, ground.z, radiusM);
