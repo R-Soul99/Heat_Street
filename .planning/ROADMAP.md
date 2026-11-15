@@ -517,7 +517,7 @@ Plans:
 **Requirements**: TBD
 **Briefs:** `.planning/plans-ahead/01-start-points.md` (do first), then `.planning/plans-ahead/02-scenery-palette.md`. Summarised in `07.1.3-CONTEXT.md`.
 **Depends on:** Phase 07.1.2
-**Plans:** 11 plans
+**Plans:** 0/11 plans executed
 
 Plans:
 - [ ] 07.1.3-01-PLAN.md — Start-point sidecar field and game spawn resolution (D-01, D-02, D-04, D-18)
