@@ -153,6 +153,7 @@ import {
   type ToolbarId,
 } from "./rail-tools.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
+import { renameAreaForSave, suggestCopyName, validateAreaName } from "./save-as.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
 import {
@@ -193,7 +194,6 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 const canvas = $<HTMLCanvasElement>("view");
 const wrap = $("wrap");
 
-const NAME_RE = /^[a-z0-9-]{1,64}$/;
 const DEFAULT_HINT =
   "Left-drag to sculpt. Middle-drag (or right-drag) to tilt and spin, Shift+middle-drag (or Shift+right-drag) to pan, wheel to zoom to the cursor, Alt+wheel = brush size in cells.";
 const CURSOR_RADIUS_M = 8;
@@ -3302,10 +3302,8 @@ async function newAreaDialog(): Promise<void> {
         primary: true,
         run: () => {
           const name = nameInput.value.trim();
-          if (!NAME_RE.test(name)) return "Name may only use a-z, 0-9 and -, 1-64 characters.";
-          if (knownAreas.includes(name)) {
-            return `An area called "${name}" already exists. Pick another name.`;
-          }
+          const nameError = validateAreaName(name, knownAreas);
+          if (nameError !== undefined) return nameError;
           const widthM = width.get();
           const depthM = height.get();
           const cellSizeM = cell.get();
@@ -3347,7 +3345,53 @@ async function newAreaDialog(): Promise<void> {
   log(`new ${next.areaId} ${g.cols}x${g.rows} cells`);
 }
 
-async function save(): Promise<boolean> {
+/** File > Save as: asks for a new area name and writes the current state under it. */
+async function saveAsDialog(): Promise<void> {
+  if (!area || saving) return;
+  try {
+    await refreshAreaList();
+  } catch (err) {
+    fail(`Cannot list areas: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  const nameInput = el("input", undefined, undefined, "New name: a-z, 0-9 and -");
+  nameInput.type = "text";
+  nameInput.maxLength = 64;
+  nameInput.value = suggestCopyName(area.areaId, knownAreas);
+  const body = el("div");
+  body.append(
+    createField("New name", nameInput, "Name for the new area. The current area is not changed."),
+    note("Writes a new area from the current state. The current area's files stay as they are."),
+  );
+  let chosen: string | null = null;
+  const r = await openDialog<"save" | "close">({
+    title: "Save as",
+    body,
+    actions: [
+      {
+        id: "save",
+        label: "Save",
+        tip: "Write the current state as a new area and switch to it",
+        primary: true,
+        run: async () => {
+          const name = nameInput.value.trim();
+          // Re-read the list: another tab may have created the name since the dialog opened.
+          await refreshAreaList().catch(() => {});
+          const nameError = validateAreaName(name, knownAreas);
+          if (nameError !== undefined) return nameError;
+          chosen = name;
+          return undefined;
+        },
+      },
+      { id: "close", label: "Cancel", tip: "Close without saving" },
+    ],
+  });
+  const name = chosen as string | null;
+  if (r !== "save" || name === null) return;
+  await save(name);
+}
+
+async function save(asId?: string): Promise<boolean> {
   // CR-01: one save at a time; a second Ctrl+S / Drive here while a save is
   // in flight is refused instead of racing the first one.
   if (!area || saving) {
@@ -3356,7 +3400,9 @@ async function save(): Promise<boolean> {
   }
   saving = true;
   let registerWarning = "";
-  const target = area;
+  // Save as: write a renamed copy as a NEW area; the original's files are never touched.
+  const source = area;
+  const target = asId === undefined ? area : renameAreaForSave(area, asId);
   const editsAtStart = editCounter;
   try {
     // D-15: refuse to save a road graph with a hard validation failure; no PUT.
@@ -3396,7 +3442,34 @@ async function save(): Promise<boolean> {
       bin as BodyInit,
       sidecar,
     );
-    const editedDuringSave = editCounter !== editsAtStart || area !== target;
+    const editedDuringSave = editCounter !== editsAtStart || area !== source;
+    if (asId !== undefined) {
+      log(`saved ${target.areaId} as a new area (${Math.round(bin.length / 1024)} KB)`);
+      if (registerWarning !== "") fail(registerWarning);
+      await refreshAreaList().catch(() => {});
+      if (editedDuringSave) {
+        setStatus(
+          `Saved a copy as ${asId}. You made edits during the save, so you are still on ${source.areaId}.`,
+          "ok",
+        );
+        return true;
+      }
+      // Switch to the new area so later Ctrl+S saves go there. Nothing unsaved is lost: the copy
+      // on disk is exactly the current state.
+      const pose = { pos: camera.position.clone(), target: controls.target.clone() };
+      setDirty(false);
+      const err = await loadArea(asId);
+      if (err === null) {
+        camera.position.copy(pose.pos);
+        controls.target.copy(pose.target);
+        controls.update();
+        setStatus(
+          `Saved as ${asId}. You are now editing ${asId}; ${source.areaId} is unchanged.`,
+          "ok",
+        );
+      }
+      return true;
+    }
     if (!editedDuringSave) setDirty(false);
     const kb = Math.round(bin.length / 1024);
     setStatus(
@@ -5512,6 +5585,14 @@ const shell = createShell({
           enabled: () => area !== null,
         },
         {
+          id: "save-as",
+          label: "Save as...",
+          tip: "Write the current state as a new area, leaving this one as it is, and switch to it",
+          shortcut: "Ctrl+Shift+S",
+          run: () => void saveAsDialog(),
+          enabled: () => area !== null,
+        },
+        {
           id: "drive",
           label: "Drive from start point",
           tip: "Save, then open the game on the selected start point, else the default one",
@@ -5659,7 +5740,10 @@ window.addEventListener("keydown", (e) => {
   const dialogOpen = shell.isDialogOpen();
   if ((e.ctrlKey || e.metaKey) && e.code === "KeyS" && !e.altKey) {
     e.preventDefault();
-    if (!dialogOpen) void save();
+    if (!dialogOpen) {
+      if (e.shiftKey) void saveAsDialog();
+      else void save();
+    }
     return;
   }
   const id = resolveShortcut(e, BINDINGS, { textFocused, dialogOpen });
