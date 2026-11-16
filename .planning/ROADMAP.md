@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette (completed 2026-11-16)
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 - [ ] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car
-- [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor
+- [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor; the same tool authors road race routes; ramps become built objects
 - [ ] **Phase 11: Art Pass** - Shaped car bodies and wheels; soft particles, dust trails, roost, landing bursts and continuous tyre tracks
 
 ## Phase Details
@@ -575,7 +575,8 @@ Plans:
   1. `?map=<id>&mode=stage` runs a stage with gate markers, an arrow to the next gate, a timer, splits and a results screen
   2. Gates count only in order and only when crossed forwards; respawn returns the car to the last gate passed
   3. The user can place a start, gates and a finish in the terrain editor and press Test stage
-  4. Existing routes, courses and medals are untouched (`routes.json` and its parser unchanged)
+  4. The same tool authors road race routes (point-to-point and circuit); a map can hold any number of routes, including none (widened 2026-11-16)
+  5. Ramps are placed as built stunt-ramp objects with a choice of shapes and their own surface, not as grass terrain (added 2026-11-16)
 
 **Plans**: TBD (run /gsd-plan-phase 10)
 **UI hint**: yes

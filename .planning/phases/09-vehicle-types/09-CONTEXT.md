@@ -41,7 +41,7 @@ Final tuning values within the measured targets, colours (distinct from the AI p
 - `.planning/plans-ahead/03-vehicle-types.md` - current state, stages, tests, traps
 - `src/core/vehicle-class.ts`, `src/core/vehicle-tuning.ts`, `src/core/feel.ts`, `src/physics/vehicle.ts`
 - `docs/vehicle-tuning-guide.md`
-- `.planning/todos/pending/2026-09-20-support-configurable-drivetrain-type-per-car-class.md`
+- Closed todos folded in here (2026-11-16): drivetrain per car class (RWD/FWD/AWD already exist via `?car=`), and "other vehicles" (user: "we really need those other vehicles", said while building a playground map)
 - `.planning/seeds/offroad-point-to-point-stages.md`
 
 </canonical_refs>
@@ -61,6 +61,7 @@ Final tuning values within the measured targets, colours (distinct from the AI p
 - AI racers and pursuers in other vehicle classes
 - Per-vehicle medal times
 - Vehicle select screen
+- Renaming `drive.engineForcePerRearWheel` (`src/core/vehicle-tuning.ts`, `src/core/feel.ts`) to a drivetrain-neutral name: kept out by D-04, revisit once real car classes settle
 
 </deferred>
 

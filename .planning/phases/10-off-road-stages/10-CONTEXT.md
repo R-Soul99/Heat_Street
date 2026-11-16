@@ -11,14 +11,16 @@ A stage is a timed run from a start through ordered gates to a finish across ope
 
 The brief is the specification. Its stages of work (1 to 8) map to plans roughly one to one, in order. Stage 7 (medal recording) is done later with the user and is not a build plan. Everything in the brief's Decisions section is locked.
 
-**Out of scope:** changing `routes.json` or `parseCourseData`, AI opponents on stages, medal recording, stages on legacy (non-terrain) maps.
+**Widened 2026-11-16 (user):** the same route tool also authors **road race routes** (point-to-point and circuit) in the terrain editor, and the phase includes **ramps as built objects** (see D-11 to D-14). Both were todos raised during other phases and folded in here.
+
+**Out of scope:** AI opponents on stages, medal recording, stages on legacy (non-terrain) maps.
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-- **D-01:** New file `public/maps/<id>.stages.json` with its own schema and parser (`src/core/stage.ts`); existing routes, courses and their two-course rule are untouched.
+- **D-01 (revised 2026-11-16, see D-11):** New file `public/maps/<id>.stages.json` with its own schema and parser (`src/core/stage.ts`). The original "existing routes untouched" rule is lifted; medal times need not be preserved (user, 2026-11-15).
 - **D-02:** Shape per the brief (D2): start, 1 to 40 ordered gates, finish, optional medals; no `y` stored.
 - **D-03:** Gates count only in order, and only when crossed forwards (velocity dotted with the gate direction).
 - **D-04:** No wrong-way warning in stage mode.
@@ -28,6 +30,14 @@ The brief is the specification. Its stages of work (1 to 8) map to plans roughly
 - **D-08:** Terrain maps only; elsewhere `?mode=stage` falls back to free drive with a console warning.
 - **D-09:** Editor: **Place ▾ → Stage**, sidebar Stages panel, Test stage button; stages saved through new dev-server `GET`/`PUT /__terrain/stages/<id>` validated by the parser. Show the user a layout sketch first.
 - **D-10:** Gate visuals have no colliders.
+
+**Road race routes (folded in from todo `2026-11-15-author-race-routes-in-the-editor.md`, 2026-11-16):**
+- **D-11:** One route tool in the terrain editor authors off-road stages and road races (point-to-point and circuit): a start, ordered checkpoints, a finish or a lap. Reuse the Place tool, markers, sidebar list and undo pattern from Phase 07.1.3.
+- **D-12:** Relax the two-course rule in `parseCourseData`: a map may hold any number of road routes, including none. Whether road routes and stages share one file format or stay as `routes.json` + `stages.json` behind one tool is decided during planning.
+- **D-13:** The race coordinator uses `nearestRoadNode`; hand-placed checkpoints may not sit on a road node, so that must cope. Medals for a new route are recorded after it is authored.
+
+**Ramps as built objects (folded in from todo `2026-11-16-ramps-as-built-objects.md`, 2026-11-16):**
+- **D-14:** Ramps look like built stunt ramps (timber planks or a steel wedge with visible frame and side panels, own material, not the ground) with a choice of shapes (kicker, wedge, tabletop, quarter-pipe), picked in the Place menu / ramp options. Own surface grip instead of hard-coded grass. Decide whether ramps leave the crest list as their own object kind (crests stay pure terrain) and how older files with crest-ramps load. Keep the rigid deck from quick task 261116-ryu (one base height at the foot). Short discuss pass first on shapes list, look and format split; may become its own plan(s) or a split-off phase if the phase gets too big.
 
 ### Claude's Discretion
 Gate look, exact warning thresholds, wave split.
@@ -61,7 +71,6 @@ Gate look, exact warning thresholds, wave split.
 - Medal recording per stage and vehicle (with the user, after handling is settled)
 - AI opponents on stages
 - Dust-cloud line-of-sight evasion (seed)
-- Authoring road race routes (race nodes and checkpoints) in the editor (user request 2026-11-15; todo `2026-11-15-author-race-routes-in-the-editor.md`). Keep the gate-authoring tool general enough to be reused for it.
 
 </deferred>
 
