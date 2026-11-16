@@ -1420,4 +1420,61 @@ describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
     d.undo();
     expect(area.buildings ?? []).toEqual([]);
   });
+
+  // WR-01: every sculpt path that re-seats a building must say so, or the view keeps the old mesh.
+  describe("reports buildingsChanged when a sculpt re-seats a building", () => {
+    const withShed = () => {
+      const s = setup();
+      s.d.commitScenery({ buildings: [shed(0, 0, "shed")] });
+      return s;
+    };
+    const selectBox = (d: ReturnType<typeof setup>["d"]) => {
+      d.setMode("select");
+      d.pointerDown(-12, -12, {});
+      d.pointerUp(12, 12);
+    };
+
+    it("brush stroke release", () => {
+      const { area, d } = withShed();
+      d.setTool("raise");
+      d.pointerDown(0, 0, {});
+      d.pointerMove(3, 0, {});
+      const up = d.pointerUp(3, 0);
+      expect(up.buildingsChanged).toBe(true);
+      expect(area.buildings?.[0]?.center.y).not.toBe(1.1);
+    });
+
+    it("a stroke away from every building reports nothing", () => {
+      const { d } = withShed();
+      d.setTool("raise");
+      d.pointerDown(90, 90, {});
+      expect(d.pointerUp(90, 90).buildingsChanged).toBe(false);
+    });
+
+    it("Flatten on a selection", () => {
+      const { d } = withShed();
+      d.setTool("raise");
+      d.pointerDown(6, 0, {});
+      d.pointerUp(6, 0);
+      selectBox(d);
+      expect(d.applyOperation("flatten").buildingsChanged).toBe(true);
+    });
+
+    it("Raise on a selection, and the hold-to-repeat end", () => {
+      const { d } = withShed();
+      selectBox(d);
+      expect(d.applyOperation("raise").buildingsChanged).toBe(true);
+      d.beginOpRepeat("lower");
+      d.opRepeatTick();
+      expect(d.endOpRepeat().buildingsChanged).toBe(true);
+    });
+
+    it("Smooth all", () => {
+      const { d } = withShed();
+      d.setTool("raise");
+      d.pointerDown(6, 0, {});
+      d.pointerUp(6, 0);
+      expect(d.smoothAll().buildingsChanged).toBe(true);
+    });
+  });
 });

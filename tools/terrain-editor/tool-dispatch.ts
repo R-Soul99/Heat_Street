@@ -536,9 +536,14 @@ export function createToolDispatcher(getArea: () => EditArea) {
     return res;
   }
 
-  function finish(diff: StrokeDiff | undefined): void {
-    if (diff) pushDiff(getArea(), diff);
+  /**
+   * Ends the stroke and pushes its diff. Returns true when the pushed entry re-seated
+   * buildings, so every caller can report buildingsChanged and the view redraws them.
+   */
+  function finish(diff: StrokeDiff | undefined): boolean {
+    const pushed = diff ? pushDiff(getArea(), diff) : undefined;
     stroke = null;
+    return pushed?.buildings !== undefined;
   }
 
   /** World rectangle (one cell of margin) covering the vertices a heights part wrote. */
@@ -1108,8 +1113,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (op === "flatten") {
         const r = flattenMaskToAverage(area.grid, sel, rec, heightOpOptions(area, options));
         const diff = rec.commit();
-        if (diff) pushDiff(area, diff);
-        return heightResult(r);
+        const res = heightResult(r);
+        if (diff) res.buildingsChanged = pushDiff(area, diff).buildings !== undefined;
+        return res;
       }
       const r = paintMask(area.paint, area.grid, sel, options.surface, rec);
       const diff = rec.commit();
@@ -1371,7 +1377,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
             res.dirtyPaint = w.paint;
             res.graphChanged = w.graph;
             res.lockChanged = w.lock;
-            finish(r.diff);
+            res.buildingsChanged = finish(r.diff);
             return res;
           }
         }
@@ -1396,10 +1402,10 @@ export function createToolDispatcher(getArea: () => EditArea) {
         return res;
       }
       if (s.tool === "erase") {
-        finish(mergeDiffs(s.diffs));
+        res.buildingsChanged = finish(mergeDiffs(s.diffs));
         return res;
       }
-      finish(s.recorder.commit());
+      res.buildingsChanged = finish(s.recorder.commit());
       return res;
     },
 
@@ -1419,7 +1425,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       res.dirtyHeights = r.window;
       res.slopeClamped = r.slopeClamped;
       if (r.slopeClamped) res.status = slopeClampHint(options.slopeLimitDeg);
-      finish(rec.commit());
+      res.buildingsChanged = finish(rec.commit());
       return res;
     },
     undo(): UndoRedoResult | false {

@@ -5239,8 +5239,9 @@ function stopOpHold(): void {
   opHold = null;
   h.repeater.stop();
   if (area) {
-    // The ticks already refreshed the view; the end only commits the single undo entry.
-    dispatcher.endOpRepeat();
+    // The ticks already refreshed the terrain; the end commits the single undo entry, and that
+    // is where buildings under the sculpt are re-seated, so their meshes are redrawn here.
+    sceneryChanged(dispatcher.endOpRepeat());
     updateHistoryButtons();
     refreshRoadProblems();
   }
