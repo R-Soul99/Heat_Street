@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 Phase: 07.1.3 (editor-feature-palette) — EXECUTING
 Plan: 11 of 11 (all plans complete, awaiting phase verification)
 Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; phase 7: all 7 plans done (07-07 human-approved 2026-11-15), awaiting phase verification
-Last activity: 2026-11-16 - Completed quick task 261116-qok: Editor Drive button and pane header fixes
+Last activity: 2026-11-16 - Completed quick task 261116-ryu: Rigid ramps and straight roads
 
 Progress: [██████████] 99%
 
@@ -274,6 +274,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261116-a5q | Editor amendments B: align ramps (Face, Face each other, Match heading, Line up), Snap to grid, Contours-only view | 2026-11-16 | 5b683ce | [261116-a5q-editor-amendments-b-align-ramps-snap-to-](./quick/261116-a5q-editor-amendments-b-align-ramps-snap-to-/) |
 | 261116-a69 | Car shadow: sun shadow follows the car, contact shadow on every map, reference grid off on terrain maps (?grid= override) | 2026-11-16 | bfab93a | [261116-a69-car-ground-shadow-for-height-cue](./quick/261116-a69-car-ground-shadow-for-height-cue/) |
 | 261116-qok | Editor: camera pad sits below the top bar (Drive no longer overlaps it); left pane header names the selected item and hides View | 2026-11-16 | 7168d99 | [261116-qok-editor-fixes-drive-button-clear-of-camer](./quick/261116-qok-editor-fixes-drive-button-clear-of-camer/) |
+| 261116-ryu | Rigid ramp deck from one base height (no terrain bumps on the deck); straight road drawing (Shift or Straight toggle) | 2026-11-16 | 2d5f3c8 | [261116-ryu-rigid-ramps-with-a-flat-deck-from-the-fo](./quick/261116-ryu-rigid-ramps-with-a-flat-deck-from-the-fo/) |
 
 ## Session Continuity
 
