@@ -115,6 +115,7 @@ import {
   deleteRamp,
   featureIdSeed,
   footprintCorners,
+  isEditableBuilding,
   LINE_TOO_FEW_POINTS,
   moveFeature,
   pickFeatureByRay,
@@ -2397,7 +2398,11 @@ function sceneryAreaFull(): SceneryArea | null {
 function sceneryExists(sel: ScenerySelection): boolean {
   if (!area) return false;
   if (sel.kind === "feature") return (area.features ?? []).some((f) => f.id === sel.id);
-  if (sel.kind === "building") return sel.index >= 0 && sel.index < area.buildings.length;
+  if (sel.kind === "building") {
+    // A legacy GLB collision box is read-only, so it never counts as a selectable item.
+    const b = area.buildings[sel.index];
+    return b !== undefined && isEditableBuilding(b, area.legacyGlbBuildings);
+  }
   return area.objects.some((o) => o.crest.id === sel.id && o.crest.ramp !== undefined);
 }
 
@@ -2491,6 +2496,7 @@ function pickSceneryAt(clientX: number, clientY: number): ScenerySelection | und
     },
     hit ? { x: hit.x, z: hit.z } : null,
     SCENERY_PICK_RADIUS_M,
+    area.legacyGlbBuildings,
   );
 }
 
@@ -2682,7 +2688,9 @@ function deleteSelectedScenery(): boolean {
     res = dispatcher.commitScenery({ features: deleteFeature(area.features ?? [], sel.id) });
   } else if (sel.kind === "building") {
     what = "Building";
-    res = dispatcher.commitScenery({ buildings: deleteBuilding(area.buildings, sel.index) });
+    res = dispatcher.commitScenery({
+      buildings: deleteBuilding(area.buildings, sel.index, area.legacyGlbBuildings),
+    });
   } else {
     what = "Ramp";
     res = dispatcher.commitScenery({ objects: deleteRamp(area.objects, sel.id) });
@@ -2704,7 +2712,12 @@ async function deleteSceneryInSelection(): Promise<void> {
     return;
   }
   const g = area.grid;
-  const r = removeInMask(area.features ?? [], area.buildings, (x, z) => mask.cellAtXZ(g, x, z));
+  const r = removeInMask(
+    area.features ?? [],
+    area.buildings,
+    (x, z) => mask.cellAtXZ(g, x, z),
+    area.legacyGlbBuildings,
+  );
   const n = r.removedFeatures + r.removedBuildings;
   if (n === 0) {
     setStatus("No scenery in the selection");

@@ -8,7 +8,12 @@ import type {
 import { createTerrainGrid, sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { createPaintMap, PAINT_ROAD_FLAG } from "../../src/core/terrain-paint.ts";
 import { DENSE_BUILDINGS, DENSE_FEATURES } from "../../tests/fixtures/dense-scenery.ts";
-import { addRampObject, ON_ROAD_REASON, OUTSIDE_AREA_REASON } from "./features.ts";
+import {
+  addRampObject,
+  LEGACY_BUILDING_REASON,
+  ON_ROAD_REASON,
+  OUTSIDE_AREA_REASON,
+} from "./features.ts";
 import {
   BUDGET_REASON,
   canPlaceRampAt,
@@ -303,6 +308,18 @@ describe("rotateSceneryItem", () => {
       expect(rot).toBeLessThanOrEqual(Math.PI);
       expect(rot).toBeCloseTo(3.6 - 2 * Math.PI, 6);
     }
+  });
+
+  it("refuses to move or turn a legacy GLB collision box, and still edits a styled one", () => {
+    const area = moveArea({
+      buildings: [long(20, 0), long(60, 0, "shed")],
+      legacyGlbBuildings: true,
+    });
+    const refused = { ok: false, reason: LEGACY_BUILDING_REASON };
+    expect(moveSceneryItem(area, { kind: "building", index: 0 }, 1, 0)).toEqual(refused);
+    expect(rotateSceneryItem(area, { kind: "building", index: 0 }, 0.1)).toEqual(refused);
+    expect(moveSceneryItem(area, { kind: "building", index: 1 }, 1, 0).ok).toBe(true);
+    expect(rotateSceneryItem(area, { kind: "building", index: 1 }, 0.1).ok).toBe(true);
   });
 
   it("turns a ramp heading and a tree, and not a line", () => {

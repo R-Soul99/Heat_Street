@@ -18,8 +18,10 @@ import {
   addRampObject,
   canPlaceAt,
   canPlaceLine,
+  deleteBuilding,
   deleteFeature,
   featureIdSeed,
+  isEditableBuilding,
   moveFeature,
   nextRampId,
   ON_ROAD_REASON,
@@ -328,6 +330,64 @@ describe("removeInMask", () => {
     const none = removeInMask(features, buildings, () => false);
     expect(none.features).toBe(features);
     expect(none.buildings).toBe(buildings);
+  });
+});
+
+// CR-01: on a legacy GLB map the style-less boxes are collision for meshes baked into the map
+// model, so no editor path may pick, delete or bulk-delete them. Styled buildings stay editable.
+describe("legacy GLB buildings are read-only", () => {
+  const legacyBox: TerrainBuilding = {
+    center: { x: 10, y: 2, z: 10 },
+    halfExtents: { x: 3, y: 2, z: 3 },
+    rotationY: 0,
+  };
+  const styled: TerrainBuilding = {
+    center: { x: 30, y: 2, z: 10 },
+    halfExtents: { x: 3, y: 2, z: 3 },
+    rotationY: 0,
+    style: "shed",
+  };
+  const buildings = [legacyBox, styled];
+  const down = (x: number, z: number) => ({ ox: x, oy: 50, oz: z, dx: 0, dy: -1, dz: 0 });
+
+  it("isEditableBuilding is false only for a style-less box on a legacy map", () => {
+    expect(isEditableBuilding(legacyBox, true)).toBe(false);
+    expect(isEditableBuilding(styled, true)).toBe(true);
+    expect(isEditableBuilding(legacyBox, false)).toBe(true);
+    expect(isEditableBuilding(styled, false)).toBe(true);
+  });
+
+  it("ground and ray picks skip the legacy box and still hit the styled one", () => {
+    expect(pickFeatureAt([], buildings, [], 10, 10, 1.5, true)).toBeUndefined();
+    expect(pickFeatureAt([], buildings, [], 30, 10, 1.5, true)).toEqual({
+      kind: "building",
+      index: 1,
+    });
+    const flat = () => 0;
+    const ground = { x: 10, z: 10 };
+    expect(pickFeatureByRay([], buildings, [], flat, down(10, 10), ground, 1.5, true)).toBe(
+      undefined,
+    );
+    expect(
+      pickFeatureByRay([], buildings, [], flat, down(30, 10), { x: 30, z: 10 }, 1.5, true),
+    ).toEqual({ kind: "building", index: 1 });
+    // The same box on an ordinary map is an editor-drawn building and stays pickable.
+    expect(pickFeatureByRay([], buildings, [], flat, down(10, 10), ground, 1.5)).toEqual({
+      kind: "building",
+      index: 0,
+    });
+  });
+
+  it("delete and box delete keep the legacy box", () => {
+    expect(deleteBuilding(buildings, 0, true)).toBe(buildings);
+    expect(deleteBuilding(buildings, 1, true)).toEqual([legacyBox]);
+    expect(deleteBuilding(buildings, 0)).toEqual([styled]);
+    const all = removeInMask([], buildings, () => true, true);
+    expect(all.buildings).toEqual([legacyBox]);
+    expect(all.removedBuildings).toBe(1);
+    const onlyLegacy = removeInMask([], [legacyBox], () => true, true);
+    expect(onlyLegacy.buildings).toHaveLength(1);
+    expect(onlyLegacy.removedBuildings).toBe(0);
   });
 });
 

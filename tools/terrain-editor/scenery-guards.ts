@@ -15,6 +15,8 @@ import {
   footprintCorners,
   type HeightFn,
   insideArea,
+  isEditableBuilding,
+  LEGACY_BUILDING_REASON,
   moveFeature,
   OUTSIDE_AREA_REASON,
   type PlaceArea,
@@ -156,6 +158,9 @@ export function moveSceneryItem(
     const buildings = area.buildings ?? [];
     const b = buildings[selection.index];
     if (b === undefined) return { ok: false, reason: NOTHING_SELECTED };
+    if (!isEditableBuilding(b, area.legacyGlbBuildings === true)) {
+      return { ok: false, reason: LEGACY_BUILDING_REASON };
+    }
     const x = b.center.x + dx;
     const z = b.center.z + dz;
     const spots: [number, number][] = [
@@ -303,6 +308,9 @@ export function rotateSceneryItem(
     const buildings = area.buildings ?? [];
     const b = buildings[selection.index];
     if (b === undefined) return { ok: false, reason: NOTHING_SELECTED };
+    if (!isEditableBuilding(b, area.legacyGlbBuildings === true)) {
+      return { ok: false, reason: LEGACY_BUILDING_REASON };
+    }
     const rotationY = wrapAngle(b.rotationY + deltaRad);
     for (const [px, pz] of footprintCorners(
       b.center.x,

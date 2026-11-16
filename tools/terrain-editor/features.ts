@@ -395,11 +395,27 @@ export function deleteRamp(
   return objects.filter((_, k) => k !== i);
 }
 
+export const LEGACY_BUILDING_REASON =
+  "That building comes from the map model and cannot be changed here";
+
+/**
+ * False for a style-less building on a legacy GLB map: it is the collision box of a mesh
+ * baked into the map model, which the game draws from the GLB. Moving, turning or removing
+ * the box would leave the car hitting nothing it can see, so every edit path skips it.
+ * Styled (palette-placed) buildings are editable on every map.
+ */
+export function isEditableBuilding(b: TerrainBuilding, legacyGlbBuildings: boolean): boolean {
+  return !(legacyGlbBuildings && b.style === undefined);
+}
+
+/** Removes one building. A read-only legacy box (see isEditableBuilding) is kept. */
 export function deleteBuilding(
   buildings: readonly TerrainBuilding[],
   index: number,
+  legacyGlbBuildings = false,
 ): readonly TerrainBuilding[] {
-  if (index < 0 || index >= buildings.length) return buildings;
+  const b = buildings[index];
+  if (b === undefined || !isEditableBuilding(b, legacyGlbBuildings)) return buildings;
   return buildings.filter((_, k) => k !== index);
 }
 
@@ -442,17 +458,21 @@ export interface RemoveResult {
 
 /**
  * Removes point features inside the mask, lines with any vertex inside, and buildings
- * whose centre is inside. Unchanged arrays keep their reference.
+ * whose centre is inside. Read-only legacy boxes (see isEditableBuilding) are always kept.
+ * Unchanged arrays keep their reference.
  */
 export function removeInMask(
   features: readonly TerrainFeature[],
   buildings: readonly TerrainBuilding[],
   inMask: (x: number, z: number) => boolean,
+  legacyGlbBuildings = false,
 ): RemoveResult {
   const keepF = features.filter((f) =>
     "points" in f ? !f.points.some((p) => inMask(p[0], p[1])) : !inMask(f.x, f.z),
   );
-  const keepB = buildings.filter((b) => !inMask(b.center.x, b.center.z));
+  const keepB = buildings.filter(
+    (b) => !isEditableBuilding(b, legacyGlbBuildings) || !inMask(b.center.x, b.center.z),
+  );
   return {
     features: keepF.length === features.length ? features : keepF,
     buildings: keepB.length === buildings.length ? buildings : keepB,
@@ -512,7 +532,10 @@ function insideRotatedBox(b: TerrainBuilding, x: number, z: number): boolean {
   return Math.abs(lx) <= b.halfExtents.x && Math.abs(lz) <= b.halfExtents.z;
 }
 
-/** Nearest hit within radiusM (buildings: inside the rotated footprint, distance 0). */
+/**
+ * Nearest hit within radiusM (buildings: inside the rotated footprint, distance 0).
+ * Read-only legacy boxes (see isEditableBuilding) are never picked.
+ */
 export function pickFeatureAt(
   features: readonly TerrainFeature[],
   buildings: readonly TerrainBuilding[],
@@ -520,6 +543,7 @@ export function pickFeatureAt(
   x: number,
   z: number,
   radiusM: number,
+  legacyGlbBuildings = false,
 ): ScenerySelection | undefined {
   let best: ScenerySelection | undefined;
   let bestD = Number.POSITIVE_INFINITY;
@@ -543,6 +567,7 @@ export function pickFeatureAt(
     }
   }
   buildings.forEach((b, index) => {
+    if (!isEditableBuilding(b, legacyGlbBuildings)) return;
     if (insideRotatedBox(b, x, z)) consider(0, { kind: "building", index });
   });
   for (const o of objects) {
@@ -659,6 +684,7 @@ function featurePickBoxes(f: TerrainFeature, heightAt: HeightFn): PickBox[] {
  * Picks the placed item the ray hits first: trees by trunk and canopy, bushes by body, lines by
  * their full height, buildings by their box, ramps by their footprint box. Anything the ray
  * misses falls back to the ground-distance test at `ground` (the terrain hit under the cursor).
+ * Read-only legacy boxes (see isEditableBuilding) are never picked.
  */
 export function pickFeatureByRay(
   features: readonly TerrainFeature[],
@@ -668,6 +694,7 @@ export function pickFeatureByRay(
   ray: PickRay,
   ground: { readonly x: number; readonly z: number } | null,
   radiusM: number,
+  legacyGlbBuildings = false,
 ): ScenerySelection | undefined {
   let best: ScenerySelection | undefined;
   let bestT = Number.POSITIVE_INFINITY;
@@ -682,6 +709,7 @@ export function pickFeatureByRay(
       consider(rayHitsBox(ray, b), { kind: "feature", id: f.id });
   }
   buildings.forEach((b, index) => {
+    if (!isEditableBuilding(b, legacyGlbBuildings)) return;
     consider(
       rayHitsBox(ray, {
         cx: b.center.x,
@@ -715,5 +743,13 @@ export function pickFeatureByRay(
   }
   if (best !== undefined) return best;
   if (ground === null) return undefined;
-  return pickFeatureAt(features, buildings, objects, ground.x, ground.z, radiusM);
+  return pickFeatureAt(
+    features,
+    buildings,
+    objects,
+    ground.x,
+    ground.z,
+    radiusM,
+    legacyGlbBuildings,
+  );
 }
