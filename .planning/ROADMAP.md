@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
 - [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
 - [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
-- [ ] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
+- [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette (completed 2026-11-16)
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 - [ ] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car
 - [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor
@@ -517,7 +517,7 @@ Plans:
 **Requirements**: TBD
 **Briefs:** `.planning/plans-ahead/01-start-points.md` (do first), then `.planning/plans-ahead/02-scenery-palette.md`. Summarised in `07.1.3-CONTEXT.md`.
 **Depends on:** Phase 07.1.2
-**Plans:** 10/11 plans executed
+**Plans:** 11/11 plans complete
 
 Plans:
 - [x] 07.1.3-01-PLAN.md — Start-point sidecar field and game spawn resolution (D-01, D-02, D-04, D-18)
@@ -530,7 +530,7 @@ Plans:
 - [x] 07.1.3-08-PLAN.md — Shared scenery view, crest-view extraction, game wiring, docs (D-09, D-11, D-13, D-17, D-19)
 - [x] 07.1.3-09-PLAN.md — Editor palette: scenery view, swatches, trees/bushes/scatter/buildings (D-13, D-21)
 - [x] 07.1.3-10-PLAN.md — Editor hedge/fence lines and ramps (D-09, D-12, D-14)
-- [ ] 07.1.3-11-PLAN.md — Editor select/move/delete for scenery; 5-minute check and budget reading
+- [x] 07.1.3-11-PLAN.md — Editor select/move/delete for scenery; 5-minute check and budget reading
 
 ### Phase 8: Getaway - Heat, Damage & Dispatch
 
