@@ -336,7 +336,11 @@ export const TERRAIN_BAR: BarGroup[] = [
       },
     ],
   },
-  { id: "view", label: "View", items: [tool("grid"), tool("contours")] },
+  {
+    id: "view",
+    label: "View",
+    items: [tool("grid"), { kind: "slot", id: "snap" }, tool("contours")],
+  },
   {
     id: "history",
     label: "History",

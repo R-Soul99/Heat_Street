@@ -107,7 +107,7 @@ describe("toolbar data", () => {
     expect(
       road?.kind === "menu" && road.items.flatMap((m) => (m.kind === "tool" ? [m.tool.id] : [])),
     ).toEqual(["roadPaint", "roadErase", "lock", "unlock", "deleteRoad"]);
-    expect(g("view")?.items.map(name)).toEqual(["grid", "contours"]);
+    expect(g("view")?.items.map(name)).toEqual(["grid", "snap", "contours"]);
     expect(g("menus")?.items.map(name)).toEqual(["menu", "menu", "menu"]);
     const place = g("menus")?.items[2];
     expect(place?.kind === "menu" && place.tool.id).toBe("place");

@@ -94,6 +94,7 @@ import {
   resolveShortcut,
   STANDARD_BINDINGS,
 } from "../editor-shell/keys.ts";
+import { getBoolPref, getPref, setBoolPref, setPref } from "../editor-shell/prefs.ts";
 import { createRepeater, OP_REPEAT_MS, REPEAT_DELAY_MS } from "../editor-shell/repeat.ts";
 import { createShell } from "../editor-shell/shell.ts";
 import { type StepperSpec, stepValue } from "../editor-shell/stepper.ts";
@@ -176,6 +177,14 @@ import {
   type SceneryArea,
 } from "./scenery-guards.ts";
 import {
+  DEFAULT_SNAP_M,
+  parseSnapSize,
+  SNAP_SIZES_M,
+  snapDelta,
+  snapGridSegments,
+  snapPoint,
+} from "./snap.ts";
+import {
   addStartPoint,
   defaultStartPoint,
   makeDefault,
@@ -245,6 +254,10 @@ let knownAreas: string[] = [];
 let saving = false;
 let editCounter = 0;
 let gridOn = false;
+/** Snap to grid (quick 261116-a5q): remembered in the editor prefs; Alt bypasses it per action. */
+let snapOn = getBoolPref("terrain.snap.on", false);
+let snapSizeM = parseSnapSize(getPref("terrain.snap.size", String(DEFAULT_SNAP_M)));
+let altHeld = false;
 let contoursOn = false;
 let contourInterval = 1;
 /** Grid line spacing in cells (D-20). */
@@ -1512,6 +1525,14 @@ function setRect(plan: BuildingPlan | null): void {
   rectFill.visible = true;
 }
 
+/**
+ * Where a placement or drag lands: the cursor spot snapped to the grid when Snap is on (Alt held
+ * bypasses it). Snapping happens before the placement guards, so refusals judge the snapped spot.
+ */
+function placeSpot(p: { x: number; z: number }, alt: boolean = altHeld): { x: number; z: number } {
+  return snapPoint(p.x, p.z, { on: snapOn, sizeM: snapSizeM, bypass: alt });
+}
+
 /** Plan for the building under the cursor: a dragged footprint, else the sidebar size at the cursor. */
 function buildingPlanAt(hit: { x: number; z: number }): BuildingPlan {
   const rot = buildingPalette.rotationDeg * DEG;
@@ -1639,7 +1660,7 @@ function updatePlaceGhost(): void {
     lastGhostReason = "";
     return;
   }
-  const hit = lastHit;
+  const hit = lastHit && placeSpot(lastHit);
   if (!area || !hit) {
     ghostRefused = false;
     cursorRing.visible = false;
@@ -1669,7 +1690,7 @@ function updatePlaceGhost(): void {
   }
   const p = pointPalette[kind];
   if (p.scatter) {
-    paintScatterRing(hit);
+    paintScatterRing(lastHit ?? hit); // scatter is a free brush: never snapped
     setGhostState(false, "", kind);
     return;
   }
@@ -1877,10 +1898,12 @@ function sceneryPointerDown(e: PointerEvent, kind: SceneryPlaceKind): void {
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
+  altHeld = e.altKey;
+  const spot = placeSpot(hit, e.altKey);
   if (kind === "building") {
     canvas.setPointerCapture(e.pointerId);
     activePointerId = e.pointerId;
-    buildGesture.down(hit.x, hit.z);
+    buildGesture.down(spot.x, spot.z);
     updatePlaceGhost();
     return;
   }
@@ -1901,7 +1924,7 @@ function sceneryPointerDown(e: PointerEvent, kind: SceneryPlaceKind): void {
     updatePlaceGhost();
     return;
   }
-  placePointAt(kind, hit.x, hit.z);
+  placePointAt(kind, spot.x, spot.z);
 }
 
 function sceneryPointerMove(e: PointerEvent): void {
@@ -1927,8 +1950,10 @@ function sceneryPointerMove(e: PointerEvent): void {
     updatePlaceGhost();
     return;
   }
-  buildGesture.move(hit.x, hit.z);
-  const plan = buildingPlanAt(lastHit);
+  altHeld = e.altKey;
+  const spot = placeSpot(hit, e.altKey);
+  buildGesture.move(spot.x, spot.z);
+  const plan = buildingPlanAt(spot);
   if (plan.dragged) {
     setStatus(`${fmt3(plan.widthM)} x ${fmt3(plan.depthM)} m, ${buildingPalette.rotationDeg}°`);
   }
@@ -1953,10 +1978,11 @@ function sceneryPointerUp(e: PointerEvent): void {
   if (!buildGesture.active() || !area) return;
   const hit = pickTerrain(e.clientX, e.clientY);
   if (hit) {
-    buildGesture.move(hit.x, hit.z);
+    const spot = placeSpot(hit, e.altKey);
+    buildGesture.move(spot.x, spot.z);
     lastHit = { x: hit.x, z: hit.z };
   }
-  const at = lastHit;
+  const at = lastHit && placeSpot(lastHit, e.altKey);
   const plan = at ? buildingPlanAt(at) : null;
   buildGesture.up();
   setRect(null);
@@ -2036,7 +2062,7 @@ function updateLineOverlay(kind: LinePlaceKind | null): void {
   }
   if (!area || kind === null) return;
   const pts = lineBuilder.points();
-  const hit = lastHit;
+  const hit = lastHit && placeSpot(lastHit);
   let refused = false;
   let reason = "";
   if (hit) {
@@ -2108,18 +2134,22 @@ function linePointerDown(e: PointerEvent, kind: LinePlaceKind): void {
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
+  altHeld = e.altKey;
+  const spot = placeSpot(hit, e.altKey);
   if (lineKindActive !== kind) {
     lineBuilder.cancel();
     lineKindActive = kind;
   }
   const last = lineBuilder.points()[lineBuilder.points().length - 1];
-  if (last && Math.hypot(hit.x - last[0], hit.z - last[1]) < LINE_DUP_RADIUS_M) return;
-  const check = last ? canPlaceLine(area, [last, [hit.x, hit.z]]) : canPlaceAt(area, hit.x, hit.z);
+  if (last && Math.hypot(spot.x - last[0], spot.z - last[1]) < LINE_DUP_RADIUS_M) return;
+  const check = last
+    ? canPlaceLine(area, [last, [spot.x, spot.z]])
+    : canPlaceAt(area, spot.x, spot.z);
   if (!check.ok) {
     setStatus(check.reason, "error"); // a refused click adds nothing (D-12)
     return;
   }
-  const add = lineBuilder.add(hit.x, hit.z);
+  const add = lineBuilder.add(spot.x, spot.z);
   if (add.error !== undefined) {
     setStatus(add.error, "error");
     return;
@@ -2221,7 +2251,7 @@ function rampSpecAt(x: number, z: number, headingRad: number): AuthoredCrest {
 /** Ghost ramp (game builder, translucent) at the press point plus a direction arrow to the cursor. */
 function updateRampPreview(): void {
   cursorRing.visible = false;
-  const hit = lastHit;
+  const hit = lastHit && placeSpot(lastHit);
   if (!area || !hit) {
     ghostRefused = false;
     return;
@@ -2297,14 +2327,16 @@ function rampPointerDown(e: PointerEvent): void {
     return;
   }
   lastHit = { x: hit.x, z: hit.z };
-  const check = canPlaceRampAt(area, hit.x, hit.z);
+  altHeld = e.altKey;
+  const spot = placeSpot(hit, e.altKey);
+  const check = canPlaceRampAt(area, spot.x, spot.z);
   if (!check.ok) {
     setStatus(check.reason, "error");
     return;
   }
   canvas.setPointerCapture(e.pointerId);
   activePointerId = e.pointerId;
-  rampGesture.down(hit.x, hit.z);
+  rampGesture.down(spot.x, spot.z);
   updatePlaceGhost();
 }
 
@@ -2717,15 +2749,48 @@ function showMoveGhost(d: SceneryMoveDrag, refused: boolean): void {
   scene.add(moveGhost);
 }
 
+/** The point of a placed item that snaps when it is moved (null when the item is gone). */
+function sceneryAnchor(sel: ScenerySelection): { x: number; z: number } | null {
+  if (!area) return null;
+  if (sel.kind === "feature") {
+    const f = (area.features ?? []).find((v) => v.id === sel.id);
+    if (!f) return null;
+    if ("points" in f) {
+      const p = f.points[0];
+      return p ? { x: p[0], z: p[1] } : null;
+    }
+    return { x: f.x, z: f.z };
+  }
+  if (sel.kind === "building") {
+    const b = area.buildings[sel.index];
+    return b ? { x: b.center.x, z: b.center.z } : null;
+  }
+  const o = area.objects.find((v) => v.crest.id === sel.id && v.crest.ramp !== undefined);
+  return o ? { x: o.crest.centerX, z: o.crest.centerZ } : null;
+}
+
 function moveDragTo(e: PointerEvent): void {
   const d = moveDrag;
   if (!d || !area) return;
   const hit = pickTerrain(e.clientX, e.clientY);
   if (!hit) return;
   lastHit = { x: hit.x, z: hit.z };
+  altHeld = e.altKey;
   d.dx = hit.x - d.startX;
   d.dz = hit.z - d.startZ;
   if (!d.moved && Math.hypot(d.dx, d.dz) < MOVE_MIN_M) return;
+  // Snap: the item's anchor (point, building centre, ramp start, first line point) lands on the grid.
+  const anchor = sceneryAnchor(d.sel);
+  if (anchor) {
+    const s = snapDelta(anchor.x, anchor.z, d.dx, d.dz, {
+      on: snapOn,
+      sizeM: snapSizeM,
+      bypass: e.altKey,
+    });
+    d.dx = s.dx;
+    d.dz = s.dz;
+    if (!d.moved && Math.abs(d.dx) < 1e-9 && Math.abs(d.dz) < 1e-9) return; // snapped back to the start
+  }
   d.moved = true;
   const guard = sceneryAreaFull();
   if (!guard) return;
@@ -2751,7 +2816,8 @@ function finishMoveDrag(e: PointerEvent): void {
   if (area) moveDragTo(e);
   moveDrag = null;
   const res = d.result;
-  const moved = d.moved;
+  // A drag that ended back on its own grid spot changes nothing: no undo step.
+  const moved = d.moved && (Math.abs(d.dx) > 1e-9 || Math.abs(d.dz) > 1e-9);
   clearMoveGhost();
   if (!area || !moved || res === null) {
     refreshSceneryBoxes();
@@ -3936,11 +4002,46 @@ function setLines(target: THREE.LineSegments, data: Float32Array): void {
   target.geometry = g;
 }
 
+/** Half-width (m) of the snap grid drawn around the cursor, and how far the cursor may drift before a rebuild. */
+const SNAP_GRID_HALF_M = 40;
+const SNAP_GRID_REBUILD_M = 4;
+
+/** Snap on + Grid on: world grid lines at the snap size around the cursor (they ARE the snap points). */
+function updateSnapGrid(hit: { x: number; z: number } | null): void {
+  if (!area || !hit) {
+    gridLines.visible = false;
+    return;
+  }
+  const qx = Math.round(hit.x / SNAP_GRID_REBUILD_M);
+  const qz = Math.round(hit.z / SNAP_GRID_REBUILD_M);
+  const key = `snap|${snapSizeM}|${qx},${qz}`;
+  gridLines.visible = true;
+  if (key === gridKey) return;
+  gridKey = key;
+  const g = area.grid;
+  setLines(
+    gridLines,
+    snapGridSegments(
+      { minX: g.originX, maxX: g.originX + g.scaleX, minZ: g.originZ, maxZ: g.originZ + g.scaleZ },
+      qx * SNAP_GRID_REBUILD_M,
+      qz * SNAP_GRID_REBUILD_M,
+      SNAP_GRID_HALF_M,
+      snapSizeM,
+      heightAtArea,
+      FOOTPRINT_LIFT_M,
+    ),
+  );
+}
+
 /**
  * Grid lines: over the selection bounds in Select mode with a selection (A4), otherwise for the
  * active tool's footprint under the cursor. Rebuilt when its cell window, spacing or tool changes.
  */
 function updateFootprintGrid(hit: { x: number; z: number } | null): void {
+  if (area && gridOn && snapOn) {
+    updateSnapGrid(hit);
+    return;
+  }
   const sel = area && dispatcher.getMode() === "select" ? dispatcher.getSelectionMask() : null;
   if (!area || !gridOn || (!hit && !sel)) {
     gridLines.visible = false;
@@ -4569,6 +4670,7 @@ canvas.addEventListener("pointerdown", (e) => {
   strokeEvent(e, "down");
 });
 canvas.addEventListener("pointermove", (e) => {
+  altHeld = e.altKey;
   updateCursor(e.clientX, e.clientY);
   if (alignPending) {
     alignPointerMove(e);
@@ -4680,7 +4782,9 @@ function startPointerDown(e: PointerEvent): void {
     };
     return;
   }
-  startGesture.down(hit.x, hit.z);
+  altHeld = e.altKey;
+  const spot = placeSpot(hit, e.altKey);
+  startGesture.down(spot.x, spot.z);
 }
 
 function startPointerMove(e: PointerEvent): void {
@@ -4692,7 +4796,8 @@ function startPointerMove(e: PointerEvent): void {
     const p = list.find((q) => q.id === startDrag?.id);
     if (!p) return;
     if (startDrag.mode === "move") {
-      startDraft = moveStartPoint(list, p.id, hit.x, hit.z);
+      const spot = placeSpot(hit, e.altKey);
+      startDraft = moveStartPoint(list, p.id, spot.x, spot.z);
     } else {
       const dx = hit.x - p.x;
       const dz = hit.z - p.z;
@@ -4994,6 +5099,58 @@ const topDriveBtn = createButton({
   onClick: () => void driveFromOrHere(),
 });
 topDriveBtn.classList.add("drive-btn");
+
+// ---- snap control (top bar, beside Grid): toggle button plus a size drop-down
+
+const snapBtn = el("button", "tool-btn", undefined, "");
+snapBtn.type = "button";
+snapBtn.setAttribute("aria-label", "Snap to grid");
+snapBtn.append(
+  el("span", "tool-glyph", "⌗"),
+  el("span", "tool-word", "Snap"),
+  el("span", "tool-key", ""),
+);
+snapBtn.addEventListener("click", () => setSnap(!snapOn));
+const snapSizeSelect = createSelect<string>({
+  options: SNAP_SIZES_M.map((m) => ({ value: String(m), label: `${m} m` })),
+  value: String(snapSizeM),
+  tip: "Snap grid size in metres",
+  onChange: (v) => setSnapSize(parseSnapSize(v)),
+});
+const snapSlot = el("div");
+snapSlot.style.cssText = "display:flex;align-items:center;gap:2px";
+snapSlot.append(snapBtn, snapSizeSelect.el);
+
+function updateSnapUi(): void {
+  snapBtn.setAttribute("aria-pressed", String(snapOn));
+  snapBtn.dataset.tip = snapOn
+    ? `Snap: placing and moving items lands on a ${snapSizeM} m grid (hold Alt to bypass). Click to turn off`
+    : "Snap: turn on to make placing and moving items land on a grid";
+  snapSizeSelect.set(String(snapSizeM));
+}
+
+/** Turning Snap on also turns the grid on; turning it off leaves the Grid toggle as it was. */
+function setSnap(on: boolean): void {
+  snapOn = on;
+  setBoolPref("terrain.snap.on", on);
+  if (on) gridOn = true;
+  gridKey = "";
+  updateFootprintGrid(lastHit);
+  updatePlaceGhost();
+  shell.refreshMenus();
+  syncToolbar();
+  setStatus(on ? `Snap on: ${snapSizeM} m grid. Hold Alt to place or drag freely.` : "Snap off.");
+}
+
+function setSnapSize(m: number): void {
+  snapSizeM = m;
+  setPref("terrain.snap.size", String(m));
+  gridKey = "";
+  updateFootprintGrid(lastHit);
+  updatePlaceGhost();
+  updateSnapUi();
+  if (snapOn) setStatus(`Snap grid ${m} m.`);
+}
 
 function updateDriveButton(): void {
   const start = selectedOrDefaultStart();
@@ -5689,6 +5846,7 @@ function syncToolbar(): void {
     }
   }
   updateSurfaceReadout();
+  updateSnapUi();
   updatePlaceGhost();
   refreshSceneryBoxes();
   const shape = dispatcher.getOptions().brushShape;
@@ -5892,10 +6050,17 @@ const shell = createShell({
         {
           id: "grid",
           label: "Grid",
-          tip: "Show the cell grid under the brush",
+          tip: "Show grid lines under the cursor (the snap grid when Snap is on)",
           shortcut: "X",
           run: () => toggleOverlay("grid"),
           checked: () => gridOn,
+        },
+        {
+          id: "snap",
+          label: "Snap to grid",
+          tip: "Make placing and moving items land on the grid (hold Alt to bypass)",
+          run: () => setSnap(!snapOn),
+          checked: () => snapOn,
         },
         {
           id: "contours",
@@ -5938,7 +6103,7 @@ const shell = createShell({
       ...TERRAIN_BAR,
       { id: "drive", label: "Drive", items: [{ kind: "slot", id: "drive" }] },
     ],
-    slots: { surfaces: surfaceMenu, drive: topDriveBtn },
+    slots: { surfaces: surfaceMenu, drive: topDriveBtn, snap: snapSlot },
   },
   sidebarView: [
     createField("Grid spacing", gridSpacingStepper.el, "Grid line spacing in cells (display only)"),
@@ -6146,6 +6311,16 @@ window.addEventListener("blur", () => stopOpHold());
 
 // D-05 (assumption A1): a bare Alt press must not open the browser menu while Alt+drag push/pull
 // is in use. Text fields and dialogs keep the default.
+const trackAlt = (e: KeyboardEvent): void => {
+  if (e.key !== "Alt" || altHeld === (e.type === "keydown")) return;
+  altHeld = e.type === "keydown";
+  if (snapOn && dispatcher.placing() !== null) updatePlaceGhost(); // the ghost jumps free or back
+};
+window.addEventListener("keydown", trackAlt);
+window.addEventListener("keyup", trackAlt);
+window.addEventListener("blur", () => {
+  altHeld = false;
+});
 const suppressAltMenu = (e: KeyboardEvent): void => {
   if (e.key === "Alt" && !isTextEntryFocused(document.activeElement) && !shell.isDialogOpen()) {
     e.preventDefault();
