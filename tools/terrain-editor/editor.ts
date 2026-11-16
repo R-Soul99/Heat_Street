@@ -132,6 +132,13 @@ import {
   updateRamp,
 } from "./features.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
+import {
+  itemPanelHint,
+  itemPanelTitle,
+  type PaneChoice,
+  paneChoice,
+  type SelectedItemKind,
+} from "./pane-state.ts";
 import { createDragGesture, createLineBuilder, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 import {
   BRUSH_TOOL_FOR,
@@ -2499,8 +2506,30 @@ function refreshSceneryBoxes(): void {
   if (hb) hoverBox.box.copy(hb);
   hoverBox.visible = hb !== null;
   if (deleteSceneryBtn) deleteSceneryBtn.disabled = !(area && dispatcher.getSelectionMask());
+  // The left pane follows the selection: a selected item swaps in its own panel.
+  if (paneBuiltKey !== null && paneBuiltKey !== currentPane().key) buildSidebar();
   refreshSelectedPanel();
 }
+
+/** Kind of the single selected placed item, or null (nothing selected / not in Select mode). */
+function selectedItemKind(): SelectedItemKind | null {
+  const sel = selectedScenery;
+  if (!area || !sel || !selectableNow() || !sceneryExists(sel)) return null;
+  if (sel.kind === "building" || sel.kind === "ramp") return sel.kind;
+  return (area.features ?? []).find((f) => f.id === sel.id)?.kind ?? null;
+}
+
+/** What the left pane should show right now (pure choice in pane-state.ts). */
+function currentPane(): PaneChoice {
+  return paneChoice({
+    mode: dispatcher.getMode(),
+    placing: dispatcher.placing(),
+    selectedItem: selectedItemKind(),
+  });
+}
+
+/** Key of the pane the sidebar was last built for; null before the first build. */
+let paneBuiltKey: string | null = null;
 
 function selectScenery(sel: ScenerySelection | null): void {
   selectedScenery = sel;
@@ -2893,13 +2922,9 @@ function refreshSelectedPanel(): void {
   host.replaceChildren();
   const sel = selectedScenery;
   if (!sel || key === "" || !area) return;
-  const title =
-    sel.kind === "ramp"
-      ? "Selected ramp"
-      : sel.kind === "building"
-        ? "Selected building"
-        : "Selected item";
-  const head = el("div", undefined, title);
+  const itemKind = selectedItemKind();
+  if (itemKind === null) return;
+  const head = el("div", undefined, `Selected ${itemPanelTitle(itemKind).toLowerCase()}`);
   head.style.fontWeight = "600";
   const kids: HTMLElement[] = [head];
   const ramp = selectedRamp();
@@ -2934,7 +2959,7 @@ function refreshSelectedPanel(): void {
   if (isRotatable(sel)) {
     kids.push(note("Left and Right arrows turn it 15 degrees. Hold Shift for 1 degree."));
   }
-  kids.push(note("Drag to move, Delete removes it."));
+  kids.push(note(itemPanelHint(itemKind)));
   const tri = el("div", "muted");
   tri.textContent = `Scenery triangles: ${estimateSceneryTriangles(area.features ?? [], area.buildings, { drawStyleless: !area.legacyGlbBuildings }).toLocaleString("en-US")} / 40,000`;
   kids.push(tri);
@@ -4752,6 +4777,8 @@ function buildSidebar(): void {
   const mode = dispatcher.getMode();
   const armed = dispatcher.getArmed();
   const placingKind = dispatcher.placing();
+  const pane = currentPane();
+  paneBuiltKey = pane.key;
   if (lineKindActive !== null && lineKindActive !== placingKind) cancelLine();
   if (placingKind === "hedge" || placingKind === "fence") {
     buildLineSidebar(placingKind, f);
@@ -4807,6 +4834,16 @@ function buildSidebar(): void {
       "deg",
       (v) => dispatcher.setOptions({ slopeLimitDeg: v }),
     ).field;
+
+  if (pane.showItemPanel) {
+    // A placed item is selected: the pane shows only that item's panel.
+    selectedPanelEl = el("div");
+    selectedPanelKey = "";
+    f.append(selectedPanelEl);
+    refreshSelectedPanel();
+    refreshSelectionOutline();
+    return;
+  }
 
   if (mode === "select") {
     selectionReadoutEl = el("div", "muted");
