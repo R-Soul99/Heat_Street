@@ -158,6 +158,17 @@ export interface UndoRedoResult {
   objectsChanged: boolean;
 }
 
+/**
+ * Asks commitScenery to fold this edit into the previous one when that was the newest undo
+ * entry, carried the same key and was made no more than windowMs before nowMs. A held
+ * arrow key or stepper button is then one undo step, not one per repeat tick.
+ */
+export interface SceneryMerge {
+  readonly key: string;
+  readonly nowMs: number;
+  readonly windowMs: number;
+}
+
 export interface Modifiers {
   shift?: boolean;
   ctrl?: boolean;
@@ -602,10 +613,17 @@ export function createToolDispatcher(getArea: () => EditArea) {
     return { ...diff, buildings: { before, after } };
   }
 
+  /**
+   * The newest undo entry when a merging commitScenery made it (see SceneryMerge). Any other
+   * push, undo, redo or history clear forgets it, so a merge can only ever extend the top entry.
+   */
+  let mergeable: { key: string; atMs: number; entry: StrokeDiff } | null = null;
+
   /** Pushes one diff as ONE undo entry, folding in the building re-seat for sculpt diffs. */
   function pushDiff(area: EditArea, diff: StrokeDiff): StrokeDiff {
     const out = withBuildingReseat(area, diff);
     stack.push(out);
+    mergeable = null;
     return out;
   }
 
@@ -810,12 +828,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
      * One undo step for any mix of feature, building and ramp-object edits (D-16). Only
      * the parts that differ from the live area are recorded; nothing differing pushes
      * nothing. Together with applyStrokeDiff this is the only write path for these arrays.
+     * With `merge`, a run of edits sharing a key becomes one undo step (see SceneryMerge).
      */
-    commitScenery(next: {
-      features?: readonly TerrainFeature[];
-      buildings?: readonly TerrainBuilding[];
-      objects?: readonly TerrainObject[];
-    }): ToolResult {
+    commitScenery(
+      next: {
+        features?: readonly TerrainFeature[];
+        buildings?: readonly TerrainBuilding[];
+        objects?: readonly TerrainObject[];
+      },
+      merge?: SceneryMerge,
+    ): ToolResult {
       const area = getArea();
       const differs = <T>(a: readonly T[], b: readonly T[] | undefined): b is readonly T[] =>
         b !== undefined && JSON.stringify(a) !== JSON.stringify(b);
@@ -840,7 +862,21 @@ export function createToolDispatcher(getArea: () => EditArea) {
         area.objects = [...next.objects];
       }
       if (!diff.features && !diff.buildings && !diff.objects) return emptyResult();
-      return commitSceneryDiff(area, diff);
+      if (merge === undefined) return commitSceneryDiff(area, diff);
+      const prev = mergeable;
+      const folded =
+        prev !== null && prev.key === merge.key && merge.nowMs - prev.atMs <= merge.windowMs
+          ? mergeDiffs([prev.entry, diff])
+          : undefined;
+      let entry: StrokeDiff;
+      if (folded !== undefined && stack.amendTop(folded)) entry = folded;
+      else entry = pushDiff(area, diff);
+      mergeable = { key: merge.key, atMs: merge.nowMs, entry };
+      const res = emptyResult();
+      res.featuresChanged = diff.features !== undefined;
+      res.buildingsChanged = diff.buildings !== undefined;
+      res.objectsChanged = diff.objects !== undefined;
+      return res;
     },
     getSelectionMask: (): CellMask | null => liveSelection(),
     selectionCellCount: (): number => liveSelection()?.cellCount() ?? 0,
@@ -1430,16 +1466,19 @@ export function createToolDispatcher(getArea: () => EditArea) {
     },
     undo(): UndoRedoResult | false {
       const area = getArea();
+      mergeable = null;
       return toUndoResult(area, stack.undo(area));
     },
     redo(): UndoRedoResult | false {
       const area = getArea();
+      mergeable = null;
       return toUndoResult(area, stack.redo(area));
     },
     canUndo: (): boolean => stack.canUndo(),
     canRedo: (): boolean => stack.canRedo(),
     clearHistory(): void {
       stack.clear();
+      mergeable = null;
       stroke = null;
       selection = null;
       pushPull = null;

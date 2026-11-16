@@ -1421,6 +1421,82 @@ describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
     expect(area.buildings ?? []).toEqual([]);
   });
 
+  // WR-02 / WR-03: a held arrow key or stepper is one undo step, not one per repeat tick.
+  describe("merging commitScenery", () => {
+    const turned = (rotationY: number) => [{ ...shed(0, 0, "shed"), rotationY }];
+    const merge = (nowMs: number, key = "rotate:b0", windowMs = 700) => ({ key, nowMs, windowMs });
+
+    it("folds a run with the same key into one undo step", () => {
+      const { area, d } = setup();
+      d.commitScenery({ buildings: turned(0) });
+      for (let i = 1; i <= 100; i++) {
+        const r = d.commitScenery({ buildings: turned(i / 100) }, merge(1000 + i * 30));
+        expect(r.buildingsChanged).toBe(true);
+      }
+      expect(area.buildings?.[0]?.rotationY).toBe(1);
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0);
+      d.redo();
+      expect(area.buildings?.[0]?.rotationY).toBe(1);
+      d.undo();
+      d.undo();
+      expect(area.buildings ?? []).toEqual([]);
+      expect(d.canUndo()).toBe(false);
+    });
+
+    it("a run does not evict earlier history from the 50-entry stack", () => {
+      const { area, d } = setup();
+      d.commitScenery({ features: [tree(1)] });
+      d.commitScenery({ buildings: turned(0) });
+      for (let i = 1; i <= 120; i++) d.commitScenery({ buildings: turned(i / 100) }, merge(i * 80));
+      d.undo();
+      d.undo();
+      d.undo();
+      expect(area.features ?? []).toEqual([]);
+    });
+
+    it("starts a new step after the window, for another key, and after any other edit", () => {
+      const { area, d } = setup();
+      d.commitScenery({ buildings: turned(0) });
+      d.commitScenery({ buildings: turned(0.1) }, merge(0));
+      d.commitScenery({ buildings: turned(0.2) }, merge(701)); // too late: a new step
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0.1);
+      d.redo();
+      d.commitScenery({ buildings: turned(0.3) }, merge(800, "rotate:b1")); // other item
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0.2);
+      d.redo();
+      d.commitScenery({ features: [tree(1)] }); // unrelated edit in between
+      d.commitScenery({ buildings: turned(0.4) }, merge(810, "rotate:b1"));
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0.3);
+    });
+
+    it("never merges across an undo or a redo", () => {
+      const { area, d } = setup();
+      d.commitScenery({ buildings: turned(0) });
+      d.commitScenery({ buildings: turned(0.1) }, merge(0));
+      d.undo();
+      d.redo();
+      d.commitScenery({ buildings: turned(0.2) }, merge(10));
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0.1);
+    });
+
+    it("an unbounded window merges a key repeat however late it arrives", () => {
+      const { area, d } = setup();
+      d.commitScenery({ buildings: turned(0) });
+      d.commitScenery({ buildings: turned(0.1) }, merge(0));
+      d.commitScenery(
+        { buildings: turned(0.2) },
+        merge(5000, "rotate:b0", Number.POSITIVE_INFINITY),
+      );
+      d.undo();
+      expect(area.buildings?.[0]?.rotationY).toBe(0);
+    });
+  });
+
   // WR-01: every sculpt path that re-seats a building must say so, or the view keeps the old mesh.
   describe("reports buildingsChanged when a sculpt re-seats a building", () => {
     const withShed = () => {

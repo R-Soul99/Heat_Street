@@ -107,6 +107,7 @@ import {
   addLineFeature,
   addPointFeature,
   addRampObject,
+  arrowRotateDeg,
   BUILDING_TOO_SMALL,
   canPlaceAt,
   canPlaceLine,
@@ -761,6 +762,11 @@ function startPointAt(x: number, z: number): TerrainStartPoint | undefined {
 // ---------------------------------------------------------------- scenery view and palette (07.1.3 plan 09)
 
 const ROTATION_STEP_DEG = 15;
+/**
+ * Small repeated edits of one item (arrow-key turns, ramp steppers) made within this long of
+ * each other are one undo step. It is longer than the hold-to-repeat delay, so a hold is one step.
+ */
+const EDIT_MERGE_WINDOW_MS = 700;
 /** Shown beside the triangle count; the refusal decision itself lives in scenery-guards.ts. */
 const BUDGET_ERROR_COLOUR = "#ff6b6b";
 
@@ -2562,7 +2568,7 @@ function scenerySelectDown(e: PointerEvent): boolean {
   selectScenery(sel);
   setStatus(
     isRotatable(sel)
-      ? "Drag to move, Left/Right arrows turn it, Delete removes it."
+      ? "Drag to move, Left/Right arrows turn it (Shift for 1 degree), Delete removes it."
       : "Drag to move, Delete removes it.",
   );
   return true;
@@ -2760,15 +2766,19 @@ function isRotatable(sel: ScenerySelection): boolean {
   return f !== undefined && !("points" in f);
 }
 
-/** Left/Right with a selected item turns it by 15 degrees, one undo step per press. */
-function rotateSelectedScenery(dir: 1 | -1): boolean {
+/**
+ * Turns the selected item by `deg` (positive = counter-clockwise seen from above). A held key
+ * (`held` = OS key repeat) and quick successive presses on the same item are ONE undo step.
+ * False when there is nothing to turn.
+ */
+function rotateSelectedScenery(deg: number, held: boolean): boolean {
   if (!area || moveDrag || !selectedScenery || !selectableNow()) return false;
   const sel = selectedScenery;
   if (!sceneryExists(sel) || !isRotatable(sel)) return false;
   const guard = sceneryAreaFull();
   if (!guard) return false;
-  // Left = counter-clockwise seen from above; crest headings run the other way round.
-  const delta = (sel.kind === "ramp" ? -dir : dir) * ROTATION_STEP_DEG * DEG;
+  // Crest headings run the other way round from building and plant rotation.
+  const delta = (sel.kind === "ramp" ? -deg : deg) * DEG;
   const res = rotateSceneryItem(guard, sel, delta);
   if (!res.ok) {
     setStatus(res.reason, "error");
@@ -2782,9 +2792,16 @@ function rotateSelectedScenery(dir: 1 | -1): boolean {
   if (res.features) parts.features = res.features;
   if (res.buildings) parts.buildings = res.buildings;
   if (res.objects) parts.objects = res.objects;
-  applyResult(dispatcher.commitScenery(parts), 0);
+  applyResult(
+    dispatcher.commitScenery(parts, {
+      key: `rotate:${JSON.stringify(sel)}`,
+      nowMs: performance.now(),
+      windowMs: held ? Number.POSITIVE_INFINITY : EDIT_MERGE_WINDOW_MS,
+    }),
+    0,
+  );
   updateHistoryButtons();
-  setStatus("Turned 15 degrees. Ctrl+Z undoes it.", "ok");
+  setStatus("Turned. Ctrl+Z undoes the whole turn.", "ok");
   return true;
 }
 
@@ -2872,7 +2889,9 @@ function refreshSelectedPanel(): void {
       ).field,
     );
   }
-  if (isRotatable(sel)) kids.push(note("Left and Right arrows turn it 15 degrees."));
+  if (isRotatable(sel)) {
+    kids.push(note("Left and Right arrows turn it 15 degrees. Hold Shift for 1 degree."));
+  }
   kids.push(note("Drag to move, Delete removes it."));
   const tri = el("div", "muted");
   tri.textContent = `Scenery triangles: ${estimateSceneryTriangles(area.features ?? [], area.buildings, { drawStyleless: !area.legacyGlbBuildings }).toLocaleString("en-US")} / 40,000`;
@@ -5591,13 +5610,14 @@ window.addEventListener("keydown", (e) => {
       return;
     }
   }
-  if (
-    (e.code === "ArrowLeft" || e.code === "ArrowRight") &&
-    !e.shiftKey &&
-    !e.repeat &&
-    rotateSelectedScenery(e.code === "ArrowLeft" ? 1 : -1)
-  ) {
+  const turnDeg = arrowRotateDeg(e.code, e.shiftKey);
+  if (turnDeg !== undefined && selectedScenery && selectableNow()) {
+    // Left/Right belong to the selected item (15 degrees, Shift = 1 degree, key repeat allowed).
+    // They never fall through to the sidebar Step value, even for a line that cannot turn.
     e.preventDefault();
+    if (!rotateSelectedScenery(turnDeg, e.repeat) && !e.repeat && !isRotatable(selectedScenery)) {
+      setStatus("Hedges and fences cannot be turned.");
+    }
     return;
   }
   if (e.code === "Delete" && (deleteSelectedScenery() || deleteSelectedStart())) {

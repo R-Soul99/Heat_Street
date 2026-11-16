@@ -143,6 +143,11 @@ export function applyStrokeDiff(
 
 export interface UndoStack {
   push(diff: StrokeDiff): void;
+  /**
+   * Replaces the newest applied entry (a run of small edits kept as one step). Refused,
+   * returning false, when there is nothing applied or redo entries exist beyond it.
+   */
+  amendTop(diff: StrokeDiff): boolean;
   undo(area: UndoTarget): ApplyResult | false;
   redo(area: UndoTarget): ApplyResult | false;
   canUndo(): boolean;
@@ -161,6 +166,11 @@ export function createUndoStack(depth: number = UNDO_DEPTH): UndoStack {
       items.push(diff);
       if (items.length > cap) items = items.slice(items.length - cap);
       cursor = items.length;
+    },
+    amendTop(diff) {
+      if (cursor === 0 || cursor !== items.length) return false;
+      items[cursor - 1] = diff;
+      return true;
     },
     undo(area) {
       if (cursor === 0) return false;

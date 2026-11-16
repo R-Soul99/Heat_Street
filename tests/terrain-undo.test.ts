@@ -198,6 +198,36 @@ describe("undo stack", () => {
   });
 });
 
+describe("amendTop", () => {
+  const objs = (h: number) => [
+    {
+      kind: "crest" as const,
+      crest: { id: "ramp-1", centerX: 0, centerZ: 0, radiusM: 0, heightM: h },
+    },
+  ];
+  it("replaces the newest entry without adding one", () => {
+    const area = makeArea();
+    const stack = createUndoStack(5);
+    area.objects = objs(3);
+    stack.push({ objects: { before: objs(1), after: objs(2) } });
+    expect(stack.amendTop({ objects: { before: objs(1), after: objs(3) } })).toBe(true);
+    stack.undo(area);
+    expect(area.objects).toEqual(objs(1));
+    expect(stack.canUndo()).toBe(false);
+    stack.redo(area);
+    expect(area.objects).toEqual(objs(3));
+  });
+  it("refuses on an empty stack and when redo entries exist", () => {
+    const area = makeArea();
+    const stack = createUndoStack(5);
+    const diff = { objects: { before: objs(1), after: objs(2) } };
+    expect(stack.amendTop(diff)).toBe(false);
+    stack.push(diff);
+    stack.undo(area);
+    expect(stack.amendTop(diff)).toBe(false);
+  });
+});
+
 describe("lock snapshots (quick 261110-rdx)", () => {
   it("applies diff.lock on both sides and reports lockChanged", () => {
     const area = makeArea();

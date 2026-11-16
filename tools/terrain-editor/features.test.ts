@@ -16,6 +16,7 @@ import {
   addLineFeature,
   addPointFeature,
   addRampObject,
+  arrowRotateDeg,
   canPlaceAt,
   canPlaceLine,
   deleteBuilding,
@@ -544,6 +545,19 @@ describe("pickFeatureByRay ramps", () => {
       id: "ramp-1",
     });
     expect(pickFeatureAt([], [], objects, 10 + len * 0.5, 30, 0.5)).toBeUndefined();
+  });
+});
+
+describe("arrowRotateDeg", () => {
+  it("Left and Right turn 15 degrees, Shift makes it 1 degree", () => {
+    expect(arrowRotateDeg("ArrowLeft", false)).toBe(15);
+    expect(arrowRotateDeg("ArrowRight", false)).toBe(-15);
+    expect(arrowRotateDeg("ArrowLeft", true)).toBe(1);
+    expect(arrowRotateDeg("ArrowRight", true)).toBe(-1);
+  });
+  it("ignores every other key", () => {
+    expect(arrowRotateDeg("ArrowUp", false)).toBeUndefined();
+    expect(arrowRotateDeg("BracketRight", true)).toBeUndefined();
   });
 });
 

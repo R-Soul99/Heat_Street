@@ -301,6 +301,22 @@ export function seatBuilding(heightAt: HeightFn, spec: BuildingSpec): SeatResult
   return { building };
 }
 
+// ---------------------------------------------------------------- keyboard rotation
+
+/** Left/Right turn a selected item by this much; Shift+Left/Right by the fine step. */
+export const ROTATE_STEP_DEG = 15;
+export const ROTATE_FINE_STEP_DEG = 1;
+
+/**
+ * Signed turn in degrees for an arrow key: Left is positive (counter-clockwise seen from
+ * above), Right is negative, Shift selects the 1 degree step. Any other key is undefined.
+ */
+export function arrowRotateDeg(code: string, shiftKey: boolean): number | undefined {
+  if (code !== "ArrowLeft" && code !== "ArrowRight") return undefined;
+  const step = shiftKey ? ROTATE_FINE_STEP_DEG : ROTATE_STEP_DEG;
+  return code === "ArrowLeft" ? step : -step;
+}
+
 // ---------------------------------------------------------------- ramps
 
 /** Foot radius of palette ramps; the same value the authored feel-test ramps use (D-14). */
