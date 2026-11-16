@@ -42,6 +42,31 @@ describe("paneChoice", () => {
     expect(c.showItemPanel).toBe(false);
   });
 
+  it("names the selected item in the header and hides View", () => {
+    const kinds: SelectedItemKind[] = ["building", "ramp", "tree", "bush", "hedge", "fence"];
+    for (const k of kinds) {
+      const c = paneChoice({ mode: "select", placing: null, selectedItem: k });
+      expect(c.headerTitle).toBe(itemPanelTitle(k));
+      expect(c.showView).toBe(false);
+    }
+    expect(paneChoice({ mode: "select", placing: null, selectedItem: "ramp" }).headerTitle).toBe(
+      "Ramp",
+    );
+  });
+
+  it("keeps the toolbar header and View when nothing is selected, in Brush, or in Place", () => {
+    const cases = [
+      { mode: "select", placing: null, selectedItem: null },
+      { mode: "brush", placing: null, selectedItem: "ramp" },
+      { mode: "select", placing: "ramp", selectedItem: "ramp" },
+    ] as const;
+    for (const input of cases) {
+      const c = paneChoice(input);
+      expect(c.headerTitle).toBeNull();
+      expect(c.showView).toBe(true);
+    }
+  });
+
   it("changes key between different item kinds so the pane rebuilds", () => {
     const a = paneChoice({ mode: "select", placing: null, selectedItem: "ramp" });
     const b = paneChoice({ mode: "select", placing: null, selectedItem: "tree" });

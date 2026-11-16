@@ -24,6 +24,10 @@ export interface PaneChoice {
   showItemPanel: boolean;
   /** Rotation field is offered for these item kinds. */
   rotatable: boolean;
+  /** Pane header to show instead of the toolbar title (the item kind), or null to keep the toolbar's. */
+  headerTitle: string | null;
+  /** Whether the shared View section (grid spacing, contour interval) is shown. */
+  showView: boolean;
 }
 
 const ROTATABLE: readonly SelectedItemKind[] = ["building", "ramp", "tree", "bush"];
@@ -40,6 +44,8 @@ export function paneChoice(i: PaneInput): PaneChoice {
       showGeneralSelect: false,
       showItemPanel: false,
       rotatable: false,
+      headerTitle: null,
+      showView: true,
     };
   }
   if (i.mode === "brush") {
@@ -49,6 +55,8 @@ export function paneChoice(i: PaneInput): PaneChoice {
       showGeneralSelect: false,
       showItemPanel: false,
       rotatable: false,
+      headerTitle: null,
+      showView: true,
     };
   }
   if (i.selectedItem) {
@@ -58,6 +66,8 @@ export function paneChoice(i: PaneInput): PaneChoice {
       showGeneralSelect: false,
       showItemPanel: true,
       rotatable: isRotatableKind(i.selectedItem),
+      headerTitle: itemPanelTitle(i.selectedItem),
+      showView: false,
     };
   }
   return {
@@ -66,6 +76,8 @@ export function paneChoice(i: PaneInput): PaneChoice {
     showGeneralSelect: true,
     showItemPanel: false,
     rotatable: false,
+    headerTitle: null,
+    showView: true,
   };
 }
 

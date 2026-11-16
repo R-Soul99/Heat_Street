@@ -2596,6 +2596,23 @@ function refreshSceneryBoxes(): void {
   // The left pane follows the selection: a selected item swaps in its own panel.
   if (paneBuiltKey !== null && paneBuiltKey !== currentPane().key) buildSidebar();
   refreshSelectedPanel();
+  if (paneBuiltKey !== null) applyPaneChrome();
+}
+
+/** Last toolbar header; the pane header falls back to it when no item is selected. */
+let toolbarHeader: { title: string; subtitle: string | undefined } = {
+  title: "No tool selected",
+  subtitle: undefined,
+};
+
+/** Applies the pane header and View visibility for the current selection. */
+function applyPaneChrome(): void {
+  const pane = currentPane();
+  shell.setSidebarTitle(
+    pane.headerTitle ?? toolbarHeader.title,
+    pane.headerTitle ? undefined : toolbarHeader.subtitle,
+  );
+  shell.setSidebarViewVisible(pane.showView);
 }
 
 /** Kind of the single selected placed item, or null (nothing selected / not in Select mode). */
@@ -5982,7 +5999,8 @@ function syncToolbar(): void {
   refreshSceneryBoxes();
   const shape = dispatcher.getOptions().brushShape;
   for (const [k, b] of brushShapeButtons) b.setAttribute("aria-pressed", String(k === shape));
-  shell.setSidebarTitle(st.title, st.subtitle);
+  toolbarHeader = { title: st.title, subtitle: st.subtitle };
+  applyPaneChrome();
   shell.setClearSelectionEnabled(input.selectionCells > 0);
   if (opHold && input.selectionCells === 0) stopOpHold();
 }

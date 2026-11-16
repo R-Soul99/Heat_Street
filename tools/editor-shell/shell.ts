@@ -68,6 +68,8 @@ export interface Shell {
   setHistoryState(canUndo: boolean, canRedo: boolean): void;
   setClearSelectionEnabled(on: boolean): void;
   setSidebarTitle(title: string, subtitle?: string): void;
+  /** Shows or hides the View section (no-op when the shell has none). */
+  setSidebarViewVisible(on: boolean): void;
   bar: TopBar | undefined;
   setToolEnabled(id: string, enabled: boolean): void;
   refreshMenus(): void;
@@ -123,15 +125,15 @@ export function createShell(options: ShellOptions): Shell {
   const divider = el("div", "sidebar-divider");
   const body = el("div", "sidebar-body");
   sidebar.append(title, subtitle, divider, body);
+  let viewSection: HTMLElement | undefined;
   if (options.sidebarView) {
-    sidebar.appendChild(
-      createSection(
-        "View",
-        "Display settings for the grid and overlays, shown for every tool",
-        true,
-        options.sidebarView,
-      ),
+    viewSection = createSection(
+      "View",
+      "Display settings for the grid and overlays, shown for every tool",
+      true,
+      options.sidebarView,
     );
+    sidebar.appendChild(viewSection);
   }
   const showEmpty = (): void => {
     body.replaceChildren(el("div", "sidebar-empty", "Pick a tool to see its options."));
@@ -239,6 +241,14 @@ export function createShell(options: ShellOptions): Shell {
   options.root.append(menubar.el, sidebar);
   options.root.append(bar.el, pad, info.el);
 
+  // The camera pad sits just below the top bar, whatever height the bar wraps to.
+  const barEl = bar.el;
+  const placePad = (): void => {
+    pad.style.top = `${barEl.offsetTop + barEl.offsetHeight + 8}px`;
+  };
+  placePad();
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(placePad).observe(barEl);
+
   const setHistoryState = (canUndo: boolean, canRedo: boolean): void => {
     undoBtn.disabled = !canUndo;
     redoBtn.disabled = !canRedo;
@@ -255,6 +265,9 @@ export function createShell(options: ShellOptions): Shell {
       if (clearSelectionBtn) clearSelectionBtn.disabled = !on;
     },
     setSidebarTitle,
+    setSidebarViewVisible: (on) => {
+      if (viewSection) viewSection.hidden = !on;
+    },
     bar,
     setToolEnabled: (id, on) => bar?.setEnabled(id, on),
     refreshMenus: () => {
