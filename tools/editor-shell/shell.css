@@ -589,3 +589,7 @@ dialog button {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* Right end of the top bar: the always-visible Drive button group. */
+.bar-group:has(.drive-btn) {
+  margin-left: auto;
+}

@@ -102,6 +102,7 @@ import { menuFace } from "../editor-shell/top-bar.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
+import { DRIVE_FALLBACK_STATUS, driveButtonTip } from "./drive-button.ts";
 import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
 import {
   addLineFeature,
@@ -3192,6 +3193,7 @@ function installArea(next: TerrainArea): void {
   refreshInfo();
   refreshBudgetReadout();
   rebuildStartMarkers();
+  updateDriveButton();
   syncToolbar();
 }
 
@@ -4539,6 +4541,7 @@ function startPointsEdited(): void {
   if (selectedStartId !== null && !ids.has(selectedStartId)) selectedStartId = null;
   rebuildStartMarkers();
   refreshStartList();
+  updateDriveButton();
   syncToolbar();
 }
 
@@ -4747,9 +4750,21 @@ function selectedOrDefaultStart(): TerrainStartPoint | undefined {
   return list.find((q) => q.id === selectedStartId) ?? defaultStartPoint(list);
 }
 
+/** Small always-visible Drive button at the right end of the top bar. */
+const topDriveBtn = createButton({
+  label: "▶ Drive",
+  tip: driveButtonTip(undefined),
+  kind: "primary",
+  onClick: () => void driveFromOrHere(),
+});
+topDriveBtn.classList.add("drive-btn");
+
 function updateDriveButton(): void {
+  const start = selectedOrDefaultStart();
+  topDriveBtn.dataset.tip = driveButtonTip(start?.name);
+  topDriveBtn.disabled = area === null;
   if (!driveFromBtn) return;
-  const sp = selectedOrDefaultStart();
+  const sp = start;
   driveFromBtn.textContent = `Drive from: ${sp ? sp.name : "(none)"}`;
   driveFromBtn.setAttribute("aria-disabled", String(!sp));
   driveFromBtn.style.opacity = sp ? "" : "0.55";
@@ -5189,12 +5204,19 @@ async function driveFrom(): Promise<void> {
   openDriveUrl(buildDriveUrl(id, { start: startId }));
 }
 
+/** Top-bar Drive: the selected or default start point, else the centre of the view. */
+async function driveFromOrHere(): Promise<void> {
+  if (!area) return;
+  if (selectedOrDefaultStart()) await driveFrom();
+  else await driveHere(undefined, true);
+}
+
 /**
  * Drive from a spot. The keyboard path passes the cursor point captured at keydown; the
  * menu path passes nothing and uses the view centre. The spot and the facing are read BEFORE
  * the awaited save, so a moving cursor or camera never changes them (D-06).
  */
-async function driveHere(spot?: { x: number; z: number }): Promise<void> {
+async function driveHere(spot?: { x: number; z: number }, noStart = false): Promise<void> {
   if (!area) return;
   const id = area.areaId;
   const fromMenu = spot === undefined;
@@ -5210,7 +5232,8 @@ async function driveHere(spot?: { x: number; z: number }): Promise<void> {
     fail("Drive here: this area is not registered yet. Save it once, then try again.");
     return;
   }
-  if (fromMenu) setStatus("Driving from the centre of the view");
+  if (noStart) setStatus(DRIVE_FALLBACK_STATUS);
+  else if (fromMenu) setStatus("Driving from the centre of the view");
   openDriveUrl(buildDriveUrl(id, { at, ...(headingDeg !== undefined ? { headingDeg } : {}) }));
 }
 
@@ -5674,8 +5697,11 @@ const shell = createShell({
   tools: TOOLBAR_TOOLS,
   onToolChange: () => {},
   bar: {
-    groups: TERRAIN_BAR,
-    slots: { surfaces: surfaceMenu },
+    groups: [
+      ...TERRAIN_BAR,
+      { id: "drive", label: "Drive", items: [{ kind: "slot", id: "drive" }] },
+    ],
+    slots: { surfaces: surfaceMenu, drive: topDriveBtn },
   },
   sidebarView: [
     createField("Grid spacing", gridSpacingStepper.el, "Grid line spacing in cells (display only)"),
