@@ -154,6 +154,14 @@ import {
   TOOLBAR_TOOLS,
   type ToolbarId,
 } from "./rail-tools.ts";
+import {
+  ALIGN_NOT_A_RAMP,
+  ALIGN_PROMPT,
+  ALIGN_SAME_RAMP,
+  type AlignMode,
+  alignRamp,
+  centreLineEnds,
+} from "./ramp-align.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
 import { renameAreaForSave, suggestCopyName, validateAreaName } from "./save-as.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
@@ -2410,6 +2418,26 @@ const selectedBox = makeBoxHelper(1);
 const hoverBox = makeBoxHelper(0.5);
 scene.add(selectedBox, hoverBox);
 
+// Ramp align: a thin accent line along the centre line of the ramp the next click would align to.
+const alignGuide = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({
+    color: SELECT_ACCENT,
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+  }),
+);
+alignGuide.frustumCulled = false;
+alignGuide.renderOrder = 998;
+alignGuide.visible = false;
+scene.add(alignGuide);
+/** Waiting for the click on the second ramp (selected ramp id and what to do with it). */
+let alignPending: { mode: AlignMode; selId: string } | null = null;
+let alignHoverId: string | null = null;
+const ALIGN_GUIDE_STEP_M = 2;
+const ALIGN_GUIDE_LIFT_M = 0.4;
+
 function sceneryAreaFull(): SceneryArea | null {
   const a = sceneryAreaWith();
   if (!a || !area) return null;
@@ -2504,6 +2532,12 @@ function refreshSceneryBoxes(): void {
   const ok = selectableNow() && area !== null;
   resolveSelectedBuilding();
   if (selectedScenery && !(ok && sceneryExists(selectedScenery))) selectedScenery = null;
+  if (
+    alignPending &&
+    !(selectedScenery?.kind === "ramp" && selectedScenery.id === alignPending.selId)
+  ) {
+    cancelAlign(); // the selection moved on (other item, other mode, deleted, undone)
+  }
   const sb = ok && selectedScenery ? sceneryBounds(selectedScenery) : null;
   if (sb) selectedBox.box.copy(sb);
   selectedBox.visible = sb !== null;
@@ -2923,7 +2957,7 @@ function selectionPanelKey(): string {
   const rot = selectedRotationExactDeg();
   const rotKey = rot === null ? "" : `|r${wrapDegrees(rot)}`;
   return ramp
-    ? `${JSON.stringify(selectedScenery)}|${r.crest.heightM}|${ramp.angleDeg}|${ramp.widthM}${rotKey}`
+    ? `${JSON.stringify(selectedScenery)}|${r.crest.heightM}|${ramp.angleDeg}|${ramp.widthM}|n${rampCount()}${rotKey}`
     : `${JSON.stringify(selectedScenery)}${rotKey}`;
 }
 
@@ -2953,6 +2987,142 @@ function editSelectedRamp(patch: RampPatch): void {
   selectedPanelKey = selectionPanelKey();
   updateHistoryButtons();
   setStatus("Ramp changed. Ctrl+Z undoes it.", "ok");
+}
+
+// ---- ramp align (quick 261116-a5q): pick a second ramp, then ONE undo step on the selected one
+
+function setAlignGuide(target: AuthoredCrest | null): void {
+  alignGuide.visible = false;
+  if (!target || !area) return;
+  const g = area.grid;
+  const half = Math.min(MAX_AREA_SIZE_M, Math.hypot(g.scaleX, g.scaleZ));
+  const ends = centreLineEnds(target, half);
+  if (!ends) return;
+  const inside = (x: number, z: number): boolean =>
+    x >= g.originX && x <= g.originX + g.scaleX && z >= g.originZ && z <= g.originZ + g.scaleZ;
+  const pts: number[] = [];
+  const n = Math.max(1, Math.ceil((2 * half) / ALIGN_GUIDE_STEP_M));
+  let prev: [number, number] | null = null;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = ends[0].x + (ends[1].x - ends[0].x) * t;
+    const z = ends[0].z + (ends[1].z - ends[0].z) * t;
+    if (prev && inside(prev[0], prev[1]) && inside(x, z)) {
+      pts.push(
+        prev[0],
+        heightAtArea(prev[0], prev[1]) + ALIGN_GUIDE_LIFT_M,
+        prev[1],
+        x,
+        heightAtArea(x, z) + ALIGN_GUIDE_LIFT_M,
+        z,
+      );
+    }
+    prev = [x, z];
+  }
+  setLines(alignGuide, Float32Array.from(pts));
+  alignGuide.visible = pts.length > 0;
+}
+
+function cancelAlign(message?: string): void {
+  if (!alignPending && !alignGuide.visible) return;
+  alignPending = null;
+  alignHoverId = null;
+  alignGuide.visible = false;
+  applyCanvasCursor();
+  if (message) setStatus(message);
+}
+
+function rampCount(): number {
+  return area ? area.objects.filter((o) => o.crest.ramp !== undefined).length : 0;
+}
+
+function startAlign(mode: AlignMode): void {
+  const sel = selectedScenery;
+  if (!area || sel?.kind !== "ramp" || !selectableNow()) return;
+  if (rampCount() < 2) {
+    setStatus("Place a second ramp first, then align to it.", "error");
+    return;
+  }
+  alignPending = { mode, selId: sel.id };
+  alignHoverId = null;
+  setStatus(ALIGN_PROMPT);
+  applyCanvasCursor();
+}
+
+/** Hover while waiting for the second click: guide line on the ramp under the cursor. */
+function alignPointerMove(e: PointerEvent): void {
+  const pend = alignPending;
+  if (!pend || !area) return;
+  const hit = pickSceneryAt(e.clientX, e.clientY);
+  const id = hit?.kind === "ramp" && hit.id !== pend.selId ? hit.id : null;
+  if (id === alignHoverId) return;
+  alignHoverId = id;
+  const crest = id ? area.objects.find((o) => o.crest.id === id)?.crest : undefined;
+  setAlignGuide(crest?.ramp ? crest : null);
+}
+
+/** The second click: align (one undo step) or say why not. */
+function alignPointerDown(e: PointerEvent): void {
+  const pend = alignPending;
+  if (!pend || !area) return;
+  const hit = pickSceneryAt(e.clientX, e.clientY);
+  if (hit?.kind !== "ramp") {
+    setStatus(ALIGN_NOT_A_RAMP, "error");
+    return;
+  }
+  if (hit.id === pend.selId) {
+    setStatus(ALIGN_SAME_RAMP, "error");
+    return;
+  }
+  const res = alignRamp(area.objects, pend.selId, hit.id, pend.mode, area);
+  cancelAlign();
+  if (!res.ok) {
+    setStatus(`${res.reason}. Nothing changed.`, "error");
+    return;
+  }
+  applyResult(dispatcher.commitScenery({ objects: res.objects }), 0);
+  selectedPanelKey = "";
+  updateHistoryButtons();
+  refreshSceneryBoxes();
+  const deg = selectedRotationExactDeg();
+  setStatus(
+    pend.mode === "lineUp"
+      ? "Ramp slid onto the other ramp's line. Ctrl+Z undoes it."
+      : `Ramp turned to ${deg === null ? "" : `${Math.round(wrapDegrees(deg))}°`}${
+          res.changed.length > 1 ? " and the other ramp turned back to face it" : ""
+        }. Ctrl+Z undoes it.`,
+    "ok",
+  );
+}
+
+/** The "Align" group of the selected-ramp panel. */
+function alignGroup(): HTMLElement {
+  const box = el("div");
+  box.style.cssText = "display:flex;flex-direction:column;gap:4px";
+  const head = el("div", "muted", "Align (then click the other ramp)");
+  const row = el("div");
+  row.style.cssText = "display:flex;flex-wrap:wrap;gap:4px";
+  const enough = rampCount() >= 2;
+  const mk = (label: string, tip: string, mode: AlignMode): HTMLButtonElement => {
+    const b = createButton({ label, tip, onClick: () => startAlign(mode) });
+    if (!enough) {
+      b.disabled = true;
+      b.dataset.tip = `${tip} (place a second ramp first)`;
+    }
+    return b;
+  };
+  row.append(
+    mk("Face", "Turn this ramp to point straight at another ramp", "face"),
+    mk(
+      "Face each other",
+      "Turn this ramp to point at another ramp, and turn that ramp to point back",
+      "faceEach",
+    ),
+    mk("Match heading", "Give this ramp the same heading as another ramp", "match"),
+    mk("Line up", "Slide this ramp sideways onto another ramp's centre line", "lineUp"),
+  );
+  box.append(head, row);
+  return box;
 }
 
 function refreshSelectedPanel(): void {
@@ -3017,6 +3187,7 @@ function refreshSelectedPanel(): void {
     row.append(rot.field, el("span", "muted", "Left/Right 15°, Shift 1°"));
     kids.push(row);
   }
+  if (ramp?.crest.ramp) kids.push(alignGroup());
   kids.push(note(itemPanelHint(itemKind)));
   const tri = el("div", "muted");
   tri.textContent = `Scenery triangles: ${estimateSceneryTriangles(area.features ?? [], area.buildings, { drawStyleless: !area.legacyGlbBuildings }).toLocaleString("en-US")} / 40,000`;
@@ -4342,6 +4513,11 @@ canvas.addEventListener("pointerdown", (e) => {
     setStatus(NO_AREA_MSG, "error");
     return;
   }
+  if (alignPending) {
+    e.preventDefault();
+    alignPointerDown(e);
+    return;
+  }
   if (e.altKey && dispatcher.getMode() === "select") {
     e.preventDefault(); // no browser Alt menu or text selection while dragging
     if (pushPull) return;
@@ -4394,6 +4570,10 @@ canvas.addEventListener("pointerdown", (e) => {
 });
 canvas.addEventListener("pointermove", (e) => {
   updateCursor(e.clientX, e.clientY);
+  if (alignPending) {
+    alignPointerMove(e);
+    return;
+  }
   if (pushPull && e.pointerId === pushPull.pointerId && area) {
     const perPx = e.shiftKey ? PUSH_PULL_FINE_M_PER_PX : PUSH_PULL_M_PER_PX;
     const delta = -(e.clientY - pushPull.startY) * perPx;
@@ -5844,6 +6024,10 @@ window.addEventListener("keydown", (e) => {
       stopBrushHold();
       if (dialogOpen) return;
       if (shell.bar?.closeMenus()) return;
+      if (alignPending) {
+        cancelAlign("Align cancelled.");
+        return;
+      }
       if (opHold) {
         stopOpHold();
         return;
