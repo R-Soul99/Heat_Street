@@ -27,6 +27,7 @@
  */
 import type * as RAPIER from "@dimforge/rapier3d";
 import * as THREE from "three";
+import { snapShadowTarget } from "./shadow-follow";
 
 /**
  * Ground plane visual size, metres. MUST MATCH `GROUND_HALF_EXTENTS` in
@@ -79,6 +80,12 @@ const GRID_SPACING = 10;
 
 /** Half-width of the area the shadow camera frames, metres. */
 const SHADOW_AREA_HALF = 30;
+/** Shadow map size in texels (square). */
+const SHADOW_MAP_SIZE = 2048;
+/** One shadow texel, metres: the window is snapped to this so edges do not shimmer. */
+const SHADOW_TEXEL_M = (SHADOW_AREA_HALF * 2) / SHADOW_MAP_SIZE;
+/** Sun position relative to the shadow window centre, metres. */
+const SUN_OFFSET = new THREE.Vector3(20, 30, 20);
 
 /**
  * Build the six triangles (18 non-indexed vertices) of the ramp wedge, in the
@@ -165,6 +172,13 @@ export interface VehicleView {
    * threat T-01-16 already names for meshes/bodies.
    */
   readonly wheelMeshes: readonly THREE.Object3D[];
+
+  /**
+   * Carry the sun's shadow window to (x, y, z) -- call each frame with the
+   * car's rendered position, or the car leaves the fixed window and casts no
+   * sun shadow. Snapped to shadow-map texels so edges do not shimmer.
+   */
+  followShadow(x: number, y: number, z: number): void;
 
   /** Dispose every geometry and material this module created. */
   dispose(): void;
@@ -490,9 +504,9 @@ export function createVehicleView(
   scene.add(hemisphere);
 
   const sun = new THREE.DirectionalLight(0xffe9cf, 2.6);
-  sun.position.set(20, 30, 20);
+  sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
   sun.shadow.camera.left = -SHADOW_AREA_HALF;
   sun.shadow.camera.right = SHADOW_AREA_HALF;
   sun.shadow.camera.top = SHADOW_AREA_HALF;
@@ -510,6 +524,16 @@ export function createVehicleView(
 
     updateWheels(vc: RAPIER.DynamicRayCastVehicleController): void {
       carMeshes.updateWheels(vc);
+    },
+
+    followShadow(x: number, y: number, z: number): void {
+      const snapped = snapShadowTarget({ x, y, z }, SUN_OFFSET, SHADOW_TEXEL_M);
+      sun.target.position.set(snapped.x, snapped.y, snapped.z);
+      sun.position.set(
+        snapped.x + SUN_OFFSET.x,
+        snapped.y + SUN_OFFSET.y,
+        snapped.z + SUN_OFFSET.z,
+      );
     },
 
     dispose(): void {

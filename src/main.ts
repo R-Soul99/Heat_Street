@@ -1504,6 +1504,12 @@ try {
         }
       }
       applyAllInterpolated(interpolated, transforms, alpha);
+      // The sun's shadow window is small; carry it with the car (it was fixed at the origin).
+      view.followShadow(
+        view.meshes[0].position.x,
+        view.meshes[0].position.y,
+        view.meshes[0].position.z,
+      );
       terrainDbg?.begin();
       if (gateView !== undefined) {
         const gp = view.meshes[0].position;
