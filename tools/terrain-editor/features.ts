@@ -261,6 +261,47 @@ export function footprintCorners(
   return out;
 }
 
+/** Footprint samples are never closer than this, whatever the paint resolution. */
+const FOOTPRINT_MIN_STEP_M = 0.25;
+
+/**
+ * D-12 for a building footprint: the whole rectangle must be inside the area and clear of
+ * road paint. The corners and centre are tested first, then the edges and interior on a grid
+ * no coarser than one paint pixel, so a road passing between the corners is still seen.
+ * Place, move and rotate all use this one check.
+ */
+export function canPlaceFootprint(
+  area: PlaceArea,
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  rotationY: number,
+): PlaceCheck {
+  const centre = canPlaceAt(area, x, z);
+  if (!centre.ok) return centre;
+  for (const [px, pz] of footprintCorners(x, z, hx, hz, rotationY)) {
+    const corner = canPlaceAt(area, px, pz);
+    if (!corner.ok) return corner;
+  }
+  const step = Math.max(FOOTPRINT_MIN_STEP_M, area.paint.metresPerPixel);
+  const nx = Math.max(1, Math.ceil((2 * hx) / step));
+  const nz = Math.max(1, Math.ceil((2 * hz) / step));
+  const c = Math.cos(rotationY);
+  const s = Math.sin(rotationY);
+  for (let i = 0; i <= nx; i++) {
+    const lx = -hx + (2 * hx * i) / nx;
+    for (let k = 0; k <= nz; k++) {
+      const lz = -hz + (2 * hz * k) / nz;
+      // Same local-to-world transform as footprintCorners.
+      if (isRoadAt(area.paint, x + lx * c + lz * s, z - lx * s + lz * c)) {
+        return { ok: false, reason: ON_ROAD_REASON };
+      }
+    }
+  }
+  return OK;
+}
+
 export interface BuildingSpec {
   x: number;
   z: number;

@@ -199,6 +199,33 @@ describe("moveSceneryItem", () => {
     const ok = moveSceneryItem(area, { kind: "building", index: 0 }, -10, 0);
     expect(ok.ok).toBe(true);
   });
+  it("refuses a move or turn that lays a footprint across the road between its corners", () => {
+    // Road is x 40..44, narrower than the 28 m wide building laid across it.
+    const wide: TerrainBuilding = {
+      center: { x: 20, y: 2, z: 30 },
+      halfExtents: { x: 14, y: 2, z: 3 },
+      rotationY: 0,
+      style: "shed",
+    };
+    const area = moveArea({ buildings: [wide] });
+    // Moved to x 50: spans x 36..64, centre and corners all off the paint.
+    expect(moveSceneryItem(area, { kind: "building", index: 0 }, 30, 0)).toEqual({
+      ok: false,
+      reason: ON_ROAD_REASON,
+    });
+    const tall: TerrainBuilding = {
+      center: { x: 50, y: 2, z: 30 },
+      halfExtents: { x: 3, y: 2, z: 14 },
+      rotationY: 0,
+      style: "shed",
+    };
+    const turnArea = moveArea({ buildings: [tall] });
+    expect(rotateSceneryItem(turnArea, { kind: "building", index: 0 }, Math.PI / 2)).toEqual({
+      ok: false,
+      reason: ON_ROAD_REASON,
+    });
+  });
+
   it("re-seats a moved styled building keeping its visible height", () => {
     const area = moveArea({
       buildings: [

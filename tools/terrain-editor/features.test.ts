@@ -18,6 +18,7 @@ import {
   addRampObject,
   arrowRotateDeg,
   canPlaceAt,
+  canPlaceFootprint,
   canPlaceLine,
   deleteBuilding,
   deleteFeature,
@@ -94,6 +95,37 @@ describe("canPlaceAt / canPlaceLine", () => {
         [10, 120],
       ]),
     ).toEqual({ ok: false, reason: OUTSIDE_AREA_REASON });
+  });
+});
+
+// WR-05: the road strip is x 40..44; a footprint must not straddle it between its corners.
+describe("canPlaceFootprint", () => {
+  it("refuses a footprint that spans a road with its centre and corners clear", () => {
+    const a = testArea();
+    // 24 m wide block centred at x 50: it spans x 38..62, so the strip runs through its middle.
+    expect(canPlaceFootprint(a, 50, 50, 12, 4, 0)).toEqual({ ok: false, reason: ON_ROAD_REASON });
+    // The old five-point test saw nothing wrong here.
+    expect(canPlaceAt(a, 50, 50).ok).toBe(true);
+    expect(canPlaceAt(a, 38, 46).ok).toBe(true);
+    expect(canPlaceAt(a, 62, 54).ok).toBe(true);
+  });
+  it("refuses a rotated footprint whose edge, not corner, crosses the road", () => {
+    const a = testArea();
+    // Long thin building turned 90 degrees: its long side runs along x across the strip.
+    expect(canPlaceFootprint(a, 42, 50, 1, 12, Math.PI / 2).ok).toBe(false);
+    expect(canPlaceFootprint(a, 20, 50, 1, 12, Math.PI / 2)).toEqual({ ok: true });
+  });
+  it("allows a footprint beside the road and refuses one that leaves the area", () => {
+    const a = testArea();
+    expect(canPlaceFootprint(a, 30, 50, 8, 8, 0)).toEqual({ ok: true });
+    expect(canPlaceFootprint(a, 55, 50, 8, 8, 0)).toEqual({ ok: true });
+    expect(canPlaceFootprint(a, 95, 50, 8, 8, 0)).toEqual({
+      ok: false,
+      reason: OUTSIDE_AREA_REASON,
+    });
+  });
+  it("has no road refusal on a map with no road paint", () => {
+    expect(canPlaceFootprint(testArea(false), 42, 50, 20, 20, 0.3)).toEqual({ ok: true });
   });
 });
 

@@ -110,12 +110,12 @@ import {
   arrowRotateDeg,
   BUILDING_TOO_SMALL,
   canPlaceAt,
+  canPlaceFootprint,
   canPlaceLine,
   deleteBuilding,
   deleteFeature,
   deleteRamp,
   featureIdSeed,
-  footprintCorners,
   isEditableBuilding,
   LINE_TOO_FEW_POINTS,
   moveFeature,
@@ -1522,19 +1522,11 @@ function buildingPlanAt(hit: { x: number; z: number }): BuildingPlan {
   };
 }
 
-/** D-12 for a footprint: too small, or the centre or a corner on road paint or outside the area. */
+/** D-12 for a footprint: too small, any part of it on road paint, or a corner outside the area. */
 function checkBuildingPlan(plan: BuildingPlan): { ok: true } | { ok: false; reason: string } {
   if (!area) return { ok: false, reason: NO_AREA_MSG };
   if (plan.widthM < 1 || plan.depthM < 1) return { ok: false, reason: BUILDING_TOO_SMALL };
-  const pts: [number, number][] = [
-    [plan.x, plan.z],
-    ...footprintCorners(plan.x, plan.z, plan.widthM / 2, plan.depthM / 2, plan.rotationY),
-  ];
-  for (const [x, z] of pts) {
-    const c = canPlaceAt(area, x, z);
-    if (!c.ok) return c;
-  }
-  return { ok: true };
+  return canPlaceFootprint(area, plan.x, plan.z, plan.widthM / 2, plan.depthM / 2, plan.rotationY);
 }
 
 /** Ghost reason copy: show a refusal once, and restore the hint when it clears (D-12). */

@@ -11,6 +11,7 @@ import type {
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import {
   canPlaceAt,
+  canPlaceFootprint,
   canPlaceLine,
   footprintCorners,
   type HeightFn,
@@ -163,14 +164,8 @@ export function moveSceneryItem(
     }
     const x = b.center.x + dx;
     const z = b.center.z + dz;
-    const spots: [number, number][] = [
-      [x, z],
-      ...footprintCorners(x, z, b.halfExtents.x, b.halfExtents.z, b.rotationY),
-    ];
-    for (const [px, pz] of spots) {
-      const c = canPlaceAt(area, px, pz);
-      if (!c.ok) return c;
-    }
+    const clear = canPlaceFootprint(area, x, z, b.halfExtents.x, b.halfExtents.z, b.rotationY);
+    if (!clear.ok) return clear;
     let moved: TerrainBuilding;
     if (b.style !== undefined) {
       const heightAt = areaHeightFn(area);
@@ -312,16 +307,15 @@ export function rotateSceneryItem(
       return { ok: false, reason: LEGACY_BUILDING_REASON };
     }
     const rotationY = wrapAngle(b.rotationY + deltaRad);
-    for (const [px, pz] of footprintCorners(
+    const clear = canPlaceFootprint(
+      area,
       b.center.x,
       b.center.z,
       b.halfExtents.x,
       b.halfExtents.z,
       rotationY,
-    )) {
-      const c = canPlaceAt(area, px, pz);
-      if (!c.ok) return c;
-    }
+    );
+    if (!clear.ok) return clear;
     let turned: TerrainBuilding;
     if (b.style !== undefined) {
       const heightAt = areaHeightFn(area);
