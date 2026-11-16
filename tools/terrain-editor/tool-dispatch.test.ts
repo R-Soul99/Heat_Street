@@ -1333,6 +1333,34 @@ describe("start-point undo (07.1.3 D-16)", () => {
   });
 });
 
+describe("stopPlacing (WR-08)", () => {
+  it("returns to Select mode, not to the brush armed before Place", () => {
+    const { area, d } = setup();
+    d.armBrush("raise");
+    expect(d.getMode()).toBe("brush");
+    d.setPlacing("tree");
+    d.stopPlacing();
+    expect(d.placing()).toBeNull();
+    expect(d.getMode()).toBe("select");
+    expect(d.getTool()).toBe("select");
+    // The next click and drag is a selection, never a sculpt.
+    d.pointerDown(0, 0, {});
+    d.pointerMove(6, 6, {});
+    const up = d.pointerUp(6, 6);
+    expect(up.selectionChanged).toBe(true);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+    expect(d.canUndo()).toBe(false);
+  });
+  it("from Select mode it stays in Select mode", () => {
+    const { d } = setup();
+    d.setMode("select");
+    d.setPlacing("ramp");
+    d.stopPlacing();
+    expect(d.getMode()).toBe("select");
+    expect(d.placing()).toBeNull();
+  });
+});
+
 describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
   const tree = (n: number) => ({
     id: `f-${n}`,

@@ -816,6 +816,13 @@ export function createToolDispatcher(getArea: () => EditArea) {
       else if (stroke) this.pointerUp(Number.NaN, Number.NaN);
       placing = kind;
     },
+    /**
+     * Leaves a Place tool (Esc) and lands in Select mode, never back in a brush that was armed
+     * before Place was opened: the next click should pick the item just placed, not sculpt.
+     */
+    stopPlacing(): void {
+      this.setMode("select");
+    },
     /** One undo step for a start-point list edit; a deep-equal list pushes nothing. */
     commitStartPoints(next: readonly TerrainStartPoint[]): ToolResult {
       const area = getArea();

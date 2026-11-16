@@ -5611,10 +5611,10 @@ window.addEventListener("keydown", (e) => {
       }
       if (dispatcher.placing() !== null) {
         stopOpHold();
-        dispatcher.setPlacing(null);
+        dispatcher.stopPlacing(); // always Select mode, never a brush armed before Place
         syncToolFromDispatcher();
         syncToolbar();
-        setStatus("Stopped placing.");
+        setStatus("Stopped placing. Select mode: click an item to select it.");
         return;
       }
       if (tool === "select" && stroking) {
