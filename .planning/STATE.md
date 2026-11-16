@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 Phase: 07.1.3 (editor-feature-palette) — EXECUTING
 Plan: 11 of 11 (all plans complete, awaiting phase verification)
 Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; phase 7: all 7 plans done (07-07 human-approved 2026-11-15), awaiting phase verification
-Last activity: 2026-11-16 - Completed quick task 261116-a5q: Editor amendments B
+Last activity: 2026-11-16 - Completed quick task 261116-a69: Car ground shadow
 
 Progress: [██████████] 99%
 
@@ -272,6 +272,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261113-vei | Wheel (plain or Ctrl) zooms to cursor in both editors; terrain middle-drag orbits about cursor point, Shift+middle-drag pans | 2026-11-13 | 370fe9f | [261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra](./quick/261113-vei-ctrl-wheel-zoom-to-cursor-and-middle-dra/) |
 | 261116-a53 | Editor amendments A: contextual left pane, Rotation field, Save as, top-bar Drive button, hold-to-apply brush | 2026-11-16 | 56fa255 | [261116-a53-editor-amendments-a-contextual-left-pane](./quick/261116-a53-editor-amendments-a-contextual-left-pane/) |
 | 261116-a5q | Editor amendments B: align ramps (Face, Face each other, Match heading, Line up), Snap to grid, Contours-only view | 2026-11-16 | 5b683ce | [261116-a5q-editor-amendments-b-align-ramps-snap-to-](./quick/261116-a5q-editor-amendments-b-align-ramps-snap-to-/) |
+| 261116-a69 | Car shadow: sun shadow follows the car, contact shadow on every map, reference grid off on terrain maps (?grid= override) | 2026-11-16 | bfab93a | [261116-a69-car-ground-shadow-for-height-cue](./quick/261116-a69-car-ground-shadow-for-height-cue/) |
 
 ## Session Continuity
 
