@@ -2,7 +2,7 @@
 // Every function returns NEW arrays and never mutates its inputs or the elements in
 // them (undo snapshots share element objects). editor.ts only routes input to these.
 
-import { type AuthoredCrest, rampLengthM } from "../../src/core/crest-geometry.ts";
+import { type AuthoredCrest, rampBaseY, rampLengthM } from "../../src/core/crest-geometry.ts";
 import { resolveVariant, type SceneryKind } from "../../src/core/scenery-catalog.ts";
 import { lineSegments } from "../../src/core/scenery-geometry.ts";
 import { terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
@@ -853,12 +853,20 @@ export function pickFeatureByRay(
   for (const o of objects) {
     if (o.crest.ramp === undefined) continue;
     const fp = rampFootprint(o.crest);
-    const y0 = Math.min(heightAt(o.crest.centerX, o.crest.centerZ), heightAt(fp.cx, fp.cz));
-    const h = o.crest.heightM + 0.4;
+    const len = rampLengthM(o.crest.heightM, o.crest.ramp);
+    const hd = o.crest.ramp.headingRad;
+    const lipY = heightAt(
+      o.crest.centerX + Math.cos(hd) * len,
+      o.crest.centerZ + Math.sin(hd) * len,
+    );
+    const bottom =
+      Math.min(heightAt(o.crest.centerX, o.crest.centerZ), heightAt(fp.cx, fp.cz), lipY) - 0.2;
+    const top = rampBaseY(o.crest, heightAt) + o.crest.heightM + 0.2;
+    const h = Math.max(0.2, top - bottom);
     consider(
       rayHitsBox(ray, {
         cx: fp.cx,
-        cy: y0 + h / 2 - 0.2,
+        cy: bottom + h / 2,
         cz: fp.cz,
         hx: fp.hx,
         hy: h / 2,

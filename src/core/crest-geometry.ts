@@ -46,7 +46,7 @@ export interface AuthoredCrest {
   readonly centerZ: number;
   /** The radius at which the dome reaches exactly zero height above the terrain. */
   readonly radiusM: number;
-  /** Apex height above the sampled terrain at the centre. For a ramp, the lip height. */
+  /** Apex height above the sampled terrain at the centre. For a ramp, the lip height above the rigid deck base (rampBaseY), not above the ground under the lip. */
   readonly heightM: number;
   /**
    * Set for a straight take-off ramp instead of a dome. `centerX`/`centerZ`
@@ -411,6 +411,18 @@ export function rampProfileHeight(s: number, heightM: number, ramp: RampSpec): n
 
 const RAMP_STEP_M = 0.5;
 
+/**
+ * Base height of a ramp deck: the ground height at the foot start on the centre
+ * line. The whole deck hangs off this one value, so it is rigid and does not
+ * copy terrain bumps (top = base + ramp profile, same on left and right).
+ */
+export function rampBaseY(
+  crest: AuthoredCrest,
+  heightSampler: (x: number, z: number) => number,
+): number {
+  return heightSampler(crest.centerX, crest.centerZ);
+}
+
 function buildRampGeometry(
   crest: AuthoredCrest,
   ramp: RampSpec,
@@ -425,6 +437,7 @@ function buildRampGeometry(
   const rz = fx;
   const half = ramp.widthM / 2;
   const columns = steps + 1;
+  const baseY = rampBaseY(crest, heightSampler);
   // Vertex order: top left/right per column, then ground left/right per column.
   const positions = new Float32Array(columns * 4 * 3);
   const top = (i: number, side: 0 | 1): number => i * 2 + side;
@@ -438,7 +451,7 @@ function buildRampGeometry(
       const g = heightSampler(x, z);
       const t = top(i, side) * 3;
       positions[t] = x;
-      positions[t + 1] = g + rampProfileHeight(s, crest.heightM, ramp);
+      positions[t + 1] = baseY + rampProfileHeight(s, crest.heightM, ramp);
       positions[t + 2] = z;
       const b = ground(i, side) * 3;
       positions[b] = x;

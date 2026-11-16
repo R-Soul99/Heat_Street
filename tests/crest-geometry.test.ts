@@ -10,6 +10,7 @@ import {
   FEEL_TEST_CRESTS,
   JULIETTE_GA_CRESTS,
   type RampSpec,
+  rampBaseY,
   rampLengthM,
   rampProfileHeight,
 } from "../src/core/crest-geometry";
@@ -302,10 +303,34 @@ describe("take-off ramps", () => {
     expect(Array.from(again.positions)).toEqual(Array.from(entry.positions));
   });
 
-  it("follows the terrain under it", () => {
-    const [entry] = buildCrestGeometry([crest], (x) => x * 0.01);
-    const first = vertexAt(entry.positions, 0);
-    expect(first[1]).toBeCloseTo(first[0] * 0.01, 5);
+  const bumpy = (x: number, z: number): number =>
+    Math.sin(x * 1.3) * 0.4 + z * 0.05 + Math.cos(z * 2) * 0.3;
+
+  it("the deck is rigid: top = base height + profile, equal left and right, on bumpy ground", () => {
+    const [entry] = buildCrestGeometry([crest], bumpy);
+    const length = rampLengthM(1.8, ramp);
+    const steps = Math.max(2, Math.ceil(length / 0.5));
+    const base = rampBaseY(crest, bumpy);
+    for (let i = 0; i <= steps; i++) {
+      const s = (length * i) / steps;
+      const l = vertexAt(entry.positions, i * 2);
+      const r = vertexAt(entry.positions, i * 2 + 1);
+      expect(l[1]).toBeCloseTo(base + rampProfileHeight(s, 1.8, ramp), 5);
+      expect(r[1]).toBeCloseTo(l[1], 5);
+    }
+    // Lip top = base + heightM.
+    expect(vertexAt(entry.positions, steps * 2)[1]).toBeCloseTo(base + 1.8, 5);
+  });
+
+  it("skirt ground vertices still sit on the real ground", () => {
+    const [entry] = buildCrestGeometry([crest], bumpy);
+    const length = rampLengthM(1.8, ramp);
+    const steps = Math.max(2, Math.ceil(length / 0.5));
+    const columns = steps + 1;
+    for (let i = 0; i < columns * 2; i++) {
+      const v = vertexAt(entry.positions, columns * 2 + i);
+      expect(v[1]).toBeCloseTo(bumpy(v[0], v[2]), 5);
+    }
   });
 
   it("the feel-test ramps respect the foot-load rule v^2 / R <= ~19.5 m/s^2 at 85 mph", () => {

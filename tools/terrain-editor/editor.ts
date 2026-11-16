@@ -7,7 +7,7 @@
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { type AuthoredCrest, rampLengthM } from "../../src/core/crest-geometry.ts";
+import { type AuthoredCrest, rampBaseY, rampLengthM } from "../../src/core/crest-geometry.ts";
 import { yawFromTravelDirection } from "../../src/core/heading.ts";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import {
@@ -2536,6 +2536,8 @@ function sceneryBounds(sel: ScenerySelection): THREE.Box3 | null {
   const fp = rampFootprint(o.crest);
   const c = Math.cos(fp.rotationY);
   const sn = Math.sin(fp.rotationY);
+  // The deck is rigid: its top is the foot-start ground height plus heightM everywhere.
+  const baseY = rampBaseY(o.crest, heightAtArea);
   for (const [lx, lz] of [
     [-fp.hx, -fp.hz],
     [fp.hx, -fp.hz],
@@ -2545,7 +2547,8 @@ function sceneryBounds(sel: ScenerySelection): THREE.Box3 | null {
     // inverse of the box-frame transform used by the pick tests
     const wx = fp.cx + lx * c + lz * sn;
     const wz = fp.cz - lx * sn + lz * c;
-    grow(wx, wz, 0, o.crest.heightM + 0.5);
+    // grow() heights are relative to the ground at the corner.
+    grow(wx, wz, 0, Math.max(0.5, baseY - heightAtArea(wx, wz) + o.crest.heightM + 0.5));
   }
   return box;
 }
