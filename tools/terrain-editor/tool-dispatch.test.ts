@@ -192,6 +192,50 @@ describe("road and erase", () => {
     expect(d.canUndo()).toBe(false);
   });
 
+  it("Shift while dragging makes a dead-straight road from press to release", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.pointerDown(-60, 0, {});
+    d.pointerMove(-20, 15, { shift: true });
+    d.pointerMove(20, -15, { shift: true });
+    const mv = d.pointerMove(40, 0, { shift: true });
+    expect(mv.previewPoints).toEqual([
+      { x: -60, z: 0 },
+      { x: 40, z: 0 },
+    ]);
+    d.pointerUp(60, 0);
+    expect(area.graph.edges.length).toBeGreaterThan(0);
+    for (const e of area.graph.edges) {
+      for (const p of e.points) expect(Math.abs(p[2])).toBeLessThan(0.5);
+    }
+  });
+
+  it("the roadStraight option draws a straight road without Shift", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadStraight: true });
+    d.pointerDown(-60, 0, {});
+    d.pointerMove(-20, 15, {});
+    const mv = d.pointerMove(20, -15, {});
+    expect(mv.previewPoints).toHaveLength(2);
+    d.pointerUp(60, 0);
+    expect(area.graph.edges.length).toBeGreaterThan(0);
+    for (const e of area.graph.edges) {
+      for (const p of e.points) expect(Math.abs(p[2])).toBeLessThan(0.5);
+    }
+  });
+
+  it("a straight stroke shorter than 0.5 m applies nothing", () => {
+    const { area, d } = setup();
+    d.setTool("road");
+    d.setOptions({ roadStraight: true });
+    d.pointerDown(0, 0, {});
+    d.pointerMove(0.2, 0, {});
+    d.pointerUp(0.3, 0);
+    expect(area.graph.edges).toHaveLength(0);
+    expect(d.canUndo()).toBe(false);
+  });
+
   it("WR-02: sculpting beside a road never lets the slope limiter move road vertices", () => {
     const { area, d } = setup();
     d.setTool("road");

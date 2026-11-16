@@ -5674,6 +5674,12 @@ function buildSidebar(): void {
         ),
         width.field,
         bank.field,
+        createToggle({
+          label: "Straight",
+          checked: o.roadStraight,
+          tip: "Draw a straight road from where you press to where you let go. Or hold Shift while dragging.",
+          onChange: (v) => dispatcher.setOptions({ roadStraight: v }),
+        }).el,
       );
       break;
     }

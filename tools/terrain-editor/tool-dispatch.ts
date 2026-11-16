@@ -109,6 +109,8 @@ export interface ToolOptions {
   roadPreset: RoadPresetId;
   widthM: number;
   maxBankDeg: number;
+  /** Road tool draws a straight line from press to release. */
+  roadStraight: boolean;
   smoothStrength: number;
   smoothPasses: number;
   /** Select-mode raise/lower step in metres (0.25..5, multiples of 0.25). Separate from brush strength (D-12). */
@@ -441,6 +443,8 @@ interface Stroke {
   points: { x: number; z: number }[];
   diffs: StrokeDiff[];
   removedAny: boolean;
+  /** Road stroke draws a dead-straight start-to-end line (Shift or the Straight option). */
+  straight: boolean;
 }
 
 export function createToolDispatcher(getArea: () => EditArea) {
@@ -466,6 +470,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
     roadPreset: "street",
     widthM: presetDefaults.widthM,
     maxBankDeg: presetDefaults.maxBankDeg,
+    roadStraight: false,
     slopeLimitDeg: MAX_SLOPE_DEG,
     smoothStrength: 0.5,
     smoothPasses: 3,
@@ -1381,6 +1386,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
         points: [{ x, z }],
         diffs: [],
         removedAny: false,
+        straight: tool === "road" && (options.roadStraight || !!mods.shift),
       };
       stroke = s;
       const res = emptyResult();
@@ -1400,7 +1406,7 @@ export function createToolDispatcher(getArea: () => EditArea) {
       return res;
     },
 
-    pointerMove(x: number, z: number, _mods?: Modifiers): ToolResult {
+    pointerMove(x: number, z: number, mods?: Modifiers): ToolResult {
       const s = stroke;
       if (placing !== null) return emptyResult();
       if (!s || !Number.isFinite(x) || !Number.isFinite(z)) return emptyResult();
@@ -1408,7 +1414,9 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (s.tool === "road") {
         const last = s.points[s.points.length - 1];
         if (Math.hypot(x - last.x, z - last.z) >= 0.5) s.points.push({ x, z });
-        res.previewPoints = [...s.points];
+        s.last = { x, z };
+        s.straight = options.roadStraight || !!mods?.shift;
+        res.previewPoints = s.straight ? [s.start, { x, z }] : [...s.points];
       } else if (s.tool === "erase") {
         mergeInto(
           res,
@@ -1432,12 +1440,16 @@ export function createToolDispatcher(getArea: () => EditArea) {
       const res = emptyResult();
       const finite = Number.isFinite(x) && Number.isFinite(z);
       if (s.tool === "road") {
-        if (finite) {
+        let pts = s.points;
+        const end = finite ? { x, z } : s.last;
+        if (s.straight && Math.hypot(end.x - s.start.x, end.z - s.start.z) >= 0.5) {
+          pts = [s.start, end];
+        } else if (finite) {
           const last = s.points[s.points.length - 1];
           if (Math.hypot(x - last.x, z - last.z) >= 0.5) s.points.push({ x, z });
         }
-        if (s.points.length >= 2) {
-          const r = applyRoadStroke(area, s.points, options.roadPreset, {
+        if (pts.length >= 2) {
+          const r = applyRoadStroke(area, pts, options.roadPreset, {
             widthM: options.widthM,
             maxBankDeg: options.maxBankDeg,
             replace: true,
