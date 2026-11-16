@@ -112,6 +112,7 @@ import {
   canPlaceAt,
   canPlaceFootprint,
   canPlaceLine,
+  canPlaceRamp,
   deleteBuilding,
   deleteFeature,
   deleteRamp,
@@ -2220,7 +2221,10 @@ function updateRampPreview(): void {
       dragging = true;
     }
   }
-  const check = canPlaceRampAt(area, x, z);
+  // Before a direction is dragged only the start point is known to be final.
+  const check = dragging
+    ? canPlaceRamp(area, rampSpecAt(x, z, heading))
+    : canPlaceRampAt(area, x, z);
   const group = new THREE.Group();
   for (const mesh of buildCrestMeshes(
     [rampSpecAt(x, z, heading)],
@@ -2307,15 +2311,16 @@ function rampPointerUp(e: PointerEvent): void {
     fail("Drag toward the way the ramp should face");
     return;
   }
-  const check = canPlaceRampAt(area, pv.from.x, pv.from.z);
-  if (!check.ok) {
-    fail(check.reason);
-    return;
-  }
   const heading = Math.atan2(dz, dx);
   const spec = rampSpecAt(pv.from.x, pv.from.z, heading);
   if (spec.ramp && rampLengthM(spec.heightM, spec.ramp) > MAX_AREA_SIZE_M) {
     fail("That ramp is too long. Raise the angle or lower the height");
+    return;
+  }
+  // The whole body, not just the start of the foot, must be inside the map area.
+  const check = canPlaceRamp(area, spec);
+  if (!check.ok) {
+    fail(check.reason);
     return;
   }
   const next = addRampObject(area.objects, pv.from.x, pv.from.z, heading, {
@@ -2855,7 +2860,7 @@ function selectionPanelKey(): string {
 function editSelectedRamp(patch: RampPatch): void {
   const sel = selectedScenery;
   if (!area || sel?.kind !== "ramp") return;
-  const r = updateRamp(area.objects, sel.id, patch);
+  const r = updateRamp(area.objects, sel.id, patch, area);
   if (!r.ok) {
     setStatus(r.reason, "error");
     return;

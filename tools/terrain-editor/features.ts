@@ -422,11 +422,35 @@ export type RampEdit =
   | { ok: true; objects: readonly TerrainObject[] }
   | { ok: false; reason: string };
 
-/** Changes one ramp's height, angle, width or heading. The foot radius and position are kept. */
+export const RAMP_OUTSIDE_REASON = "That ramp would reach outside the map area";
+
+/**
+ * A ramp may sit on road paint (D-14) but its whole body must be inside the map area: the
+ * start of the foot and all four corners of its footprint (it runs rampLengthM along its
+ * heading). Place, move, rotate and the sidebar values all use this one check.
+ */
+export function canPlaceRamp(area: PlaceArea, crest: AuthoredCrest): PlaceCheck {
+  if (!insideArea(area, crest.centerX, crest.centerZ)) {
+    return { ok: false, reason: OUTSIDE_AREA_REASON };
+  }
+  const fp = rampFootprint(crest);
+  for (const [x, z] of footprintCorners(fp.cx, fp.cz, fp.hx, fp.hz, fp.rotationY)) {
+    if (!insideArea(area, x, z)) return { ok: false, reason: RAMP_OUTSIDE_REASON };
+  }
+  return OK;
+}
+
+/**
+ * Changes one ramp's height, angle, width or heading. The foot radius and position are kept.
+ * With `area`, a change that would push the ramp outside the map is refused. A ramp that
+ * already reaches outside (an older map) can still be made shorter or narrower on the same
+ * heading, so it can be brought back in step by step.
+ */
 export function updateRamp(
   objects: readonly TerrainObject[],
   id: string,
   patch: RampPatch,
+  area?: PlaceArea,
 ): RampEdit {
   const o = objects.find((v) => v.crest.id === id && v.crest.ramp !== undefined);
   if (o === undefined || o.crest.ramp === undefined)
@@ -440,6 +464,18 @@ export function updateRamp(
   const heightM = patch.heightM ?? o.crest.heightM;
   if (rampLengthM(heightM, ramp) > MAX_AREA_SIZE_M) return { ok: false, reason: RAMP_TOO_LONG };
   const crest: AuthoredCrest = { ...o.crest, heightM, ramp };
+  if (area !== undefined) {
+    const check = canPlaceRamp(area, crest);
+    if (!check.ok) {
+      const old = o.crest.ramp;
+      const noWorse =
+        !canPlaceRamp(area, o.crest).ok &&
+        ramp.headingRad === old.headingRad &&
+        ramp.widthM <= old.widthM &&
+        rampLengthM(heightM, ramp) <= rampLengthM(o.crest.heightM, old);
+      if (!noWorse) return check;
+    }
+  }
   return { ok: true, objects: objects.map((v) => (v === o ? { kind: "crest", crest } : v)) };
 }
 

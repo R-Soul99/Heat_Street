@@ -13,6 +13,7 @@ import {
   LEGACY_BUILDING_REASON,
   ON_ROAD_REASON,
   OUTSIDE_AREA_REASON,
+  RAMP_OUTSIDE_REASON,
 } from "./features.ts";
 import {
   BUDGET_REASON,
@@ -261,6 +262,29 @@ describe("moveSceneryItem", () => {
     expect(off).toEqual({ ok: false, reason: OUTSIDE_AREA_REASON });
     expect(canPlaceRampAt(area, 41, 10)).toEqual({ ok: true });
     expect(canPlaceRampAt(area, -5, 10)).toEqual({ ok: false, reason: OUTSIDE_AREA_REASON });
+  });
+  it("refuses moving or turning a ramp so its body leaves the area", () => {
+    // Heading 0 runs along +x from the start point; the area is 100 m square.
+    const objects: TerrainObject[] = addRampObject([], 30, 50, 0, {
+      heightM: 2,
+      angleDeg: 15,
+      widthM: 8,
+    });
+    const area = moveArea({ objects });
+    // Start stays inside at x 98, but the body would run past the +x edge.
+    expect(moveSceneryItem(area, { kind: "ramp", id: "ramp-1" }, 68, 0)).toEqual({
+      ok: false,
+      reason: RAMP_OUTSIDE_REASON,
+    });
+    // Near the -x edge: fine pointing in, refused once turned to point out.
+    const edge = moveArea({
+      objects: addRampObject([], 3, 50, 0, { heightM: 2, angleDeg: 15, widthM: 8 }),
+    });
+    expect(rotateSceneryItem(edge, { kind: "ramp", id: "ramp-1" }, 0.1).ok).toBe(true);
+    expect(rotateSceneryItem(edge, { kind: "ramp", id: "ramp-1" }, Math.PI)).toEqual({
+      ok: false,
+      reason: RAMP_OUTSIDE_REASON,
+    });
   });
 });
 

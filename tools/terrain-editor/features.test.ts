@@ -20,6 +20,7 @@ import {
   canPlaceAt,
   canPlaceFootprint,
   canPlaceLine,
+  canPlaceRamp,
   deleteBuilding,
   deleteFeature,
   featureIdSeed,
@@ -30,6 +31,7 @@ import {
   OUTSIDE_AREA_REASON,
   pickFeatureAt,
   pickFeatureByRay,
+  RAMP_OUTSIDE_REASON,
   removeInMask,
   resolveBuildingIndex,
   rotateFeature,
@@ -659,6 +661,64 @@ describe("updateRamp", () => {
     }
     expect(objects[0]?.crest.heightM).toBe(2); // input untouched
   });
+  // WR-07: the whole ramp body must be inside the area, not just the start of its foot.
+  describe("stays inside the map area", () => {
+    const area = testArea(false); // 100 m square at the origin
+    const rampAt = (x: number, z: number, heading: number, heightM = 2) =>
+      addRampObject([], x, z, heading, { heightM, angleDeg: 20, widthM: 10 });
+    const lengthOf = (o: TerrainObject[]) => {
+      const c = o[0]?.crest;
+      return c?.ramp ? rampLengthM(c.heightM, c.ramp) : 0;
+    };
+
+    it("canPlaceRamp checks the start and all four footprint corners", () => {
+      const inside = rampAt(20, 50, 0);
+      const len = lengthOf(inside);
+      expect(len).toBeGreaterThan(5);
+      expect(canPlaceRamp(area, (inside[0] as TerrainObject).crest)).toEqual({ ok: true });
+      // Start inside, far end over the +x edge.
+      const overEnd = rampAt(100 - len / 2, 50, 0);
+      expect(canPlaceRamp(area, (overEnd[0] as TerrainObject).crest)).toEqual({
+        ok: false,
+        reason: RAMP_OUTSIDE_REASON,
+      });
+      // Start inside but closer to the z edge than half the width.
+      const overSide = rampAt(20, 3, 0);
+      expect(canPlaceRamp(area, (overSide[0] as TerrainObject).crest)).toEqual({
+        ok: false,
+        reason: RAMP_OUTSIDE_REASON,
+      });
+      // The same start pointing the other way is fine.
+      const inward = rampAt(100 - len / 2, 50, Math.PI);
+      expect(canPlaceRamp(area, (inward[0] as TerrainObject).crest)).toEqual({ ok: true });
+      const startOut = rampAt(-5, 50, 0);
+      expect(canPlaceRamp(area, (startOut[0] as TerrainObject).crest)).toEqual({
+        ok: false,
+        reason: OUTSIDE_AREA_REASON,
+      });
+    });
+
+    it("updateRamp with an area refuses a change that pushes the ramp outside", () => {
+      const o = rampAt(60, 50, 0);
+      const grow = updateRamp(o, "ramp-1", { heightM: 30 }, area);
+      expect(grow).toEqual({ ok: false, reason: RAMP_OUTSIDE_REASON });
+      expect(updateRamp(o, "ramp-1", { heightM: 3 }, area).ok).toBe(true);
+      // Without an area the old behaviour is unchanged.
+      expect(updateRamp(o, "ramp-1", { heightM: 30 }).ok).toBe(true);
+    });
+
+    it("a ramp already outside can be shortened or narrowed, never grown or turned", () => {
+      const o = rampAt(60, 50, 0, 30);
+      expect(canPlaceRamp(area, (o[0] as TerrainObject).crest).ok).toBe(false);
+      const shorter = updateRamp(o, "ramp-1", { heightM: 25 }, area);
+      expect(shorter.ok).toBe(true);
+      expect(updateRamp(o, "ramp-1", { widthM: 8 }, area).ok).toBe(true);
+      expect(updateRamp(o, "ramp-1", { heightM: 31 }, area).ok).toBe(false);
+      expect(updateRamp(o, "ramp-1", { widthM: 12 }, area).ok).toBe(false);
+      expect(updateRamp(o, "ramp-1", { headingRad: 0.1 }, area).ok).toBe(false);
+    });
+  });
+
   it("refuses an unknown id", () => {
     expect(updateRamp(objects, "nope", { heightM: 3 }).ok).toBe(false);
   });

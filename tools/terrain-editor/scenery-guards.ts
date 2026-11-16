@@ -13,6 +13,7 @@ import {
   canPlaceAt,
   canPlaceFootprint,
   canPlaceLine,
+  canPlaceRamp,
   footprintCorners,
   type HeightFn,
   insideArea,
@@ -91,7 +92,10 @@ export function fitScatterToBudget(
   return { accepted, skipped };
 }
 
-/** A ramp may sit on road paint (D-14); it is refused only outside the map area. */
+/**
+ * Start-point check used when a ramp drag begins, before its direction is known. The whole
+ * body is checked by canPlaceRamp (features.ts) once the heading exists.
+ */
 export function canPlaceRampAt(
   area: PlaceArea,
   x: number,
@@ -190,13 +194,12 @@ export function moveSceneryItem(
   if (o === undefined) return { ok: false, reason: NOTHING_SELECTED };
   const nx = o.crest.centerX + dx;
   const nz = o.crest.centerZ + dz;
-  const c = canPlaceRampAt(area, nx, nz);
+  const moved = { ...o.crest, centerX: nx, centerZ: nz };
+  const c = canPlaceRamp(area, moved);
   if (!c.ok) return c;
   return {
     ok: true,
-    objects: objects.map((v) =>
-      v === o ? { kind: "crest", crest: { ...v.crest, centerX: nx, centerZ: nz } } : v,
-    ),
+    objects: objects.map((v) => (v === o ? { kind: "crest", crest: moved } : v)),
   };
 }
 
@@ -338,8 +341,11 @@ export function rotateSceneryItem(
   const objects = area.objects ?? [];
   const o = objects.find((v) => v.crest.id === selection.id && v.crest.ramp !== undefined);
   if (o === undefined || o.crest.ramp === undefined) return { ok: false, reason: NOTHING_SELECTED };
-  const r = updateRamp(objects, selection.id, {
-    headingRad: wrapAngle(o.crest.ramp.headingRad + deltaRad),
-  });
+  const r = updateRamp(
+    objects,
+    selection.id,
+    { headingRad: wrapAngle(o.crest.ramp.headingRad + deltaRad) },
+    area,
+  );
   return r.ok ? { ok: true, objects: r.objects } : r;
 }
