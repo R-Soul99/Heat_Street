@@ -66,5 +66,13 @@
   {
     "id": "map-5",
     "format": "legacy"
+  },
+  {
+    "id": "poppp",
+    "format": "legacy"
+  },
+  {
+    "id": "new-area-3",
+    "format": "terrain"
   }
 ]

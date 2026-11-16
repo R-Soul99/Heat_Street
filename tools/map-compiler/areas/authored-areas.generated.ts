@@ -13,6 +13,7 @@ import { newMap2Config } from "./new-map2.config.ts";
 import { uatMapConfig } from "./uat-map.config.ts";
 import { mMConfig } from "./m-m.config.ts";
 import { map5Config } from "./map-5.config.ts";
+import { popppConfig } from "./poppp.config.ts";
 
 export const AUTHORED_AREAS: Record<string, AreaConfig> = {
   "popp": poppConfig,
@@ -27,4 +28,5 @@ export const AUTHORED_AREAS: Record<string, AreaConfig> = {
   "uat-map": uatMapConfig,
   "m-m": mMConfig,
   "map-5": map5Config,
+  "poppp": popppConfig,
 };

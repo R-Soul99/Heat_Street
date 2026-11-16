@@ -4155,5 +4155,14 @@
     ]
   },
   "objects": [],
-  "buildings": []
+  "buildings": [],
+  "startPoints": [
+    {
+      "id": "start-1",
+      "name": "Start 1",
+      "x": -329.32494823726336,
+      "z": 463.5620432458071,
+      "headingRad": 0.12791832184547328
+    }
+  ]
 }
