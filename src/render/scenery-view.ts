@@ -21,6 +21,7 @@ import {
   featureInstances,
   type HeightSampler,
   type InstanceTransform,
+  lineBoxQuat,
   sceneryTriangles,
 } from "../core/scenery-geometry.ts";
 import type { TerrainBuilding, TerrainFeature } from "../core/terrain-format.ts";
@@ -49,7 +50,6 @@ interface Item {
   readonly color: number;
 }
 
-const UP = new THREE.Vector3(0, 1, 0);
 const STYLELESS_WALL = 0x9a9a98;
 const STYLELESS_ROOF = 0x707070;
 
@@ -61,8 +61,11 @@ function transform(
   sx: number,
   sy: number,
   sz: number,
+  pitch = 0,
 ): THREE.Matrix4 {
-  const q = new THREE.Quaternion().setFromAxisAngle(UP, rotationY);
+  // Hedge and rail boxes tilt along their length to follow a slope (same angles as the collider).
+  const lq = lineBoxQuat(rotationY, pitch);
+  const q = new THREE.Quaternion(lq.x, lq.y, lq.z, lq.w);
   return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(sx, sy, sz));
 }
 
@@ -195,7 +198,7 @@ function buildFeatureMeshes(
     const v = resolveVariant("hedge", h.variant);
     if (v === undefined) continue;
     boxes.push({
-      m: transform(h.x, h.y, h.z, h.rotationY, h.lengthM, h.heightM, h.widthM),
+      m: transform(h.x, h.y, h.z, h.rotationY, h.lengthM, h.heightM, h.widthM, h.pitch),
       color: v.color,
     });
   }
@@ -203,7 +206,7 @@ function buildFeatureMeshes(
     const v = resolveVariant("fence", r.variant);
     if (v === undefined) continue;
     boxes.push({
-      m: transform(r.x, r.y, r.z, r.rotationY, r.lengthM, r.heightM, r.widthM),
+      m: transform(r.x, r.y, r.z, r.rotationY, r.lengthM, r.heightM, r.widthM, r.pitch),
       color: v.color,
     });
   }

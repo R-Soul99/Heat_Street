@@ -15,7 +15,10 @@ import type { TerrainBuilding, TerrainFeature } from "./terrain-format";
 
 /** Longest single hedge/fence segment (metres). */
 export const MAX_SEGMENT_M = 8;
-/** Line colliders extend this far below the average ground height so no end floats on a slope. */
+/**
+ * Line colliders extend this far below the ground line between a segment's two ends, so a
+ * small dip under the middle of a segment leaves no gap.
+ */
 export const LINE_SINK_M = 0.3;
 /** Thin fences get a collider at least this thick so a fast car cannot tunnel through a tick. */
 export const MIN_LINE_COLLIDER_THICKNESS_M = 0.4;
@@ -46,6 +49,8 @@ export type ColliderSpec =
       readonly hy: number;
       readonly hz: number;
       readonly rotationY: number;
+      /** Tilt along the box's length so it follows the slope (see LineSegment.pitch). */
+      readonly pitch: number;
       readonly blocksSight: boolean;
       readonly kind: SceneryKind;
     };
@@ -66,6 +71,8 @@ export interface SegmentBox {
   readonly heightM: number;
   readonly widthM: number;
   readonly rotationY: number;
+  /** Tilt along the box's length so it follows the slope (see LineSegment.pitch); 0 = level. */
+  readonly pitch: number;
   readonly variant: string;
 }
 
@@ -96,16 +103,29 @@ export interface BuildingBox {
   readonly roof: "pitched" | "flat";
 }
 
-/** One straight piece of a line feature. `y` is the average of the two end ground heights. */
+/**
+ * One straight piece of a line feature. It follows the ground: it runs from the ground height
+ * at its start to the ground height at its end, so neither end floats or is buried on a slope.
+ * `y` is the average of the two end ground heights (the middle of that ground line).
+ */
 export interface LineSegment {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+  /** Horizontal length. */
   readonly lengthM: number;
+  /** Length along the ground line (never shorter than lengthM). */
+  readonly slopeLengthM: number;
   readonly rotationY: number;
+  /**
+   * Tilt in radians about the box's own width axis, applied before rotationY: positive when
+   * the end is higher than the start. 0 on level ground.
+   */
+  readonly pitch: number;
   readonly startX: number;
   readonly startZ: number;
   readonly startY: number;
+  readonly endY: number;
   readonly heightM: number;
   readonly widthM: number;
 }
@@ -153,21 +173,51 @@ export function lineSegments(
       const z1 = a[1] + (dz * (k + 1)) / n;
       const y0 = heightAt(x0, z0);
       const y1 = heightAt(x1, z1);
+      const len = dist / n;
       out.push({
         x: (x0 + x1) / 2,
         y: (y0 + y1) / 2,
         z: (z0 + z1) / 2,
-        lengthM: dist / n,
+        lengthM: len,
+        slopeLengthM: Math.hypot(len, y1 - y0),
         rotationY: Math.atan2(-dz, dx),
+        pitch: Math.atan2(y1 - y0, len),
         startX: x0,
         startZ: z0,
         startY: y0,
+        endY: y1,
         heightM,
         widthM,
       });
     }
   }
   return out;
+}
+
+/**
+ * Rotation of a box that is turned rotationY about the world Y axis and tilted `pitch` along
+ * its length (yaw applied after pitch). Physics and render both build their rotation from
+ * these two angles, so the collider and the drawn box stay on top of each other.
+ */
+export function lineBoxQuat(
+  rotationY: number,
+  pitch: number,
+): { x: number; y: number; z: number; w: number } {
+  const a = Math.cos(rotationY / 2);
+  const b = Math.sin(rotationY / 2);
+  const c = Math.cos(pitch / 2);
+  const d = Math.sin(pitch / 2);
+  return { x: b * d, y: b * c, z: a * d, w: a * c };
+}
+
+/** The point `upM` above the middle of a segment's ground line, measured along its tilted up axis. */
+function liftedCentre(s: LineSegment, upM: number): { x: number; y: number; z: number } {
+  const sp = Math.sin(s.pitch);
+  return {
+    x: s.x - sp * Math.cos(s.rotationY) * upM,
+    y: s.y + Math.cos(s.pitch) * upM,
+    z: s.z + sp * Math.sin(s.rotationY) * upM,
+  };
 }
 
 export function featureColliders(
@@ -213,15 +263,17 @@ export function featureColliders(
 
 function lineCollider(s: LineSegment, kind: "hedge" | "fence", blocksSight: boolean): ColliderSpec {
   const hy = (s.heightM + LINE_SINK_M) / 2;
+  const c = liftedCentre(s, hy - LINE_SINK_M);
   return {
     shape: "cuboid",
-    x: s.x,
-    y: s.y - LINE_SINK_M + hy,
-    z: s.z,
-    hx: s.lengthM / 2,
+    x: c.x,
+    y: c.y,
+    z: c.z,
+    hx: s.slopeLengthM / 2,
     hy,
     hz: Math.max(s.widthM, MIN_LINE_COLLIDER_THICKNESS_M) / 2,
     rotationY: s.rotationY,
+    pitch: s.pitch,
     blocksSight,
     kind,
   };
@@ -243,14 +295,16 @@ export function featureInstances(
         const v = resolveVariant("hedge", f.variant);
         if (v === undefined) continue;
         for (const s of lineSegments(f.points, heightAt, f.heightM, v.widthM)) {
+          const c = liftedCentre(s, f.heightM / 2);
           hedges.push({
-            x: s.x,
-            y: s.y + f.heightM / 2,
-            z: s.z,
-            lengthM: s.lengthM,
+            x: c.x,
+            y: c.y,
+            z: c.z,
+            lengthM: s.slopeLengthM,
             heightM: f.heightM,
             widthM: v.widthM,
             rotationY: s.rotationY,
+            pitch: s.pitch,
             variant: f.variant,
           });
         }
@@ -259,16 +313,21 @@ export function featureInstances(
         if (v === undefined) continue;
         const segs = lineSegments(f.points, heightAt, f.heightM, v.thicknessM);
         for (const s of segs) {
-          const rail = (yFrac: number, h: number): SegmentBox => ({
-            x: s.x,
-            y: s.y + f.heightM * yFrac,
-            z: s.z,
-            lengthM: s.lengthM,
-            heightM: h,
-            widthM: v.thicknessM,
-            rotationY: s.rotationY,
-            variant: f.variant,
-          });
+          // Rails run post to post along the ground line, so they stay on the posts on a slope.
+          const rail = (yFrac: number, h: number): SegmentBox => {
+            const c = liftedCentre(s, f.heightM * yFrac);
+            return {
+              x: c.x,
+              y: c.y,
+              z: c.z,
+              lengthM: s.slopeLengthM,
+              heightM: h,
+              widthM: v.thicknessM,
+              rotationY: s.rotationY,
+              pitch: s.pitch,
+              variant: f.variant,
+            };
+          };
           if (f.variant === "picket") {
             // Spaced slats on a backing rail: reads as a picket fence, not a solid wall.
             fenceRails.push(rail(0.55, 0.1));
@@ -288,6 +347,7 @@ export function featureInstances(
                 heightM: slatH,
                 widthM: v.thicknessM,
                 rotationY: s.rotationY,
+                pitch: 0, // slats stand upright, each seated on the ground under it
                 variant: f.variant,
               });
             }

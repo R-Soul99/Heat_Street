@@ -17,7 +17,7 @@ import { sampleHeightfieldBilinear } from "../core/heightfield-sample";
 import type { InputFrame } from "../core/input-tape";
 import type { MapCollisionBuilding } from "../core/map-collision";
 import type { RoadGraph } from "../core/road-graph";
-import { buildingBoxes, featureColliders } from "../core/scenery-geometry";
+import { buildingBoxes, featureColliders, lineBoxQuat } from "../core/scenery-geometry";
 import type { SurfaceProfiles } from "../core/surface-tuning";
 import type { SurfaceType } from "../core/surface-types";
 import { type BermBox, buildEdgeBerm } from "../core/terrain-edge-berm";
@@ -227,7 +227,7 @@ export function createTerrainScene(
       spec.shape === "cylinder"
         ? RAPIER.ColliderDesc.cylinder(spec.halfHeight, spec.radius)
         : RAPIER.ColliderDesc.cuboid(spec.hx, spec.hy, spec.hz).setRotation(
-            yRotationQuat(spec.rotationY),
+            lineBoxQuat(spec.rotationY, spec.pitch),
           );
     const collider = world.createCollider(
       desc.setTranslation(spec.x, spec.y, spec.z).setFriction(BUILDING_FRICTION).setRestitution(0),

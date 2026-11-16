@@ -50,8 +50,19 @@ Hedges and fences have a 1.0 m minimum height. Measured headlessly (flat grass, 
 4 s from 15 m, plan 06): a 1.0 m line stops the car (chassis rise 0.47 m, car stopped at
 x = -2.85 / -2.55), while a 0.5 m line was climbed over (car ended at x = 31.9 / 41.7). Below
 about 1.0 m the wheels simply drive over the kerb, so the minimum keeps a "solid" line solid.
-Line colliders are at least 0.4 m thick (thin fences would tunnel at speed) and sink 0.3 m below
-the average ground height so no end floats on a slope.
+Line colliders are at least 0.4 m thick (thin fences would tunnel at speed).
+
+## Hedges and fences on slopes
+
+Each hedge or fence segment (at most 8 m) follows the ground: it runs from the ground height at
+its start to the ground height at its end, tilted along its length (`LineSegment.pitch`). The
+drawn hedge box, the fence rails and the collider all use the same tilt (`lineBoxQuat`), so
+neither end floats or is buried and the rails stay on their posts. Posts and picket slats stand
+upright, each seated on the ground under it. The collider also extends 0.3 m below that ground
+line, which covers a small dip under the middle of a segment. A segment is still one straight
+piece, so over a sharp crest or hollow shorter than a segment its middle can sit a little above
+or below the ground. The tilt changes no box counts: triangle estimates and the 40,000 budget
+depend only on line length, never on terrain height.
 
 ## Rendering rules
 
