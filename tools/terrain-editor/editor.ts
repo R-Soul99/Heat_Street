@@ -103,6 +103,12 @@ import { menuFace } from "../editor-shell/top-bar.ts";
 import { validateGraph } from "../map-compiler/validate/validator.ts";
 import { wheelZoomFactor } from "../map-editor/world.ts";
 import { orbitAboutPivot, panByPixels, worldPerPixel, zoomTowardPoint } from "./camera-nav.ts";
+import {
+  type ContourMode,
+  nextContourMode,
+  parseContourMode,
+  splitIndexContours,
+} from "./contour-view.ts";
 import { DRIVE_FALLBACK_STATUS, driveButtonTip } from "./drive-button.ts";
 import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
 import {
@@ -229,6 +235,13 @@ const FOOTPRINT_GRID_MAX_CELLS = 160;
 /** Radius brushes that draw the standout yellow footprint. */
 const FOOTPRINT_TOOLS: readonly Tool[] = ["raise", "lower", "smooth", "flatten", "paint"];
 const FOOTPRINT_YELLOW = 0xffd400;
+const CONTOUR_NORMAL_COLOUR = 0xff8855;
+/** Contours-only view: muted ordinary lines, bright index lines, dark ground. */
+const CONTOUR_ONLY_COLOUR = 0xa8633f;
+const CONTOUR_INDEX_COLOUR = 0xffe3c2;
+const CONTOUR_GROUND_COLOUR = 0x171a20;
+/** A height edit in the contours-only view redraws the whole map this long after the last change. */
+const CONTOUR_ONLY_DEBOUNCE_MS = 150;
 const CONTOUR_MIN_M = 0.25;
 const CONTOUR_MAX_M = 10;
 const BOX_CYAN = 0x44ddff;
@@ -258,7 +271,10 @@ let gridOn = false;
 let snapOn = getBoolPref("terrain.snap.on", false);
 let snapSizeM = parseSnapSize(getPref("terrain.snap.size", String(DEFAULT_SNAP_M)));
 let altHeld = false;
-let contoursOn = false;
+/** Contours: off, lines over the normal view, or lines only on a plain dark ground (remembered in prefs). */
+const initialContourMode = parseContourMode(getPref("terrain.contours.mode", "off"));
+let contoursOn = initialContourMode !== "off";
+let contoursOnly = initialContourMode === "only";
 let contourInterval = 1;
 /** Grid line spacing in cells (D-20). */
 let gridSpacing = 1;
@@ -3416,6 +3432,7 @@ function installArea(next: TerrainArea): void {
   updateHistoryButtons();
   terrainView = buildTerrainView(next.grid, next.paint);
   scene.add(terrainView.group);
+  applyContourGround();
   rampGesture.cancel();
   cancelLine();
   resetSceneryMove();
@@ -3886,11 +3903,27 @@ const contourLines = new THREE.LineSegments(
   new THREE.BufferGeometry(),
   new THREE.LineBasicMaterial({ color: 0xff8855 }),
 );
-for (const l of [gridLines, contourLines]) {
+// Contours-only view: every fifth line is an index line, brighter (WebGL lines are 1 px wide).
+const indexContourLines = new THREE.LineSegments(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: CONTOUR_INDEX_COLOUR }),
+);
+for (const l of [gridLines, contourLines, indexContourLines]) {
   l.frustumCulled = false;
   l.visible = false;
   scene.add(l);
 }
+/** Flat dark ground that replaces the surface colours in the contours-only view. */
+const contourGroundMaterial = new THREE.MeshStandardMaterial({
+  color: CONTOUR_GROUND_COLOUR,
+  roughness: 1,
+  metalness: 0,
+  // Push the ground back a hair so contour lines lying exactly on it never z-fight.
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
+});
+let contourGround: THREE.Group | null = null;
 let overlayCentre: { row: number; col: number } | null = null;
 /** Cache key of the footprint grid currently built (tool, size, shape, cell window). */
 let gridKey = "";
@@ -4108,7 +4141,15 @@ function rebuildContours(x: number, z: number): void {
   if (!area) return;
   const g = area.grid;
   contourLines.visible = contoursOn;
+  indexContourLines.visible = contoursOn && contoursOnly;
+  (contourLines.material as THREE.LineBasicMaterial).color.setHex(
+    contoursOnly ? CONTOUR_ONLY_COLOUR : CONTOUR_NORMAL_COLOUR,
+  );
   if (!contoursOn) return;
+  if (contoursOnly) {
+    rebuildContoursWholeMap();
+    return;
+  }
   const row = Math.round((z - g.originZ) / g.cellSizeM);
   const col = Math.round((x - g.originX) / g.cellSizeM);
   const w = overlayWindow(row, col);
@@ -4118,12 +4159,75 @@ function rebuildContours(x: number, z: number): void {
   setLines(contourLines, contourSegments(g, w, lastContourInterval));
 }
 
+/** Contours-only view: lines over the whole map, every fifth one split out as a brighter index line. */
+function rebuildContoursWholeMap(): void {
+  if (!area) return;
+  const g = area.grid;
+  lastContourInterval = contourIntervalM();
+  const all = contourSegments(
+    g,
+    { minRow: 0, minCol: 0, maxRow: g.rows, maxCol: g.cols },
+    lastContourInterval,
+  );
+  const split = splitIndexContours(all, lastContourInterval);
+  setLines(contourLines, split.regular);
+  setLines(indexContourLines, split.index);
+}
+
+let contourRedrawTimer: number | undefined;
+/** Heights changed while the contours-only view is on: redraw the whole map once the edit settles. */
+function scheduleContourRedraw(): void {
+  if (contourRedrawTimer !== undefined) window.clearTimeout(contourRedrawTimer);
+  contourRedrawTimer = window.setTimeout(() => {
+    contourRedrawTimer = undefined;
+    if (contoursOn && contoursOnly) rebuildContoursWholeMap();
+  }, CONTOUR_ONLY_DEBOUNCE_MS);
+}
+
+/**
+ * Contours-only ground: the surface colours and road paint are hidden and a flat dark ground
+ * (sharing the terrain geometry, so it follows every sculpt) is shown instead. Display only:
+ * nothing about it is saved into the map. Scenery, ramps, start markers and road lines stay.
+ */
+function applyContourGround(): void {
+  if (contourGround) {
+    scene.remove(contourGround);
+    contourGround = null; // the geometry belongs to the terrain view; the material is shared
+  }
+  const view = terrainView;
+  if (!view) return;
+  const want = contoursOn && contoursOnly;
+  for (const m of view.chunkMeshes) m.visible = !want;
+  if (!want) return;
+  const group = new THREE.Group();
+  for (const m of view.chunkMeshes) group.add(new THREE.Mesh(m.geometry, contourGroundMaterial));
+  scene.add(group);
+  contourGround = group;
+}
+
+function setContourMode(mode: ContourMode): void {
+  contoursOn = mode !== "off";
+  contoursOnly = mode === "only";
+  setPref("terrain.contours.mode", mode);
+  applyContourGround();
+  refreshOverlays();
+  shell.refreshMenus();
+  syncToolbar();
+  setStatus(
+    mode === "only"
+      ? `Contours only${Number.isFinite(lastContourInterval) ? `, a line every ${lastContourInterval} m` : ""}, on a plain ground. C goes on to the normal view.`
+      : mode === "on"
+        ? "Contours on."
+        : "Contours off.",
+  );
+}
+
 function overlayAnchor(): { x: number; z: number } {
   return lastHit ?? { x: controls.target.x, z: controls.target.z };
 }
 
 function maybeRebuildContours(x: number, z: number): void {
-  if (!area || !contoursOn) return;
+  if (!area || !contoursOn || contoursOnly) return;
   const g = area.grid;
   const row = Math.round((z - g.originZ) / g.cellSizeM);
   const col = Math.round((x - g.originX) / g.cellSizeM);
@@ -4143,6 +4247,10 @@ function refreshOverlaysAfterEdit(w: CellWindow | undefined): void {
   if (gridOn) {
     gridKey = "";
     updateFootprintGrid(lastHit);
+  }
+  if (contoursOn && contoursOnly) {
+    scheduleContourRedraw();
+    return;
   }
   if (!overlayCentre || !contoursOn) return;
   const g = area.grid;
@@ -4190,11 +4298,19 @@ function onCameraChange(): void {
 controls.addEventListener("change", onCameraChange);
 
 function toggleOverlay(which: "grid" | "contours"): void {
-  if (which === "grid") gridOn = !gridOn;
-  else contoursOn = !contoursOn;
+  if (which === "contours") {
+    // C and the top-bar button cycle: off, lines, lines only.
+    setContourMode(nextContourMode(currentContourMode()));
+    return;
+  }
+  gridOn = !gridOn;
   refreshOverlays();
   shell.refreshMenus();
   syncToolbar();
+}
+
+function currentContourMode(): ContourMode {
+  return !contoursOn ? "off" : contoursOnly ? "only" : "on";
 }
 
 /** Alt + wheel: step the brush radius by whole cells (Brush mode). */
@@ -5817,6 +5933,20 @@ function syncToolFromDispatcher(): void {
   applyCanvasCursor();
 }
 
+/** The Contours button shows which of its three states is on. */
+function updateContoursButton(b: HTMLButtonElement | undefined): void {
+  if (!b) return;
+  const mode = currentContourMode();
+  const word = b.querySelector(".tool-word");
+  if (word) word.textContent = mode === "only" ? "Contours only" : "Contours";
+  b.dataset.tip =
+    mode === "off"
+      ? "Contours: show height lines (C: lines, then lines only)"
+      : mode === "on"
+        ? "Contours: height lines are on (C: lines only)"
+        : "Contours only: height lines on a plain ground (C: turn off)";
+}
+
 /** Pressed, enabled and tooltip state of every toolbar control, plus the sidebar title. */
 function syncToolbar(): void {
   const input = toolbarInput();
@@ -5835,6 +5965,7 @@ function syncToolbar(): void {
         t.id === "grid" ? gridOn : t.id === "contours" ? contoursOn : st.pressed[t.id];
       f.setPressed(t.id, pressed);
     }
+    updateContoursButton(f.button("contours"));
     f.setMenuFace("road", menuFace(ROAD_MENU, ROAD_BUTTONS, st.roadFace));
     const terrainTool = TOOLBAR_TOOLS.find((t) => t.id === "terrain");
     if (terrainTool) {
@@ -6065,10 +6196,17 @@ const shell = createShell({
         {
           id: "contours",
           label: "Contours",
-          tip: "Show height contour lines around the cursor",
+          tip: "Show height contour lines around the cursor (C cycles off, lines, lines only)",
           shortcut: "C",
-          run: () => toggleOverlay("contours"),
-          checked: () => contoursOn,
+          run: () => setContourMode(currentContourMode() === "on" ? "off" : "on"),
+          checked: () => currentContourMode() === "on",
+        },
+        {
+          id: "contours-only",
+          label: "Contours only",
+          tip: "Hide surface colours and road paint and show the whole map as height lines on a plain ground",
+          run: () => setContourMode(currentContourMode() === "only" ? "off" : "only"),
+          checked: () => currentContourMode() === "only",
         },
         {
           id: "contour-interval",
