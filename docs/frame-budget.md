@@ -321,7 +321,15 @@ meshes, no shadows.
 
 | Measured in a browser (render CPU ms, draw calls on the dense map) | Result |
 |---|---|
-| Plan 11 human check | not yet measured |
+| Plan 11, `?map=demo-hills&debug`, with the user's placed scenery, car idle at spawn | 16 draws / 33,864 tris (limits 80 / 90,000) |
+| Plan 11, same map, driving about 20 s, busiest of 40 samples at 0.5 s | 70 draws / 79,081 tris |
+| Plan 11, `?map=grid-test&debug` (no scenery), idle at spawn | 22 draws / 67,716 tris |
+| Plan 11, same map, driving about 20 s, busiest of 40 samples | 25 draws / 75,646 tris |
 
-The headless numbers are counted from the built geometry. No browser frame time has been measured
-here; the empty row is for plan 11's human measurement.
+Taken by the orchestrator in Chrome, reading the profiler HUD (Backquote). The counts move with the
+view while driving, so the idle reading and the busiest of 40 samples are both given. The demo-hills
+draw-call peak (70) is driven by terrain and the view, not by scenery: the scenery view is a fixed
+handful of instanced and merged draws. Render CPU time is not recorded here; the tab ran at about
+33 ms per frame in a background-driven session, which is not a representative frame time.
+
+The headless numbers are counted from the built geometry.
