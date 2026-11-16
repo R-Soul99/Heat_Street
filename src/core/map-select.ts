@@ -125,3 +125,31 @@ export function searchForMap(search: string, id: MapId): string {
   params.set("map", id);
   return `?${params.toString()}`;
 }
+
+/**
+ * `?grid=` override for the flat 10 m reference grid: `1` forces it on, `0`
+ * forces it off, on any map. Anything else (missing, `2`, `true`, hostile
+ * text) is ignored and the per-map default applies.
+ */
+export function parseGridOverride(search: string): boolean | undefined {
+  const raw = new URLSearchParams(search).get("grid");
+  if (raw === "1") return true;
+  if (raw === "0") return false;
+  return undefined;
+}
+
+/**
+ * Whether to draw the reference grid. An explicit `?grid=` override wins.
+ * Otherwise it is on, except on sculpted terrain maps, where a flat plane at
+ * y = 0 only shows where the ground is at or below zero. The flat proving
+ * grounds keep it even when they load as terrain, because it is their only
+ * speed reference.
+ */
+export function shouldShowReferenceGrid(
+  override: boolean | undefined,
+  isTerrain: boolean,
+  isFlatTestArea: boolean,
+): boolean {
+  if (override !== undefined) return override;
+  return !isTerrain || isFlatTestArea;
+}

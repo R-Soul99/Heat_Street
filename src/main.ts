@@ -52,7 +52,12 @@ import { groundSurfaceForArea, isFlatTestArea } from "./core/ground-surface";
 import { forwardFromYaw, headingFromRotation, yawFromTravelDirection } from "./core/heading";
 import type { InputFrame } from "./core/input-tape";
 import { parseMapCollision } from "./core/map-collision";
-import { MAP_FORMATS, resolveMapId } from "./core/map-select";
+import {
+  MAP_FORMATS,
+  parseGridOverride,
+  resolveMapId,
+  shouldShowReferenceGrid,
+} from "./core/map-select";
 import {
   knownProgressCourseIds,
   loadMedalProgress,
@@ -678,7 +683,17 @@ try {
     tuning.wheels.halfTrack,
     tuning.wheels.halfWheelbase,
     tuning.chassis.halfExtents,
-    { includePhase2Ground: false, groundExtents, chassisColor: CAR_CLASS.chassisColor },
+    {
+      includePhase2Ground: false,
+      groundExtents,
+      chassisColor: CAR_CLASS.chassisColor,
+      // Off on sculpted terrain maps (a flat plane at y = 0 means nothing there); `?grid=1|0` overrides.
+      showGrid: shouldShowReferenceGrid(
+        parseGridOverride(location.search),
+        isTerrain,
+        isFlatTestArea(AREA_ID),
+      ),
+    },
   );
   view.scene.add(mapView.group);
   // Compiled-map edge berm (07.1): drawn from the very boxes the scene collides with.

@@ -386,7 +386,7 @@ export function buildCarMeshes(
  *   built on BOTH branches of `includePhase2Ground` regardless -- plan
  *   02-10's feel session found a featureless ground made speed and slip
  *   impossible to judge, and SC4's speed-legibility gate needs it more than
- *   that session did.
+ *   that session did. `options.showGrid: false` omits it (sculpted terrain maps).
  */
 export function createVehicleView(
   wheelRadius: number,
@@ -398,6 +398,8 @@ export function createVehicleView(
     readonly groundExtents?: { readonly x: number; readonly z: number };
     /** Player chassis paint (0xRRGGBB); defaults to the RWD red. */
     readonly chassisColor?: number;
+    /** Draw the flat reference grid. Defaults to `true`. */
+    readonly showGrid?: boolean;
   },
 ): VehicleView {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
@@ -457,15 +459,20 @@ export function createVehicleView(
   // `buildReferenceGrid`'s doc comment for why an unbounded grid is a bug,
   // not a feature. Built on BOTH branches of `includePhase2Ground` -- see
   // this function's own `options.includePhase2Ground` doc comment for why.
-  const grid = buildReferenceGrid(
-    groundExtents.x,
-    groundExtents.z,
-    GRID_SPACING,
-    COLOUR_GRID_CENTER,
-    COLOUR_GRID,
-  );
-  grid.position.y = 0.01;
-  scene.add(grid);
+  const grid =
+    (options?.showGrid ?? true)
+      ? buildReferenceGrid(
+          groundExtents.x,
+          groundExtents.z,
+          GRID_SPACING,
+          COLOUR_GRID_CENTER,
+          COLOUR_GRID,
+        )
+      : null;
+  if (grid !== null) {
+    grid.position.y = 0.01;
+    scene.add(grid);
+  }
 
   if (includePhase2Ground) {
     rampGeometry = buildRampGeometry();
@@ -539,8 +546,8 @@ export function createVehicleView(
     dispose(): void {
       groundGeometry?.dispose();
       groundMaterial?.dispose();
-      grid.geometry.dispose();
-      (grid.material as THREE.Material).dispose();
+      grid?.geometry.dispose();
+      (grid?.material as THREE.Material | undefined)?.dispose();
       rampGeometry?.dispose();
       rampMaterial?.dispose();
       carMeshes.dispose();

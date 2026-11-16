@@ -7,9 +7,11 @@ import {
   MAP_LABELS,
   parseDriveAt,
   parseDriveHeading,
+  parseGridOverride,
   parseStartId,
   resolveMapId,
   searchForMap,
+  shouldShowReferenceGrid,
 } from "../src/core/map-select";
 
 describe("resolveMapId", () => {
@@ -160,5 +162,31 @@ describe("parseStartId", () => {
     ]) {
       expect(parseStartId(s)).toBeUndefined();
     }
+  });
+});
+
+describe("parseGridOverride", () => {
+  it("reads 1 and 0 only", () => {
+    expect(parseGridOverride("?grid=1")).toBe(true);
+    expect(parseGridOverride("?map=demo-hills&grid=0")).toBe(false);
+  });
+  it("ignores everything else", () => {
+    for (const s of ["", "?grid=", "?grid=2", "?grid=true", "?grid=01", "?grid=%00", "?grid=1;"]) {
+      expect(parseGridOverride(s)).toBeUndefined();
+    }
+  });
+});
+
+describe("shouldShowReferenceGrid", () => {
+  it("is on for non-terrain maps and off for sculpted terrain maps by default", () => {
+    expect(shouldShowReferenceGrid(undefined, false, false)).toBe(true);
+    expect(shouldShowReferenceGrid(undefined, true, false)).toBe(false);
+  });
+  it("keeps the grid on flat proving grounds even when they load as terrain", () => {
+    expect(shouldShowReferenceGrid(undefined, true, true)).toBe(true);
+  });
+  it("lets the override win either way", () => {
+    expect(shouldShowReferenceGrid(true, true, false)).toBe(true);
+    expect(shouldShowReferenceGrid(false, false, true)).toBe(false);
   });
 });
