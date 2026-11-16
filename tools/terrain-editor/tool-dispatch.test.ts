@@ -1616,3 +1616,57 @@ describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
     });
   });
 });
+
+describe("held brush ticks (quick 261116-a53)", () => {
+  it("a held raise adds strength metres per second and is one undo step with the press", () => {
+    const { area, d } = setup();
+    d.setTool("raise");
+    d.setOptions({ strength: 0.5 });
+    d.pointerDown(0, 0, {});
+    const afterDown = sampleTerrainHeight(area.grid, 0, 0);
+    expect(d.isHoldStroke()).toBe(true);
+    for (let i = 0; i < 20; i++) d.holdTick(0, 0, 1 / 20); // one second held still
+    const held = sampleTerrainHeight(area.grid, 0, 0) - afterDown;
+    expect(held).toBeCloseTo(0.5, 2);
+    d.pointerMove(12, 0, {});
+    d.pointerUp(12, 0);
+    expect(d.canUndo()).toBe(true);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+  });
+
+  it("a held lower digs", () => {
+    const { area, d } = setup();
+    d.setTool("lower");
+    d.pointerDown(0, 0, {});
+    const before = sampleTerrainHeight(area.grid, 0, 0);
+    d.holdTick(0, 0, 0.05);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBeLessThan(before);
+    d.pointerUp(0, 0);
+  });
+
+  it("paint and erase strokes ignore held ticks", () => {
+    const { area, d } = setup();
+    d.setTool("paint");
+    d.pointerDown(0, 0, {});
+    expect(d.isHoldStroke()).toBe(false);
+    const res = d.holdTick(0, 0, 0.05);
+    expect(res.dirtyPaint).toBeUndefined();
+    expect(res.dirtyHeights).toBeUndefined();
+    d.pointerUp(0, 0);
+    d.setTool("erase");
+    d.pointerDown(0, 0, {});
+    expect(d.isHoldStroke()).toBe(false);
+    expect(d.holdTick(0, 0, 0.05).dirtyHeights).toBeUndefined();
+    d.pointerUp(0, 0);
+    expect(sampleTerrainHeight(area.grid, 0, 0)).toBe(0);
+  });
+
+  it("no live stroke means no held effect", () => {
+    const { d } = setup();
+    d.setTool("raise");
+    expect(d.isHoldStroke()).toBe(false);
+    expect(d.holdTick(0, 0, 0.05).dirtyHeights).toBeUndefined();
+  });
+});

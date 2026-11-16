@@ -369,6 +369,11 @@ export function raiseLower(
   rateM = 1,
   rec?: StrokeRecorder,
   opts?: HeightOpOptions,
+  /**
+   * Neighbour relaxation after the dab (default on). A held brush that re-applies many small
+   * ticks in place turns it off, otherwise each tick would erode the bump the last one built.
+   */
+  relax = true,
 ): BrushResult {
   const p = sanitize(params);
   if (!p || !Number.isFinite(rateM)) return noOp();
@@ -382,7 +387,7 @@ export function raiseLower(
       return f > 0 ? h + sign * rateM * p.strength * f : h;
     },
     rec,
-    true,
+    relax,
     opts,
   );
 }

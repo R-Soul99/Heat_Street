@@ -61,6 +61,7 @@ import {
 import { unlockedSet } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
 import { type ApplyResult, createUndoStack, type UndoTarget } from "../../src/core/terrain-undo.ts";
+import { heldTickStrength, isHoldTool } from "./hold-brush.ts";
 import {
   BRUSH_TOOL_FOR,
   type BrushToolName,
@@ -483,10 +484,18 @@ export function createToolDispatcher(getArea: () => EditArea) {
     };
   }
 
-  function dab(s: Stroke, x: number, z: number): ToolResult {
+  /**
+   * One brush application. `heldTickS` marks a held (stationary) tick: raise and lower then add
+   * `strength` metres per SECOND (rate = tick length), smooth and flatten blend by the per-tick
+   * share of `strength` per second. A moving stroke leaves it undefined and is unchanged.
+   */
+  function dab(s: Stroke, x: number, z: number, heldTickS?: number): ToolResult {
     const area = getArea();
     const res = emptyResult();
     const p = params(x, z);
+    if (heldTickS !== undefined && (s.tool === "smooth" || s.tool === "flatten")) {
+      p.strength = heldTickStrength(options.strength, heldTickS);
+    }
     if (s.tool === "paint") {
       const r = paintSurface(area.paint, p, options.surface, { road: false }, s.recorder);
       if (r.rect) res.dirtyPaint = paintRectToCells(area, r.rect);
@@ -495,7 +504,15 @@ export function createToolDispatcher(getArea: () => EditArea) {
     let r: BrushResult;
     const hop = heightOpOptions(area, options);
     if (s.tool === "raise" || s.tool === "lower") {
-      r = raiseLower(area.grid, p, s.tool === "lower" ? -1 : 1, 1, s.recorder, hop);
+      r = raiseLower(
+        area.grid,
+        p,
+        s.tool === "lower" ? -1 : 1,
+        heldTickS ?? 1,
+        s.recorder,
+        hop,
+        heldTickS === undefined,
+      );
     } else if (s.tool === "smooth") r = smoothBrush(area.grid, p, s.recorder, hop);
     else r = flattenBrush(area.grid, p, s.flattenTarget, s.recorder, hop);
     res.dirtyHeights = r.window;
@@ -951,6 +968,18 @@ export function createToolDispatcher(getArea: () => EditArea) {
       }
     },
     isStroking: (): boolean => stroke !== null,
+    /** True while the live stroke is a raise, lower, smooth or flatten brush (can be held still). */
+    isHoldStroke: (): boolean => stroke !== null && isHoldTool(stroke.tool),
+    /**
+     * One held tick of the live brush at (x, z): same stroke recorder, so the whole press (held
+     * and moved) stays ONE undo step. Paint, road and erase strokes ignore it.
+     */
+    holdTick(x: number, z: number, tickS: number): ToolResult {
+      const s = stroke;
+      if (!s || placing !== null || !isHoldTool(s.tool)) return emptyResult();
+      if (!Number.isFinite(x) || !Number.isFinite(z) || !(tickS > 0)) return emptyResult();
+      return dab(s, x, z, tickS);
+    },
     isRepeating: (): boolean => repeat !== null,
 
     /**

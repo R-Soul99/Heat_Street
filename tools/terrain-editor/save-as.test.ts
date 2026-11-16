@@ -29,7 +29,7 @@ describe("suggestCopyName", () => {
   });
   it("stays a valid name when the source id is long", () => {
     const long = "a".repeat(64);
-    const s = suggestCopyName(long, [long.slice(0, 59) + "-copy"]);
+    const s = suggestCopyName(long, [`${long.slice(0, 59)}-copy`]);
     expect(s.length).toBeLessThanOrEqual(64);
     expect(validateAreaName(s, [])).toBeUndefined();
   });

@@ -132,6 +132,7 @@ import {
   seatBuilding,
   updateRamp,
 } from "./features.ts";
+import { createHoldAccumulator, HOLD_IDLE_S, HOLD_MOVE_EPS_M, HOLD_TICK_S } from "./hold-brush.ts";
 import { createEmptyTerrainArea } from "./new-area.ts";
 import {
   itemPanelHint,
@@ -4231,6 +4232,54 @@ function modsOf(e: PointerEvent): { shift: boolean; ctrl: boolean; alt: boolean 
   return { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey };
 }
 
+// ---- held brushes (quick 261116-a53): raise, lower, smooth and flatten keep applying while the
+// pointer is held still. Timing lives in hold-brush.ts; the dispatcher applies each tick to the
+// live stroke, so the whole press (held and moved) is ONE undo step.
+const brushHold = createHoldAccumulator();
+let holdTimer: ReturnType<typeof setInterval> | null = null;
+/** Set by every stop (up, cancel, leave, Esc, dialog, blur); cleared by the next press. */
+let holdSuppressed = false;
+let holdLastMs = 0;
+let holdLastMoveMs = 0;
+let holdAnchor: { x: number; z: number } | null = null;
+
+function stopBrushHold(): void {
+  if (holdTimer !== null) clearInterval(holdTimer);
+  holdTimer = null;
+  holdSuppressed = true;
+}
+
+function startBrushHold(at: { x: number; z: number }): void {
+  stopBrushHold();
+  if (!dispatcher.isHoldStroke()) return;
+  holdSuppressed = false;
+  holdAnchor = at;
+  brushHold.reset();
+  holdLastMs = performance.now();
+  holdLastMoveMs = holdLastMs;
+  holdTimer = setInterval(brushHoldFrame, 25);
+}
+
+function brushHoldFrame(): void {
+  const now = performance.now();
+  const dt = (now - holdLastMs) / 1000;
+  holdLastMs = now;
+  if (!stroking || !area || holdSuppressed || !lastHit || !dispatcher.isHoldStroke()) {
+    stopBrushHold();
+    return;
+  }
+  const ticks = brushHold.advance(dt);
+  // A moving pointer already applies its own dabs; held ticks wait until it has been still.
+  if (now - holdLastMoveMs < HOLD_IDLE_S * 1000) {
+    brushHold.reset();
+    return;
+  }
+  for (let i = 0; i < ticks; i++) {
+    const t0 = performance.now();
+    applyResult(dispatcher.holdTick(lastHit.x, lastHit.z, HOLD_TICK_S), performance.now() - t0);
+  }
+}
+
 function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
   if (!area) return;
   const hit = pickTerrain(e.clientX, e.clientY);
@@ -4241,10 +4290,16 @@ function strokeEvent(e: PointerEvent, phase: "down" | "move" | "up"): void {
     if (!hit) return;
     stroking = true;
     res = dispatcher.pointerDown(hit.x, hit.z, modsOf(e));
+    startBrushHold({ x: hit.x, z: hit.z });
   } else if (phase === "move") {
     if (!hit) return;
+    if (holdAnchor && Math.hypot(hit.x - holdAnchor.x, hit.z - holdAnchor.z) > HOLD_MOVE_EPS_M) {
+      holdAnchor = { x: hit.x, z: hit.z };
+      holdLastMoveMs = performance.now();
+    }
     res = dispatcher.pointerMove(hit.x, hit.z, modsOf(e));
   } else {
+    stopBrushHold();
     stroking = false;
     setPreview(null);
     const end = hit ?? lastHit;
@@ -4403,6 +4458,7 @@ canvas.addEventListener("dblclick", (e) => {
   }
 });
 canvas.addEventListener("pointerleave", () => {
+  stopBrushHold();
   cancelStartGesture();
   cancelSceneryGesture();
   if (!stroking) {
@@ -5301,6 +5357,7 @@ async function contourIntervalDialog(): Promise<void> {
 }
 
 function cancelActiveStroke(): void {
+  stopBrushHold();
   cancelStartGesture();
   cancelSceneryGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
@@ -5759,6 +5816,7 @@ const BINDINGS: Binding[] = [
 ];
 
 window.addEventListener("shell:dialog-open", () => cancelActiveStroke());
+window.addEventListener("blur", stopBrushHold);
 
 window.addEventListener("keydown", (e) => {
   const active = document.activeElement;
@@ -5783,6 +5841,7 @@ window.addEventListener("keydown", (e) => {
       undoRedo("redo");
       return;
     case "escape":
+      stopBrushHold();
       if (dialogOpen) return;
       if (shell.bar?.closeMenus()) return;
       if (opHold) {
