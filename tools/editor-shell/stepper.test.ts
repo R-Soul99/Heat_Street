@@ -92,3 +92,18 @@ describe("presets", () => {
     expect(snapToPreset(3.5, ps)).toBe(5);
   });
 });
+
+describe("wrapping angle spec", () => {
+  const angle: StepperSpec = { step: 1, coarse: 15, min: 0, max: 359, decimals: 0, wrap: true };
+  it("wraps when stepping past either end", () => {
+    expect(stepValue(359, 1, angle, false)).toBe(0);
+    expect(stepValue(0, -1, angle, false)).toBe(359);
+    expect(stepValue(350, 1, angle, true)).toBe(5);
+  });
+  it("wraps typed values and keeps 1-degree precision", () => {
+    expect(parseStepperInput("37", angle)).toBe(37);
+    expect(parseStepperInput("370", angle)).toBe(10);
+    expect(parseStepperInput("-10", angle)).toBe(350);
+    expect(parseStepperInput("37.4", angle)).toBe(37);
+  });
+});

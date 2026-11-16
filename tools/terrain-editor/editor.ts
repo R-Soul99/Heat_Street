@@ -138,6 +138,7 @@ import {
   type PaneChoice,
   paneChoice,
   type SelectedItemKind,
+  wrapDegrees,
 } from "./pane-state.ts";
 import { createDragGesture, createLineBuilder, DRAG_HEADING_MIN_M } from "./place-tool.ts";
 import {
@@ -870,12 +871,14 @@ const buildingPalette = {
 };
 
 const SCALE_SPEC: StepperSpec = { step: 0.1, coarse: 0.5, min: 0.5, max: 2, decimals: 1 };
+// 1-degree steps (Shift = 15), wrapping, typed values accepted (quick 261116-a53).
 const ROTATION_SPEC: StepperSpec = {
-  step: ROTATION_STEP_DEG,
-  coarse: 45,
+  step: 1,
+  coarse: ROTATION_STEP_DEG,
   min: 0,
   max: 359,
   decimals: 0,
+  wrap: true,
 };
 const DENSITY_SPEC: StepperSpec = { step: 1, coarse: 5, min: 1, max: 20, decimals: 0 };
 const BUILDING_SIDE_SPEC: StepperSpec = { step: 0.5, coarse: 2, min: 1, max: 100, decimals: 1 };
@@ -2876,13 +2879,50 @@ function selectedRamp(): TerrainObject | undefined {
   return area.objects.find((o) => o.crest.id === sel.id && o.crest.ramp !== undefined);
 }
 
+/** Exact turn of the selected item in degrees, in the arrow-key convention (+ = counter-clockwise). */
+function selectedRotationExactDeg(): number | null {
+  const sel = selectedScenery;
+  if (!area || !sel || !selectableNow()) return null;
+  if (sel.kind === "building") {
+    const b = area.buildings[sel.index];
+    return b ? b.rotationY / DEG : null;
+  }
+  if (sel.kind === "ramp") {
+    const ramp = selectedRamp()?.crest.ramp;
+    return ramp ? -ramp.headingRad / DEG : null;
+  }
+  const f = (area.features ?? []).find((v) => v.id === sel.id);
+  return f && !("points" in f) ? f.rotationY / DEG : null;
+}
+
+/** Turns the selected item to a typed or stepped angle through the arrow keys' rotate path. */
+function setSelectedRotation(targetDeg: number, field: ReturnType<typeof createStepper>): void {
+  const cur = selectedRotationExactDeg();
+  if (cur === null) return;
+  let delta = (((targetDeg - cur) % 360) + 360) % 360;
+  if (delta > 180) delta -= 360;
+  if (Math.abs(delta) < 1e-9) return;
+  panelEditing = true;
+  try {
+    rotateSelectedScenery(delta, false);
+  } finally {
+    panelEditing = false;
+  }
+  // A refused turn (blocked footprint) puts the field back to the real angle.
+  const now = selectedRotationExactDeg();
+  if (now !== null) field.set(wrapDegrees(now));
+  selectedPanelKey = selectionPanelKey();
+}
+
 function selectionPanelKey(): string {
   if (!selectedScenery || !selectableNow()) return "";
   const r = selectedRamp();
   const ramp = r?.crest.ramp;
+  const rot = selectedRotationExactDeg();
+  const rotKey = rot === null ? "" : `|r${wrapDegrees(rot)}`;
   return ramp
-    ? `${JSON.stringify(selectedScenery)}|${r.crest.heightM}|${ramp.angleDeg}|${ramp.widthM}`
-    : JSON.stringify(selectedScenery);
+    ? `${JSON.stringify(selectedScenery)}|${r.crest.heightM}|${ramp.angleDeg}|${ramp.widthM}${rotKey}`
+    : `${JSON.stringify(selectedScenery)}${rotKey}`;
 }
 
 /** Changes the selected ramp's values: one undo step per hold or quick run, the mesh rebuilds. */
@@ -2956,8 +2996,24 @@ function refreshSelectedPanel(): void {
       ).field,
     );
   }
-  if (isRotatable(sel)) {
-    kids.push(note("Left and Right arrows turn it 15 degrees. Hold Shift for 1 degree."));
+  const rotNow = selectedRotationExactDeg();
+  if (isRotatable(sel) && rotNow !== null) {
+    const rotField: { stepper: ReturnType<typeof createStepper> | null } = { stepper: null };
+    const rot = optStepper(
+      "Rotation",
+      "Turn the selected item, in degrees (0 to 359). Type a value or step it.",
+      ROTATION_SPEC,
+      wrapDegrees(rotNow),
+      "deg",
+      (v) => {
+        if (rotField.stepper) setSelectedRotation(v, rotField.stepper);
+      },
+    );
+    rotField.stepper = rot.stepper;
+    const row = el("div");
+    row.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px";
+    row.append(rot.field, el("span", "muted", "Left/Right 15°, Shift 1°"));
+    kids.push(row);
   }
   kids.push(note(itemPanelHint(itemKind)));
   const tri = el("div", "muted");

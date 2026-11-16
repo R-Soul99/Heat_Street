@@ -7,6 +7,8 @@ export interface StepperSpec {
   decimals: number;
   /** Discrete values to step through (ascending); typed input snaps to the nearest. */
   presets?: readonly number[];
+  /** Integer angle-style ranges: stepping or typing past an end wraps (359 + 1 = 0, 370 = 10). */
+  wrap?: boolean;
 }
 
 /** Nearest preset to v; a tie goes to the larger. */
@@ -24,6 +26,11 @@ export function snapToPreset(v: number, presets: readonly number[]): number {
 }
 
 function clampRound(x: number, spec: StepperSpec): number {
+  if (spec.wrap) {
+    const span = spec.max - spec.min + 1;
+    const r = Math.round(x);
+    return ((((r - spec.min) % span) + span) % span) + spec.min;
+  }
   const c = Math.min(spec.max, Math.max(spec.min, x));
   const f = 10 ** spec.decimals;
   return Math.round(c * f) / f;
