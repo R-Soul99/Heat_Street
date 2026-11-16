@@ -2825,7 +2825,7 @@ function selectionPanelKey(): string {
     : JSON.stringify(selectedScenery);
 }
 
-/** Changes the selected ramp's values: one undo step per change, the mesh rebuilds. */
+/** Changes the selected ramp's values: one undo step per hold or quick run, the mesh rebuilds. */
 function editSelectedRamp(patch: RampPatch): void {
   const sel = selectedScenery;
   if (!area || sel?.kind !== "ramp") return;
@@ -2835,7 +2835,18 @@ function editSelectedRamp(patch: RampPatch): void {
     return;
   }
   panelEditing = true;
-  applyResult(dispatcher.commitScenery({ objects: r.objects }), 0);
+  // A held stepper button repeats every 80 ms: the whole hold is one undo step, per value.
+  applyResult(
+    dispatcher.commitScenery(
+      { objects: r.objects },
+      {
+        key: `ramp:${sel.id}:${Object.keys(patch).sort().join(",")}`,
+        nowMs: performance.now(),
+        windowMs: EDIT_MERGE_WINDOW_MS,
+      },
+    ),
+    0,
+  );
   panelEditing = false;
   selectedPanelKey = selectionPanelKey();
   updateHistoryButtons();

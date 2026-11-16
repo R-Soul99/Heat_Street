@@ -1484,6 +1484,40 @@ describe("scenery undo and building re-seat (07.1.3 D-16)", () => {
       expect(area.buildings?.[0]?.rotationY).toBe(0.1);
     });
 
+    it("WR-03: a ramp stepper held from 2 m to 50 m is one step and keeps earlier history", () => {
+      const { area, d } = setup();
+      const ramp = (heightM: number) => [
+        {
+          kind: "crest" as const,
+          crest: { id: "ramp-1", centerX: 5, centerZ: 5, radiusM: 0, heightM },
+        },
+      ];
+      d.commitScenery({ features: [tree(1)] });
+      d.commitScenery({ objects: ramp(2) });
+      // First tick, the 400 ms hold delay, then one tick every 80 ms: 96 ticks of 0.5 m.
+      for (let i = 1; i <= 96; i++) {
+        const nowMs = i === 1 ? 0 : 400 + (i - 2) * 80;
+        d.commitScenery(
+          { objects: ramp(2 + i * 0.5) },
+          { key: "ramp:ramp-1:heightM", nowMs, windowMs: 700 },
+        );
+      }
+      expect(area.objects?.[0]?.crest.heightM).toBe(50);
+      // A different value of the same ramp is its own step.
+      d.commitScenery(
+        { objects: ramp(51) },
+        { key: "ramp:ramp-1:angleDeg", nowMs: 8000, windowMs: 700 },
+      );
+      d.undo();
+      expect(area.objects?.[0]?.crest.heightM).toBe(50);
+      d.undo();
+      expect(area.objects?.[0]?.crest.heightM).toBe(2);
+      d.undo();
+      d.undo();
+      expect(area.features ?? []).toEqual([]);
+      expect(d.canUndo()).toBe(false);
+    });
+
     it("an unbounded window merges a key repeat however late it arrives", () => {
       const { area, d } = setup();
       d.commitScenery({ buildings: turned(0) });
