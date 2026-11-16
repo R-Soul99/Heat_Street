@@ -143,7 +143,7 @@ import { LiveInputSource } from "./input/live-input";
 import { type LoopHandle, startLoop } from "./loop";
 import { lineOfSightClear } from "./physics/ai-avoidance";
 import { createAiFleet } from "./physics/ai-fleet";
-import { createGroundProbe } from "./physics/ground-probe";
+import { createGroundSampler } from "./physics/ground-probe";
 import { createMapScene, type MapScene, SPAWN_CLEARANCE_M } from "./physics/map-scene";
 import { createTerrainScene } from "./physics/terrain-scene";
 import { TransformCache } from "./physics/transform-cache";
@@ -770,20 +770,18 @@ try {
   // from the grey tarmac (they were invisible bumps), and lay a shadow patch
   // on the ground below the car so the camera can see how high it is.
   let carShadow: ReturnType<typeof createCarShadow> | undefined;
-  let groundProbe: ReturnType<typeof createGroundProbe> | undefined;
+  let groundSampler: ReturnType<typeof createGroundSampler> | undefined;
   if (isTerrain || isFlatTestArea(AREA_ID)) {
     for (const crest of mapView.crestMeshes) {
       shadeByHeight(crest);
       view.scene.add(crest);
     }
   }
-  // WR-05: feel-test keeps its shadow and ground probe whether it loads as
-  // terrain (the default since plan 11) or legacy.
-  if (isFlatTestArea(AREA_ID)) {
-    carShadow = createCarShadow(tuning.chassis.halfExtents);
-    view.scene.add(carShadow.object);
-    groundProbe = createGroundProbe(world, scene.vehicle.body);
-  }
+  // Every map gets the player's contact shadow (one draw call). The bright
+  // footprint outline and stem (two more draws) stay on the proving grounds only.
+  carShadow = createCarShadow(tuning.chassis.halfExtents, isFlatTestArea(AREA_ID));
+  view.scene.add(carShadow.object);
+  groundSampler = createGroundSampler(world, scene.vehicle.body);
 
   /** One render frame's mutable per-wheel FX sample -- `SurfaceFxWheelInput`'s shape, but writable at this call site (the interface itself is `readonly` for `fx.update`'s own callers). */
   interface WheelFxSample {
@@ -1523,9 +1521,9 @@ try {
         terrainDbg?.rebuilt(rebuilt);
       }
       terrainDbg?.end();
-      if (carShadow !== undefined && groundProbe !== undefined) {
+      if (carShadow !== undefined && groundSampler !== undefined) {
         const p = view.meshes[0].position;
-        carShadow.update(view.meshes[0], groundProbe(p.x, p.y + 0.5, p.z));
+        carShadow.update(view.meshes[0], groundSampler(p.x, p.y + 0.5, p.z));
       }
       // `freeLook?.restoreRigPose()` runs BEFORE `activeRig.update(dtMs)` —
       // LOAD-BEARING ordering (src/debug/free-look-camera.ts's own doc

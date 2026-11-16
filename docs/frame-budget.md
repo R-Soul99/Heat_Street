@@ -333,3 +333,15 @@ handful of instanced and merged draws. Render CPU time is not recorded here; the
 33 ms per frame in a background-driven session, which is not a representative frame time.
 
 The headless numbers are counted from the built geometry.
+
+## Player contact shadow (quick 261116-a69)
+
+The player car has a soft dark ground patch under it on every map (`src/render/car-shadow.ts`):
+one flat quad, one added draw call, no extra shadow pass, no extra lights. It is placed with one
+downward physics ray per rendered frame (`createGroundSampler`, read-only). The proving grounds
+(`isFlatTestArea`) keep their bright footprint outline and stem line as well, which are two more
+draws there only. The sun's shadow window now follows the car (`VehicleView.followShadow`), which
+costs no draws: same single shadow pass, moved each frame.
+
+Expected change: demo-hills driving peak of 70 draws becomes about 71 (limit 80). Not yet measured
+in a browser.
