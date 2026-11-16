@@ -435,6 +435,40 @@ export function deleteBuilding(
   return buildings.filter((_, k) => k !== index);
 }
 
+/**
+ * Buildings have no id in the map format, so a building selection is an array index plus the
+ * building object it was made on. This finds where that building is NOW, or -1 when it is
+ * gone, so a selection can never silently move to a different building after undo, redo or
+ * a delete shifts the array:
+ *  - the same object still at the index: unchanged;
+ *  - the same object at another index (undo put an earlier building back): the new index;
+ *  - a new object at the index with the same footprint, turn and style (a sculpt re-seated
+ *    it, only its height changed): still that building;
+ *  - anything else: -1.
+ */
+export function resolveBuildingIndex(
+  buildings: readonly TerrainBuilding[],
+  index: number,
+  ref: TerrainBuilding,
+): number {
+  if (buildings[index] === ref) return index;
+  const at = buildings.indexOf(ref);
+  if (at >= 0) return at;
+  const b = buildings[index];
+  if (
+    b !== undefined &&
+    b.center.x === ref.center.x &&
+    b.center.z === ref.center.z &&
+    b.halfExtents.x === ref.halfExtents.x &&
+    b.halfExtents.z === ref.halfExtents.z &&
+    b.rotationY === ref.rotationY &&
+    b.style === ref.style
+  ) {
+    return index;
+  }
+  return -1;
+}
+
 // ---------------------------------------------------------------- scatter
 
 export interface ScatterSpec {

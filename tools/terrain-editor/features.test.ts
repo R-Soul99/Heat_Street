@@ -30,6 +30,7 @@ import {
   pickFeatureAt,
   pickFeatureByRay,
   removeInMask,
+  resolveBuildingIndex,
   rotateFeature,
   scaleFeature,
   scatterPoints,
@@ -545,6 +546,53 @@ describe("pickFeatureByRay ramps", () => {
       id: "ramp-1",
     });
     expect(pickFeatureAt([], [], objects, 10 + len * 0.5, 30, 0.5)).toBeUndefined();
+  });
+});
+
+// WR-04: buildings have no id, so the selection follows the object, never just the index.
+describe("resolveBuildingIndex", () => {
+  const b = (x: number, style?: string): TerrainBuilding => ({
+    center: { x, y: 2, z: 10 },
+    halfExtents: { x: 3, y: 2, z: 3 },
+    rotationY: 0,
+    ...(style !== undefined ? { style } : {}),
+  });
+  const b0 = b(0);
+  const b1 = b(20);
+  const b2 = b(40);
+
+  it("keeps the index while the same object is there", () => {
+    expect(resolveBuildingIndex([b0, b1, b2], 1, b1)).toBe(1);
+  });
+
+  it("follows the building when undo puts an earlier one back", () => {
+    // b1 was deleted, b2 was selected at index 1, then Ctrl+Z restored b1.
+    const afterDelete = deleteBuilding([b0, b1, b2], 1);
+    expect(resolveBuildingIndex(afterDelete, 1, b2)).toBe(1);
+    expect(resolveBuildingIndex([b0, b1, b2], 1, b2)).toBe(2);
+  });
+
+  it("follows the building when a delete in front shifts it down", () => {
+    expect(resolveBuildingIndex([b1, b2], 2, b2)).toBe(1);
+  });
+
+  it("is -1 when the building is gone, never the one that took its index", () => {
+    expect(resolveBuildingIndex([b0, b2], 1, b1)).toBe(-1);
+    expect(resolveBuildingIndex([b0], 1, b1)).toBe(-1);
+    expect(resolveBuildingIndex([], 0, b0)).toBe(-1);
+  });
+
+  it("keeps a building a sculpt re-seated in place (only its height changed)", () => {
+    const styled = b(20, "shed");
+    const reseated: TerrainBuilding = {
+      ...styled,
+      center: { ...styled.center, y: 5 },
+      halfExtents: { ...styled.halfExtents, y: 3 },
+    };
+    expect(resolveBuildingIndex([b0, reseated], 1, styled)).toBe(1);
+    // Undoing a move puts a building with another position at the index: not the same one.
+    const moved: TerrainBuilding = { ...styled, center: { ...styled.center, x: 25 } };
+    expect(resolveBuildingIndex([b0, moved], 1, styled)).toBe(-1);
   });
 });
 

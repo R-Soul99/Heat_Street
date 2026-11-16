@@ -124,6 +124,7 @@ import {
   type RampPatch,
   rampFootprint,
   removeInMask,
+  resolveBuildingIndex,
   type ScenerySelection,
   scatterPoints,
   seatBuilding,
@@ -2378,6 +2379,11 @@ const MOVE_MIN_M = 0.3;
 const BULK_DELETE_CONFIRM_ABOVE = 20;
 
 let selectedScenery: ScenerySelection | null = null;
+/**
+ * The building object a building selection was made on. Buildings have no id, so the index
+ * alone would point at a different building once undo, redo or a delete shifts the array.
+ */
+let selectedBuildingRef: TerrainBuilding | null = null;
 let hoverScenery: ScenerySelection | null = null;
 let moveGhost: THREE.Object3D | null = null;
 let lastMoveReason = "";
@@ -2459,6 +2465,27 @@ function sceneryBounds(sel: ScenerySelection): THREE.Box3 | null {
   return box;
 }
 
+/** Follows the selected building to its current index, or drops the selection when it is gone. */
+function resolveSelectedBuilding(): void {
+  const sel = selectedScenery;
+  if (sel?.kind !== "building") return;
+  const ref = selectedBuildingRef;
+  const index = area && ref ? resolveBuildingIndex(area.buildings, sel.index, ref) : -1;
+  if (!area || index < 0) {
+    selectedScenery = null;
+    selectedBuildingRef = null;
+    return;
+  }
+  if (index !== sel.index) selectedScenery = { kind: "building", index };
+  selectedBuildingRef = area.buildings[index] ?? null;
+}
+
+/** An edit of the selected building is about to replace its object: follow the new one. */
+function followEditedBuilding(next: readonly TerrainBuilding[] | undefined): void {
+  const sel = selectedScenery;
+  if (sel?.kind === "building" && next) selectedBuildingRef = next[sel.index] ?? null;
+}
+
 function selectableNow(): boolean {
   return dispatcher.getMode() === "select" && dispatcher.placing() === null;
 }
@@ -2466,6 +2493,7 @@ function selectableNow(): boolean {
 /** Shows or hides the accent selection box and the 50% hover box. */
 function refreshSceneryBoxes(): void {
   const ok = selectableNow() && area !== null;
+  resolveSelectedBuilding();
   if (selectedScenery && !(ok && sceneryExists(selectedScenery))) selectedScenery = null;
   const sb = ok && selectedScenery ? sceneryBounds(selectedScenery) : null;
   if (sb) selectedBox.box.copy(sb);
@@ -2479,6 +2507,7 @@ function refreshSceneryBoxes(): void {
 
 function selectScenery(sel: ScenerySelection | null): void {
   selectedScenery = sel;
+  selectedBuildingRef = sel?.kind === "building" ? (area?.buildings[sel.index] ?? null) : null;
   refreshSceneryBoxes();
 }
 
@@ -2536,6 +2565,7 @@ function clearMoveGhost(): void {
 function resetSceneryMove(): void {
   moveDrag = null;
   selectedScenery = null;
+  selectedBuildingRef = null;
   hoverScenery = null;
   clearMoveGhost();
   refreshSceneryBoxes();
@@ -2675,6 +2705,7 @@ function finishMoveDrag(e: PointerEvent): void {
   if (res.features) parts.features = res.features;
   if (res.buildings) parts.buildings = res.buildings;
   if (res.objects) parts.objects = res.objects;
+  followEditedBuilding(res.buildings);
   applyResult(dispatcher.commitScenery(parts), 0);
   updateHistoryButtons();
   refreshSceneryBoxes();
@@ -2683,6 +2714,7 @@ function finishMoveDrag(e: PointerEvent): void {
 
 /** Delete with a selected placed item removes it as one undo step. False when nothing applies. */
 function deleteSelectedScenery(): boolean {
+  resolveSelectedBuilding();
   if (!area || moveDrag || !selectedScenery || !selectableNow()) return false;
   const sel = selectedScenery;
   if (!sceneryExists(sel)) return false;
@@ -2772,6 +2804,7 @@ function isRotatable(sel: ScenerySelection): boolean {
  * False when there is nothing to turn.
  */
 function rotateSelectedScenery(deg: number, held: boolean): boolean {
+  resolveSelectedBuilding();
   if (!area || moveDrag || !selectedScenery || !selectableNow()) return false;
   const sel = selectedScenery;
   if (!sceneryExists(sel) || !isRotatable(sel)) return false;
@@ -2792,6 +2825,7 @@ function rotateSelectedScenery(deg: number, held: boolean): boolean {
   if (res.features) parts.features = res.features;
   if (res.buildings) parts.buildings = res.buildings;
   if (res.objects) parts.objects = res.objects;
+  followEditedBuilding(res.buildings);
   applyResult(
     dispatcher.commitScenery(parts, {
       key: `rotate:${JSON.stringify(sel)}`,
@@ -4370,7 +4404,15 @@ function deleteSelectedStart(): boolean {
 }
 
 function undoRedo(kind: "undo" | "redo"): void {
-  if (!area || stroking || pushPull || opHold || sceneryGestureActive() || lineBuilder.active()) {
+  if (
+    !area ||
+    stroking ||
+    pushPull ||
+    opHold ||
+    moveDrag || // a move drag holds an index into the buildings undo would rearrange
+    sceneryGestureActive() ||
+    lineBuilder.active()
+  ) {
     return;
   }
   const r = kind === "undo" ? dispatcher.undo() : dispatcher.redo();
