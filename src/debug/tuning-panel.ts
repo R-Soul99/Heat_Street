@@ -68,6 +68,7 @@ import { SURFACE_TYPES } from "../core/surface-types";
 import { parseTuningSnapshot, serializeTuningSnapshot } from "../core/tuning-snapshot";
 import {
   defaultTuning,
+  REAR_OVERRIDE_KEYS,
   serializeTuning,
   TUNING_RANGES,
   TUNING_STORAGE_KEY,
@@ -344,6 +345,17 @@ export function createTuningPanel(
     "maxSuspensionForce",
     ranges.wheels.maxSuspensionForce,
   ).onChange(handlers.onApplyVehicle);
+  const rearOverride = tuning.wheels.rear;
+  if (rearOverride !== undefined && typeof rearOverride === "object") {
+    const rearFolder = suspensionFolder.addFolder("Rear axle");
+    for (const key of REAR_OVERRIDE_KEYS) {
+      if (key in rearOverride) {
+        addNumber(rearFolder, rearOverride, key, ranges.wheels[key]).onChange(
+          handlers.onApplyVehicle,
+        );
+      }
+    }
+  }
 
   // ---- Grip --------------------------------------------------------------
   // `frictionSlip`: [MEASURED] dead above ~10 (10.5 and 1000 read identical,

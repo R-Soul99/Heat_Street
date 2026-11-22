@@ -88,6 +88,12 @@ export interface VehicleTuning {
     angularDamping: number;
   };
   readonly wheels: {
+    /**
+     * Optional rear-axle override (D-03). Absent = rear wheels use the front
+     * values. Only the 7 `REAR_OVERRIDE_KEYS` fields; range-checked against
+     * the front-wheel ranges. Never present in the default or class defaults.
+     */
+    rear?: WheelAxleOverride;
     /** Half the track width (left-right wheel spacing / 2), metres. */
     halfTrack: number;
     /** Half the wheelbase (front-rear wheel spacing / 2), metres. */
@@ -997,7 +1003,92 @@ export function clampTuning(t: VehicleTuning, ranges: TuningRanges = TUNING_RANG
     ranges as unknown as Record<string, unknown>,
     fallback,
   );
+  clampRearOverride(t, ranges);
   return t;
+}
+
+/**
+ * Sanitises the optional `wheels.rear` override: drops it if it is not a plain
+ * object, otherwise rebuilds it from the explicit key list only, clamping each
+ * value to the front-wheel range (non-finite falls back to the front value).
+ */
+function clampRearOverride(t: VehicleTuning, ranges: TuningRanges): void {
+  const wheels = t.wheels as { rear?: unknown };
+  if (!Object.hasOwn(wheels, "rear")) {
+    return;
+  }
+  const raw = wheels.rear;
+  if (!isPlainObject(raw)) {
+    delete wheels.rear;
+    return;
+  }
+  const out: WheelAxleOverride = {};
+  for (const key of REAR_OVERRIDE_KEYS) {
+    if (!Object.hasOwn(raw, key)) {
+      continue;
+    }
+    const v = raw[key];
+    const r = ranges.wheels[key];
+    const value = typeof v === "number" && Number.isFinite(v) ? v : t.wheels[key];
+    out[key] = Math.min(r.max, Math.max(r.min, value));
+  }
+  wheels.rear = out;
+}
+
+/** The seven wheel fields a rear axle may override. */
+export const REAR_OVERRIDE_KEYS = [
+  "radius",
+  "suspensionRestLength",
+  "maxSuspensionTravel",
+  "suspensionStiffness",
+  "suspensionCompression",
+  "suspensionRelaxation",
+  "connectionY",
+] as const;
+
+/** Optional per-axle override of the seven suspension/geometry fields. */
+export interface WheelAxleOverride {
+  radius?: number;
+  suspensionRestLength?: number;
+  maxSuspensionTravel?: number;
+  suspensionStiffness?: number;
+  suspensionCompression?: number;
+  suspensionRelaxation?: number;
+  connectionY?: number;
+}
+
+/** Resolved per-wheel values (all required). */
+export interface WheelParams {
+  radius: number;
+  suspensionRestLength: number;
+  maxSuspensionTravel: number;
+  suspensionStiffness: number;
+  suspensionCompression: number;
+  suspensionRelaxation: number;
+  connectionY: number;
+}
+
+/** Per-wheel params; index 0/1 front, 2/3 rear (rear overlays `wheels.rear`). */
+export function wheelParams(t: VehicleTuning, i: number): WheelParams {
+  const w = t.wheels;
+  const p: WheelParams = {
+    radius: w.radius,
+    suspensionRestLength: w.suspensionRestLength,
+    maxSuspensionTravel: w.maxSuspensionTravel,
+    suspensionStiffness: w.suspensionStiffness,
+    suspensionCompression: w.suspensionCompression,
+    suspensionRelaxation: w.suspensionRelaxation,
+    connectionY: w.connectionY,
+  };
+  if (i >= 2 && w.rear !== undefined) {
+    for (const key of REAR_OVERRIDE_KEYS) {
+      const v = w.rear[key];
+      if (v !== undefined) {
+        p[key] = v;
+      }
+    }
+  }
+  return p;
 }
 
 /**
@@ -1063,6 +1154,16 @@ export function parseSavedTuning(
     result as unknown as Record<string, unknown>,
     ranges as unknown as Record<string, unknown>,
   );
+  const parsedWheels = parsed.wheels;
+  if (isPlainObject(parsedWheels) && isPlainObject(parsedWheels.rear)) {
+    const rear: WheelAxleOverride = {};
+    for (const key of REAR_OVERRIDE_KEYS) {
+      if (Object.hasOwn(parsedWheels.rear, key) && typeof parsedWheels.rear[key] === "number") {
+        rear[key] = parsedWheels.rear[key] as number;
+      }
+    }
+    (result.wheels as { rear?: WheelAxleOverride }).rear = rear;
+  }
   clampTuning(result, ranges);
   return result;
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   clampTuning,
   defaultTuning,
+  serializeTuning,
   TUNING_RANGES,
   type TuningRange,
   type TuningRanges,
   type VehicleTuning,
+  wheelParams,
 } from "../src/core/vehicle-tuning";
 
 /**
@@ -165,5 +167,42 @@ describe("clampTuning ranges argument (D-02)", () => {
     const t = defaultTuning();
     t.chassis.mass = 6000;
     expect(clampTuning(t, customRanges()).chassis.mass).toBe(6000);
+  });
+});
+
+describe("wheels.rear override (D-03)", () => {
+  it("is absent from defaultTuning and its serialisation", () => {
+    const t = defaultTuning();
+    expect("rear" in t.wheels).toBe(false);
+    expect(serializeTuning(t)).not.toContain('rear"');
+  });
+
+  it("wheelParams without rear equals front for all four wheels", () => {
+    const t = defaultTuning();
+    const front = wheelParams(t, 0);
+    for (let i = 0; i < 4; i++) {
+      expect(wheelParams(t, i)).toEqual(front);
+    }
+    expect(front.radius).toBe(t.wheels.radius);
+  });
+
+  it("applies a rear radius override to wheels 2 and 3 only", () => {
+    const t = defaultTuning();
+    t.wheels.rear = { radius: 0.45 };
+    expect(wheelParams(t, 2).radius).toBe(0.45);
+    expect(wheelParams(t, 3).radius).toBe(0.45);
+    expect(wheelParams(t, 0).radius).toBe(t.wheels.radius);
+    expect(wheelParams(t, 2).suspensionStiffness).toBe(t.wheels.suspensionStiffness);
+  });
+
+  it("clamps rear values against the supplied ranges", () => {
+    const r = structuredClone(TUNING_RANGES) as {
+      -readonly [K in keyof TuningRanges]: TuningRanges[K];
+    };
+    (r.wheels as { radius: TuningRange }).radius = { min: 0.1, max: 0.2, step: 0.01 };
+    const t = defaultTuning();
+    t.wheels.rear = { radius: 5 };
+    clampTuning(t, r);
+    expect(t.wheels.rear?.radius).toBe(0.2);
   });
 });
