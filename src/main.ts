@@ -120,7 +120,12 @@ import {
   resolveVehicleClassId,
   VEHICLE_CLASSES,
 } from "./core/vehicle-class";
-import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
+import {
+  defaultTuning,
+  parseSavedTuning,
+  TUNING_STORAGE_KEY,
+  wheelParams,
+} from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createDriveLogger } from "./debug/drive-logger";
@@ -694,6 +699,7 @@ try {
       includePhase2Ground: false,
       groundExtents,
       chassisColor: CAR_CLASS.chassisColor,
+      rearWheelRadius: wheelParams(tuning, 2).radius,
       // Off on sculpted terrain maps (a flat plane at y = 0 means nothing there); `?grid=1|0` overrides.
       showGrid: shouldShowReferenceGrid(
         parseGridOverride(location.search),
@@ -729,22 +735,24 @@ try {
       ? undefined
       : createAiVehicleViews(
           view.scene,
-          tuning.wheels.radius,
-          tuning.wheels.halfTrack,
-          tuning.wheels.halfWheelbase,
-          tuning.chassis.halfExtents,
+          aiTuning.wheels.radius,
+          aiTuning.wheels.halfTrack,
+          aiTuning.wheels.halfWheelbase,
+          aiTuning.chassis.halfExtents,
           AI_PAINTS.map((paint) => paint.hex),
+          wheelParams(aiTuning, 2).radius,
         );
   const pursuitViews =
     pursuit === undefined
       ? undefined
       : createAiVehicleViews(
           view.scene,
-          tuning.wheels.radius,
-          tuning.wheels.halfTrack,
-          tuning.wheels.halfWheelbase,
-          tuning.chassis.halfExtents,
+          aiTuning.wheels.radius,
+          aiTuning.wheels.halfTrack,
+          aiTuning.wheels.halfWheelbase,
+          aiTuning.chassis.halfExtents,
           pursuit.drivers.map((_, i) => pursuerPaint(i)),
+          wheelParams(aiTuning, 2).radius,
         );
   const interpolated: readonly THREE.Object3D[] = [
     ...(aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes]),

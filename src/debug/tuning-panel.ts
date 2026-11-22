@@ -350,9 +350,12 @@ export function createTuningPanel(
     const rearFolder = suspensionFolder.addFolder("Rear axle");
     for (const key of REAR_OVERRIDE_KEYS) {
       if (key in rearOverride) {
-        addNumber(rearFolder, rearOverride, key, ranges.wheels[key]).onChange(
-          handlers.onApplyVehicle,
-        );
+        addNumber(
+          rearFolder,
+          rearOverride as Record<string, number>,
+          key,
+          ranges.wheels[key],
+        ).onChange(handlers.onApplyVehicle);
       }
     }
   }

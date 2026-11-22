@@ -46,9 +46,17 @@ export function createAiVehicleViews(
   halfWheelbase: number,
   chassisHalfExtents: { x: number; y: number; z: number },
   colors: readonly number[],
+  rearWheelRadius?: number,
 ): AiVehicleViews {
   const cars: CarMeshes[] = colors.map((color) =>
-    buildCarMeshes(wheelRadius, halfTrack, halfWheelbase, chassisHalfExtents, color),
+    buildCarMeshes(
+      wheelRadius,
+      halfTrack,
+      halfWheelbase,
+      chassisHalfExtents,
+      color,
+      rearWheelRadius,
+    ),
   );
   for (const car of cars) {
     scene.add(car.chassis);
