@@ -5,6 +5,7 @@
  * rapier imports. Index lookups into `VEHICLE_CLASSES` only ever use an
  * already-allowlisted `VehicleClassId`.
  */
+import { SURFACE_TYPES, type SurfaceType } from "./surface-types";
 import {
   defaultTuning,
   TUNING_RANGES,
@@ -25,6 +26,20 @@ export function resolveVehicleClassId(search: string): VehicleClassId {
   return match ?? DEFAULT_VEHICLE_CLASS_ID;
 }
 
+/** Per-surface-type multipliers on the surface profile's forward and lateral grip (D-06). */
+export type SurfaceGripScale = Readonly<
+  Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>
+>;
+
+function buildUnitSurfaceGripScale(): SurfaceGripScale {
+  const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
+  for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
+  return Object.freeze(table);
+}
+
+/** All-ones table: inert for the existing classes. */
+export const UNIT_SURFACE_GRIP_SCALE: SurfaceGripScale = buildUnitSurfaceGripScale();
+
 export interface VehicleClassSpec {
   readonly id: VehicleClassId;
   readonly label: string;
@@ -32,6 +47,8 @@ export interface VehicleClassSpec {
   /** Fraction (0..1) of total drive force sent to the front axle. */
   readonly frontDriveShare: number;
   readonly storageKey: string;
+  /** Per-surface grip multipliers applied at the single surface-grip read site (D-06). */
+  readonly surfaceGripScale: SurfaceGripScale;
 }
 
 /**
@@ -46,6 +63,7 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     chassisColor: 0xb5321f,
     frontDriveShare: 0,
     storageKey: TUNING_STORAGE_KEY,
+    surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
   }),
   fwd: Object.freeze({
     id: "fwd",
@@ -53,6 +71,7 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     chassisColor: 0x3fbf3f,
     frontDriveShare: 1,
     storageKey: "heat-street.tuning.fwd.v1",
+    surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
   }),
   awd: Object.freeze({
     id: "awd",
@@ -61,6 +80,7 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     // Configurable front/rear bias: mild rear bias keeps muscle-car character.
     frontDriveShare: 0.4,
     storageKey: "heat-street.tuning.awd.v1",
+    surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
   }),
 });
 

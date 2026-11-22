@@ -17,8 +17,8 @@ import * as RAPIER from "@dimforge/rapier3d";
 import { engineForceScale, REVERSE_TOP_MS, steerLockScale } from "../core/drivetrain";
 import type { InputFrame } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
-import type { SurfaceType } from "../core/surface-types";
-import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
+import { SURFACE_TYPES, type SurfaceType } from "../core/surface-types";
+import { frontDriveThrustN, type SurfaceGripScale, wheelEngineForces } from "../core/vehicle-class";
 import { type VehicleTuning, wheelParams } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
 import { applyAssists, applyLandingCushion, boxPrincipalInertia } from "./vehicle-assists";
@@ -281,12 +281,32 @@ export interface Vehicle {
  * reference to "the player" (D-09): Phase 7/8 constructs pursuers through
  * this exact same call.
  */
+export interface CreateVehicleOptions {
+  /** Per-surface grip multipliers (player car only). Omitted = raw profile grip. */
+  readonly surfaceGripScale?: SurfaceGripScale;
+}
+
 export function createVehicle(
   world: RAPIER.World,
   tuning: VehicleTuning,
   spawn: { x: number; y: number; z: number },
   frontDriveShare = 0,
+  options?: CreateVehicleOptions,
 ): Vehicle {
+  const classGripScale = options?.surfaceGripScale ?? null;
+  if (classGripScale !== null) {
+    for (const s of SURFACE_TYPES) {
+      const e = classGripScale[s];
+      if (
+        !Number.isFinite(e.forward) ||
+        !Number.isFinite(e.lateral) ||
+        e.forward <= 0 ||
+        e.lateral <= 0
+      ) {
+        throw new RangeError(`surfaceGripScale[${s}] must be finite and > 0`);
+      }
+    }
+  }
   if (!Number.isFinite(frontDriveShare) || frontDriveShare < 0 || frontDriveShare > 1) {
     throw new RangeError(`frontDriveShare must be finite and within 0..1, got ${frontDriveShare}`);
   }
@@ -596,15 +616,20 @@ export function createVehicle(
           }
           wheelSurfaces[i] = surface;
           const profile = surfaces.profiles[surface];
+          const scale = classGripScale === null ? null : classGripScale[surface];
+          const targetLateral =
+            scale === null ? profile.lateralGrip : profile.lateralGrip * scale.lateral;
+          const targetForward =
+            scale === null ? profile.forwardGrip : profile.forwardGrip * scale.forward;
           // Blend toward the painted surface's grip: slow to regrip (the tyre
           // sheds mud/sand), fast to degrip. Seeded to the target after a reset
           // so a spawn does not blend in from a stale surface.
           if (!blendSeeded) {
-            blendLateral[i] = profile.lateralGrip;
-            blendForward[i] = profile.forwardGrip;
+            blendLateral[i] = targetLateral;
+            blendForward[i] = targetForward;
           } else {
-            blendLateral[i] = blendToward(blendLateral[i] as number, profile.lateralGrip, t.wheels);
-            blendForward[i] = blendToward(blendForward[i] as number, profile.forwardGrip, t.wheels);
+            blendLateral[i] = blendToward(blendLateral[i] as number, targetLateral, t.wheels);
+            blendForward[i] = blendToward(blendForward[i] as number, targetForward, t.wheels);
           }
           const lateralGrip = blendLateral[i] as number;
           const forwardGrip = blendForward[i] as number;

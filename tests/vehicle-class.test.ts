@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { AI_PAINTS } from "../src/core/race-start";
+import { SURFACE_TYPES } from "../src/core/surface-types";
 import {
   classDefaultTuning,
   classTuningRanges,
   frontDriveThrustN,
   KNOWN_VEHICLE_CLASS_IDS,
   resolveVehicleClassId,
+  UNIT_SURFACE_GRIP_SCALE,
   VEHICLE_CLASSES,
   wheelEngineForces,
 } from "../src/core/vehicle-class";
@@ -186,6 +188,19 @@ describe("classTuningRanges", () => {
   it("returns the TUNING_RANGES object itself for rwd, fwd and awd (D-02)", () => {
     for (const id of KNOWN_VEHICLE_CLASS_IDS) {
       expect(classTuningRanges(id)).toBe(TUNING_RANGES);
+    }
+  });
+});
+
+describe("surfaceGripScale", () => {
+  it("every class uses the frozen all-ones table", () => {
+    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+      expect(VEHICLE_CLASSES[id].surfaceGripScale).toBe(UNIT_SURFACE_GRIP_SCALE);
+    }
+    expect(Object.isFrozen(UNIT_SURFACE_GRIP_SCALE)).toBe(true);
+    for (const s of SURFACE_TYPES) {
+      expect(UNIT_SURFACE_GRIP_SCALE[s]).toEqual({ forward: 1, lateral: 1 });
+      expect(Object.isFrozen(UNIT_SURFACE_GRIP_SCALE[s])).toBe(true);
     }
   });
 });
