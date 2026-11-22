@@ -5,3 +5,4 @@ coverage/
 *.local
 .DS_Store
 out/
+UI_DESIGN/
