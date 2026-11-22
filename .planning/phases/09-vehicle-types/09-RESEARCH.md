@@ -223,12 +223,12 @@ Not applicable (no library choices). Note Rapier 0.20.0 index-based vehicle API 
 | A3 | Rapier golden literals are reproducible across machines to 1e-6 | Code Examples | Rapier non-deterministic build is not cross-platform guaranteed; a literal recorded on this machine may differ on CI. Mitigate: this project is single-dev/local; if a second machine is used, loosen to 1e-4 and say so |
 | A4 | Multiplying surface grip by exactly 1.0 is bit-identical | Stage-to-code map | IEEE-754 guarantees x*1 === x for finite x; the golden-with-surface test proves it |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **D-08: fwd/awd save medals today.** No class gate exists in `main.ts`. Options: (a) leave as is for fwd/awd and gate only the four new classes to "show time, no medal"; (b) gate everything non-rwd. Needs the user because it changes current behaviour for fwd/awd under (b). Recommend (a): zero change to shipped behaviour, new classes (which cannot be compared against rwd medal times) do not save. Where to gate: the `saveMedalResult` call site (~main.ts:1007) and the solo coordinator's medal path; confirm how a "show time without medal" result displays (results view) before planning.
-2. **D-07 AI stays muscle cars** is still a default awaiting confirmation; research assumes yes. The leak fix in Summary item 4 is needed either way.
-3. **Camera framing** for the tall/long vehicles (`camera-tuning.ts`): decide after the spike with a visual check; the class spec field is conditional.
-4. **Collision with AI at 4500 kg** (stage 7.5): measure headlessly; mitigation is restitution, not mass.
+1. **D-08: fwd/awd save medals today.** No class gate exists in `main.ts`. Options: (a) leave as is for fwd/awd and gate only the four new classes to "show time, no medal"; (b) gate everything non-rwd. Needs the user because it changes current behaviour for fwd/awd under (b). Recommend (a): zero change to shipped behaviour, new classes (which cannot be compared against rwd medal times) do not save. Where to gate: the `saveMedalResult` call site (~main.ts:1007) and the solo coordinator's medal path; confirm how a "show time without medal" result displays (results view) before planning. **RESOLVED (2026-11-22, user):** option (a), recorded as CONTEXT D-08; implemented by 09-06 `savesMedals` gate.
+2. **D-07 AI stays muscle cars** is still a default awaiting confirmation; research assumes yes. The leak fix in Summary item 4 is needed either way. **RESOLVED (2026-11-22, user):** AI stays muscle car, CONTEXT D-07; mesh fix in 09-04.
+3. **Camera framing** for the tall/long vehicles (`camera-tuning.ts`): decide after the spike with a visual check; the class spec field is conditional. **RESOLVED:** checked by eye in the 09-11 human drive; a crop is routed to `/gsd-plan-phase 9 --gaps` (per-class camera offset added only then, per brief stage 7.4).
+4. **Collision with AI at 4500 kg** (stage 7.5): measure headlessly; mitigation is restitution, not mass. **RESOLVED:** measured by 09-10 Task 1 (`vehicle-collision.test.ts`); restitution is already 0, so an excessive launch stops for the user with numbers, no code change.
 
 ## Environment Availability
 

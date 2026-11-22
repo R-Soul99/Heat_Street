@@ -45,7 +45,7 @@ Filled in by the planner/executor per task. Requirement-level map:
 | VEH-06 | `classTuningRanges`: existing ids return `TUNING_RANGES` by reference; defaults/shipped inside own ranges | unit | `npx vitest run tests/vehicle-class.test.ts` | ✅ (extend) | ⬜ pending |
 | VEH-06 | `clampTuning`/`parseSavedTuning` default behaviour unchanged; blob without `rear` gains no `rear` key | unit | `npx vitest run tests/vehicle-tuning.test.ts tests/tuning-persist.test.ts` | ✅ (extend) | ⬜ pending |
 | VEH-07 | `wheels.rear` override: absent → front values; present → rear wheels differ; hostile values clamped | unit | `npx vitest run tests/vehicle-tuning.test.ts` | ✅ (extend) | ⬜ pending |
-| VEH-07 | `surfaceGripScale` < 1 lowers skidpad g; all-ones identical | integration | `npx vitest run tests/surface-telemetry.test.ts` | ❌ W0 | ⬜ pending |
+| VEH-07 | `surfaceGripScale` < 1 lowers skidpad g; all-ones identical | integration | `npx vitest run tests/surface-grip-scale.test.ts` | ❌ W0 | ⬜ pending |
 | SC4 | Per-vehicle 0-60 (±15%), settle < 2 s, tilt, no wheel lift on flat | integration | `npx vitest run tests/vehicle-types-targets.test.ts` | ❌ W0 | ⬜ pending |
 | SC3 | Monster spike result written | doc | `test -f .planning/plans-ahead/03-monster-spike-result.md` | ❌ W0 | ⬜ pending |
 | SC1 | Storage keys unique; colours distinct from `AI_PAINTS` | unit | `npx vitest run tests/vehicle-class.test.ts` | ✅ (extend) | ⬜ pending |
