@@ -92,6 +92,35 @@ export function measureZeroToSixty(tuning: VehicleTuning, opts?: MeasureOpts): n
   return runRoutine(accel, tuning, surfaceOpts, undefined, opts).value;
 }
 
+/** Idle ticks before throttle, matching the accel routine's SETTLE_TICKS. */
+const TIME_TO_SPEED_SETTLE_TICKS = 40;
+
+/**
+ * Seconds of full throttle (straight, after the same 40-tick settle as the accel
+ * routine) until forward speed reaches `speedMs`; +Infinity if not reached within
+ * 1800 ticks. Supports surface opts. `measureTimeToSpeed(t, 26.8224)` equals
+ * `measureZeroToSixty(t)`.
+ */
+export function measureTimeToSpeed(
+  tuning: VehicleTuning,
+  speedMs: number,
+  opts?: MeasureOpts,
+): number {
+  return withRig(tuning, opts, ({ step }) => {
+    for (let tick = 0; tick < 1800; tick++) {
+      const s = step(
+        tick < TIME_TO_SPEED_SETTLE_TICKS
+          ? IDLE
+          : { steer: 0, throttle: 1, brake: 0, handbrake: false },
+      );
+      if (tick >= TIME_TO_SPEED_SETTLE_TICKS && s.forwardSpeedMs >= speedMs) {
+        return (tick - TIME_TO_SPEED_SETTLE_TICKS) * DT;
+      }
+    }
+    return Number.POSITIVE_INFINITY;
+  });
+}
+
 /** Max forward speed (m/s) at full throttle, straight, over 1800 ticks. */
 export function measureTopSpeed(tuning: VehicleTuning, opts?: MeasureOpts): number {
   return withRig(tuning, opts, ({ step }) => {

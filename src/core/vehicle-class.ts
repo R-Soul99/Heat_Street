@@ -68,11 +68,12 @@ function buildRallyGripScale(): SurfaceGripScale {
   const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
   for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
   table.tarmac = Object.freeze({ forward: 0.97, lateral: 0.95 });
-  table.gravel = Object.freeze({ forward: 1.15, lateral: 1.15 });
-  table.dirt_road = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  // D-11 (09-10): best skidpad on gravel and dirt road; worst loose-surface launch in mud.
+  table.gravel = Object.freeze({ forward: 1.25, lateral: 1.15 });
+  table.dirt_road = Object.freeze({ forward: 1.25, lateral: 1.15 });
   table.grass = Object.freeze({ forward: 1.08, lateral: 1.08 });
   table.sand = Object.freeze({ forward: 1.08, lateral: 1.08 });
-  table.mud = Object.freeze({ forward: 1.08, lateral: 1.08 });
+  table.mud = Object.freeze({ forward: 0.5, lateral: 1.08 });
   return Object.freeze(table);
 }
 
@@ -80,9 +81,10 @@ function buildBuggyGripScale(): SurfaceGripScale {
   const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
   for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
   table.tarmac = Object.freeze({ forward: 0.92, lateral: 0.9 });
-  table.sand = Object.freeze({ forward: 1.25, lateral: 1.25 });
+  // D-11 (09-10): best skidpad on sand and quickest to 20 m/s in mud.
+  table.sand = Object.freeze({ forward: 1.5, lateral: 1.25 });
   table.grass = Object.freeze({ forward: 1.15, lateral: 1.15 });
-  table.mud = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  table.mud = Object.freeze({ forward: 1.5, lateral: 1.15 });
   table.gravel = Object.freeze({ forward: 1.1, lateral: 1.1 });
   table.dirt_road = Object.freeze({ forward: 1.1, lateral: 1.1 });
   return Object.freeze(table);
@@ -105,7 +107,8 @@ function buildMonsterGripScale(): SurfaceGripScale {
   for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
   table.tarmac = Object.freeze({ forward: 0.9, lateral: 0.85 });
   table.mud = Object.freeze({ forward: 1.3, lateral: 1.2 });
-  table.sand = Object.freeze({ forward: 1.2, lateral: 1.15 });
+  // D-11 (09-10): best skidpad in mud only; sand scale lowered so the buggy owns sand.
+  table.sand = Object.freeze({ forward: 1.0, lateral: 1.15 });
   table.grass = Object.freeze({ forward: 1.15, lateral: 1.1 });
   table.gravel = Object.freeze({ forward: 1.05, lateral: 1.0 });
   table.dirt_road = Object.freeze({ forward: 1.05, lateral: 1.0 });

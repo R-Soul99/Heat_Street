@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { shippedTuning } from "../src/core/feel";
 import { defaultSurfaceProfiles } from "../src/core/surface-tuning";
+import { SURFACE_TYPES } from "../src/core/surface-types";
 import { VEHICLE_CLASSES, type VehicleClassId } from "../src/core/vehicle-class";
 import { handbrakeRoutine, ROUTINES, TELEMETRY_TARGETS } from "../src/physics/telemetry/routines";
 import { runRoutine } from "../src/physics/telemetry/run";
@@ -9,6 +10,8 @@ import {
   measureFullLockTilt,
   measureRestContact,
   measureSettle,
+  measureSurfaceSkidpad,
+  measureTimeToSpeed,
   measureTopSpeed,
   measureZeroToSixty,
 } from "../src/physics/telemetry/vehicle-measure";
@@ -26,7 +29,7 @@ interface ClassTargets {
   readonly maxTiltDeg: number;
 }
 
-export const CLASS_TARGETS: Partial<Record<VehicleClassId, ClassTargets>> = {
+const CLASS_TARGETS: Partial<Record<VehicleClassId, ClassTargets>> = {
   rally: {
     zeroToSixtyS: 4.0,
     zeroToSixtyTol: 0.15,
@@ -161,3 +164,46 @@ for (const [rawId, target] of Object.entries(CLASS_TARGETS) as [VehicleClassId, 
     }
   });
 }
+
+describe("D-11 per-surface trade-offs", () => {
+  const NEW_CLASSES: readonly VehicleClassId[] = ["rally", "buggy", "truck", "monster"];
+  const REFERENCE: VehicleClassId = "rwd";
+  const profiles = defaultSurfaceProfiles();
+
+  it("no new vehicle is best everywhere, and each wins at least one cell", () => {
+    const cell = (id: VehicleClassId, surface: (typeof SURFACE_TYPES)[number]) => {
+      const opts = { ...optsFor(id), surface, profiles };
+      const tuning = shippedTuning(id);
+      return {
+        g: measureSurfaceSkidpad(tuning, surface, profiles, optsFor(id)),
+        t20: measureTimeToSpeed(tuning, 20, opts),
+      };
+    };
+    const rows: string[] = ["| surface | class | skidpad g | t20 s |", "|---|---|---|---|"];
+    const gWinners: VehicleClassId[] = [];
+    const tWinners: VehicleClassId[] = [];
+    for (const surface of SURFACE_TYPES) {
+      let bestG: { id: VehicleClassId; v: number } | undefined;
+      let bestT: { id: VehicleClassId; v: number } | undefined;
+      const contenders: VehicleClassId[] = [REFERENCE, ...NEW_CLASSES];
+      for (const id of contenders) {
+        const c: { g: number; t20: number } = cell(id, surface);
+        rows.push(`| ${surface} | ${id} | ${c.g.toFixed(2)} | ${c.t20.toFixed(2)} |`);
+        if (id === REFERENCE) continue;
+        if (bestG === undefined || c.g > bestG.v) bestG = { id, v: c.g };
+        if (bestT === undefined || c.t20 < bestT.v) bestT = { id, v: c.t20 };
+      }
+      if (bestG === undefined || bestT === undefined) throw new Error("no classes");
+      gWinners.push(bestG.id);
+      tWinners.push(bestT.id);
+    }
+    console.info(`[D-11] table\n${rows.join("\n")}`);
+    console.info(`[D-11] skidpad winners ${gWinners.join(",")}; t20 winners ${tWinners.join(",")}`);
+    // (a) neither metric is won by one class on every surface.
+    expect(new Set(gWinners).size).toBeGreaterThan(1);
+    expect(new Set(tWinners).size).toBeGreaterThan(1);
+    // (b) every new class wins at least one surface-metric cell.
+    const all = [...gWinners, ...tWinners];
+    for (const id of NEW_CLASSES) expect(all).toContain(id);
+  });
+});

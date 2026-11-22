@@ -11,6 +11,7 @@ import {
   measureRestContact,
   measureSettle,
   measureSurfaceSkidpad,
+  measureTimeToSpeed,
   measureTopSpeed,
   measureZeroToSixty,
 } from "../src/physics/telemetry/vehicle-measure";
@@ -95,5 +96,19 @@ describe("vehicle-measure helpers", () => {
     expect(
       Number.isFinite(measureSurfaceSkidpad(defaultTuning(), "tarmac", defaultSurfaceProfiles())),
     ).toBe(true);
+  });
+});
+
+describe("measureTimeToSpeed", () => {
+  it("equals measureZeroToSixty at 60 mph", () => {
+    expect(measureTimeToSpeed(defaultTuning(), 26.8224)).toBe(measureZeroToSixty(defaultTuning()));
+  });
+  it("is finite and quicker for a lower speed", () => {
+    const t20 = measureTimeToSpeed(defaultTuning(), 20);
+    expect(Number.isFinite(t20)).toBe(true);
+    expect(t20).toBeLessThan(measureTimeToSpeed(defaultTuning(), 26.8224));
+  });
+  it("is +Infinity when the speed is unreachable", () => {
+    expect(measureTimeToSpeed(defaultTuning(), 1000)).toBe(Number.POSITIVE_INFINITY);
   });
 });
