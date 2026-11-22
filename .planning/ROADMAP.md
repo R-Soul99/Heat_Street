@@ -580,7 +580,7 @@ Plans:
 
 **Wave 4**
 
-- [ ] 09-05-PLAN.md — Per-vehicle surface grip scale on the class spec (D-06)
+- [x] 09-05-PLAN.md — Per-vehicle surface grip scale on the class spec (D-06)
 
 **Wave 5**
 
@@ -663,7 +663,7 @@ Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended or
 | 7.1.2. Selection-based Editor Tools (INSERTED) | 15/15 | Complete (human UAT 10/10 2026-11-22) | 2026-11-14 |
 | 7.1.3. Editor Feature Palette (INSERTED) | 11/11 | Complete | 2026-11-16 |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
-| 9. Vehicle Types | 4/11 | In Progress|  |
+| 9. Vehicle Types | 5/11 | In Progress|  |
 | 10. Off-road Stages | 0/TBD | Not started | - |
 | 11. Art Pass | 0/TBD | Not started | - |
 
