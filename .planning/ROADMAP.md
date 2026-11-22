@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
 - [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette (completed 2026-11-16)
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
-- [ ] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car
+- [x] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car (completed 2026-11-22)
 - [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor; the same tool authors road race routes; ramps become built objects
 - [ ] **Phase 11: Art Pass** - Shaped car bodies and wheels; soft particles, dust trails, roost, landing bursts and continuous tyre tracks
 
@@ -604,7 +604,7 @@ Plans:
 
 **Wave 10**
 
-- [ ] 09-11-PLAN.md — Tuning guide, phase gate (golden + dossier identity), one-minute drive per vehicle
+- [x] 09-11-PLAN.md — Tuning guide, phase gate (golden + dossier identity), one-minute drive per vehicle
 
 ### Phase 10: Off-road Stages
 
@@ -663,7 +663,7 @@ Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended or
 | 7.1.2. Selection-based Editor Tools (INSERTED) | 15/15 | Complete (human UAT 10/10 2026-11-22) | 2026-11-14 |
 | 7.1.3. Editor Feature Palette (INSERTED) | 11/11 | Complete | 2026-11-16 |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
-| 9. Vehicle Types | 10/11 | In Progress|  |
+| 9. Vehicle Types | 11/11 | Complete   | 2026-11-22 |
 | 10. Off-road Stages | 0/TBD | Not started | - |
 | 11. Art Pass | 0/TBD | Not started | - |
 
