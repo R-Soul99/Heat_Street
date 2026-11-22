@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 Phase: 09
 Plan: Not started
-Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md; phase 7: all 7 plans done (07-07 human-approved 2026-11-15), awaiting phase verification
-Last activity: 2026-11-16 - Phase 07.1.3 complete (UAT 5/5 passed); todos folded into Phases 9 and 10
+Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md, then /gsd-plan-phase 9 (Phase 7 verified 2026-11-15, 07-VERIFICATION.md passed 5/5; Phase 07.1 closed, 07.1-12/13 covered by 07.1-UAT)
+Last activity: 2026-11-22 - Completed quick task 261122-qam: close out Phase 07.1 bookkeeping
 
 Progress: [██████████] 99%
 
@@ -275,6 +275,7 @@ Items acknowledged and carried forward from previous milestone close:
 | 261116-a69 | Car shadow: sun shadow follows the car, contact shadow on every map, reference grid off on terrain maps (?grid= override) | 2026-11-16 | bfab93a | [261116-a69-car-ground-shadow-for-height-cue](./quick/261116-a69-car-ground-shadow-for-height-cue/) |
 | 261116-qok | Editor: camera pad sits below the top bar (Drive no longer overlaps it); left pane header names the selected item and hides View | 2026-11-16 | 7168d99 | [261116-qok-editor-fixes-drive-button-clear-of-camer](./quick/261116-qok-editor-fixes-drive-button-clear-of-camer/) |
 | 261116-ryu | Rigid ramp deck from one base height (no terrain bumps on the deck); straight road drawing (Shift or Straight toggle) | 2026-11-16 | 2d5f3c8 | [261116-ryu-rigid-ramps-with-a-flat-deck-from-the-fo](./quick/261116-ryu-rigid-ramps-with-a-flat-deck-from-the-fo/) |
+| 261122-qam | Close out Phase 07.1 bookkeeping: progress table rows for 7.1-7.1.3, STATE next step (Phase 7 already verified) | 2026-11-22 | 3b71f80 | [261122-qam-close-out-phase-07-1-bookkeeping-and-wri](./quick/261122-qam-close-out-phase-07-1-bookkeeping-and-wri/) |
 
 ## Session Continuity
 

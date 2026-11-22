@@ -616,7 +616,10 @@ Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended or
 | 5. Objectives, Navigation & Race Modes | 4/4 | Complete | 2026-09-21 |
 | 6. Medals & Time-Attack Loop | 5/5 | Complete   | 2026-09-22 |
 | 7. NPC Driving AI & Circuit Racers | 7/7 | Complete    | 2026-11-15 |
-| 7.1. Editor UX Overhaul (INSERTED) | 14/16 | In Progress | - |
+| 7.1. Editor UX Overhaul (INSERTED) | 20/22 | Complete (12/13 covered by UAT) | 2026-11-14 |
+| 7.1.1. Editor Controls Polish (INSERTED) | 6/6 | Complete | 2026-11-14 |
+| 7.1.2. Selection-based Editor Tools (INSERTED) | 15/15 | Complete (human UAT pending) | 2026-11-14 |
+| 7.1.3. Editor Feature Palette (INSERTED) | 11/11 | Complete | 2026-11-16 |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 | 9. Vehicle Types | 0/TBD | Not started | - |
 | 10. Off-road Stages | 0/TBD | Not started | - |
