@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shippedTuning } from "../src/core/feel";
 import { AI_PAINTS } from "../src/core/race-start";
 import { SURFACE_TYPES } from "../src/core/surface-types";
 import {
@@ -7,6 +8,7 @@ import {
   frontDriveThrustN,
   KNOWN_VEHICLE_CLASS_IDS,
   resolveVehicleClassId,
+  searchForVehicle,
   UNIT_SURFACE_GRIP_SCALE,
   VEHICLE_CLASSES,
   wheelEngineForces,
@@ -26,6 +28,12 @@ describe("resolveVehicleClassId", () => {
     expect(resolveVehicleClassId("?map=grid-test")).toBe("rwd");
     expect(resolveVehicleClassId("?car=rwd")).toBe("rwd");
   });
+  it("accepts rally and rejects hostile variants", () => {
+    expect(resolveVehicleClassId("?car=rally")).toBe("rally");
+    for (const s of ["?car=RALLY", "?car=rally%00", "?car=__proto__", "?car=constructor"]) {
+      expect(resolveVehicleClassId(s)).toBe("rwd");
+    }
+  });
   it("accepts fwd and awd", () => {
     expect(resolveVehicleClassId("?car=fwd")).toBe("fwd");
     expect(resolveVehicleClassId("?mode=circuit&car=awd")).toBe("awd");
@@ -43,7 +51,7 @@ describe("resolveVehicleClassId", () => {
     }
   });
   it("lists exactly the known classes", () => {
-    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual(["rwd", "fwd", "awd"]);
+    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual(["rwd", "fwd", "awd", "rally"]);
   });
 });
 
@@ -151,16 +159,17 @@ describe("VEHICLE_CLASSES", () => {
     expect(VEHICLE_CLASSES.fwd.storageKey).toBe("heat-street.tuning.fwd.v1");
     expect(VEHICLE_CLASSES.awd.storageKey).toBe("heat-street.tuning.awd.v1");
     const keys = new Set(KNOWN_VEHICLE_CLASS_IDS.map((id) => VEHICLE_CLASSES[id].storageKey));
-    expect(keys.size).toBe(3);
+    expect(keys.size).toBe(KNOWN_VEHICLE_CLASS_IDS.length);
+    expect(VEHICLE_CLASSES.rally.storageKey).toBe("heat-street.tuning.rally.v1");
   });
   it("colours are distinct and clear of the AI paints", () => {
     expect(VEHICLE_CLASSES.rwd.chassisColor).toBe(0xb5321f);
     const colours = KNOWN_VEHICLE_CLASS_IDS.map((id) => VEHICLE_CLASSES[id].chassisColor);
-    expect(new Set(colours).size).toBe(3);
+    expect(new Set(colours).size).toBe(KNOWN_VEHICLE_CLASS_IDS.length);
     const ai = (AI_PAINTS as readonly { hex?: number; color?: number }[]).map(
       (p) => p.hex ?? p.color,
     );
-    for (const c of [VEHICLE_CLASSES.fwd.chassisColor, VEHICLE_CLASSES.awd.chassisColor]) {
+    for (const c of colours.filter((x) => x !== VEHICLE_CLASSES.rwd.chassisColor)) {
       expect(ai).not.toContain(c);
     }
   });
@@ -192,9 +201,44 @@ describe("classTuningRanges", () => {
   });
 });
 
+describe("rally class", () => {
+  it("savesMedals is true for rwd/fwd/awd and false for rally (D-08)", () => {
+    expect(VEHICLE_CLASSES.rwd.savesMedals).toBe(true);
+    expect(VEHICLE_CLASSES.fwd.savesMedals).toBe(true);
+    expect(VEHICLE_CLASSES.awd.savesMedals).toBe(true);
+    expect(VEHICLE_CLASSES.rally.savesMedals).toBe(false);
+  });
+  it("tuning is inside TUNING_RANGES and survives a clamp", () => {
+    expect(classTuningRanges("rally")).toBe(TUNING_RANGES);
+    const t = classDefaultTuning("rally");
+    expect(clampTuning(structuredClone(t), classTuningRanges("rally"))).toEqual(t);
+    const s = shippedTuning("rally");
+    expect(clampTuning(structuredClone(s), classTuningRanges("rally"))).toEqual(s);
+  });
+  it("grips more off-road and slightly less on tarmac (D-06)", () => {
+    const g = VEHICLE_CLASSES.rally.surfaceGripScale;
+    expect(g.gravel.lateral).toBeGreaterThan(1);
+    expect(g.tarmac.lateral).toBeLessThan(1);
+    expect(VEHICLE_CLASSES.rally.frontDriveShare).toBe(0.45);
+  });
+});
+
+describe("searchForVehicle", () => {
+  it("sets car and keeps other params", () => {
+    const p = new URLSearchParams(searchForVehicle("?map=feel-test&debug", "rally"));
+    expect(p.get("car")).toBe("rally");
+    expect(p.get("map")).toBe("feel-test");
+    expect(p.has("debug")).toBe(true);
+  });
+  it("replaces an existing car", () => {
+    const p = new URLSearchParams(searchForVehicle("?car=rally", "rwd"));
+    expect(p.getAll("car")).toEqual(["rwd"]);
+  });
+});
+
 describe("surfaceGripScale", () => {
-  it("every class uses the frozen all-ones table", () => {
-    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+  it("rwd/fwd/awd use the frozen all-ones table", () => {
+    for (const id of ["rwd", "fwd", "awd"] as const) {
       expect(VEHICLE_CLASSES[id].surfaceGripScale).toBe(UNIT_SURFACE_GRIP_SCALE);
     }
     expect(Object.isFrozen(UNIT_SURFACE_GRIP_SCALE)).toBe(true);

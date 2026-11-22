@@ -131,7 +131,7 @@ import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createDriveLogger } from "./debug/drive-logger";
 import { createFeelPanel, loadFeel } from "./debug/feel-panel";
 import { createFreeLookCamera } from "./debug/free-look-camera";
-import { createMapMenu } from "./debug/map-menu";
+import { createMapMenu, createVehicleMenu } from "./debug/map-menu";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createPursuitPanel } from "./debug/pursuit-panel";
@@ -968,6 +968,7 @@ try {
           onRaceClassified: (result) => {
             keepRaceResultOnRestart = true;
             if (
+              CAR_CLASS.savesMedals &&
               raceLaps?.practice !== true &&
               saveRaceResult(
                 medalStorage,
@@ -1019,6 +1020,11 @@ try {
               } catch (error) {
                 console.warn("[medal-reference] could not build record", error);
               }
+            }
+            // D-08: only the muscle-car family records medals; new classes show the time only.
+            if (!CAR_CLASS.savesMedals) {
+              resultsView?.showCompletion({ ...completion, medal: "none" });
+              return;
             }
             const saved = saveMedalResult(
               medalStorage,
@@ -1328,7 +1334,10 @@ try {
     driveLogger?.record(frame);
   };
 
-  if (FEEL_ENABLED || DEBUG_ENABLED) createMapMenu(AREA_ID);
+  if (FEEL_ENABLED || DEBUG_ENABLED) {
+    createMapMenu(AREA_ID);
+    createVehicleMenu(CAR_CLASS.id);
+  }
 
   // Proving ground (`?map=feel-test`): number keys launch the car from fixed
   // pads at a chosen speed (see src/debug/test-stations.ts). Other terrain maps

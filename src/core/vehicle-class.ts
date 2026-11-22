@@ -1,5 +1,6 @@
 /**
- * Player vehicle classes (RWD / FWD / AWD) for drivetrain A/B testing.
+ * Player vehicle classes (RWD / FWD / AWD drivetrain A/B variants plus the
+ * roster of distinct vehicle types such as the rally coupe).
  *
  * Selected through the allowlisted `?car=` URL param. Pure module: no three or
  * rapier imports. Index lookups into `VEHICLE_CLASSES` only ever use an
@@ -14,7 +15,7 @@ import {
   type VehicleTuning,
 } from "./vehicle-tuning";
 
-export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd"] as const;
+export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally"] as const;
 export type VehicleClassId = (typeof KNOWN_VEHICLE_CLASS_IDS)[number];
 export const DEFAULT_VEHICLE_CLASS_ID: VehicleClassId = "rwd";
 
@@ -49,6 +50,20 @@ export interface VehicleClassSpec {
   readonly storageKey: string;
   /** Per-surface grip multipliers applied at the single surface-grip read site (D-06). */
   readonly surfaceGripScale: SurfaceGripScale;
+  /** D-08: medals/best times are recorded for the muscle-car family only; new classes show time only. */
+  readonly savesMedals: boolean;
+}
+
+function buildRallyGripScale(): SurfaceGripScale {
+  const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
+  for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
+  table.tarmac = Object.freeze({ forward: 0.97, lateral: 0.95 });
+  table.gravel = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  table.dirt_road = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  table.grass = Object.freeze({ forward: 1.08, lateral: 1.08 });
+  table.sand = Object.freeze({ forward: 1.08, lateral: 1.08 });
+  table.mud = Object.freeze({ forward: 1.08, lateral: 1.08 });
+  return Object.freeze(table);
 }
 
 /**
@@ -64,6 +79,7 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     frontDriveShare: 0,
     storageKey: TUNING_STORAGE_KEY,
     surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
+    savesMedals: true,
   }),
   fwd: Object.freeze({
     id: "fwd",
@@ -72,6 +88,7 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     frontDriveShare: 1,
     storageKey: "heat-street.tuning.fwd.v1",
     surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
+    savesMedals: true,
   }),
   awd: Object.freeze({
     id: "awd",
@@ -81,6 +98,17 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     frontDriveShare: 0.4,
     storageKey: "heat-street.tuning.awd.v1",
     surfaceGripScale: UNIT_SURFACE_GRIP_SCALE,
+    savesMedals: true,
+  }),
+  rally: Object.freeze({
+    id: "rally",
+    label: "Rally Coupe",
+    // Orange: distinct from AI paints, pursuer paints and the other player colours.
+    chassisColor: 0xf07a1a,
+    frontDriveShare: 0.45,
+    storageKey: "heat-street.tuning.rally.v1",
+    surfaceGripScale: buildRallyGripScale(),
+    savesMedals: false,
   }),
 });
 
@@ -140,6 +168,27 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // Some rear-biased throttle rotation, far less than RWD.
       t.drive.powerOversteerGain = 0.5;
       break;
+    case "rally":
+      t.chassis.mass = 1250;
+      t.chassis.halfExtents = { x: 0.9, y: 0.48, z: 2.1 };
+      t.chassis.comOffset.y = -0.25;
+      t.wheels.halfTrack = 0.8;
+      t.wheels.halfWheelbase = 1.35;
+      t.wheels.radius = 0.37;
+      t.wheels.suspensionRestLength = 0.6;
+      t.wheels.maxSuspensionTravel = 0.55;
+      t.wheels.suspensionStiffness = 16;
+      // AWD planted character: rear-only oversteer terms turned down like awd.
+      t.wheels.rearSideFriction = 0.3;
+      t.drive.powerOversteerGain = 0.5;
+      // topSpeedMs is a gear/limiter scale, not a cap: the measured top speed is
+      // about 1.54x it (30 -> 46.3 m/s, the D-05 46 m/s target).
+      t.drive.topSpeedMs = 30;
+      // D-04: name kept; for the rally coupe this is the drive force per wheel
+      // of a two-wheel-drive axle (total = 2x, split 45% front by frontDriveShare).
+      // 4800 with topSpeedMs 30 measures 0-60 4.20 s (target 3.4-4.6).
+      t.drive.engineForcePerRearWheel = 4800;
+      break;
   }
   return t;
 }
@@ -150,6 +199,14 @@ export function classTuningRanges(id: VehicleClassId): TuningRanges {
     case "rwd":
     case "fwd":
     case "awd":
+    case "rally":
       return TUNING_RANGES;
   }
+}
+
+/** D-08 style helper for the debug vehicle menu (brief D9): rewrite `?car=`, keep other params. */
+export function searchForVehicle(search: string, id: VehicleClassId): string {
+  const params = new URLSearchParams(search);
+  params.set("car", id);
+  return `?${params.toString()}`;
 }
