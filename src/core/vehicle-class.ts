@@ -15,7 +15,7 @@ import {
   type VehicleTuning,
 } from "./vehicle-tuning";
 
-export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally", "buggy"] as const;
+export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally", "buggy", "truck", "monster"] as const;
 export type VehicleClassId = (typeof KNOWN_VEHICLE_CLASS_IDS)[number];
 export const DEFAULT_VEHICLE_CLASS_ID: VehicleClassId = "rwd";
 
@@ -52,6 +52,8 @@ export interface VehicleClassSpec {
   readonly surfaceGripScale: SurfaceGripScale;
   /** D-08: medals/best times are recorded for the muscle-car family only; new classes show time only. */
   readonly savesMedals: boolean;
+  /** Metres above ground for the chassis origin at spawn; absent means SPAWN_CLEARANCE_M (0.6). */
+  readonly spawnClearanceM?: number;
 }
 
 function buildRallyGripScale(): SurfaceGripScale {
@@ -75,6 +77,30 @@ function buildBuggyGripScale(): SurfaceGripScale {
   table.mud = Object.freeze({ forward: 1.15, lateral: 1.15 });
   table.gravel = Object.freeze({ forward: 1.1, lateral: 1.1 });
   table.dirt_road = Object.freeze({ forward: 1.1, lateral: 1.1 });
+  return Object.freeze(table);
+}
+
+function buildTruckGripScale(): SurfaceGripScale {
+  const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
+  for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
+  table.tarmac = Object.freeze({ forward: 0.98, lateral: 0.95 });
+  table.gravel = Object.freeze({ forward: 1.1, lateral: 1.05 });
+  table.dirt_road = Object.freeze({ forward: 1.1, lateral: 1.05 });
+  table.grass = Object.freeze({ forward: 1.15, lateral: 1.1 });
+  table.mud = Object.freeze({ forward: 1.15, lateral: 1.1 });
+  table.sand = Object.freeze({ forward: 1.05, lateral: 1.0 });
+  return Object.freeze(table);
+}
+
+function buildMonsterGripScale(): SurfaceGripScale {
+  const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
+  for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
+  table.tarmac = Object.freeze({ forward: 0.9, lateral: 0.85 });
+  table.mud = Object.freeze({ forward: 1.3, lateral: 1.2 });
+  table.sand = Object.freeze({ forward: 1.2, lateral: 1.15 });
+  table.grass = Object.freeze({ forward: 1.15, lateral: 1.1 });
+  table.gravel = Object.freeze({ forward: 1.05, lateral: 1.0 });
+  table.dirt_road = Object.freeze({ forward: 1.05, lateral: 1.0 });
   return Object.freeze(table);
 }
 
@@ -105,6 +131,66 @@ export function widenRanges(base: TuningRanges, edit: (draft: DraftRanges) => vo
 const BUGGY_RANGES: TuningRanges = widenRanges(TUNING_RANGES, (d) => {
   d.chassis.mass.min = 500;
   d.wheels.maxSuspensionTravel.max = 0.7;
+});
+
+/** Truck ranges: spike result (09-08) Recommended ranges, user approved. */
+const TRUCK_RANGES: TuningRanges = widenRanges(TUNING_RANGES, (d) => {
+  d.chassis.mass.min = 1800;
+  d.chassis.mass.max = 3200;
+  d.chassis.halfExtents.y.min = 0.5;
+  d.chassis.halfExtents.y.max = 1.0;
+  d.chassis.comOffset.y.min = -0.3;
+  d.chassis.comOffset.y.max = 0.5;
+  d.wheels.halfTrack.min = 0.8;
+  d.wheels.halfTrack.max = 1.3;
+  d.wheels.halfWheelbase.min = 1.3;
+  d.wheels.halfWheelbase.max = 2.2;
+  d.wheels.connectionY.min = -0.2;
+  d.wheels.connectionY.max = 0.4;
+  d.wheels.radius.min = 0.4;
+  d.wheels.radius.max = 0.7;
+  d.wheels.suspensionRestLength.min = 0.5;
+  d.wheels.suspensionRestLength.max = 1.1;
+  d.wheels.maxSuspensionTravel.min = 0.4;
+  d.wheels.maxSuspensionTravel.max = 0.9;
+  d.wheels.suspensionStiffness.min = 6;
+  d.wheels.suspensionStiffness.max = 16;
+  d.wheels.maxSuspensionForce.min = 20000;
+  d.wheels.maxSuspensionForce.max = 80000;
+  d.drive.topSpeedMs.min = 18;
+  d.drive.topSpeedMs.max = 34;
+  d.drive.engineForcePerRearWheel.min = 3000;
+  d.drive.engineForcePerRearWheel.max = 9000;
+});
+
+/** Monster ranges: spike result (09-08) Recommended ranges, user approved. */
+const MONSTER_RANGES: TuningRanges = widenRanges(TUNING_RANGES, (d) => {
+  d.chassis.mass.min = 3000;
+  d.chassis.mass.max = 6000;
+  d.chassis.halfExtents.y.min = 0.6;
+  d.chassis.halfExtents.y.max = 1.4;
+  d.chassis.comOffset.y.min = -0.3;
+  d.chassis.comOffset.y.max = 0.6;
+  d.wheels.halfTrack.min = 0.9;
+  d.wheels.halfTrack.max = 1.8;
+  d.wheels.halfWheelbase.min = 1.4;
+  d.wheels.halfWheelbase.max = 2.6;
+  d.wheels.connectionY.min = -0.2;
+  d.wheels.connectionY.max = 0.6;
+  d.wheels.radius.min = 0.4;
+  d.wheels.radius.max = 1.2;
+  d.wheels.suspensionRestLength.min = 0.6;
+  d.wheels.suspensionRestLength.max = 1.6;
+  d.wheels.maxSuspensionTravel.min = 0.5;
+  d.wheels.maxSuspensionTravel.max = 1.3;
+  d.wheels.suspensionStiffness.min = 4;
+  d.wheels.suspensionStiffness.max = 16;
+  d.wheels.maxSuspensionForce.min = 20000;
+  d.wheels.maxSuspensionForce.max = 200000;
+  d.drive.topSpeedMs.min = 18;
+  d.drive.topSpeedMs.max = 36;
+  d.drive.engineForcePerRearWheel.min = 4000;
+  d.drive.engineForcePerRearWheel.max = 20000;
 });
 
 /**
@@ -160,6 +246,28 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     storageKey: "heat-street.tuning.buggy.v1",
     surfaceGripScale: buildBuggyGripScale(),
     savesMedals: false,
+  }),
+  truck: Object.freeze({
+    id: "truck",
+    label: "4x4 Pickup",
+    chassisColor: 0x8a6a2f,
+    frontDriveShare: 0.5,
+    storageKey: "heat-street.tuning.truck.v1",
+    surfaceGripScale: buildTruckGripScale(),
+    savesMedals: false,
+    // Spike 09-08: radius 0.5 + rest 0.8 - connectionY 0.10 + 0.1.
+    spawnClearanceM: 1.3,
+  }),
+  monster: Object.freeze({
+    id: "monster",
+    label: "Monster Truck",
+    chassisColor: 0xd4c21a,
+    frontDriveShare: 0.5,
+    storageKey: "heat-street.tuning.monster.v1",
+    surfaceGripScale: buildMonsterGripScale(),
+    savesMedals: false,
+    // Spike 09-08: radius 0.9 + rest 1.2 - connectionY 0.10 + 0.1.
+    spawnClearanceM: 2.1,
   }),
 });
 
@@ -264,6 +372,51 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // low: 5000+ with the short wheelbase wheelied the car over.
       t.drive.engineForcePerRearWheel = 3000;
       break;
+    case "truck":
+      // Spike 09-08 Recommended values (iteration 6b); inside-wheel-lift target open (09-10).
+      t.chassis.mass = 2300;
+      t.chassis.halfExtents = { x: 1.0, y: 0.7, z: 2.7 };
+      t.chassis.comOffset.y = 0.1;
+      t.wheels.halfTrack = 1.0;
+      t.wheels.halfWheelbase = 1.7;
+      t.wheels.connectionY = 0.1;
+      t.wheels.radius = 0.5;
+      t.wheels.suspensionRestLength = 0.8;
+      t.wheels.maxSuspensionTravel = 0.7;
+      t.wheels.suspensionStiffness = 10;
+      t.wheels.maxSuspensionForce = 40000;
+      // AWD planted character: rear-only oversteer terms turned down like awd.
+      t.wheels.rearSideFriction = 0.3;
+      t.drive.powerOversteerGain = 0.5;
+      // Brief stage 7.3: calmer steering for tall vehicles.
+      t.drive.maxSteerLock = Math.PI / 6;
+      t.drive.steerRampPerSec = 4;
+      t.drive.topSpeedMs = 30;
+      t.drive.engineForcePerRearWheel = 6000;
+      break;
+    case "monster":
+      // Spike 09-08 Recommended values (iteration 5), user approved at 09-08.
+      t.chassis.mass = 4500;
+      t.chassis.halfExtents = { x: 1.25, y: 0.9, z: 2.7 };
+      t.chassis.comOffset.y = 0.1;
+      t.chassis.linearDamping = 0.05;
+      t.wheels.halfTrack = 1.5;
+      t.wheels.halfWheelbase = 2.0;
+      t.wheels.connectionY = 0.1;
+      t.wheels.radius = 0.9;
+      t.wheels.suspensionRestLength = 1.2;
+      t.wheels.maxSuspensionTravel = 1.0;
+      t.wheels.suspensionStiffness = 7;
+      t.wheels.maxSuspensionForce = 80000;
+      t.wheels.rearSideFriction = 0.3;
+      t.drive.powerOversteerGain = 0.5;
+      // Brief stage 7.3: calmer steering for tall vehicles.
+      t.drive.maxSteerLock = Math.PI / 6;
+      t.drive.steerRampPerSec = 4;
+      // Measured 0-60 7.65 s, top 35.8 m/s (accepted; the gear knee is sharp).
+      t.drive.topSpeedMs = 29;
+      t.drive.engineForcePerRearWheel = 12000;
+      break;
   }
   return t;
 }
@@ -278,6 +431,10 @@ export function classTuningRanges(id: VehicleClassId): TuningRanges {
       return TUNING_RANGES;
     case "buggy":
       return BUGGY_RANGES;
+    case "truck":
+      return TRUCK_RANGES;
+    case "monster":
+      return MONSTER_RANGES;
   }
 }
 

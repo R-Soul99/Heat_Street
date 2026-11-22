@@ -38,6 +38,13 @@ describe("resolveVehicleClassId", () => {
   it("accepts buggy", () => {
     expect(resolveVehicleClassId("?car=buggy")).toBe("buggy");
   });
+  it("accepts truck and monster, rejects hostile variants", () => {
+    expect(resolveVehicleClassId("?car=truck")).toBe("truck");
+    expect(resolveVehicleClassId("?car=monster")).toBe("monster");
+    for (const x of ["?car=TRUCK", "?car=monster%00", "?car=trucks", "?car=__proto__"]) {
+      expect(resolveVehicleClassId(x)).toBe("rwd");
+    }
+  });
   it("accepts fwd and awd", () => {
     expect(resolveVehicleClassId("?car=fwd")).toBe("fwd");
     expect(resolveVehicleClassId("?mode=circuit&car=awd")).toBe("awd");
@@ -55,7 +62,15 @@ describe("resolveVehicleClassId", () => {
     }
   });
   it("lists exactly the known classes", () => {
-    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual(["rwd", "fwd", "awd", "rally", "buggy"]);
+    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual([
+      "rwd",
+      "fwd",
+      "awd",
+      "rally",
+      "buggy",
+      "truck",
+      "monster",
+    ]);
   });
 });
 
@@ -283,6 +298,52 @@ describe("surfaceGripScale", () => {
     for (const s of SURFACE_TYPES) {
       expect(UNIT_SURFACE_GRIP_SCALE[s]).toEqual({ forward: 1, lateral: 1 });
       expect(Object.isFrozen(UNIT_SURFACE_GRIP_SCALE[s])).toBe(true);
+    }
+  });
+});
+
+describe("truck and monster classes", () => {
+  it("are AWD 0.5 with their own keys, no medals (D-05, D-08)", () => {
+    for (const [id, key] of [
+      ["truck", "heat-street.tuning.truck.v1"],
+      ["monster", "heat-street.tuning.monster.v1"],
+    ] as const) {
+      const v = VEHICLE_CLASSES[id];
+      expect(v.frontDriveShare).toBe(0.5);
+      expect(v.storageKey).toBe(key);
+      expect(v.savesMedals).toBe(false);
+    }
+  });
+  it("have distinct frozen ranges and TUNING_RANGES is untouched (D-02)", () => {
+    const t = classTuningRanges("truck");
+    const m = classTuningRanges("monster");
+    expect(t).not.toBe(m);
+    expect(t).not.toBe(TUNING_RANGES);
+    expect(Object.isFrozen(t)).toBe(true);
+    expect(Object.isFrozen(m)).toBe(true);
+    expect(m.chassis.mass.max).toBe(6000);
+    expect(t.chassis.mass.max).toBe(3200);
+    expect(TUNING_RANGES.chassis.mass.min).toBe(800);
+  });
+  it("every class default and shipped tuning is inside its own ranges", () => {
+    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+      const r = classTuningRanges(id);
+      const d = classDefaultTuning(id);
+      expect(clampTuning(structuredClone(d), r)).toEqual(d);
+      const s = shippedTuning(id);
+      expect(clampTuning(structuredClone(s), r)).toEqual(s);
+    }
+  });
+  it("spawn clearance is per class for tall vehicles only", () => {
+    for (const id of ["rwd", "fwd", "awd"] as const) {
+      expect(VEHICLE_CLASSES[id].spawnClearanceM).toBeUndefined();
+    }
+    expect(VEHICLE_CLASSES.truck.spawnClearanceM).toBeCloseTo(1.3, 9);
+    expect(VEHICLE_CLASSES.monster.spawnClearanceM).toBeCloseTo(2.1, 9);
+    for (const id of ["truck", "monster"] as const) {
+      const w = classDefaultTuning(id).wheels;
+      const expected = w.radius + w.suspensionRestLength - w.connectionY + 0.1;
+      expect(VEHICLE_CLASSES[id].spawnClearanceM).toBeCloseTo(expected, 9);
     }
   });
 });
