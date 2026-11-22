@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-09-08)
 
 Phase: 09
 Plan: Not started
-Next: /gsd-verify-work 07.1.2 using 07.1.2-HUMAN-UAT.md, then /gsd-plan-phase 9 (Phase 7 verified 2026-11-15, 07-VERIFICATION.md passed 5/5; Phase 07.1 closed, 07.1-12/13 covered by 07.1-UAT)
-Last activity: 2026-11-22 - Completed quick task 261122-qam: close out Phase 07.1 bookkeeping
+Next: /gsd-plan-phase 9 (all phases through 07.1.3 closed: Phase 7 verified 2026-11-15; 07.1.2 human UAT short pass 10/10 2026-11-22)
+Last activity: 2026-11-22 - Phase 07.1.2 human UAT complete (short pass, 10/10 passed)
 
 Progress: [██████████] 99%
 
