@@ -399,16 +399,20 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // Brief stage 7.3: calmer steering for tall vehicles.
       t.drive.maxSteerLock = Math.PI / 6;
       t.drive.steerRampPerSec = 4;
-      t.drive.topSpeedMs = 30;
-      t.drive.engineForcePerRearWheel = 6000;
+      // Measured (09-10): 0-60 7.80 s, top 36.9 m/s; inside wheels lift at 20 m/s
+      // full lock but not at 12 m/s. topSpeedMs is a limiter scale (30 gave 42.6 m/s).
+      t.drive.topSpeedMs = 28;
+      t.drive.engineForcePerRearWheel = 5500;
       break;
     case "monster":
       // Spike 09-08 Recommended values (iteration 5), user approved at 09-08.
       t.chassis.mass = 4500;
       t.chassis.halfExtents = { x: 1.25, y: 0.9, z: 2.7 };
-      t.chassis.comOffset.y = 0.1;
+      // Raised CoM and 1.4 track (09-10): inside wheels lift at 20 m/s full lock
+      // (13 deg tilt) but not 12 m/s; 1.2 flips over, 1.5 never lifts.
+      t.chassis.comOffset.y = 0.5;
       t.chassis.linearDamping = 0.05;
-      t.wheels.halfTrack = 1.5;
+      t.wheels.halfTrack = 1.4;
       t.wheels.halfWheelbase = 2.0;
       t.wheels.connectionY = 0.1;
       t.wheels.radius = 0.9;
@@ -421,9 +425,10 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // Brief stage 7.3: calmer steering for tall vehicles.
       t.drive.maxSteerLock = Math.PI / 6;
       t.drive.steerRampPerSec = 4;
-      // Measured 0-60 7.65 s, top 35.8 m/s (accepted; the gear knee is sharp).
+      // Measured (09-10): 0-60 9.00 s, top 34.7 m/s. Top speed about 35 m/s is user
+      // accepted (09-08); the gear knee is sharp, so it is not tuned toward 28.
       t.drive.topSpeedMs = 29;
-      t.drive.engineForcePerRearWheel = 12000;
+      t.drive.engineForcePerRearWheel = 10500;
       break;
   }
   return t;

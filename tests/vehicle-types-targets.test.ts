@@ -49,12 +49,39 @@ export const CLASS_TARGETS: Partial<Record<VehicleClassId, ClassTargets>> = {
     tiltSpeedMs: 15,
     maxTiltDeg: 15,
   },
+  truck: {
+    zeroToSixtyS: 8.0,
+    zeroToSixtyTol: 0.15,
+    topSpeedMs: 36,
+    topSpeedTol: 0.1,
+    settleMaxS: 2,
+    settleBandM: 0.01,
+    restContact: 4,
+    tiltSpeedMs: 12,
+    maxTiltDeg: 15,
+  },
+  monster: {
+    zeroToSixtyS: 9.0,
+    zeroToSixtyTol: 0.15,
+    // User-accepted at 09-08: measured top about 35 m/s, NOT the 28 m/s of the
+    // brief (the gear-limiter knee is sharp and mass dependent).
+    topSpeedMs: 35.8,
+    topSpeedTol: 0.1,
+    settleMaxS: 2,
+    settleBandM: 0.01,
+    restContact: 4,
+    tiltSpeedMs: 12,
+    maxTiltDeg: 15,
+  },
 };
+
+const ROLLOVER_CLASSES: readonly VehicleClassId[] = ["truck", "monster"];
 
 function optsFor(id: VehicleClassId): MeasureOpts {
   return {
     frontDriveShare: VEHICLE_CLASSES[id].frontDriveShare,
     surfaceGripScale: VEHICLE_CLASSES[id].surfaceGripScale,
+    spawnY: VEHICLE_CLASSES[id].spawnClearanceM,
   };
 }
 
@@ -83,6 +110,18 @@ for (const [rawId, target] of Object.entries(CLASS_TARGETS) as [VehicleClassId, 
       expect(contact).toBe(target.restContact);
       expect(tilt.maxTiltDeg).toBeLessThan(target.maxTiltDeg);
     });
+
+    if (ROLLOVER_CLASSES.includes(rawId)) {
+      it("rolls when pushed: inside wheels lift at 20 m/s full lock, not at 12 m/s", () => {
+        const hard = measureFullLockTilt(tuning, 20, opts);
+        const gentle = measureFullLockTilt(tuning, 12, opts);
+        console.info(
+          `[targets] ${rawId}: tilt 20 m/s ${hard.maxTiltDeg.toFixed(1)} deg lifted ${hard.insideWheelsLifted}; 12 m/s ${gentle.maxTiltDeg.toFixed(1)} deg lifted ${gentle.insideWheelsLifted}`,
+        );
+        expect(hard.insideWheelsLifted).toBe(true);
+        expect(gentle.insideWheelsLifted).toBe(false);
+      });
+    }
 
     if (rawId === "buggy") {
       it("lands the ramp routine upright", () => {
