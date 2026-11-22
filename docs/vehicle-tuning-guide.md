@@ -48,6 +48,9 @@ nothing.
   thrown exception. An import carrying only one or two of the three domains applies only
   those and leaves the others untouched, mirroring the shipped three-independent-
   `localStorage`-keys rationale (`src/debug/tuning-panel.ts`'s D-17 comment).
+- Pick the player vehicle with `?car=`: `rwd` (default, the shipped muscle car), `fwd`, `awd`,
+  `rally`, `buggy`, `truck` or `monster`. Anything else falls back to `rwd`. Sections 2-6
+  describe the muscle car; section 7 lists what changes per class.
 
 ## 2. How a value reaches the tyres
 
@@ -470,3 +473,162 @@ identifier bound through `addNumber(...)` in `src/debug/tuning-panel.ts`, plus e
 surface's `fwd`/`lat` display form derived from `SURFACE_TYPES`, and asserts each one
 appears somewhere in this document. Adding a control to the panel — or renaming one —
 requires adding (or updating) its entry here, or the test suite goes red.
+
+## 7. Vehicle classes
+
+Seven classes ship, picked with `?car=` (`src/core/vehicle-class.ts`, `VEHICLE_CLASSES`).
+`rwd` is the shipped muscle car and is bit-for-bit unchanged by this phase: the golden test
+`tests/vehicle-rwd-golden.test.ts` (one commit, never edited) and a byte-identical
+feel-dossier diff against the stage 0 baseline prove it.
+
+| id | Label | Drive (front share) | Mass kg | Wheel radius m | Rest / travel m | Storage key | Saves medals |
+|---|---|---|---|---|---|---|---|
+| `rwd` | RWD | rear (0) | 1390 | 0.36 | 0.6 / 0.55 | `heat-street.tuning.v1` | yes |
+| `fwd` | FWD | front (1) | 1390 | 0.36 | 0.6 / 0.55 | `heat-street.tuning.fwd.v1` | yes |
+| `awd` | AWD | all (0.4 front) | 1390 | 0.36 | 0.6 / 0.55 | `heat-street.tuning.awd.v1` | yes |
+| `rally` | Rally Coupe | all (0.45) | 1250 | 0.37 | 0.6 / 0.55 | `heat-street.tuning.rally.v1` | no |
+| `buggy` | Dune Buggy | rear (0) | 750 | 0.40 | 0.7 / 0.65 | `heat-street.tuning.buggy.v1` | no |
+| `truck` | 4x4 Pickup | all (0.5) | 2300 | 0.50 | 0.8 / 0.7 | `heat-street.tuning.truck.v1` | no |
+| `monster` | Monster Truck | all (0.5) | 4500 | 0.90 | 1.2 / 1.0 | `heat-street.tuning.monster.v1` | no |
+
+The feel blob `heat-street.feel.v1` (the `?feel` panel) is shared by all classes.
+
+### Per-class ranges
+
+D-02: `classTuningRanges(id)` returns the ranges the panel sliders and the load-time clamp
+use. `rwd`, `fwd`, `awd` and `rally` share the one `TUNING_RANGES` object. The others get a
+widened deep copy (`widenRanges`); the base table is never mutated:
+
+- `buggy`: `chassis.mass` min 500; `wheels.maxSuspensionTravel` max 0.7.
+- `truck`: mass 1800-3200, halfExtents.y 0.5-1.0, comOffset.y -0.3 to 0.5, halfTrack 0.8-1.3, halfWheelbase 1.3-2.2, connectionY -0.2 to 0.4, radius 0.4-0.7, rest 0.5-1.1, travel 0.4-0.9, stiffness 6-16, maxSuspensionForce 20000-80000, topSpeedMs 18-34, engineForcePerRearWheel 3000-9000.
+- `monster`: mass 3000-6000, halfExtents.y 0.6-1.4, comOffset.y -0.3 to 0.6, halfTrack 0.9-1.8, halfWheelbase 1.4-2.6, connectionY -0.2 to 0.6, radius 0.4-1.2, rest 0.6-1.6, travel 0.5-1.3, stiffness 4-16, maxSuspensionForce 20000-200000, topSpeedMs 18-36, engineForcePerRearWheel 4000-20000.
+
+Silent clamping trap: loading a saved blob clamps every value into the class's ranges with
+no warning, so a blob saved under old defaults can quietly mask a changed default. Each class
+saves under its own key (table above), so classes never overwrite each other. After changing
+a class default, use a private window or clear that class's `heat-street.tuning.*` key, or
+click Reset in the panel.
+
+### Rear axle override
+
+D-03: `wheels.rear` is an optional object holding up to seven fields (`REAR_OVERRIDE_KEYS`:
+`radius`, `suspensionRestLength`, `maxSuspensionTravel`, `suspensionStiffness`,
+`suspensionCompression`, `suspensionRelaxation`, `connectionY`). A field that is absent
+uses the front value, so a class that does not set it behaves exactly as before. Values are
+range-checked against the front-wheel ranges. A "Rear axle" sub-folder appears under
+Suspension only when the class sets `wheels.rear`; no shipped class sets it yet, so the
+sub-folder is not normally visible.
+
+### engineForcePerRearWheel
+
+D-04: the name is kept for every class (renaming would break saved blobs and the sync test).
+For a two-wheel-drive axle it means the drive force per wheel of that axle. Total drive force
+is 2x the value, split by `frontDriveShare`: the front share goes through the arcade
+front-drive impulse (see "Arcade front-drive model"), the rest through the rear tyres.
+
+### Surface grip scale
+
+D-06: each class has a `surfaceGripScale` table, a forward and lateral multiplier per surface
+applied on top of the shared surface profiles at the single surface-grip read site. `rwd`,
+`fwd` and `awd` use an all-ones table, so they are unaffected. The panel's Surfaces folder
+edits the shared profiles, not the per-class scale.
+
+### Per-surface trade-offs
+
+D-11: no new vehicle is best everywhere and each is best somewhere. Measured in 09-10 (fixed
+1/60 step, skidpad lateral g and time to 20 m/s from rest, shipped class tuning):
+
+| surface | class | skidpad g | t20 s |
+|---|---|---|---|
+| tarmac | rwd | 1.64 | 2.17 |
+| tarmac | rally | 1.66 | 2.50 |
+| tarmac | buggy | 1.26 | 2.53 |
+| tarmac | truck | 1.73 | 4.35 |
+| tarmac | monster | 1.56 | 4.72 |
+| gravel | rwd | 1.23 | 2.17 |
+| gravel | rally | 1.58 | 2.50 |
+| gravel | buggy | 1.12 | 2.53 |
+| gravel | truck | 1.49 | 4.35 |
+| gravel | monster | 1.38 | 4.72 |
+| dirt_road | rwd | 1.27 | 2.17 |
+| dirt_road | rally | 1.63 | 2.50 |
+| dirt_road | buggy | 1.17 | 2.53 |
+| dirt_road | truck | 1.53 | 4.35 |
+| dirt_road | monster | 1.40 | 4.72 |
+| grass | rwd | 0.91 | 2.18 |
+| grass | rally | 1.05 | 2.50 |
+| grass | buggy | 0.88 | 2.55 |
+| grass | truck | 1.13 | 4.35 |
+| grass | monster | 1.12 | 4.72 |
+| sand | rwd | 0.75 | 2.22 |
+| sand | rally | 0.84 | 2.50 |
+| sand | buggy | 0.93 | 2.53 |
+| sand | truck | 0.79 | 4.35 |
+| sand | monster | 0.79 | 4.72 |
+| mud | rwd | 0.68 | 2.25 |
+| mud | rally | 0.31 | 2.65 |
+| mud | buggy | 0.84 | 2.55 |
+| mud | truck | 0.77 | 4.35 |
+| mud | monster | 0.92 | 4.72 |
+
+- **Rally Coupe:** best skidpad on gravel and dirt road, quickest of the four new classes to 20 m/s on five surfaces; worst by far in mud (0.31 g, forward scale 0.5 on purpose so D-11 holds).
+- **Dune Buggy:** best skidpad on sand and quickest to 20 m/s in mud; weakest tarmac grip (1.26 g).
+- **4x4 Pickup:** best skidpad on tarmac and grass; slow off the line (4.35 s to 20 m/s).
+- **Monster Truck:** best skidpad in mud (0.92 g); slowest to 20 m/s (4.72 s).
+- **RWD muscle car (reference):** quickest to 20 m/s on tarmac; grip falls away off tarmac.
+
+### Rally Coupe (`?car=rally`)
+
+Target: a planted, grippy all-rounder. Mass 1250, track 0.8, wheelbase 1.35, stiffness 16,
+frontDriveShare 0.45, engineForcePerRearWheel 4800 (per wheel of a 2WD axle), topSpeedMs 30
+(a limiter scale: measured top is about 1.54x it). Measured: 0-60 mph 4.20 s (target
+3.4-4.6), top speed 46.3 m/s (target 46), full-lock tilt at 15 m/s 4.1 deg, stability 8.6 deg
+at 60 mph. Character: AWD-planted and sticky on loose surfaces, but traction-limited in mud
+(D-11 trade-off).
+
+### Dune Buggy (`?car=buggy`)
+
+Target: light, twitchy, long-travel. Mass 750, track 0.85, wheelbase 1.4, rest 0.7, travel
+0.65, stiffness 12, frictionSlip 1.4, engineForcePerRearWheel 3000, topSpeedMs 27.3 (top is
+about 1.45x it; below about 26.8 the limiter starves 0-60). Measured: 0-60 5.02 s (target 5.0
++-15%), top about 39.8 m/s (target 38), full-lock tilt at 15 m/s 4.6 deg, ramp landing tilt
+5.8 deg. Rear-wheel drive: do not push force above about 5000 or the short wheelbase
+wheelies it over.
+
+### 4x4 Pickup (`?car=truck`)
+
+Target: a heavy, tall, calm 4x4. Mass 2300, track 1.0, wheelbase 1.7, radius 0.5, rest 0.8,
+travel 0.7, stiffness 10, steering lock pi/6, engineForcePerRearWheel 5500, topSpeedMs 28,
+frontDriveShare 0.5. Measured: 0-60 7.80 s (target 8.0 +-15%), top 36.9 m/s (target 36),
+settle 1.23 s, 4 wheels in contact, tilt 8.3 deg at 12 m/s (inside wheels stay down) and
+14.6 deg at 20 m/s full lock (inside wheels lift). Spawn clearance 1.3 m.
+
+### Monster Truck (`?car=monster`)
+
+Target: huge wheels, soft long suspension, big-air capable. Mass 4500, track 1.4 with
+comOffset.y 0.5 (together they set the rollover window: track 1.2 flips at 12 m/s, 1.5 never
+lifts), wheelbase 2.0, radius 0.9, rest 1.2, travel 1.0, stiffness 7, maxSuspensionForce
+80000, steering lock pi/6, engineForcePerRearWheel 10500, topSpeedMs 29. Measured: 0-60 9.00 s
+(target 9.0 +-15%), top 34.7 m/s (target 35.8 +-10%; the brief's 28 m/s was not reachable and
+about 35 m/s was accepted by the user), settle 1.40 s, 4 wheels in contact, tilt 8.0 deg at
+12 m/s and 13.4 deg at 20 m/s (inside wheels lift). Spawn clearance 2.1 m. A 15 m/s hit on a
+stationary AI car leaves the AI at 15.1 m/s with 1.74 m/s vertical (no launch, all finite).
+
+### AI and medals
+
+D-07: AI cars are always muscle cars whatever `?car=` is, so a monster truck shares the road
+with normal-size traffic. D-08: only `rwd`, `fwd` and `awd` record best times and medals; the
+four new classes show the finish time only (the result line reads "RESULT NONE <time>").
+
+### Drivetrain
+
+The configurable drivetrain todo is already delivered: rwd, fwd and awd via `frontDriveShare`
+(closed 2026-11-16). The new classes reuse that mechanism; see "Arcade front-drive model".
+
+### Monster truck spike
+
+Plan 09-08 proved headlessly that Rapier's raycast vehicle holds a 4500 kg body on 0.9 m
+wheels with 1.0 m travel (settle 1.4 s, no NaN, no tunnelling, clears a 0.6 m step) once the
+suspension is re-derived (static sag is g / (4 x stiffness)), the connection point is raised
+for clearance and the gear limiter is retuned. Full numbers and iterations:
+`.planning/plans-ahead/03-monster-spike-result.md`.
