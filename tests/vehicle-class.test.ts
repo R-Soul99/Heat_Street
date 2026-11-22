@@ -12,6 +12,7 @@ import {
   UNIT_SURFACE_GRIP_SCALE,
   VEHICLE_CLASSES,
   wheelEngineForces,
+  widenRanges,
 } from "../src/core/vehicle-class";
 import {
   clampTuning,
@@ -34,6 +35,9 @@ describe("resolveVehicleClassId", () => {
       expect(resolveVehicleClassId(s)).toBe("rwd");
     }
   });
+  it("accepts buggy", () => {
+    expect(resolveVehicleClassId("?car=buggy")).toBe("buggy");
+  });
   it("accepts fwd and awd", () => {
     expect(resolveVehicleClassId("?car=fwd")).toBe("fwd");
     expect(resolveVehicleClassId("?mode=circuit&car=awd")).toBe("awd");
@@ -51,7 +55,7 @@ describe("resolveVehicleClassId", () => {
     }
   });
   it("lists exactly the known classes", () => {
-    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual(["rwd", "fwd", "awd", "rally"]);
+    expect([...KNOWN_VEHICLE_CLASS_IDS]).toEqual(["rwd", "fwd", "awd", "rally", "buggy"]);
   });
 });
 
@@ -137,7 +141,7 @@ describe("classDefaultTuning", () => {
   it("overrides are inside TUNING_RANGES", () => {
     for (const id of KNOWN_VEHICLE_CLASS_IDS) {
       const t = classDefaultTuning(id);
-      expect(clampTuning(structuredClone(t))).toEqual(t);
+      expect(clampTuning(structuredClone(t), classTuningRanges(id))).toEqual(t);
     }
   });
   it("fwd keeps the handbrake rear friction", () => {
@@ -194,10 +198,24 @@ describe("parseSavedTuning base", () => {
 });
 
 describe("classTuningRanges", () => {
-  it("returns the TUNING_RANGES object itself for rwd, fwd and awd (D-02)", () => {
-    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+  it("returns the TUNING_RANGES object itself for rwd, fwd, awd and rally (D-02)", () => {
+    for (const id of ["rwd", "fwd", "awd", "rally"] as const) {
       expect(classTuningRanges(id)).toBe(TUNING_RANGES);
     }
+  });
+  it("buggy gets a widened frozen copy and TUNING_RANGES is not mutated", () => {
+    const a = classTuningRanges("buggy");
+    const b = classTuningRanges("buggy");
+    expect(a).not.toBe(TUNING_RANGES);
+    expect(a).toBe(b);
+    expect(Object.isFrozen(a)).toBe(true);
+    expect(a.chassis.mass.min).toBe(500);
+    expect(a.wheels.maxSuspensionTravel.max).toBeGreaterThanOrEqual(0.7);
+    expect(TUNING_RANGES.chassis.mass.min).toBe(800);
+    expect(TUNING_RANGES.wheels.maxSuspensionTravel.max).toBe(0.6);
+    const widened = widenRanges(TUNING_RANGES, () => {});
+    expect(widened).toEqual(TUNING_RANGES);
+    expect(widened).not.toBe(TUNING_RANGES);
   });
 });
 
@@ -220,6 +238,26 @@ describe("rally class", () => {
     expect(g.gravel.lateral).toBeGreaterThan(1);
     expect(g.tarmac.lateral).toBeLessThan(1);
     expect(VEHICLE_CLASSES.rally.frontDriveShare).toBe(0.45);
+  });
+});
+
+describe("buggy class", () => {
+  it("is a light RWD class without medals and clamps clean with its own ranges (D-05, D-08)", () => {
+    const v = VEHICLE_CLASSES.buggy;
+    expect(v.frontDriveShare).toBe(0);
+    expect(v.savesMedals).toBe(false);
+    expect(v.storageKey).toBe("heat-street.tuning.buggy.v1");
+    const t = classDefaultTuning("buggy");
+    expect(t.chassis.mass).toBe(750);
+    const r = classTuningRanges("buggy");
+    expect(clampTuning(structuredClone(t), r)).toEqual(t);
+    const s = shippedTuning("buggy");
+    expect(clampTuning(structuredClone(s), r)).toEqual(s);
+  });
+  it("grips better off-road and worse on tarmac (D-06)", () => {
+    const g = VEHICLE_CLASSES.buggy.surfaceGripScale;
+    for (const k of ["sand", "grass", "mud"] as const) expect(g[k].lateral).toBeGreaterThan(1);
+    expect(g.tarmac.lateral).toBeLessThan(1);
   });
 });
 

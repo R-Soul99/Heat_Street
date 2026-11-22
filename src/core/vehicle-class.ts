@@ -15,7 +15,7 @@ import {
   type VehicleTuning,
 } from "./vehicle-tuning";
 
-export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally"] as const;
+export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally", "buggy"] as const;
 export type VehicleClassId = (typeof KNOWN_VEHICLE_CLASS_IDS)[number];
 export const DEFAULT_VEHICLE_CLASS_ID: VehicleClassId = "rwd";
 
@@ -66,6 +66,45 @@ function buildRallyGripScale(): SurfaceGripScale {
   return Object.freeze(table);
 }
 
+function buildBuggyGripScale(): SurfaceGripScale {
+  const table = {} as Record<SurfaceType, Readonly<{ forward: number; lateral: number }>>;
+  for (const s of SURFACE_TYPES) table[s] = Object.freeze({ forward: 1, lateral: 1 });
+  table.tarmac = Object.freeze({ forward: 0.92, lateral: 0.9 });
+  table.sand = Object.freeze({ forward: 1.25, lateral: 1.25 });
+  table.grass = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  table.mud = Object.freeze({ forward: 1.15, lateral: 1.15 });
+  table.gravel = Object.freeze({ forward: 1.1, lateral: 1.1 });
+  table.dirt_road = Object.freeze({ forward: 1.1, lateral: 1.1 });
+  return Object.freeze(table);
+}
+
+function deepFreeze<T>(o: T): T {
+  if (typeof o === "object" && o !== null) {
+    for (const v of Object.values(o)) deepFreeze(v);
+    Object.freeze(o);
+  }
+  return o;
+}
+
+/** Mutable view of a ranges tree for `widenRanges` edit callbacks. */
+export type DraftRanges = { -readonly [K in keyof TuningRanges]: TuningRanges[K] };
+
+/**
+ * D-02: deep-copy a plain-number ranges tree, apply `edit`, deep-freeze and
+ * return it. The base table is never mutated.
+ */
+export function widenRanges(base: TuningRanges, edit: (draft: DraftRanges) => void): TuningRanges {
+  const draft = structuredClone(base) as DraftRanges;
+  edit(draft);
+  return deepFreeze(draft) as TuningRanges;
+}
+
+/** Buggy ranges: lighter body and longer suspension travel than the muscle-car table. */
+const BUGGY_RANGES: TuningRanges = widenRanges(TUNING_RANGES, (d) => {
+  d.chassis.mass.min = 500;
+  d.wheels.maxSuspensionTravel.max = 0.7;
+});
+
 /**
  * FWD green / AWD blue are deliberately brighter and more saturated than the
  * AI paints HIGHLAND GREEN 0x2e8b57 and GRABBER BLUE 0x2f6fd6 so the player
@@ -108,6 +147,16 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     frontDriveShare: 0.45,
     storageKey: "heat-street.tuning.rally.v1",
     surfaceGripScale: buildRallyGripScale(),
+    savesMedals: false,
+  }),
+  buggy: Object.freeze({
+    id: "buggy",
+    label: "Dune Buggy",
+    // Sand/teal: distinct from AI paints, pursuer paints and the other player colours.
+    chassisColor: 0x2ec4b6,
+    frontDriveShare: 0,
+    storageKey: "heat-street.tuning.buggy.v1",
+    surfaceGripScale: buildBuggyGripScale(),
     savesMedals: false,
   }),
 });
@@ -189,11 +238,25 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       // 4800 with topSpeedMs 30 measures 0-60 4.20 s (target 3.4-4.6).
       t.drive.engineForcePerRearWheel = 4800;
       break;
+    case "buggy":
+      t.chassis.mass = 750;
+      t.chassis.halfExtents = { x: 0.8, y: 0.35, z: 1.6 };
+      t.chassis.comOffset.y = -0.15;
+      t.wheels.halfTrack = 0.85;
+      t.wheels.halfWheelbase = 1.15;
+      t.wheels.radius = 0.4;
+      t.wheels.suspensionRestLength = 0.7;
+      t.wheels.maxSuspensionTravel = 0.65;
+      t.wheels.suspensionStiffness = 9;
+      t.wheels.maxSuspensionForce = 12000;
+      t.drive.topSpeedMs = 24.7;
+      t.drive.engineForcePerRearWheel = 3000;
+      break;
   }
   return t;
 }
 
-/** Tuning ranges for a class. rwd/fwd/awd share the TUNING_RANGES object itself (D-02). */
+/** Tuning ranges for a class. rwd/fwd/awd/rally share the TUNING_RANGES object itself; buggy has a widened copy (D-02). */
 export function classTuningRanges(id: VehicleClassId): TuningRanges {
   switch (id) {
     case "rwd":
@@ -201,6 +264,8 @@ export function classTuningRanges(id: VehicleClassId): TuningRanges {
     case "awd":
     case "rally":
       return TUNING_RANGES;
+    case "buggy":
+      return BUGGY_RANGES;
   }
 }
 
