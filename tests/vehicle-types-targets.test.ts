@@ -38,6 +38,17 @@ export const CLASS_TARGETS: Partial<Record<VehicleClassId, ClassTargets>> = {
     tiltSpeedMs: 15,
     maxTiltDeg: 15,
   },
+  buggy: {
+    zeroToSixtyS: 5.0,
+    zeroToSixtyTol: 0.15,
+    topSpeedMs: 38,
+    topSpeedTol: 0.1,
+    settleMaxS: 2,
+    settleBandM: 0.01,
+    restContact: 4,
+    tiltSpeedMs: 15,
+    maxTiltDeg: 15,
+  },
 };
 
 function optsFor(id: VehicleClassId): MeasureOpts {
@@ -73,6 +84,17 @@ for (const [rawId, target] of Object.entries(CLASS_TARGETS) as [VehicleClassId, 
       expect(tilt.maxTiltDeg).toBeLessThan(target.maxTiltDeg);
     });
 
+    if (rawId === "buggy") {
+      it("lands the ramp routine upright", () => {
+        const ramp = ROUTINES.find((x) => x.id === "ramp");
+        if (ramp === undefined) throw new Error("ramp routine missing");
+        // routine value = tilt 0.5 s after landing (Infinity when it never lands).
+        const r = runRoutine(ramp, tuning, undefined, undefined, opts);
+        console.info(`[targets] ${rawId}: ramp landing tilt ${r.value.toFixed(1)} deg`);
+        expect(r.value).toBeLessThan(30);
+      });
+    }
+
     if (rawId === "rally") {
       it("handbrake on gravel slides at least the muscle-car minimum", () => {
         // routine value = max slip angle (deg) during the handbrake hold.
@@ -87,7 +109,9 @@ for (const [rawId, target] of Object.entries(CLASS_TARGETS) as [VehicleClassId, 
         console.info(`[targets] ${rawId}: handbrake gravel max slip ${r.value.toFixed(1)} deg`);
         expect(r.value).toBeGreaterThan(TELEMETRY_TARGETS.handbrake.minMaxSlipDeg);
       });
+    }
 
+    if (rawId === "rally" || rawId === "buggy") {
       it("hands-off-style full-lock stability stays inside the muscle-car band", () => {
         const stability = ROUTINES.find((x) => x.id === "stability");
         if (stability === undefined) throw new Error("stability routine missing");

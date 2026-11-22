@@ -86,8 +86,10 @@ function deepFreeze<T>(o: T): T {
   return o;
 }
 
+type DeepMutable<T> = { -readonly [K in keyof T]: DeepMutable<T[K]> };
+
 /** Mutable view of a ranges tree for `widenRanges` edit callbacks. */
-export type DraftRanges = { -readonly [K in keyof TuningRanges]: TuningRanges[K] };
+export type DraftRanges = DeepMutable<TuningRanges>;
 
 /**
  * D-02: deep-copy a plain-number ranges tree, apply `edit`, deep-freeze and
@@ -241,15 +243,25 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
     case "buggy":
       t.chassis.mass = 750;
       t.chassis.halfExtents = { x: 0.8, y: 0.35, z: 1.6 };
-      t.chassis.comOffset.y = -0.15;
+      t.chassis.comOffset.y = -0.25;
       t.wheels.halfTrack = 0.85;
-      t.wheels.halfWheelbase = 1.15;
+      // 1.15 popped a launch wheelie to 69 deg (stability routine); 1.4 measures 6.6 deg.
+      t.wheels.halfWheelbase = 1.4;
       t.wheels.radius = 0.4;
       t.wheels.suspensionRestLength = 0.7;
       t.wheels.maxSuspensionTravel = 0.65;
-      t.wheels.suspensionStiffness = 9;
+      // Brief D5 says 9, but 9-10 rolls the light body over at full lock (27-56 deg
+      // at 15 m/s); 12 measures 8 deg.
+      t.wheels.suspensionStiffness = 12;
       t.wheels.maxSuspensionForce = 12000;
-      t.drive.topSpeedMs = 24.7;
+      // Light body on full-grip tyres rolls over at full lock at 60 mph (59-92 deg);
+      // 1.4 (muscle car 1.7) keeps it sliding instead (10 deg) and suits a twitchy buggy.
+      t.wheels.frictionSlip = 1.4;
+      // topSpeedMs is a gear/limiter scale (measured top ~1.45x it: 27.3 -> 39.5 m/s,
+      // inside the 38 m/s +-10% band). Below ~26.8 the limiter starves 0-60.
+      t.drive.topSpeedMs = 27.3;
+      // Measured 0-60 5.13 s at 3000 (smooth: 3500 -> 4.22, 2500 -> 7.55). Keep it
+      // low: 5000+ with the short wheelbase wheelied the car over.
       t.drive.engineForcePerRearWheel = 3000;
       break;
   }
