@@ -15,7 +15,15 @@ import {
   type VehicleTuning,
 } from "./vehicle-tuning";
 
-export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd", "rally", "buggy", "truck", "monster"] as const;
+export const KNOWN_VEHICLE_CLASS_IDS = [
+  "rwd",
+  "fwd",
+  "awd",
+  "rally",
+  "buggy",
+  "truck",
+  "monster",
+] as const;
 export type VehicleClassId = (typeof KNOWN_VEHICLE_CLASS_IDS)[number];
 export const DEFAULT_VEHICLE_CLASS_ID: VehicleClassId = "rwd";
 

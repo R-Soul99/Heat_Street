@@ -207,6 +207,11 @@ const canvas: HTMLCanvasElement = canvasElement;
 // original key). AI cars always stay RWD.
 const CAR_CLASS = VEHICLE_CLASSES[resolveVehicleClassId(location.search)];
 const CAR_RANGES = classTuningRanges(CAR_CLASS.id);
+/** Extra spawn height for tall classes over SPAWN_CLEARANCE_M; exactly 0 for rwd/fwd/awd. */
+const PLAYER_SPAWN_LIFT_M = (CAR_CLASS.spawnClearanceM ?? SPAWN_CLEARANCE_M) - SPAWN_CLEARANCE_M;
+function liftPlayerPose<P extends { readonly y: number }>(pose: P): P {
+  return PLAYER_SPAWN_LIFT_M === 0 ? pose : { ...pose, y: pose.y + PLAYER_SPAWN_LIFT_M };
+}
 // `?feel` replaces the saved big-panel blob with the class base, then lets the
 // small feel panel derive the handling from its few sliders (see core/feel).
 const FEEL_ENABLED = parseFeelFlag(location.search);
@@ -494,6 +499,18 @@ try {
         : { grid: gatePhysicsGrid, paint: gate.paint },
       { surfaceGripScale: CAR_CLASS.surfaceGripScale },
     );
+  }
+
+  // Tall vehicles (truck, monster) need more ground clearance than the shared
+  // SPAWN_CLEARANCE_M. Every PLAYER pose goes through scene.resetVehicle (race
+  // restarts and respawns, grid slot, test stations, gate spawns, free-drive),
+  // so lifting it there covers all sites once. AI spawns use fleet.resetCar /
+  // createAiFleet and are untouched. The lift is exactly 0 for rwd/fwd/awd and
+  // the wrapper is then not installed (bit-identical behaviour).
+  if (PLAYER_SPAWN_LIFT_M !== 0) {
+    const resetPlayerVehicle = scene.resetVehicle.bind(scene);
+    scene.resetVehicle = (pose) => resetPlayerVehicle(liftPlayerPose(pose));
+    scene.resetVehicle(scene.defaultSpawnPose);
   }
 
   // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
