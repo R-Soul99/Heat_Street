@@ -22,6 +22,7 @@
 import * as RAPIER from "@dimforge/rapier3d";
 import type { SurfaceProfiles } from "../../core/surface-tuning";
 import type { SurfaceType } from "../../core/surface-types";
+import type { SurfaceGripScale } from "../../core/vehicle-class";
 import type { VehicleTuning } from "../../core/vehicle-tuning";
 import type { SurfaceContext } from "../surface";
 import { createSurfaceMap } from "../surface";
@@ -110,12 +111,12 @@ export interface SurfaceRunOpts {
  * runner measure an AWD car (front drive share) and a tall car (spawn height)
  * without a second runner. When omitted, the vehicle creation call is
  * literally the pre-09 `createVehicle(world, tuning, SPAWN)` (T-03-09 style
- * byte-identical default path). Plan 09-05 extends this with a surface grip
- * scale; no field is reserved for it yet.
+ * byte-identical default path). Plan 09-05 adds the optional surface grip scale.
  */
 export interface RoutineRunOpts {
   readonly frontDriveShare?: number;
   readonly spawnY?: number;
+  readonly surfaceGripScale?: SurfaceGripScale;
 }
 
 /**
@@ -147,6 +148,9 @@ export function runRoutine(
             tuning,
             { x: SPAWN.x, y: opts.spawnY ?? SPAWN.y, z: SPAWN.z },
             opts.frontDriveShare ?? 0,
+            opts.surfaceGripScale === undefined
+              ? undefined
+              : { surfaceGripScale: opts.surfaceGripScale },
           );
     routine.setup?.(vehicle);
 

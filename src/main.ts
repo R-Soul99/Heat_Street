@@ -434,6 +434,7 @@ try {
       tuning,
       surfaceProfiles,
       CAR_CLASS.frontDriveShare,
+      { surfaceGripScale: CAR_CLASS.surfaceGripScale },
     );
     scene = terrainScene;
     terrainSightTransparent = terrainScene.sightTransparentHandles;
@@ -491,6 +492,7 @@ try {
       gate === undefined || gatePhysicsGrid === undefined
         ? undefined
         : { grid: gatePhysicsGrid, paint: gate.paint },
+      { surfaceGripScale: CAR_CLASS.surfaceGripScale },
     );
   }
 

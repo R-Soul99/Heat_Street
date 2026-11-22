@@ -46,6 +46,9 @@ function withRig<T>(tuning: VehicleTuning, opts: MeasureOpts | undefined, run: (
       tuning,
       { x: 0, y: opts?.spawnY ?? 1, z: 0 },
       opts?.frontDriveShare ?? 0,
+      opts?.surfaceGripScale === undefined
+        ? undefined
+        : { surfaceGripScale: opts.surfaceGripScale },
     );
     let surfaces: SurfaceContext | undefined;
     if (opts?.surface !== undefined && opts.profiles !== undefined) {
