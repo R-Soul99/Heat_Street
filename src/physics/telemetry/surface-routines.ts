@@ -27,6 +27,7 @@ import type { SurfaceProfiles } from "../../core/surface-tuning";
 import { SURFACE_TYPES, type SurfaceType } from "../../core/surface-types";
 import type { VehicleTuning } from "../../core/vehicle-tuning";
 import type { Routine, RoutineResult } from "./routines";
+import type { RoutineRunOpts } from "./run";
 import { runRoutine } from "./run";
 
 const RAD_TO_DEG = 180 / Math.PI;
@@ -198,9 +199,18 @@ function makeSurfaceStabilityRoutine(surface: SurfaceType): Routine {
 export function runSurfaceSkidpadSweep(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
+  opts?: RoutineRunOpts,
 ): RoutineResult[] {
   return SURFACE_TYPES.map((surface) =>
-    runRoutine(makeSurfaceSkidpadRoutine(surface), tuning, { surface, profiles }),
+    opts === undefined
+      ? runRoutine(makeSurfaceSkidpadRoutine(surface), tuning, { surface, profiles })
+      : runRoutine(
+          makeSurfaceSkidpadRoutine(surface),
+          tuning,
+          { surface, profiles },
+          undefined,
+          opts,
+        ),
   );
 }
 
@@ -211,9 +221,18 @@ export function runSurfaceSkidpadSweep(
 export function runSurfaceStabilitySweep(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
+  opts?: RoutineRunOpts,
 ): RoutineResult[] {
   return SURFACE_TYPES.map((surface) =>
-    runRoutine(makeSurfaceStabilityRoutine(surface), tuning, { surface, profiles }),
+    opts === undefined
+      ? runRoutine(makeSurfaceStabilityRoutine(surface), tuning, { surface, profiles })
+      : runRoutine(
+          makeSurfaceStabilityRoutine(surface),
+          tuning,
+          { surface, profiles },
+          undefined,
+          opts,
+        ),
   );
 }
 
@@ -229,10 +248,10 @@ export function runSkidpadAtGroundFriction(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
   groundFriction: number,
+  opts?: RoutineRunOpts,
 ): RoutineResult {
-  return runRoutine(makeSurfaceSkidpadRoutine("tarmac"), tuning, {
-    surface: "tarmac",
-    profiles,
-    groundFriction,
-  });
+  const surfaceOpts = { surface: "tarmac" as const, profiles, groundFriction };
+  return opts === undefined
+    ? runRoutine(makeSurfaceSkidpadRoutine("tarmac"), tuning, surfaceOpts)
+    : runRoutine(makeSurfaceSkidpadRoutine("tarmac"), tuning, surfaceOpts, undefined, opts);
 }

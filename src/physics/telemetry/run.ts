@@ -106,6 +106,19 @@ export interface SurfaceRunOpts {
 }
 
 /**
+ * Optional vehicle-spawn options for a telemetry run (plan 09-03). Lets the
+ * runner measure an AWD car (front drive share) and a tall car (spawn height)
+ * without a second runner. When omitted, the vehicle creation call is
+ * literally the pre-09 `createVehicle(world, tuning, SPAWN)` (T-03-09 style
+ * byte-identical default path). Plan 09-05 extends this with a surface grip
+ * scale; no field is reserved for it yet.
+ */
+export interface RoutineRunOpts {
+  readonly frontDriveShare?: number;
+  readonly spawnY?: number;
+}
+
+/**
  * Execute one `Routine` against `tuning` inside a fresh, throwaway world and
  * return its `RoutineResult`. Always builds its OWN `createWorld()` — never
  * the live game world (T-02-18) — so a telemetry run can never perturb a
@@ -116,6 +129,7 @@ export function runRoutine(
   tuning: VehicleTuning,
   surfaceOpts?: SurfaceRunOpts,
   groundBuilder?: (world: RAPIER.World) => RAPIER.Collider,
+  opts?: RoutineRunOpts,
 ): RoutineResult {
   const world = createWorld();
   try {
@@ -124,7 +138,16 @@ export function runRoutine(
     const ground = groundBuilder
       ? groundBuilder(world)
       : buildTelemetryScene(world, surfaceOpts?.groundFriction);
-    const vehicle = createVehicle(world, tuning, SPAWN);
+    // With no `opts` this stays the exact 3-argument pre-09 call (T-03-09).
+    const vehicle =
+      opts === undefined
+        ? createVehicle(world, tuning, SPAWN)
+        : createVehicle(
+            world,
+            tuning,
+            { x: SPAWN.x, y: opts.spawnY ?? SPAWN.y, z: SPAWN.z },
+            opts.frontDriveShare ?? 0,
+          );
     routine.setup?.(vehicle);
 
     // The surface map and its single registration are created INSIDE this
