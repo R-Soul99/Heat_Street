@@ -1,8 +1,8 @@
 ---
 phase: 9
 slug: vehicle-types
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-11-22
 ---
