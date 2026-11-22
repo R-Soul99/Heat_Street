@@ -5,6 +5,8 @@ import {
   parseSavedTuning,
   serializeTuning,
   TUNING_RANGES,
+  type TuningRange,
+  type TuningRanges,
 } from "../src/core/vehicle-tuning";
 
 /**
@@ -152,5 +154,27 @@ describe("clampTuning", () => {
     const before = JSON.parse(JSON.stringify(t));
     clampTuning(t);
     expect(t).toEqual(before);
+  });
+});
+
+function customRanges(): TuningRanges {
+  const r = structuredClone(TUNING_RANGES) as {
+    -readonly [K in keyof TuningRanges]: TuningRanges[K];
+  };
+  (r.chassis as { mass: TuningRange }).mass = { min: 500, max: 9000, step: 1 };
+  return r;
+}
+
+describe("parseSavedTuning ranges argument (D-02)", () => {
+  const blob = (): string => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    return JSON.stringify(t);
+  };
+  it("clamps mass with default ranges", () => {
+    expect(parseSavedTuning(blob())?.chassis.mass).toBe(TUNING_RANGES.chassis.mass.max);
+  });
+  it("keeps mass 6000 with custom ranges", () => {
+    expect(parseSavedTuning(blob(), defaultTuning, customRanges())?.chassis.mass).toBe(6000);
   });
 });

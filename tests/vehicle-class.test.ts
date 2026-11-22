@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AI_PAINTS } from "../src/core/race-start";
 import {
   classDefaultTuning,
+  classTuningRanges,
   frontDriveThrustN,
   KNOWN_VEHICLE_CLASS_IDS,
   resolveVehicleClassId,
@@ -13,6 +14,7 @@ import {
   defaultTuning,
   parseSavedTuning,
   serializeTuning,
+  TUNING_RANGES,
   TUNING_STORAGE_KEY,
 } from "../src/core/vehicle-tuning";
 
@@ -177,5 +179,13 @@ describe("parseSavedTuning base", () => {
     expect(viaBase?.drive.powerOversteerGain).toBe(0.5);
     const viaDefault = parseSavedTuning(raw);
     expect(viaDefault?.drive.powerOversteerGain).toBe(defaultTuning().drive.powerOversteerGain);
+  });
+});
+
+describe("classTuningRanges", () => {
+  it("returns the TUNING_RANGES object itself for rwd, fwd and awd (D-02)", () => {
+    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+      expect(classTuningRanges(id)).toBe(TUNING_RANGES);
+    }
   });
 });

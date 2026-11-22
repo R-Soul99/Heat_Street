@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { defaultTuning, TUNING_RANGES, type VehicleTuning } from "../src/core/vehicle-tuning";
+import {
+  clampTuning,
+  defaultTuning,
+  TUNING_RANGES,
+  type TuningRange,
+  type TuningRanges,
+  type VehicleTuning,
+} from "../src/core/vehicle-tuning";
 
 /**
  * Only the pure data half of `vehicle-tuning.ts` is exercised here:
@@ -137,5 +144,26 @@ describe("VehicleTuning shape", () => {
   it("exposes exactly the four top-level groups", () => {
     const t: VehicleTuning = defaultTuning();
     expect(Object.keys(t).sort()).toEqual(["assists", "chassis", "drive", "wheels"]);
+  });
+});
+
+function customRanges(): TuningRanges {
+  const r = structuredClone(TUNING_RANGES) as {
+    -readonly [K in keyof TuningRanges]: TuningRanges[K];
+  };
+  (r.chassis as { mass: TuningRange }).mass = { min: 500, max: 9000, step: 1 };
+  return r;
+}
+
+describe("clampTuning ranges argument (D-02)", () => {
+  it("clamps to default TUNING_RANGES without a second argument", () => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    expect(clampTuning(t).chassis.mass).toBe(TUNING_RANGES.chassis.mass.max);
+  });
+  it("honours custom ranges", () => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    expect(clampTuning(t, customRanges()).chassis.mass).toBe(6000);
   });
 });

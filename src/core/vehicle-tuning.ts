@@ -789,7 +789,8 @@ export function defaultTuning(): VehicleTuning {
  * its default with a useful tuning margin (`min < default < max`, and `min`
  * may equal 0 where zero is itself a meaningful value).
  */
-export const TUNING_RANGES: {
+/** Shape of a per-class tuning range table (see `classTuningRanges`). */
+export interface TuningRanges {
   readonly chassis: {
     mass: TuningRange;
     comOffset: { x: TuningRange; y: TuningRange; z: TuningRange };
@@ -873,7 +874,9 @@ export const TUNING_RANGES: {
     slideCatchDamping: TuningRange;
     downforcePerSpeed2: TuningRange;
   };
-} = {
+}
+
+export const TUNING_RANGES: TuningRanges = {
   chassis: {
     mass: { min: 800, max: 2600, step: 10 },
     comOffset: {
@@ -987,11 +990,11 @@ export const TUNING_RANGES: {
  * every body in the physics world, not just the vehicle's own. Mutates `t` in
  * place and returns the same object reference for convenient chaining.
  */
-export function clampTuning(t: VehicleTuning): VehicleTuning {
+export function clampTuning(t: VehicleTuning, ranges: TuningRanges = TUNING_RANGES): VehicleTuning {
   const fallback = defaultTuning() as unknown as Record<string, unknown>;
   clampNode(
     t as unknown as Record<string, unknown>,
-    TUNING_RANGES as unknown as Record<string, unknown>,
+    ranges as unknown as Record<string, unknown>,
     fallback,
   );
   return t;
@@ -1031,6 +1034,7 @@ const REQUIRED_GROUP_KEYS = ["chassis", "wheels", "drive", "assists"] as const;
 export function parseSavedTuning(
   raw: string | null,
   base: () => VehicleTuning = defaultTuning,
+  ranges: TuningRanges = TUNING_RANGES,
 ): VehicleTuning | null {
   if (raw === null) {
     return null;
@@ -1057,9 +1061,9 @@ export function parseSavedTuning(
   copyLeaves(
     parsed,
     result as unknown as Record<string, unknown>,
-    TUNING_RANGES as unknown as Record<string, unknown>,
+    ranges as unknown as Record<string, unknown>,
   );
-  clampTuning(result);
+  clampTuning(result, ranges);
   return result;
 }
 

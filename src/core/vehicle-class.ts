@@ -5,7 +5,13 @@
  * rapier imports. Index lookups into `VEHICLE_CLASSES` only ever use an
  * already-allowlisted `VehicleClassId`.
  */
-import { defaultTuning, TUNING_STORAGE_KEY, type VehicleTuning } from "./vehicle-tuning";
+import {
+  defaultTuning,
+  TUNING_RANGES,
+  TUNING_STORAGE_KEY,
+  type TuningRanges,
+  type VehicleTuning,
+} from "./vehicle-tuning";
 
 export const KNOWN_VEHICLE_CLASS_IDS = ["rwd", "fwd", "awd"] as const;
 export type VehicleClassId = (typeof KNOWN_VEHICLE_CLASS_IDS)[number];
@@ -116,4 +122,14 @@ export function classDefaultTuning(id: VehicleClassId): VehicleTuning {
       break;
   }
   return t;
+}
+
+/** Tuning ranges for a class. rwd/fwd/awd share the TUNING_RANGES object itself (D-02). */
+export function classTuningRanges(id: VehicleClassId): TuningRanges {
+  switch (id) {
+    case "rwd":
+    case "fwd":
+    case "awd":
+      return TUNING_RANGES;
+  }
 }
