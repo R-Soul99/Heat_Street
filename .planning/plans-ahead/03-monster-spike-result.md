@@ -136,3 +136,7 @@ Choose one:
 3. Stop.
 
 An arcade-assist layer or a Jolt evaluation was not needed by anything measured and will only be started if you ask (D-10).
+
+## Decision
+
+User response: "Approved" (option 1). Continue with plan 09-09 using the Recommended values as written. Open items carried into 09-09: truck inside-wheel lift at 20 m/s still to be found; monster top speed ~35.8 m/s vs D5 28 m/s accepted as-is for now; per-class spawn clearance to be verified on a real map. No arcade-assist layer or Jolt evaluation requested (D-10). Branch car/monster-spike (d85b086) kept.
