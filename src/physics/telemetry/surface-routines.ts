@@ -68,7 +68,7 @@ const SKIDPAD_HOLD_THROTTLE = 0.3;
  * tarmac, and reusing it would make five of six surfaces permanently read as
  * failing in the browser panel.
  */
-function makeSurfaceSkidpadRoutine(surface: SurfaceType): Routine {
+export function makeSurfaceSkidpadRoutine(surface: SurfaceType): Routine {
   const id = `skidpad:${surface}`;
   const label = `skidpad steady-state lateral g (${surface})`;
   let holding = false;
