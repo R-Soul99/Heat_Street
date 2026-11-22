@@ -114,7 +114,12 @@ import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
 import { sampleTerrainHeight, type TerrainGrid, upsampleTerrainGrid } from "./core/terrain-grid";
 import { DEFAULT_COLLIDER_SUBDIV } from "./core/terrain-limits";
 import { tyreSlipRatio } from "./core/tyre-slip";
-import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./core/vehicle-class";
+import {
+  classDefaultTuning,
+  classTuningRanges,
+  resolveVehicleClassId,
+  VEHICLE_CLASSES,
+} from "./core/vehicle-class";
 import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
@@ -196,6 +201,7 @@ const canvas: HTMLCanvasElement = canvasElement;
 // has its own default tuning and its own saved-tuning key (RWD keeps the
 // original key). AI cars always stay RWD.
 const CAR_CLASS = VEHICLE_CLASSES[resolveVehicleClassId(location.search)];
+const CAR_RANGES = classTuningRanges(CAR_CLASS.id);
 // `?feel` replaces the saved big-panel blob with the class base, then lets the
 // small feel panel derive the handling from its few sliders (see core/feel).
 const FEEL_ENABLED = parseFeelFlag(location.search);
@@ -207,9 +213,10 @@ const tuning = FEEL_ENABLED
   : (parseSavedTuning(
       typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
       () => shippedTuning(CAR_CLASS.id),
+      CAR_RANGES,
     ) ?? shippedTuning(CAR_CLASS.id));
 if (FEEL_ENABLED) {
-  applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings);
+  applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings, CAR_RANGES);
 }
 // AI fleet tuning: the same object as the player's when RWD (panel edits still
 // reach the fleet); otherwise an independent RWD tune so FWD/AWD edits never
@@ -1126,7 +1133,11 @@ try {
           },
         },
         undefined,
-        { storageKey: CAR_CLASS.storageKey, defaults: () => classDefaultTuning(CAR_CLASS.id) },
+        {
+          storageKey: CAR_CLASS.storageKey,
+          defaults: () => classDefaultTuning(CAR_CLASS.id),
+          ranges: CAR_RANGES,
+        },
       )
     : null;
   if (panel) {
@@ -1139,7 +1150,7 @@ try {
   if (FEEL_ENABLED) {
     const feelBase = classDefaultTuning(CAR_CLASS.id);
     createFeelPanel(feelSettings, () => {
-      applyFeel(tuning, feelBase, feelSettings);
+      applyFeel(tuning, feelBase, feelSettings, CAR_RANGES);
       scene.setTuning(tuning);
       fleet?.setTuning(aiTuning);
       pursuit?.fleet.setTuning(aiTuning);
