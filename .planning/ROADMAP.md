@@ -23,13 +23,18 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Objectives, Navigation & Race Modes** - Checkpoints, two-layer navigation, respawn, instant restart, Point-to-Point and Circuit (no AI) (completed 2026-09-21)
 - [x] **Phase 6: Medals & Time-Attack Loop** - Four-tier medals, persistent bests, live splits, post-run sector breakdown
  (completed 2026-09-22)
-- [x] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit (completed 2026-11-15)
+- [x] **Phase 7: NPC Driving AI & Circuit Racers** - Layered AI driving the same physics car, no rubber-banding, racers in Circuit
+ (completed 2026-11-15)
 - [x] **Phase 07.1: Editor UX Overhaul** (INSERTED) - Shared editor shell for map and terrain editors, road problems panel, map-to-terrain handoff (completed 2026-11-14)
-- [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls (completed 2026-11-14)
-- [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix (completed 2026-11-14)
-- [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette (completed 2026-11-16)
+- [x] **Phase 07.1.1: Editor Controls Polish** (INSERTED) - Logical, labelled tool buttons; lighter tooltips; vertical undo/redo on the left; compact knob/arrow value controls
+ (completed 2026-11-14)
+- [x] **Phase 07.1.2: Selection-based Editor Tools** (INSERTED) - Select/Brush modes with shared operations (raise, lower, smooth, flatten, terrain), floating tool layout, road tools on the selection, locked-road warp fix
+ (completed 2026-11-14)
+- [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette
+ (completed 2026-11-16)
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
-- [x] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car (completed 2026-11-22)
+- [x] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car
+ (completed 2026-11-22)
 - [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor; the same tool authors road race routes (ramps moved to Phase 10.1)
 - [ ] **Phase 10.1: Ramps and Structures** (INSERTED) - Built stunt ramps (kicker, wedge, tabletop/gap jump, quarter-pipe, half-pipe) with adjustable angle/curve, wood/metal materials and snapping, as the first kind of a general structure piece
 - [ ] **Phase 11: Art Pass** - Shaped car bodies and wheels; soft particles, dust trails, roost, landing bursts and continuous tyre tracks
@@ -621,8 +626,41 @@ Plans:
   4. The same tool authors road race routes (point-to-point and circuit); a map can hold any number of routes, including none (widened 2026-11-16)
   5. (Moved to Phase 10.1 on 2026-11-23: ramps as built objects)
 
-**Plans**: TBD (run /gsd-plan-phase 10)
+**Plans:** 13 plans
 **UI hint**: yes
+
+Plans:
+
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — Stage file format (parser, serializer, drafts, medal classifier), YAW/BEARING converters, schema doc
+- [ ] 10-02-PLAN.md — Stage run logic (ordered forward-only gates, respawn, penalty), RaceSnapshot "stage", per-class PB storage
+- [ ] 10-03-PLAN.md — Road-route core: relaxed parseCourseData (0..20 routes), RouteDraft node/edge derivation, empty-graph nearestRoadNode, soft validation, partial medals
+
+**Wave 2**
+
+- [ ] 10-04-PLAN.md — Stage coordinator (timing sectors, PB split deltas, completion, restart/respawn)
+- [ ] 10-05-PLAN.md — Stage HUD status/PB/split, stage results panel (no medal row), gate visuals in 3 draw calls
+- [ ] 10-06-PLAN.md — Dev-server GET/PUT /__terrain/stages|routes/<id> validated by the shared parsers
+- [ ] 10-07-PLAN.md — Editor pure stage/route ops with caps and warnings; stages/routes undo parts
+
+**Wave 3**
+
+- [ ] 10-08-PLAN.md — Game wiring: ?mode=stage, ?stage=, spawn, coordinator, PB save, D-08 fallback
+- [ ] 10-09-PLAN.md — Route tool module (stage kind), Place entry 8, test URLs
+
+**Wave 4**
+
+- [ ] 10-10-PLAN.md — Host the Route tool in the terrain editor (keys, load, save, undo, sculpt re-seat)
+- [ ] 10-11-PLAN.md — Game: ?route= among N routes, optional medals, soft validation, route start spawn
+
+**Wave 5**
+
+- [ ] 10-12-PLAN.md — Road kinds (point to point, circuit) in the Route tool; docs/stages.md
+
+**Wave 6**
+
+- [ ] 10-13-PLAN.md — Phase gate and three-minute human check (stage drive + road-route round trip)
 
 ### Phase 10.1: Ramps and Structures (INSERTED)
 
