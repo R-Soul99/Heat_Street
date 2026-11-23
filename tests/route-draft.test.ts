@@ -20,7 +20,7 @@ function draft(overrides: Partial<RouteDraft> = {}): RouteDraft {
     laps: 1,
     start: { x: 3, z: 2, headingRad: 1.5 },
     checkpoints: [{ id: "r1-cp-1", x: 100, z: 12 }],
-    finish: { x: 98, z: 100 },
+    finish: { id: "r1-finish", x: 98, z: 100 },
     ...overrides,
   };
 }
