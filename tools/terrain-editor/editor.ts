@@ -907,6 +907,7 @@ function sceneryChanged(r: {
 
 /** Sculpting under scenery re-seats it on the new ground (buildings re-seat inside the stroke diff). */
 function reseatScenery(w: CellWindow): void {
+  routeTool.onTerrainEdited();
   if (area && area.objects.length > 0) rebuildRamps(); // ramps are seated on the ground at build time
   if (!area || !sceneryView) return;
   const g = area.grid;
@@ -3545,6 +3546,7 @@ async function loadArea(id: string): Promise<string | null> {
     ]);
     const loaded = await loadTerrainArea(bin, json, id, id);
     installArea(loaded);
+    await routeTool.load(id);
     setDirty(false);
     setStatus(`Loaded ${id}. ${DEFAULT_HINT}`, "ok");
     log(`loaded ${id}`);
@@ -3763,6 +3765,12 @@ async function save(asId?: string): Promise<boolean> {
       setRoadProblemsOpen(true);
       return false;
     }
+    // Phase 10: an incomplete stage refuses the whole save before anything is written.
+    const routePrep = routeTool.prepareSave(target.areaId);
+    if ("error" in routePrep) {
+      fail(routePrep.error);
+      return false;
+    }
     // Snapshot synchronously: the sidecar text is serialised and the binary
     // quantised (inside encodeTerrainBinary, before its first await) at the
     // same instant, so the pair describes one consistent state.
@@ -3782,6 +3790,12 @@ async function save(asId?: string): Promise<boolean> {
       bin as BodyInit,
       sidecar,
     );
+    // The stages file is written after the terrain pair; a failure here leaves the terrain saved.
+    const routeErr = await routeTool.commitSave(target.areaId, routePrep);
+    if (routeErr !== null) {
+      fail(routeErr);
+      return false;
+    }
     const editedDuringSave = editCounter !== editsAtStart || area !== source;
     if (asId !== undefined) {
       log(`saved ${target.areaId} as a new area (${Math.round(bin.length / 1024)} KB)`);
@@ -3819,6 +3833,12 @@ async function save(asId?: string): Promise<boolean> {
       "ok",
     );
     log(`saved ${target.areaId} (${kb} KB)`);
+    if (routeTool.hasMedalsAtRisk()) {
+      setStatus(
+        "Medals recorded for this stage may no longer be fair after terrain edits",
+        "error",
+      );
+    }
     if (registerWarning !== "") fail(registerWarning);
     await refreshAreaList().catch(() => {});
     return true;
@@ -4659,8 +4679,11 @@ function applyResult(res: ToolResult, _ms: number): void {
       res.startPointsChanged ||
       res.featuresChanged ||
       res.buildingsChanged ||
-      res.objectsChanged);
+      res.objectsChanged ||
+      res.stagesChanged ||
+      res.routesChanged);
   if (res.startPointsChanged) startPointsEdited();
+  if (res.stagesChanged || res.routesChanged) routeTool.onUndoApplied();
   sceneryChanged(res);
   if (res.graphChanged || res.lockChanged || res.selectionChanged) refreshRoadLockOverlay();
   refreshSelectionOutline();
@@ -5144,6 +5167,7 @@ function undoRedo(kind: "undo" | "redo"): void {
     refreshInfo();
   }
   if (r.startPointsChanged) startPointsEdited();
+  if (r.stagesChanged || r.routesChanged) routeTool.onUndoApplied();
   sceneryChanged(r);
   setBudgetMessage("");
   refreshRoadProblems();
