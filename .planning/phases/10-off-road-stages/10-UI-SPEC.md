@@ -1,7 +1,8 @@
 ---
 phase: 10
 slug: off-road-stages
-status: draft
+status: approved
+reviewed_at: 2026-11-23
 shadcn_initialized: false
 preset: none
 created: 2026-11-23
@@ -168,7 +169,7 @@ Focal points: Editor - the Route/Ramp sidebar title with the armed kind plus the
 ### D. Ramp panel [D-14..D-20]
 Sidebar Place > Ramp, replacing the 07.1.3 Ramp body:
 1. **Shape** swatch group (5 shapes: kicker, wedge, tabletop / gap jump, quarter-pipe, half-pipe). 5 does not divide by 3 or 2, so by the 07.1.3 column rule it is a 1-column list of 40px rows; glyph tile left, name at 11px right [07.1.3 rule].
-2. **Material** swatch group, 2 columns (Wood, Metal), 110px-fill tiles with a texture-hinting pattern tile (wood: horizontal plank stripes `#8A5A2B`/`#6F4521`; steel: `#8E959E`/`#6B727B` with rivet dots) and a 11px caption "grip {value}" under the name. Future materials follow the column rule.
+2. **Material** swatch group, 2 columns (Wood, Metal), grid-fill tiles (2-column CSS grid, no fixed width) with a texture-hinting pattern tile (wood: horizontal plank stripes `#8A5A2B`/`#6F4521`; steel: `#8E959E`/`#6B727B` with rivet dots) and a 11px caption "grip {value}" under the name. Future materials follow the column rule.
 3. **Value boxes** (label above, 32px): Height (m), Width (m), Length (m), then shape-dependent:
    - Kicker and Tabletop: **Angle** (deg) and **Curve** (%, 0 = straight plank, 100 = full quarter-curve lip) [D-16].
    - Tabletop / gap jump: **Gap** (m) between take-off and landing, plus **Landing** toggle (On/Off; On places the matching landing piece on the same axis).
@@ -209,7 +210,7 @@ Declared values (multiples of 4), unchanged from 07.1.x:
 | 2xl | 48px | Game results panel padding |
 | 3xl | 64px | Not used |
 
-Exceptions: Shape list rows 224px x 40px and Material tiles 110px wide (derived fill of 2 columns in 224px) per the 07.1.3 exception; Place menu button 40px high. World-space gate, ramp and marker sizes are metres, not UI spacing.
+Exceptions: Shape list rows 224px x 40px and Material tiles fill a 2-column CSS grid in 224px per the 07.1.3 exception; Place menu button 40px high. World-space gate, ramp and marker sizes are metres, not UI spacing.
 
 ---
 
@@ -343,11 +344,11 @@ Accessibility: shape and material groups are `role="radiogroup"` with `aria-chec
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
 **Approval:** pending
