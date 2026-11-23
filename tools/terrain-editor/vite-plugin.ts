@@ -8,6 +8,8 @@
  *   GET /__terrain/<id>/bin|json      -> file bytes
  *   PUT /__terrain/<id>/bin|json      -> validate, then write via temp + rename
  *                                        (a sidecar PUT also registers a new area as a terrain map)
+ *   GET|PUT /__terrain/stages/<id>    -> <id>.stages.json (validated by parseStageData)
+ *   GET|PUT /__terrain/routes/<id>    -> <id>.routes.json (validated by parseCourseData)
  *   GET /__terrain/drivable/<id>      -> {drivable} (is `?map=<id>` a registered terrain map?)
  */
 import { randomUUID } from "node:crypto";
@@ -16,6 +18,10 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { type CourseData, parseCourseData } from "../../src/core/course.ts";
+import type { RoadGraph } from "../../src/core/road-graph.ts";
+import { parseStageData } from "../../src/core/stage.ts";
+import { type TerrainExtent, terrainGridExtent } from "../../src/core/terrain-drive-setup.ts";
 import {
   decodeTerrainBinary,
   loadTerrainArea,
@@ -27,6 +33,7 @@ import {
   MAX_BIN_BYTES,
   MAX_JSON_BYTES,
   readBodyCapped,
+  resolveRouteFile,
   resolveTerrainFile,
 } from "./paths.ts";
 import { assertGradedRoads, assertSaveableGraph } from "./save-guard.ts";
@@ -119,6 +126,33 @@ export async function validateAreaPair(
   assertGradedRoads(area);
 }
 
+/** Validates a stages PUT body against the area's grid extent; areaId must equal the URL id. */
+export function validateStagesPut(text: string, id: string, extent: TerrainExtent): void {
+  const label = `${id}.stages.json`;
+  const data = parseStageData(text, label, extent);
+  if (data.areaId !== id) throw new Error(`parseStageData: ${label}: areaId must be "${id}"`);
+}
+
+/** Validates a routes PUT body against the area's road graph; areaId must equal the URL id. */
+export function validateRoutesPut(text: string, id: string, graph: RoadGraph): void {
+  const label = `${id}.routes.json`;
+  const data: CourseData = parseCourseData(text, label, graph);
+  if (data.areaId !== id) throw new Error(`parseCourseData: ${label}: areaId must be "${id}"`);
+}
+
+const VALIDATION_PREFIXES = [
+  "terrain-format:",
+  "parseRoadGraph:",
+  "terrain-save:",
+  "parseStageData:",
+  "parseCourseData:",
+];
+
+/** Parse/validation failures are the client's fault (HTTP 400); anything else is ours (500). */
+export function isValidationMessage(msg: string): boolean {
+  return VALIDATION_PREFIXES.some((p) => msg.startsWith(p));
+}
+
 async function readIfExists(file: string | null): Promise<Buffer | undefined> {
   if (file === null || !existsSync(file)) return undefined;
   return readFile(file);
@@ -150,6 +184,37 @@ export function terrainEditorApi(): Plugin {
             const q = parts[2] ?? "";
             if (!isSafeAreaId(q)) return sendError(res, 400, "invalid area id");
             return send(res, 200, JSON.stringify({ drivable: isDrivableTerrain(ROOT, q) }));
+          }
+          if ((parts[1] === "stages" || parts[1] === "routes") && parts.length === 3) {
+            const routeKind = parts[1];
+            const routeId = parts[2] ?? "";
+            const file = resolveRouteFile(ROOT, routeId, routeKind);
+            if (file === null) return sendError(res, 400, "invalid area id");
+            if (req.method === "GET") {
+              if (!existsSync(file)) return sendError(res, 404, `no ${routeKind} file`);
+              return send(res, 200, await readFile(file), "application/json");
+            }
+            const text = (await readBodyCapped(req, MAX_JSON_BYTES)).toString("utf8");
+            if (routeKind === "stages") {
+              const bin = await readIfExists(resolveTerrainFile(ROOT, routeId, "bin"));
+              if (bin === undefined) return sendError(res, 404, "unknown area");
+              const { grid } = await decodeTerrainBinary(
+                new Uint8Array(bin),
+                `${routeId}.terrain.bin`,
+              );
+              validateStagesPut(text, routeId, terrainGridExtent(grid));
+            } else {
+              const side = await readIfExists(resolveTerrainFile(ROOT, routeId, "json"));
+              if (side === undefined) return sendError(res, 404, "unknown area");
+              const { graph } = parseTerrainSidecar(
+                side.toString("utf8"),
+                routeId,
+                `${routeId}.terrain.json`,
+              );
+              validateRoutesPut(text, routeId, graph);
+            }
+            await writeAtomic(file, text);
+            return send(res, 200, '{"ok":true}');
           }
           const id = parts[1];
           const kind = parts[2];
@@ -204,10 +269,7 @@ export function terrainEditorApi(): Plugin {
           }
           const msg = safeMessage(err);
           // Codec/parse failures are the client's fault; filesystem failures are ours.
-          const isValidation =
-            msg.startsWith("terrain-format:") ||
-            msg.startsWith("parseRoadGraph:") ||
-            msg.startsWith("terrain-save:");
+          const isValidation = isValidationMessage(msg);
           return sendError(res, isValidation ? 400 : 500, msg);
         }
       });
