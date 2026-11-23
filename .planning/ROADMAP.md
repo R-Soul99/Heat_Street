@@ -626,14 +626,14 @@ Plans:
   4. The same tool authors road race routes (point-to-point and circuit); a map can hold any number of routes, including none (widened 2026-11-16)
   5. (Moved to Phase 10.1 on 2026-11-23: ramps as built objects)
 
-**Plans:** 13 plans
+**Plans:** 1/13 plans executed
 **UI hint**: yes
 
 Plans:
 
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — Stage file format (parser, serializer, drafts, medal classifier), YAW/BEARING converters, schema doc
+- [x] 10-01-PLAN.md — Stage file format (parser, serializer, drafts, medal classifier), YAW/BEARING converters, schema doc
 - [ ] 10-02-PLAN.md — Stage run logic (ordered forward-only gates, respawn, penalty), RaceSnapshot "stage", per-class PB storage
 - [ ] 10-03-PLAN.md — Road-route core: relaxed parseCourseData (0..20 routes), RouteDraft node/edge derivation, empty-graph nearestRoadNode, soft validation, partial medals
 
@@ -722,7 +722,7 @@ Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended or
 | 7.1.3. Editor Feature Palette (INSERTED) | 11/11 | Complete | 2026-11-16 |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 | 9. Vehicle Types | 11/11 | Complete   | 2026-11-22 |
-| 10. Off-road Stages | 0/TBD | Not started | - |
+| 10. Off-road Stages | 1/13 | In Progress|  |
 | 11. Art Pass | 0/TBD | Not started | - |
 
 ## Notes
