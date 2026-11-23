@@ -8,6 +8,8 @@
  */
 
 import type { RoadGraph, RoadGraphEdge } from "../../src/core/road-graph.ts";
+import type { RouteDraft } from "../../src/core/route-draft.ts";
+import type { StageDraft } from "../../src/core/stage.ts";
 import type { SurfaceType } from "../../src/core/surface-types.ts";
 import {
   BLOCK_STEP_MAX_M,
@@ -135,6 +137,9 @@ export interface ToolResult {
   featuresChanged: boolean;
   buildingsChanged: boolean;
   objectsChanged: boolean;
+  /** Phase 10: stage / road-route draft lists changed (refresh route markers and lists, mark dirty). */
+  stagesChanged: boolean;
+  routesChanged: boolean;
   /** The mask selection changed (a Select-mode drag finished). */
   selectionChanged: boolean;
   slopeClamped: boolean;
@@ -159,6 +164,8 @@ export interface UndoRedoResult {
   featuresChanged: boolean;
   buildingsChanged: boolean;
   objectsChanged: boolean;
+  stagesChanged: boolean;
+  routesChanged: boolean;
 }
 
 /**
@@ -231,6 +238,8 @@ function emptyResult(): ToolResult {
     featuresChanged: false,
     buildingsChanged: false,
     objectsChanged: false,
+    stagesChanged: false,
+    routesChanged: false,
     selectionChanged: false,
     slopeClamped: false,
     warnings: [],
@@ -257,6 +266,8 @@ function mergeInto(into: ToolResult, r: ToolResult): void {
   into.featuresChanged ||= r.featuresChanged;
   into.buildingsChanged ||= r.buildingsChanged;
   into.objectsChanged ||= r.objectsChanged;
+  into.stagesChanged ||= r.stagesChanged;
+  into.routesChanged ||= r.routesChanged;
   into.selectionChanged ||= r.selectionChanged;
   into.slopeClamped ||= r.slopeClamped;
   if (r.heightDeltaM !== undefined) into.heightDeltaM = r.heightDeltaM;
@@ -303,6 +314,8 @@ interface DiffWindows {
   features: boolean;
   buildings: boolean;
   objects: boolean;
+  stages: boolean;
+  routes: boolean;
 }
 
 function windowsOfDiff(area: EditArea, diff: StrokeDiff | undefined): DiffWindows {
@@ -313,6 +326,8 @@ function windowsOfDiff(area: EditArea, diff: StrokeDiff | undefined): DiffWindow
     features: false,
     buildings: false,
     objects: false,
+    stages: false,
+    routes: false,
   };
   if (!diff) return out;
   if (diff.heights) {
@@ -347,6 +362,8 @@ function windowsOfDiff(area: EditArea, diff: StrokeDiff | undefined): DiffWindow
   out.features = diff.features !== undefined;
   out.buildings = diff.buildings !== undefined;
   out.objects = diff.objects !== undefined;
+  out.stages = diff.stages !== undefined;
+  out.routes = diff.routes !== undefined;
   return out;
 }
 
@@ -363,7 +380,11 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
   let features: StrokeDiff["features"];
   let buildings: StrokeDiff["buildings"];
   let objects: StrokeDiff["objects"];
+  let stages: StrokeDiff["stages"];
+  let routes: StrokeDiff["routes"];
   for (const d of diffs) {
+    if (d.stages) stages = stages ? { before: stages.before, after: d.stages.after } : d.stages;
+    if (d.routes) routes = routes ? { before: routes.before, after: d.routes.after } : d.routes;
     if (d.features) {
       features = features ? { before: features.before, after: d.features.after } : d.features;
     }
@@ -427,6 +448,8 @@ function mergeDiffs(diffs: readonly StrokeDiff[]): StrokeDiff | undefined {
     ...(features ? { features } : {}),
     ...(buildings ? { buildings } : {}),
     ...(objects ? { objects } : {}),
+    ...(stages ? { stages } : {}),
+    ...(routes ? { routes } : {}),
   };
 }
 
@@ -682,6 +705,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
       featuresChanged: r.featuresChanged,
       buildingsChanged: r.buildingsChanged,
       objectsChanged: r.objectsChanged,
+      stagesChanged: r.stagesChanged,
+      routesChanged: r.routesChanged,
     };
   }
 
@@ -748,6 +773,8 @@ export function createToolDispatcher(getArea: () => EditArea) {
     res.featuresChanged = w.features;
     res.buildingsChanged = w.buildings;
     res.objectsChanged = w.objects;
+    res.stagesChanged = w.stages;
+    res.routesChanged = w.routes;
     return res;
   }
 
@@ -852,6 +879,22 @@ export function createToolDispatcher(getArea: () => EditArea) {
       if (JSON.stringify(before) === JSON.stringify(next)) return emptyResult();
       area.startPoints = [...next];
       return commitSceneryDiff(area, { startPoints: { before, after: next } });
+    },
+    /** One undo step for a stage-draft list edit; a deep-equal list pushes nothing. */
+    commitStages(next: readonly StageDraft[]): ToolResult {
+      const area = getArea();
+      const before = area.stages ?? [];
+      if (JSON.stringify(before) === JSON.stringify(next)) return emptyResult();
+      area.stages = [...next];
+      return commitSceneryDiff(area, { stages: { before, after: next } });
+    },
+    /** One undo step for a road-route draft list edit; a deep-equal list pushes nothing. */
+    commitRoutes(next: readonly RouteDraft[]): ToolResult {
+      const area = getArea();
+      const before = area.routes ?? [];
+      if (JSON.stringify(before) === JSON.stringify(next)) return emptyResult();
+      area.routes = [...next];
+      return commitSceneryDiff(area, { routes: { before, after: next } });
     },
     /**
      * One undo step for any mix of feature, building and ramp-object edits (D-16). Only

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildRoadGeometry } from "../../src/core/road-geometry.ts";
 import type { RoadGraph, RoadGraphEdge } from "../../src/core/road-graph.ts";
+import type { RouteDraft } from "../../src/core/route-draft.ts";
+import type { StageDraft } from "../../src/core/stage.ts";
 import { sampleTerrainHeight } from "../../src/core/terrain-grid.ts";
 import { MAX_SLOPE_DEG } from "../../src/core/terrain-limits.ts";
 import { PAINT_ROAD_FLAG, surfaceAt } from "../../src/core/terrain-paint.ts";
@@ -1305,6 +1307,67 @@ describe("selection operations (07.1.2-07)", () => {
     d.setOptions({ selectSmoothStrength: Number.NaN, selectStepM: Number.NaN });
     expect(d.getOptions().selectSmoothStrength).toBe(1);
     expect(d.getOptions().selectStepM).toBe(2);
+  });
+});
+
+describe("stage and route undo (Phase 10)", () => {
+  const stage = (n: number): StageDraft => ({
+    id: `stage-${n}`,
+    name: `Stage ${n}`,
+    start: { x: 0, z: 0, headingRad: 0 },
+    gates: [],
+    finish: null,
+  });
+  const route = (n: number): RouteDraft => ({
+    id: `t-route-${n}`,
+    name: `Route ${n}`,
+    mode: "p2p",
+    laps: 1,
+    start: { x: 0, z: 0, headingRad: 0 },
+    checkpoints: [],
+    finish: null,
+  });
+
+  it("commitStages is one undo step; undo and redo restore the exact lists", () => {
+    const { area, d } = setup();
+    const a = [stage(1)];
+    const r = d.commitStages(a);
+    expect(r.stagesChanged).toBe(true);
+    expect(area.stages).toEqual(a);
+    const b = [a[0], stage(2)];
+    d.commitStages(b);
+    const u = d.undo();
+    expect(u !== false && u.stagesChanged).toBe(true);
+    expect(area.stages).toEqual(a);
+    expect(area.stages?.[0]).toBe(a[0]);
+    d.undo();
+    expect(area.stages).toEqual([]);
+    const rd = d.redo();
+    expect(rd !== false && rd.stagesChanged).toBe(true);
+    expect(area.stages).toEqual(a);
+    d.redo();
+    expect(area.stages).toEqual(b);
+  });
+
+  it("a deep-equal stage list pushes nothing", () => {
+    const { d } = setup();
+    d.commitStages([stage(1)]);
+    expect(d.commitStages([stage(1)]).stagesChanged).toBe(false);
+    d.undo();
+    expect(d.canUndo()).toBe(false);
+  });
+
+  it("commitRoutes behaves the same with routesChanged", () => {
+    const { area, d } = setup();
+    const a = [route(1)];
+    expect(d.commitRoutes(a).routesChanged).toBe(true);
+    expect(d.commitRoutes([route(1)]).routesChanged).toBe(false);
+    const u = d.undo();
+    expect(u !== false && u.routesChanged && !u.stagesChanged).toBe(true);
+    expect(area.routes).toEqual([]);
+    const rd = d.redo();
+    expect(rd !== false && rd.routesChanged).toBe(true);
+    expect(area.routes).toEqual(a);
   });
 });
 

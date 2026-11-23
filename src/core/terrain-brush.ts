@@ -15,6 +15,8 @@
  *
  * Layering: pure core, no three/rapier/DOM.
  */
+import type { RouteDraft } from "./route-draft.ts";
+import type { StageDraft } from "./stage.ts";
 import { SURFACE_TYPES, type SurfaceType } from "./surface-types.ts";
 import type { CellMask } from "./terrain-cell-mask.ts";
 import type {
@@ -76,6 +78,9 @@ export interface StrokeDiff {
   readonly features?: { before: readonly TerrainFeature[]; after: readonly TerrainFeature[] };
   readonly buildings?: { before: readonly TerrainBuilding[]; after: readonly TerrainBuilding[] };
   readonly objects?: { before: readonly TerrainObject[]; after: readonly TerrainObject[] };
+  /** Phase 10: whole-array stage / road-route draft snapshots (editor-only, saved to their own files). */
+  readonly stages?: { before: readonly StageDraft[]; after: readonly StageDraft[] };
+  readonly routes?: { before: readonly RouteDraft[]; after: readonly RouteDraft[] };
 }
 
 export interface StrokeRecorder {

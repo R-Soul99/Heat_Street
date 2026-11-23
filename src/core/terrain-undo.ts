@@ -8,7 +8,10 @@
  *
  * Layering: pure core, no three/rapier/DOM.
  */
+
 import { parseRoadGraph, type RoadGraph } from "./road-graph.ts";
+import type { RouteDraft } from "./route-draft.ts";
+import type { StageDraft } from "./stage.ts";
 import type { PaintRect, StrokeDiff } from "./terrain-brush.ts";
 import type {
   TerrainBuilding,
@@ -36,6 +39,9 @@ export interface UndoTarget {
   features?: TerrainFeature[];
   buildings?: TerrainBuilding[];
   objects?: TerrainObject[];
+  /** Phase 10 D-09/D-11: editor-only route drafts, saved to their own files. */
+  stages?: StageDraft[];
+  routes?: RouteDraft[];
 }
 
 export interface ApplyResult {
@@ -50,6 +56,9 @@ export interface ApplyResult {
   featuresChanged: boolean;
   buildingsChanged: boolean;
   objectsChanged: boolean;
+  /** True when the stage / road-route drafts were restored by this diff. */
+  stagesChanged: boolean;
+  routesChanged: boolean;
 }
 
 export function applyStrokeDiff(
@@ -64,6 +73,8 @@ export function applyStrokeDiff(
     featuresChanged: false,
     buildingsChanged: false,
     objectsChanged: false,
+    stagesChanged: false,
+    routesChanged: false,
   };
 
   if (diff.heights) {
@@ -137,6 +148,14 @@ export function applyStrokeDiff(
   if (diff.objects) {
     area.objects = [...diff.objects[side]];
     result.objectsChanged = true;
+  }
+  if (diff.stages) {
+    area.stages = [...diff.stages[side]];
+    result.stagesChanged = true;
+  }
+  if (diff.routes) {
+    area.routes = [...diff.routes[side]];
+    result.routesChanged = true;
   }
   return result;
 }

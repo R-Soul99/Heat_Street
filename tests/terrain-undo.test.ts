@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import fixtureRaw from "../fixtures/road-graph.sample.json?raw";
 import { parseRoadGraph } from "../src/core/road-graph.ts";
+import type { RouteDraft } from "../src/core/route-draft.ts";
+import type { StageDraft } from "../src/core/stage.ts";
 import {
   createStrokeRecorder,
   paintSurface,
   raiseLower,
   smoothRegion,
 } from "../src/core/terrain-brush.ts";
+import { serializeTerrainSidecar } from "../src/core/terrain-format.ts";
 import { createTerrainGrid } from "../src/core/terrain-grid.ts";
 import { createPaintMap } from "../src/core/terrain-paint.ts";
 import {
@@ -286,6 +289,74 @@ describe("start-point diff part", () => {
   it("other diffs leave startPointsChanged false", () => {
     const area = makeArea();
     expect(applyStrokeDiff(area, dab(area, 0), "before").startPointsChanged).toBe(false);
+  });
+});
+
+describe("stage and route diff parts (Phase 10)", () => {
+  const stage = (n: number): StageDraft => ({
+    id: `stage-${n}`,
+    name: `Stage ${n}`,
+    start: { x: 0, z: 0, headingRad: 0 },
+    gates: [{ id: "g1", x: 5, z: 5, headingRad: 0, widthM: 20 }],
+    finish: null,
+  });
+  const route = (n: number): RouteDraft => ({
+    id: `a-route-${n}`,
+    name: `Route ${n}`,
+    mode: "p2p",
+    laps: 1,
+    start: { x: 0, z: 0, headingRad: 0 },
+    checkpoints: [],
+    finish: null,
+  });
+
+  it("applyStrokeDiff restores stages and flags stagesChanged only", () => {
+    const area = makeArea();
+    const before: StageDraft[] = [];
+    const after = [stage(1)];
+    area.stages = [...after];
+    const r = applyStrokeDiff(area, { stages: { before, after } }, "before");
+    expect(r.stagesChanged).toBe(true);
+    expect(r.routesChanged).toBe(false);
+    expect(area.stages).toEqual([]);
+    const r2 = applyStrokeDiff(area, { stages: { before, after } }, "after");
+    expect(r2.stagesChanged).toBe(true);
+    expect(area.stages).toEqual(after);
+    expect(area.stages?.[0]).toBe(after[0]);
+  });
+
+  it("applyStrokeDiff restores routes and flags routesChanged only", () => {
+    const area = makeArea();
+    const after = [route(1)];
+    const r = applyStrokeDiff(area, { routes: { before: [], after } }, "after");
+    expect(r.routesChanged).toBe(true);
+    expect(r.stagesChanged).toBe(false);
+    expect(area.routes).toEqual(after);
+  });
+
+  it("other diffs leave both flags false", () => {
+    const area = makeArea();
+    const r = applyStrokeDiff(area, dab(area, 0), "before");
+    expect(r.stagesChanged || r.routesChanged).toBe(false);
+  });
+
+  it("the terrain sidecar never contains stages or routes", () => {
+    const area = makeArea();
+    const input = {
+      areaId: "t",
+      name: "t",
+      groundSurface: "grass",
+      legacyGlbBuildings: false,
+      nextEdgeId: 0,
+      graph: area.graph,
+      objects: [],
+      buildings: [],
+      stages: [stage(1)],
+      routes: [route(1)],
+    } as unknown as Parameters<typeof serializeTerrainSidecar>[0];
+    const text = serializeTerrainSidecar(input);
+    expect(text).not.toContain('"stages"');
+    expect(text).not.toContain('"routes"');
   });
 });
 
