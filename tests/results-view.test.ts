@@ -5,6 +5,7 @@ import {
   buildRaceCardModel,
   buildRaceClassificationRows,
   buildResultRows,
+  buildStageResultLines,
   formatResultTime,
 } from "../src/hud/results-view";
 
@@ -141,5 +142,64 @@ describe("circuit race view models (07-07)", () => {
       isPlayer: false,
       projected: true,
     });
+  });
+});
+
+describe("buildStageResultLines", () => {
+  const sector = (id: string, cum: number) =>
+    ({
+      checkpointId: id,
+      fromCheckpointId: null,
+      ordinal: 0,
+      lap: 1,
+      sectorElapsedSec: cum,
+      cumulativeElapsedSec: cum,
+      deltaSec: null,
+      comparisonSource: null,
+    }) as never;
+  const base = {
+    name: "Dust Run",
+    effectiveTimeSec: 77.48,
+    penaltySec: 5,
+    medal: "none" as const,
+    medalsShown: false,
+    newBest: true,
+    bestSec: 77.48,
+    sectors: [sector("g1", 20), sector("g2", 40), sector("f", 72.48)],
+    gateCount: 2,
+  };
+
+  it("lists time, penalty, final, new best and splits in order", () => {
+    expect(buildStageResultLines(base)).toEqual([
+      "STAGE COMPLETE",
+      "Dust Run",
+      "TIME  1:12.48",
+      "PENALTY  +0:05.00",
+      "FINAL  1:17.48",
+      "NEW BEST",
+      "G1  0:20.00",
+      "G2  0:40.00",
+      "FINISH  1:12.48",
+    ]);
+  });
+
+  it("has no medal text when medals are not shown", () => {
+    expect(buildStageResultLines(base).some((l) => /UNEARNED|MEDAL|NONE/.test(l))).toBe(false);
+  });
+
+  it("shows the medal right after FINAL when medals are shown", () => {
+    const lines = buildStageResultLines({ ...base, medalsShown: true, medal: "gold" });
+    expect(lines[lines.indexOf("FINAL  1:17.48") + 1]).toBe("MEDAL  GOLD");
+  });
+
+  it("shows PB when not a new best, nothing when there is no best", () => {
+    expect(buildStageResultLines({ ...base, newBest: false, bestSec: 70 })).toContain("PB  1:10.00");
+    expect(
+      buildStageResultLines({ ...base, newBest: false, bestSec: null }).some((l) => l.startsWith("PB")),
+    ).toBe(false);
+  });
+
+  it("always shows the penalty row", () => {
+    expect(buildStageResultLines({ ...base, penaltySec: 0 })).toContain("PENALTY  +0:00.00");
   });
 });

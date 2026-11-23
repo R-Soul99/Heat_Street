@@ -1,7 +1,7 @@
 import type { Course } from "../core/course";
 import type { MedalProgressRecord } from "../core/medal-persistence";
 import type { MedalReferenceCourse } from "../core/medal-reference";
-import type { FrozenCompletion, Medal } from "../core/medal-timing";
+import type { FrozenCompletion, Medal, SectorSplit } from "../core/medal-timing";
 import type { ClassificationRow } from "../core/race-placement";
 
 export interface CourseCardModel {
@@ -120,11 +120,42 @@ export interface RaceCardSource {
   readonly fieldSize: number;
 }
 
+export interface StageResultInput {
+  readonly name: string;
+  readonly effectiveTimeSec: number;
+  readonly penaltySec: number;
+  readonly medal: Medal;
+  readonly medalsShown: boolean;
+  readonly newBest: boolean;
+  readonly bestSec: number | null;
+  readonly sectors: readonly SectorSplit[];
+  readonly gateCount: number;
+}
+
+/** D-06: stage results lines. A MEDAL row exists only when the stage has medals. */
+export function buildStageResultLines(input: StageResultInput): readonly string[] {
+  const lines: string[] = ["STAGE COMPLETE", input.name];
+  const raw = Math.max(0, input.effectiveTimeSec - input.penaltySec);
+  lines.push(`TIME  ${formatResultTime(raw)}`);
+  lines.push(`PENALTY  +${formatResultTime(input.penaltySec)}`);
+  lines.push(`FINAL  ${formatResultTime(input.effectiveTimeSec)}`);
+  if (input.medalsShown) lines.push(`MEDAL  ${input.medal.toUpperCase()}`);
+  if (input.newBest) lines.push("NEW BEST");
+  else if (input.bestSec !== null) lines.push(`PB  ${formatResultTime(input.bestSec)}`);
+  input.sectors.forEach((sector, i) => {
+    const label = i < input.gateCount ? `G${i + 1}` : "FINISH";
+    lines.push(`${label}  ${formatResultTime(sector.cumulativeElapsedSec)}`);
+  });
+  return lines;
+}
+
 export interface ResultsView {
   updateCards(progress: Readonly<Record<string, MedalProgressRecord>>): void;
   showCompletion(completion: FrozenCompletion): void;
   /** Circuit Race classification panel (D-07): `RACE RESULT  (RUNNING)` while cars are still crossing, `RACE RESULT` once final. */
   showRaceClassification(rows: readonly RaceClassificationRowModel[], final: boolean): void;
+  /** Stage completion panel (D-06): no medal row when the stage has no medals. */
+  showStageCompletion(input: StageResultInput): void;
   clearCompletion(): void;
   dispose(): void;
 }
@@ -263,6 +294,16 @@ export function createResultsView(
         list.appendChild(element);
       }
       completion.appendChild(list);
+      setCollapsed(false);
+    },
+    showStageCompletion(input: StageResultInput): void {
+      completion.replaceChildren(
+        ...buildStageResultLines(input).map((line) => {
+          const row = text(line);
+          if (line === "NEW BEST") row.style.color = "#ffd447";
+          return row;
+        }),
+      );
       setCollapsed(false);
     },
     clearCompletion(): void {
