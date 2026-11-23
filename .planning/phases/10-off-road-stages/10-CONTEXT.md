@@ -51,6 +51,8 @@ The brief is the specification. Its stages of work (1 to 8) map to plans roughly
 - **D-19 Format:** ramps leave the crest list and get their own object kind and file format (Claude's choice of file layout). Crests stay pure terrain. Older files with crest-ramps must still load (migrate on read).
 - **D-20 Structure base (forward-looking):** the user is thinking about elevated, roller-coaster-style stunt tracks later (raised track sections on supports, banked curves, gaps). Design the ramp object as the first kind of a general "structure piece" base (a parametric piece with a profile, transform, material and optional supports) so elevated track pieces can be added later without a format break. **Building elevated stunt tracks is NOT in this phase** — only the base must not block it. Record it as a seed.
 
+**Accepted deviation (2026-11-23):** D-09 asked to show the user a layout sketch first. The user was asleep during planning, so the sketch lives at the top of `10-UI-SPEC.md` and the user reviews it before execution (morning review) and again at the plan 10-13 human check. If the user changes the layout after review, replan the editor plans (10-09, 10-10, 10-12) before executing them.
+
 ### Claude's Discretion
 Gate look, exact warning thresholds, wave split. Ramps split to Phase 10.1 on 2026-11-23 (research recommendation).
 

@@ -414,10 +414,15 @@ export const stageBestKey = (area: string, stage: string, cls: VehicleClassId) =
    - Known: `stage.medals = {goldSec, silverSec, bronzeSec, vehicle}`; `createMedalTiming` takes one `referenceTimeSec` and fixed `MEDAL_BANDS` (ace 0.9, gold 1, silver 1.15, bronze 1.35).
    - Unclear: whether recorded medals map via a reference (gold = reference) or explicit thresholds.
    - Recommendation: Phase 10 ships full support for no-medal stages and parse/validate/serialize of `medals`; add an additive optional `thresholds` config to `createMedalTiming` only in the later "record medals" step with the user (stage 7). Until then a stage with `medals` present and matching class runs with `medals:false` plus a console note.
+   - **RESOLVED:** plan 10-01 adds `classifyStageMedal` with explicit gold/silver/bronze thresholds; plan 10-04 runs timing with `medals:false`; `createMedalTiming` is unchanged.
 2. **Does `results-view` suppress the "UNEARNED" text path for no-medal stages?** Unverified (only the exports were read). Plan task: read `results-view.ts` `showCompletion`, add a model test, change if needed.
+   - **RESOLVED:** plan 10-05 adds `showStageCompletion` with a tested line builder that has no medal row for no-medal stages.
 3. **Do other tests assert `RaceSnapshot.mode` exhaustiveness?** Widening to `"stage"` may break a `switch`. Plan task: `grep -rn "snapshot.mode\|RaceSnapshot" src tests` and fix.
+   - **RESOLVED:** plan 10-02 Task 1 widens `RaceSnapshot.mode` additively and runs `tsc` to fix any exhaustive switch.
 4. **Wall/lip behaviour of steep pipe walls under the raycast vehicle** - needs a short physics spike test in 10.1 (drive a class up a quarter-pipe at speed in a Rapier test; see `tests/feel-test-ramps.test.ts` for the pattern).
+   - **DEFERRED to Phase 10.1** (ramps and structures).
 5. **Can the user's own authored maps hold crest-ramps that this migration must preserve?** Yes by design (migration on read); no way to enumerate them. The tests plus the on-read converter cover it.
+   - **DEFERRED to Phase 10.1** (crest-ramp migration).
 
 ## Environment Availability
 
