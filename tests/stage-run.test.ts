@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { forwardFromYaw } from "../src/core/heading";
 import {
-  crossedGateForward,
   createStageRun,
+  crossedGateForward,
   FINISH_GATE_ID,
   formatStageTime,
   type StageRunCourse,
@@ -34,16 +34,14 @@ describe("crossedGateForward", () => {
 
   it("counts a sideways slide with positive forward velocity", () => {
     const gate = { x: 0, z: 0, headingRad: 0, widthM: W };
-    expect(
-      crossedGateForward(gate, { x: -1, z: 0.5 }, { x: 1, z: -0.5 }, { vx: 8, vz: -1 }),
-    ).toBe(true);
+    expect(crossedGateForward(gate, { x: -1, z: 0.5 }, { x: 1, z: -0.5 }, { vx: 8, vz: -1 })).toBe(
+      true,
+    );
   });
 
   it("rejects when velocity dot forward <= 0", () => {
     const gate = { x: 0, z: 0, headingRad: 0, widthM: W };
-    expect(crossedGateForward(gate, { x: 0, z: 1 }, { x: 0, z: -1 }, { vx: 5, vz: 0 })).toBe(
-      false,
-    );
+    expect(crossedGateForward(gate, { x: 0, z: 1 }, { x: 0, z: -1 }, { vx: 5, vz: 0 })).toBe(false);
   });
 });
 
