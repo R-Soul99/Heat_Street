@@ -257,6 +257,9 @@ export const VEHICLE_CLASSES: Readonly<Record<VehicleClassId, VehicleClassSpec>>
     storageKey: "heat-street.tuning.buggy.v1",
     surfaceGripScale: buildBuggyGripScale(),
     savesMedals: false,
+    // radius 0.4 + rest 0.7 - connectionY -0.15 + 0.1 (same rule as truck/monster).
+    // At the default 0.6 m the buggy spawned at its full 0.65 m travel, on the bump stop.
+    spawnClearanceM: 1.35,
   }),
   truck: Object.freeze({
     id: "truck",

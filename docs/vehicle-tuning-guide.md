@@ -593,7 +593,7 @@ Target: light, twitchy, long-travel. Mass 750, track 0.85, wheelbase 1.4, rest 0
 about 1.45x it; below about 26.8 the limiter starves 0-60). Measured: 0-60 5.02 s (target 5.0
 +-15%), top about 39.8 m/s (target 38), full-lock tilt at 15 m/s 4.6 deg, ramp landing tilt
 5.8 deg. Rear-wheel drive: do not push force above about 5000 or the short wheelbase
-wheelies it over.
+wheelies it over. Spawn clearance 1.35 m (at the default 0.6 m it spawned at full travel).
 
 ### 4x4 Pickup (`?car=truck`)
 

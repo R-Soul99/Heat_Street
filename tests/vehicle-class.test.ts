@@ -22,6 +22,7 @@ import {
   TUNING_RANGES,
   TUNING_STORAGE_KEY,
 } from "../src/core/vehicle-tuning";
+import { SPAWN_CLEARANCE_M } from "../src/physics/map-scene";
 
 describe("resolveVehicleClassId", () => {
   it("defaults to rwd", () => {
@@ -340,10 +341,20 @@ describe("truck and monster classes", () => {
     }
     expect(VEHICLE_CLASSES.truck.spawnClearanceM).toBeCloseTo(1.3, 9);
     expect(VEHICLE_CLASSES.monster.spawnClearanceM).toBeCloseTo(2.1, 9);
-    for (const id of ["truck", "monster"] as const) {
+    expect(VEHICLE_CLASSES.buggy.spawnClearanceM).toBeCloseTo(1.35, 9);
+    for (const id of ["buggy", "truck", "monster"] as const) {
       const w = classDefaultTuning(id).wheels;
       const expected = w.radius + w.suspensionRestLength - w.connectionY + 0.1;
       expect(VEHICLE_CLASSES[id].spawnClearanceM).toBeCloseTo(expected, 9);
+    }
+  });
+  it("no class spawns on its bump stop at the in-game spawn height", () => {
+    for (const id of KNOWN_VEHICLE_CLASS_IDS) {
+      const w = classDefaultTuning(id).wheels;
+      const clearance = VEHICLE_CLASSES[id].spawnClearanceM ?? SPAWN_CLEARANCE_M;
+      // Wheel-bottom depth below the chassis origin minus the spawn height.
+      const compression = w.radius + w.suspensionRestLength - w.connectionY - clearance;
+      expect(compression, id).toBeLessThan(w.maxSuspensionTravel);
     }
   });
 });
