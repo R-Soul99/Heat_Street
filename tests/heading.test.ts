@@ -97,7 +97,9 @@ describe("bearingFromYaw / yawFromBearing", () => {
       [-1, 0],
       [0.6, 0.8],
     ] as const) {
-      expect(bearingFromYaw(yawFromTravelDirection(dx, dz))).toBeCloseTo(Math.atan2(dz, dx), 9);
+      const b = bearingFromYaw(yawFromTravelDirection(dx, dz));
+      expect(Math.cos(b)).toBeCloseTo(Math.cos(Math.atan2(dz, dx)), 9);
+      expect(Math.sin(b)).toBeCloseTo(Math.sin(Math.atan2(dz, dx)), 9);
     }
   });
 });
