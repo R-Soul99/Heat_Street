@@ -26,6 +26,20 @@ export function resolveTerrainFile(root: string, id: string, kind: string): stri
   return file;
 }
 
+/** Absolute path of an area's stages/routes file inside public/maps, or null if id/kind are not allowed. */
+export function resolveRouteFile(
+  root: string,
+  id: string,
+  kind: "stages" | "routes",
+): string | null {
+  if (!isSafeAreaId(id)) return null;
+  if (kind !== "stages" && kind !== "routes") return null;
+  const mapsDir = path.resolve(root, "public", "maps");
+  const file = path.resolve(path.join(mapsDir, `${id}.${kind}.json`));
+  if (!file.startsWith(mapsDir + path.sep)) return null;
+  return file;
+}
+
 export interface StatusError extends Error {
   status: number;
 }
