@@ -7,6 +7,7 @@ import {
   TUNING_SNAPSHOT_KIND,
   TUNING_SNAPSHOT_VERSION,
 } from "../src/core/tuning-snapshot";
+import { classDefaultTuning, classTuningRanges } from "../src/core/vehicle-class";
 import {
   defaultTuning,
   TUNING_RANGES,
@@ -287,5 +288,27 @@ describe("parseTuningSnapshot ranges argument (D-02)", () => {
   });
   it("keeps it with custom ranges", () => {
     expect(parseTuningSnapshot(raw(), customRanges())?.vehicle?.chassis.mass).toBe(6000);
+  });
+});
+
+describe("parseTuningSnapshot base argument (WR-03)", () => {
+  // A partial snapshot: the vehicle domain carries only one leaf.
+  const raw = JSON.stringify({
+    kind: "heat-street.tuning-snapshot",
+    vehicle: { chassis: { linearDamping: 0.05 }, wheels: {}, drive: {}, assists: {} },
+  });
+
+  it("fills missing leaves from the given class defaults, not the RWD car", () => {
+    const monster = classDefaultTuning("monster");
+    const v = parseTuningSnapshot(raw, classTuningRanges("monster"), () =>
+      classDefaultTuning("monster"),
+    )?.vehicle;
+    expect(v?.chassis.mass).toBe(monster.chassis.mass);
+    expect(v?.wheels.radius).toBe(monster.wheels.radius);
+    expect(v?.wheels.suspensionRestLength).toBe(monster.wheels.suspensionRestLength);
+  });
+
+  it("still defaults to the RWD car", () => {
+    expect(parseTuningSnapshot(raw)?.vehicle?.chassis.mass).toBe(defaultTuning().chassis.mass);
   });
 });

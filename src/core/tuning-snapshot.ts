@@ -103,10 +103,16 @@ export function serializeTuningSnapshot(
  * `JSON.stringify` the raw field back out and hand it to that domain's own
  * validated parser. Returns `null` only when all three domains came back
  * `null` — an envelope yielding nothing is not a usable snapshot.
+ *
+ * `base` supplies the value for any vehicle leaf the snapshot leaves out. Pass
+ * the running class's own defaults (the panel's `persist.defaults`), not the
+ * RWD muscle car's, or a partial snapshot imported into another class fills
+ * its gaps with muscle-car values.
  */
 export function parseTuningSnapshot(
   raw: string | null,
   ranges: TuningRanges = TUNING_RANGES,
+  base: () => VehicleTuning = defaultTuning,
 ): TuningSnapshot | null {
   if (raw === null) {
     return null;
@@ -132,9 +138,7 @@ export function parseTuningSnapshot(
   // handed, as a fresh JSON string, to the SAME parser that already guards
   // the `localStorage` round trip — no leaf here is ever read by hand.
   const vehicle =
-    "vehicle" in parsed
-      ? parseSavedTuning(JSON.stringify(parsed.vehicle), defaultTuning, ranges)
-      : null;
+    "vehicle" in parsed ? parseSavedTuning(JSON.stringify(parsed.vehicle), base, ranges) : null;
   const surfaces =
     "surfaces" in parsed ? parseSavedSurfaceProfiles(JSON.stringify(parsed.surfaces)) : null;
   const camera = "camera" in parsed ? parseSavedCameraTuning(JSON.stringify(parsed.camera)) : null;

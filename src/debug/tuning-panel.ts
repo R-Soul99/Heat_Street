@@ -926,7 +926,7 @@ export function createTuningPanel(
       // The security boundary: every byte read back from the file goes
       // through `parseTuningSnapshot`, never a direct `JSON.parse` — see the
       // module doc comment's Export/Import paragraph.
-      const snapshot = parseTuningSnapshot(raw, ranges);
+      const snapshot = parseTuningSnapshot(raw, ranges, persist.defaults);
 
       if (snapshot === null) {
         // Failure is surfaced through the control's own label, exactly like
