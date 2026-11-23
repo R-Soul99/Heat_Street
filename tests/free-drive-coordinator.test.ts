@@ -4,7 +4,7 @@ import { createFreeDriveCoordinator } from "../src/gameplay/free-drive-coordinat
 import type { MapScene } from "../src/physics/map-scene";
 import type { VehiclePose } from "../src/physics/vehicle";
 
-function setup(extraLiftM?: number) {
+function setup() {
   const resetVehicle = vi.fn<(pose: VehiclePose) => void>();
   // Yaw rotation about +Y by `yaw` radians: quaternion (0, sin(h/2), 0, cos(h/2)).
   const yaw = 0.7;
@@ -24,7 +24,6 @@ function setup(extraLiftM?: number) {
     spawnPose,
     heightAt: (x, z) => x + z,
     onCarReset,
-    ...(extraLiftM === undefined ? {} : { extraLiftM }),
   });
   return { coordinator, resetVehicle, onCarReset, spawnPose, yaw };
 }
@@ -51,13 +50,6 @@ describe("createFreeDriveCoordinator", () => {
     expect(f.x).toBeCloseTo(expected.x, 6);
     expect(f.z).toBeCloseTo(expected.z, 6);
     expect(onCarReset).toHaveBeenCalledTimes(1);
-  });
-
-  it("respawn adds deps.extraLiftM on top of the 0.6 m clearance", () => {
-    const { coordinator, resetVehicle } = setup(1.2);
-    coordinator.onCommands({ restart: false, respawn: true });
-    const pose = resetVehicle.mock.calls[0]?.[0] as VehiclePose;
-    expect(pose.y).toBeCloseTo(4 + 0.6 + 1.2, 9);
   });
 
   it("does nothing without a command", () => {

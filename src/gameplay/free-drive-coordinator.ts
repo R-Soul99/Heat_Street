@@ -5,7 +5,11 @@ import type { MapScene } from "../physics/map-scene";
 import type { VehiclePose } from "../physics/vehicle";
 import type { RaceCoordinator } from "./race-coordinator";
 
-/** Respawn height above the terrain surface, metres. */
+/**
+ * Respawn height above the terrain surface, metres. Tall classes get their
+ * extra lift from main.ts's `scene.resetVehicle` wrapper, which this
+ * coordinator calls, so no per-class lift is added here.
+ */
 const RESPAWN_CLEARANCE_M = 0.6;
 
 export interface FreeDriveCoordinatorDeps {
@@ -13,8 +17,6 @@ export interface FreeDriveCoordinatorDeps {
   readonly spawnPose: VehiclePose;
   readonly heightAt: (x: number, z: number) => number;
   readonly onCarReset: () => void;
-  /** Extra respawn height for tall vehicles, added to the 0.6 m clearance when defined. */
-  readonly extraLiftM?: number;
 }
 
 const FREE_DRIVE_SNAPSHOT: RaceSnapshot = {
@@ -48,7 +50,7 @@ export function createFreeDriveCoordinator(deps: FreeDriveCoordinatorDeps): Race
         const bearing = headingFromRotation(body.rotation());
         deps.scene.resetVehicle({
           x: p.x,
-          y: deps.heightAt(p.x, p.z) + RESPAWN_CLEARANCE_M + (deps.extraLiftM ?? 0),
+          y: deps.heightAt(p.x, p.z) + RESPAWN_CLEARANCE_M,
           z: p.z,
           headingRad: yawFromTravelDirection(Math.cos(bearing), Math.sin(bearing)),
         });
