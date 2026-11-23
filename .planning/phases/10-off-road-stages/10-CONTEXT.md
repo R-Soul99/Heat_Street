@@ -39,8 +39,16 @@ The brief is the specification. Its stages of work (1 to 8) map to plans roughly
 **Ramps as built objects (folded in from todo `2026-11-16-ramps-as-built-objects.md`, 2026-11-16):**
 - **D-14:** Ramps look like built stunt ramps (timber planks or a steel wedge with visible frame and side panels, own material, not the ground) with a choice of shapes (kicker, wedge, tabletop, quarter-pipe), picked in the Place menu / ramp options. Own surface grip instead of hard-coded grass. Decide whether ramps leave the crest list as their own object kind (crests stay pure terrain) and how older files with crest-ramps load. Keep the rigid deck from quick task 261116-ryu (one base height at the foot). Short discuss pass first on shapes list, look and format split; may become its own plan(s) or a split-off phase if the phase gets too big.
 
+**Ramps discuss pass (user, 2026-11-23) — resolves the D-14 open questions:**
+- **D-15 Shapes:** kicker, wedge, tabletop / gap jump, quarter-pipe and half-pipe. All five are in scope.
+- **D-16 Adjustable profile:** kickers and tabletops/gap jumps have an adjustable angle and an adjustable curve (lip profile), not fixed presets. Other shapes expose at least size; extra parameters are planner's choice.
+- **D-17 Easy, intelligent alignment:** placing ramps must make alignment easy: e.g. snap to the terrain under the foot, align to the car's line / a route or stage gate direction, and snap pieces to each other (gap-jump take-off and landing on one axis with a set gap). Exact snapping rules are planner's choice; must be undoable like other placements.
+- **D-18 Materials:** ramps have selectable materials with distinct textures, at least wood (timber planks) and metal (steel). Each material carries its own surface grip value (replaces the hard-coded grass grip).
+- **D-19 Format:** ramps leave the crest list and get their own object kind and file format (Claude's choice of file layout). Crests stay pure terrain. Older files with crest-ramps must still load (migrate on read).
+- **D-20 Structure base (forward-looking):** the user is thinking about elevated, roller-coaster-style stunt tracks later (raised track sections on supports, banked curves, gaps). Design the ramp object as the first kind of a general "structure piece" base (a parametric piece with a profile, transform, material and optional supports) so elevated track pieces can be added later without a format break. **Building elevated stunt tracks is NOT in this phase** — only the base must not block it. Record it as a seed.
+
 ### Claude's Discretion
-Gate look, exact warning thresholds, wave split.
+Gate look, exact warning thresholds, wave split. Ramp file layout (D-19). Whether ramps (D-14 to D-20) stay in this phase or split into a follow-on decimal phase if the phase gets too big — prefer splitting over cramming.
 
 </decisions>
 
@@ -71,6 +79,7 @@ Gate look, exact warning thresholds, wave split.
 - Medal recording per stage and vehicle (with the user, after handling is settled)
 - AI opponents on stages
 - Dust-cloud line-of-sight evasion (seed)
+- Elevated roller-coaster-style stunt tracks built from structure pieces (user idea 2026-11-23; see D-20). Only the base is in this phase.
 
 </deferred>
 
