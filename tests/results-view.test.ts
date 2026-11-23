@@ -193,9 +193,13 @@ describe("buildStageResultLines", () => {
   });
 
   it("shows PB when not a new best, nothing when there is no best", () => {
-    expect(buildStageResultLines({ ...base, newBest: false, bestSec: 70 })).toContain("PB  1:10.00");
+    expect(buildStageResultLines({ ...base, newBest: false, bestSec: 70 })).toContain(
+      "PB  1:10.00",
+    );
     expect(
-      buildStageResultLines({ ...base, newBest: false, bestSec: null }).some((l) => l.startsWith("PB")),
+      buildStageResultLines({ ...base, newBest: false, bestSec: null }).some((l) =>
+        l.startsWith("PB"),
+      ),
     ).toBe(false);
   });
 

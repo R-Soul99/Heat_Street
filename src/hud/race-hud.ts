@@ -135,10 +135,9 @@ export function createRaceHud(): RaceHud {
     },
     update(snapshot, timing): void {
       const isStage = snapshot.mode === "stage";
-      status.textContent =
-        isStage
-          ? formatStageStatus(snapshot)
-          : snapshot.mode === "circuit"
+      status.textContent = isStage
+        ? formatStageStatus(snapshot)
+        : snapshot.mode === "circuit"
           ? `LAP ${Math.min(snapshot.lap, snapshot.totalLaps)} / ${snapshot.totalLaps}   ${snapshot.currentTargetId ?? "FINISH"}`
           : `CHECKPOINT ${snapshot.visitedIds.length}   ${snapshot.currentTargetId ?? "FINISH"}`;
       const visible = isStage ? false : snapshot.wrongWay;

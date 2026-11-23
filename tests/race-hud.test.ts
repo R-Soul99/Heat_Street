@@ -87,7 +87,12 @@ describe("stage HUD formatters", () => {
   it("formats medal thresholds", () => {
     expect(formatStageThresholds(null)).toBe("");
     expect(
-      formatStageThresholds({ goldSec: 60, silverSec: 70, bronzeSec: 80, vehicle: "muscle" } as never),
+      formatStageThresholds({
+        goldSec: 60,
+        silverSec: 70,
+        bronzeSec: 80,
+        vehicle: "muscle",
+      } as never),
     ).toBe("GOLD   01:00.00\nSILVER 01:10.00\nBRONZE 01:20.00");
   });
 });
