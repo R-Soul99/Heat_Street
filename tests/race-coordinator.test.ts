@@ -60,7 +60,7 @@ const course: Course = {
   })),
 };
 
-function setup() {
+function setup(options: { withReference?: boolean } = {}) {
   const navigation = buildNavigationGraph(graph);
   const position = { x: 10, y: 0, z: 0 };
   const body = { translation: () => position, rotation: () => ({ x: 0, y: 0, z: 0, w: 1 }) };
@@ -84,20 +84,23 @@ function setup() {
     chime: { play: vi.fn() } as never,
     simTimeSec: () => simTimeSec,
     timing,
-    reference: {
-      courseId: "p2p",
-      mode: "p2p",
-      laps: 1,
-      totalTimeSec: 100,
-      thresholds: { ace: 90, gold: 100, silver: 115, bronze: 135 },
-      splits: course.checkpoints.map((checkpoint, index) => ({
-        checkpointId: checkpoint.id,
-        lap: 1,
-        authoredIndex: index,
-        hitOrder: index,
-        cumulativeTimeSec: (index + 1) * 20,
-      })),
-    },
+    reference:
+      options.withReference === false
+        ? undefined
+        : {
+            courseId: "p2p",
+            mode: "p2p",
+            laps: 1,
+            totalTimeSec: 100,
+            thresholds: { ace: 90, gold: 100, silver: 115, bronze: 135 },
+            splits: course.checkpoints.map((checkpoint, index) => ({
+              checkpointId: checkpoint.id,
+              lap: 1,
+              authoredIndex: index,
+              hitOrder: index,
+              cumulativeTimeSec: (index + 1) * 20,
+            })),
+          },
   });
   return {
     coordinator,
@@ -116,6 +119,13 @@ describe("race coordinator", () => {
     expect(state.snapshot().visitedIds).toEqual(["c0"]);
     expect(state.snapshot().currentTargetId).toBe("c1");
     coordinator.onTickEnd();
+    expect(timing.snapshot().sectors).toHaveLength(1);
+  });
+
+  it("runs without a medal reference (time-only)", () => {
+    const { coordinator, timing } = setup({ withReference: false });
+    coordinator.onTickEnd();
+    expect(() => coordinator.onTickEnd()).not.toThrow();
     expect(timing.snapshot().sectors).toHaveLength(1);
   });
 

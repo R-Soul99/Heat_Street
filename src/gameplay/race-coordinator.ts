@@ -28,7 +28,7 @@ export interface RaceCoordinatorDeps {
   readonly chime: CheckpointChime;
   readonly simTimeSec: () => number;
   readonly timing: MedalTiming;
-  readonly reference: MedalReferenceCourse;
+  readonly reference?: MedalReferenceCourse;
   readonly personalBest?: MedalProgressRecord;
   readonly onCompleted?: (result: NonNullable<MedalTimingSnapshot["completion"]>) => void;
   readonly onRestart?: () => void;
@@ -42,11 +42,12 @@ export interface RaceCoordinator {
 }
 
 function comparisonFor(
-  reference: MedalReferenceCourse,
+  reference: MedalReferenceCourse | undefined,
   checkpointId: string,
   lap: number,
   personalBest: MedalProgressRecord | undefined,
 ): { source: "personal-best" | "reference"; cumulativeSec: number } | undefined {
+  if (reference === undefined) return undefined;
   const split = reference.splits.find(
     (candidate) => candidate.checkpointId === checkpointId && candidate.lap === lap,
   );
