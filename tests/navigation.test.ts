@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Course } from "../src/core/course";
 import { buildNavigationGraph, findRoadPath, nearestRoadNode } from "../src/core/navigation";
+import { createRaceState } from "../src/core/race-state";
 import type { RoadGraph } from "../src/core/road-graph";
 
 const graph: RoadGraph = {
@@ -89,5 +91,22 @@ describe("road navigation", () => {
   it("finds the nearest road node from local coordinates", () => {
     const navigation = buildNavigationGraph(graph);
     expect(nearestRoadNode(navigation, [94, 0, 4])).toBe(1);
+  });
+
+  it("returns -1 on a graph with no nodes and the race state tolerates it", () => {
+    const empty = buildNavigationGraph({ ...graph, nodes: [], edges: [] });
+    expect(nearestRoadNode(empty, [1, 2, 3])).toBe(-1);
+    const course: Course = {
+      id: "c",
+      name: "c",
+      mode: "p2p",
+      laps: 1,
+      checkpoints: [],
+      start: { nodeId: 0, headingRad: 0 },
+    };
+    const state = createRaceState(course, buildNavigationGraph(graph));
+    const before = state.snapshot();
+    expect(() => state.updateProgress(-1, 0)).not.toThrow();
+    expect(state.snapshot()).toEqual(before);
   });
 });

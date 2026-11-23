@@ -271,6 +271,24 @@ describe("parseMedalReference", () => {
     ).toThrow();
   });
 
+  it("allows a subset of courses only with allowMissing", () => {
+    const source = copySource();
+    source.courses = (source.courses as unknown[]).slice(0, 1);
+    const text = JSON.stringify(source);
+    expect(() => parseMedalReference(text, "fixture", "juliette-ga", routeIdentity)).toThrow();
+    const result = parseMedalReference(text, "fixture", "juliette-ga", routeIdentity, {
+      allowMissing: true,
+    });
+    expect(result.courses).toHaveLength(1);
+    const unknown = copySource();
+    (unknown.courses as Record<string, unknown>[])[0].courseId = "unknown-course";
+    expect(() =>
+      parseMedalReference(JSON.stringify(unknown), "fixture", "juliette-ga", routeIdentity, {
+        allowMissing: true,
+      }),
+    ).toThrow();
+  });
+
   it("uses route checkpoint identity without parsing routes itself", () => {
     expect(() =>
       parseMedalReference(JSON.stringify(validSource()), "fixture", "juliette-ga", routeIdentity),

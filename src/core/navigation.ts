@@ -44,6 +44,7 @@ export function nearestRoadNode(
   navigation: NavigationGraph,
   position: readonly [number, number, number],
 ): number {
+  if (navigation.roadGraph.nodes.length === 0) return -1;
   let nearest = navigation.roadGraph.nodes[0];
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const node of navigation.roadGraph.nodes) {
@@ -95,7 +96,12 @@ function edgePointDistance(
   );
 }
 
-export function validateCourseRoutes(routes: CourseData, roadGraph: RoadGraph): readonly string[] {
+export function validateCourseRoutes(
+  routes: CourseData,
+  roadGraph: RoadGraph,
+  options: { readonly authored?: boolean } = {},
+): readonly string[] {
+  const authored = options.authored === true;
   const navigation = buildNavigationGraph(roadGraph);
   const failures: string[] = [];
   // Courses must visit a gravel/dirt road only when the map has one to visit;
@@ -123,11 +129,12 @@ export function validateCourseRoutes(routes: CourseData, roadGraph: RoadGraph): 
     for (const checkpoint of course.checkpoints) {
       const edge = navigation.edgesById.get(checkpoint.edgeId);
       if (edge === undefined) continue;
-      if (edgePointDistance(checkpoint.position, edge) > CHECKPOINT_EDGE_TOLERANCE_M)
+      if (!authored && edgePointDistance(checkpoint.position, edge) > CHECKPOINT_EDGE_TOLERANCE_M)
         failures.push(`${course.id}/${checkpoint.id}: checkpoint is not near edge ${edge.id}`);
-      if (checkpoint.sensor.widthM < edge.widthM || checkpoint.sensor.heightM < 6)
+      if (!authored && (checkpoint.sensor.widthM < edge.widthM || checkpoint.sensor.heightM < 6))
         failures.push(`${course.id}/${checkpoint.id}: sensor is too small for its road`);
-      for (const defect of DEFECT_COORDINATES) {
+      // The defect list is Juliette-local (plan 10-03, A5).
+      for (const defect of routes.areaId === "juliette-ga" ? DEFECT_COORDINATES : []) {
         if (distanceXZ(checkpoint.position, defect) < DEFECT_CLEARANCE_M)
           failures.push(
             `${course.id}/${checkpoint.id}: checkpoint is within ${DEFECT_CLEARANCE_M}m of defect coordinate`,
@@ -135,6 +142,7 @@ export function validateCourseRoutes(routes: CourseData, roadGraph: RoadGraph): 
       }
     }
     if (
+      !authored &&
       mapHasDirt &&
       ![...pathEdgeIds].some((edgeId) => {
         const surface = navigation.edgesById.get(edgeId)?.surface;

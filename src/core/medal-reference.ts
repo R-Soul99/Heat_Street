@@ -255,7 +255,9 @@ export function parseMedalReference(
   sourceLabel: string,
   expectedAreaId: string,
   expectedCourses: readonly MedalReferenceCourseExpectation[],
+  options: { readonly allowMissing?: boolean } = {},
 ): MedalReferenceData {
+  const allowMissing = options.allowMissing === true;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -272,7 +274,12 @@ export function parseMedalReference(
     fail(sourceLabel, `contractVersion must be exactly ${MEDAL_CONTRACT_VERSION}`);
   const handlingContentVersion = stringField(sourceLabel, parsed, "handlingContentVersion", "root");
   const rawCourses = required(sourceLabel, parsed, "courses", "root");
-  if (!Array.isArray(rawCourses) || rawCourses.length !== expectedCourses.length)
+  if (
+    !Array.isArray(rawCourses) ||
+    (allowMissing
+      ? rawCourses.length > expectedCourses.length
+      : rawCourses.length !== expectedCourses.length)
+  )
     fail(sourceLabel, "root.courses must contain exactly the expected courses");
   const expectations = new Map(expectedCourses.map((course) => [course.courseId, course]));
   if (expectations.size !== expectedCourses.length)
@@ -287,7 +294,7 @@ export function parseMedalReference(
     seenCourses.add(courseId);
     return parseCourse(sourceLabel, course, index, expectation);
   });
-  if (seenCourses.size !== expectedCourses.length)
+  if (!allowMissing && seenCourses.size !== expectedCourses.length)
     fail(sourceLabel, "reference is missing a course");
   return {
     kind: MEDAL_REFERENCE_KIND,
