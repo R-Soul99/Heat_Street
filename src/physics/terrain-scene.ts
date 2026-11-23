@@ -40,7 +40,7 @@ import {
   type SurfaceMap,
   type SurfacePaintLookup,
 } from "./surface";
-import { createVehicle, type VehiclePose } from "./vehicle";
+import { type CreateVehicleOptions, createVehicle, type VehiclePose } from "./vehicle";
 import {
   createWheelRayPatch,
   type WheelRayPatch,
@@ -148,6 +148,7 @@ export function createTerrainScene(
   tuning: VehicleTuning,
   profiles: SurfaceProfiles,
   frontDriveShare = 0,
+  vehicleOptions?: CreateVehicleOptions,
 ): TerrainScene {
   const surfaceMap = createSurfaceMap();
   const terrain = buildTerrainCollider(world, input.grid, input.paint, input.groundSurface);
@@ -265,7 +266,7 @@ export function createTerrainScene(
   }
 
   const spawn = resolveTerrainSpawn(input);
-  const vehicle = createVehicle(world, tuning, spawn, frontDriveShare);
+  const vehicle = createVehicle(world, tuning, spawn, frontDriveShare, vehicleOptions);
   vehicle.attachWheelRayPatch(createWheelRayPatch(world, patchTargets));
   const defaultSpawnPose: VehiclePose = spawn;
   vehicle.resetPose(defaultSpawnPose);

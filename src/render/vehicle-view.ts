@@ -274,6 +274,7 @@ export interface CarMeshes {
  * @param halfWheelbase Half the front-rear wheel spacing, metres. Must be a positive finite number.
  * @param chassisHalfExtents Chassis box half-extents, metres. Every component must be a positive finite number.
  * @param chassisColor This car's chassis paint, a `0xRRGGBB` hex integer.
+ * @param rearWheelRadius Optional rear wheel radius (wheels 2 and 3); defaults to `wheelRadius`.
  */
 export function buildCarMeshes(
   wheelRadius: number,
@@ -281,9 +282,15 @@ export function buildCarMeshes(
   halfWheelbase: number,
   chassisHalfExtents: { x: number; y: number; z: number },
   chassisColor: number,
+  rearWheelRadius: number = wheelRadius,
 ): CarMeshes {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
     throw new RangeError(`wheelRadius must be a positive finite number, got ${wheelRadius}`);
+  }
+  if (!Number.isFinite(rearWheelRadius) || rearWheelRadius <= 0) {
+    throw new RangeError(
+      `rearWheelRadius must be a positive finite number, got ${rearWheelRadius}`,
+    );
   }
   if (!Number.isFinite(halfTrack) || halfTrack <= 0) {
     throw new RangeError(`halfTrack must be a positive finite number, got ${halfTrack}`);
@@ -313,6 +320,13 @@ export function buildCarMeshes(
   // frame-budget reasoning.
   const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelRadius * 0.6, 20);
   wheelGeometry.rotateZ(Math.PI / 2);
+  const rearWheelGeometry =
+    rearWheelRadius === wheelRadius
+      ? wheelGeometry
+      : new THREE.CylinderGeometry(rearWheelRadius, rearWheelRadius, rearWheelRadius * 0.6, 20);
+  if (rearWheelGeometry !== wheelGeometry) {
+    rearWheelGeometry.rotateZ(Math.PI / 2);
+  }
   const wheelMaterial = new THREE.MeshStandardMaterial({ color: COLOUR_WHEEL, roughness: 0.7 });
 
   const connectionsXZ: readonly { x: number; z: number }[] = [
@@ -324,7 +338,7 @@ export function buildCarMeshes(
 
   const wheelMeshes: THREE.Mesh[] = [];
   for (let i = 0; i < 4; i++) {
-    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+    const wheel = new THREE.Mesh(i < 2 ? wheelGeometry : rearWheelGeometry, wheelMaterial);
     wheel.castShadow = true;
     wheel.position.set(connectionsXZ[i].x, 0, connectionsXZ[i].z);
     chassis.add(wheel);
@@ -358,6 +372,9 @@ export function buildCarMeshes(
       chassisGeometry.dispose();
       chassisMaterial.dispose();
       wheelGeometry.dispose();
+      if (rearWheelGeometry !== wheelGeometry) {
+        rearWheelGeometry.dispose();
+      }
       wheelMaterial.dispose();
     },
   };
@@ -400,6 +417,8 @@ export function createVehicleView(
     readonly chassisColor?: number;
     /** Draw the flat reference grid. Defaults to `true`. */
     readonly showGrid?: boolean;
+    /** Rear wheel radius override (wheels 2 and 3); defaults to `wheelRadius`. */
+    readonly rearWheelRadius?: number;
   },
 ): VehicleView {
   if (!Number.isFinite(wheelRadius) || wheelRadius <= 0) {
@@ -503,6 +522,7 @@ export function createVehicleView(
     halfWheelbase,
     chassisHalfExtents,
     options?.chassisColor ?? COLOUR_CHASSIS,
+    options?.rearWheelRadius,
   );
   const { chassis, wheelMeshes } = carMeshes;
   scene.add(chassis);

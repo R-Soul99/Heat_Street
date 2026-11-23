@@ -96,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-14 after Phase 07.1 (Editor UX Overhaul)*
+*Last updated: 2026-11-22 after Phase 9 (Vehicle Types): rally coupe, dune buggy, 4x4 pickup and monster truck added; shipped muscle car unchanged*

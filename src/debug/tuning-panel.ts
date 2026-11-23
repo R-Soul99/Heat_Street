@@ -68,10 +68,12 @@ import { SURFACE_TYPES } from "../core/surface-types";
 import { parseTuningSnapshot, serializeTuningSnapshot } from "../core/tuning-snapshot";
 import {
   defaultTuning,
+  REAR_OVERRIDE_KEYS,
   serializeTuning,
   TUNING_RANGES,
   TUNING_STORAGE_KEY,
   type TuningRange,
+  type TuningRanges,
   type VehicleTuning,
 } from "../core/vehicle-tuning";
 
@@ -219,9 +221,11 @@ export function createTuningPanel(
   persist: {
     readonly storageKey: string;
     readonly defaults: () => VehicleTuning;
+    readonly ranges?: TuningRanges;
   } = { storageKey: TUNING_STORAGE_KEY, defaults: defaultTuning },
 ): TuningPanel {
   const store = storage ?? createLocalStorageAdapter();
+  const ranges = persist.ranges ?? TUNING_RANGES;
 
   // 320, not lil-gui's 245px default — the default truncates names like
   // "handbrakeRearSideFriction". The "[DEV]" suffix makes a stray screenshot
@@ -250,173 +254,166 @@ export function createTuningPanel(
   // cached principal inertia the assists scale against, so a slider DRAG
   // would produce discontinuities or a launched car. Only a drag-release (or
   // an input blur) should trigger a rebuild.
-  addNumber(chassisFolder, tuning.chassis, "mass", TUNING_RANGES.chassis.mass).onFinishChange(
+  addNumber(chassisFolder, tuning.chassis, "mass", ranges.chassis.mass).onFinishChange(
     handlers.onApplyVehicle,
   );
-  addNumber(chassisFolder, tuning.chassis.comOffset, "x", TUNING_RANGES.chassis.comOffset.x)
+  addNumber(chassisFolder, tuning.chassis.comOffset, "x", ranges.chassis.comOffset.x)
     .name("comOffset.x")
     .onFinishChange(handlers.onApplyVehicle);
-  addNumber(chassisFolder, tuning.chassis.comOffset, "y", TUNING_RANGES.chassis.comOffset.y)
+  addNumber(chassisFolder, tuning.chassis.comOffset, "y", ranges.chassis.comOffset.y)
     .name("comOffset.y")
     .onFinishChange(handlers.onApplyVehicle);
-  addNumber(chassisFolder, tuning.chassis.comOffset, "z", TUNING_RANGES.chassis.comOffset.z)
+  addNumber(chassisFolder, tuning.chassis.comOffset, "z", ranges.chassis.comOffset.z)
     .name("comOffset.z")
     .onFinishChange(handlers.onApplyVehicle);
-  addNumber(chassisFolder, tuning.chassis.halfExtents, "x", TUNING_RANGES.chassis.halfExtents.x)
+  addNumber(chassisFolder, tuning.chassis.halfExtents, "x", ranges.chassis.halfExtents.x)
     .name("halfExtents.x")
     .onFinishChange(handlers.onApplyVehicle);
-  addNumber(chassisFolder, tuning.chassis.halfExtents, "y", TUNING_RANGES.chassis.halfExtents.y)
+  addNumber(chassisFolder, tuning.chassis.halfExtents, "y", ranges.chassis.halfExtents.y)
     .name("halfExtents.y")
     .onFinishChange(handlers.onApplyVehicle);
-  addNumber(chassisFolder, tuning.chassis.halfExtents, "z", TUNING_RANGES.chassis.halfExtents.z)
+  addNumber(chassisFolder, tuning.chassis.halfExtents, "z", ranges.chassis.halfExtents.z)
     .name("halfExtents.z")
     .onFinishChange(handlers.onApplyVehicle);
   // Damping is not mass-property-invalidating — safe live, like every wheel
   // property below.
-  addNumber(
-    chassisFolder,
-    tuning.chassis,
-    "linearDamping",
-    TUNING_RANGES.chassis.linearDamping,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(chassisFolder, tuning.chassis, "linearDamping", ranges.chassis.linearDamping).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     chassisFolder,
     tuning.chassis,
     "angularDamping",
-    TUNING_RANGES.chassis.angularDamping,
+    ranges.chassis.angularDamping,
   ).onChange(handlers.onApplyVehicle);
 
   // ---- Suspension (wheel geometry + suspension physics) ----------------
   // Every WHEEL property below uses `.onChange(handlers.onApplyVehicle)` — Rapier's
   // per-index wheel setters are genuinely per-frame safe, unlike
   // `setAdditionalMassProperties` above.
-  addNumber(suspensionFolder, tuning.wheels, "halfTrack", TUNING_RANGES.wheels.halfTrack).onChange(
+  addNumber(suspensionFolder, tuning.wheels, "halfTrack", ranges.wheels.halfTrack).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(
-    suspensionFolder,
-    tuning.wheels,
-    "halfWheelbase",
-    TUNING_RANGES.wheels.halfWheelbase,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    suspensionFolder,
-    tuning.wheels,
-    "connectionY",
-    TUNING_RANGES.wheels.connectionY,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(suspensionFolder, tuning.wheels, "radius", TUNING_RANGES.wheels.radius).onChange(
+  addNumber(suspensionFolder, tuning.wheels, "halfWheelbase", ranges.wheels.halfWheelbase).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(suspensionFolder, tuning.wheels, "connectionY", ranges.wheels.connectionY).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(suspensionFolder, tuning.wheels, "radius", ranges.wheels.radius).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionRestLength",
-    TUNING_RANGES.wheels.suspensionRestLength,
+    ranges.wheels.suspensionRestLength,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "maxSuspensionTravel",
-    TUNING_RANGES.wheels.maxSuspensionTravel,
+    ranges.wheels.maxSuspensionTravel,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "bumpStopStiffness",
-    TUNING_RANGES.wheels.bumpStopStiffness,
+    ranges.wheels.bumpStopStiffness,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionStiffness",
-    TUNING_RANGES.wheels.suspensionStiffness,
+    ranges.wheels.suspensionStiffness,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionCompression",
-    TUNING_RANGES.wheels.suspensionCompression,
+    ranges.wheels.suspensionCompression,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "suspensionRelaxation",
-    TUNING_RANGES.wheels.suspensionRelaxation,
+    ranges.wheels.suspensionRelaxation,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     suspensionFolder,
     tuning.wheels,
     "maxSuspensionForce",
-    TUNING_RANGES.wheels.maxSuspensionForce,
+    ranges.wheels.maxSuspensionForce,
   ).onChange(handlers.onApplyVehicle);
+  const rearOverride = tuning.wheels.rear;
+  if (rearOverride !== undefined && typeof rearOverride === "object") {
+    const rearFolder = suspensionFolder.addFolder("Rear axle");
+    for (const key of REAR_OVERRIDE_KEYS) {
+      if (key in rearOverride) {
+        addNumber(
+          rearFolder,
+          rearOverride as Record<string, number>,
+          key,
+          ranges.wheels[key],
+        ).onChange(handlers.onApplyVehicle);
+      }
+    }
+  }
 
   // ---- Grip --------------------------------------------------------------
   // `frictionSlip`: [MEASURED] dead above ~10 (10.5 and 1000 read identical,
   // 3.48g vs 3.49g on the same skidpad) — the useful band is 0.6-2.0, which
   // is why `TUNING_RANGES.wheels.frictionSlip` stays 0.4-3, not a naive
   // 0-1000 range that would waste the whole slider on a dead zone.
-  addNumber(gripFolder, tuning.wheels, "frictionSlip", TUNING_RANGES.wheels.frictionSlip).onChange(
+  addNumber(gripFolder, tuning.wheels, "frictionSlip", ranges.wheels.frictionSlip).onChange(
     handlers.onApplyVehicle,
   );
   // Surface blend: how fast a wheel adopts a new surface's grip (slow to regrip, fast to degrip).
-  addNumber(
-    gripFolder,
-    tuning.wheels,
-    "surfaceRegripSec",
-    TUNING_RANGES.wheels.surfaceRegripSec,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    gripFolder,
-    tuning.wheels,
-    "surfaceDegripSec",
-    TUNING_RANGES.wheels.surfaceDegripSec,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(gripFolder, tuning.wheels, "surfaceRegripSec", ranges.wheels.surfaceRegripSec).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(gripFolder, tuning.wheels, "surfaceDegripSec", ranges.wheels.surfaceDegripSec).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     gripFolder,
     tuning.wheels,
     "frontSideFriction",
-    TUNING_RANGES.wheels.frontSideFriction,
+    ranges.wheels.frontSideFriction,
   ).onChange(handlers.onApplyVehicle);
   // Pitfall 14 (02-RESEARCH.md): the useful range for this rear-bias dial is
   // a narrow band near zero (0.06-1.0 all meaningfully distinct), which is
   // why this stays bounded to 0..0.3 (`TUNING_RANGES.wheels.rearSideFriction`)
   // rather than a naive 0..1 that would waste 70% of the slider on a dead
   // zone.
-  addNumber(
-    gripFolder,
-    tuning.wheels,
-    "rearSideFriction",
-    TUNING_RANGES.wheels.rearSideFriction,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(gripFolder, tuning.wheels, "rearSideFriction", ranges.wheels.rearSideFriction).onChange(
+    handlers.onApplyVehicle,
+  );
 
   // ---- Drive ---------------------------------------------------------
   addNumber(
     driveFolder,
     tuning.drive,
     "engineForcePerRearWheel",
-    TUNING_RANGES.drive.engineForcePerRearWheel,
+    ranges.drive.engineForcePerRearWheel,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "brakeImpulsePerWheel",
-    TUNING_RANGES.drive.brakeImpulsePerWheel,
+    ranges.drive.brakeImpulsePerWheel,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "maxSteerLock", TUNING_RANGES.drive.maxSteerLock).onChange(
+  addNumber(driveFolder, tuning.drive, "maxSteerLock", ranges.drive.maxSteerLock).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "steerRampPerSec", ranges.drive.steerRampPerSec).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
-    "steerRampPerSec",
-    TUNING_RANGES.drive.steerRampPerSec,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
     "steerReturnPerSec",
-    TUNING_RANGES.drive.steerReturnPerSec,
+    ranges.drive.steerReturnPerSec,
   ).onChange(handlers.onApplyVehicle);
   // Pitfall 14 (02-RESEARCH.md): the ENTIRE useful range measured for this
   // dial is 0.004..0.04 — a 10x span inside the bottom 4% of a naive 0..1
@@ -426,93 +423,87 @@ export function createTuningPanel(
     driveFolder,
     tuning.drive,
     "handbrakeRearSideFriction",
-    TUNING_RANGES.drive.handbrakeRearSideFriction,
+    ranges.drive.handbrakeRearSideFriction,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "powerOversteerGain",
-    TUNING_RANGES.drive.powerOversteerGain,
+    ranges.drive.powerOversteerGain,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "powerOversteerRearSideFriction",
-    TUNING_RANGES.drive.powerOversteerRearSideFriction,
+    ranges.drive.powerOversteerRearSideFriction,
   ).onChange(handlers.onApplyVehicle);
   // Throttle-slide floor at low/medium speed (fades to the one above by the power fade speeds).
   addNumber(
     driveFolder,
     tuning.drive,
     "powerOversteerLowSpeedRearSideFriction",
-    TUNING_RANGES.drive.powerOversteerLowSpeedRearSideFriction,
+    ranges.drive.powerOversteerLowSpeedRearSideFriction,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "pivotTurn", TUNING_RANGES.drive.pivotTurn).onChange(
+  addNumber(driveFolder, tuning.drive, "pivotTurn", ranges.drive.pivotTurn).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(driveFolder, tuning.drive, "pivotYawRate", TUNING_RANGES.drive.pivotYawRate).onChange(
+  addNumber(driveFolder, tuning.drive, "pivotYawRate", ranges.drive.pivotYawRate).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
     "pivotFrontSpeedCap",
-    TUNING_RANGES.drive.pivotFrontSpeedCap,
+    ranges.drive.pivotFrontSpeedCap,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "pivotEngageSec",
-    TUNING_RANGES.drive.pivotEngageSec,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "pivotAssist", TUNING_RANGES.drive.pivotAssist).onChange(
+  addNumber(driveFolder, tuning.drive, "pivotEngageSec", ranges.drive.pivotEngageSec).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "pivotAssist", ranges.drive.pivotAssist).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
     "reverseEngineForcePerRearWheel",
-    TUNING_RANGES.drive.reverseEngineForcePerRearWheel,
+    ranges.drive.reverseEngineForcePerRearWheel,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "reverseEngageSpeedMs",
-    TUNING_RANGES.drive.reverseEngageSpeedMs,
+    ranges.drive.reverseEngageSpeedMs,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "topSpeedMs", TUNING_RANGES.drive.topSpeedMs).onChange(
+  addNumber(driveFolder, tuning.drive, "topSpeedMs", ranges.drive.topSpeedMs).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
     "highSpeedSteerFraction",
-    TUNING_RANGES.drive.highSpeedSteerFraction,
+    ranges.drive.highSpeedSteerFraction,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "lowGearPunch", TUNING_RANGES.drive.lowGearPunch).onChange(
+  addNumber(driveFolder, tuning.drive, "lowGearPunch", ranges.drive.lowGearPunch).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(driveFolder, tuning.drive, "flickGain", TUNING_RANGES.drive.flickGain).onChange(
+  addNumber(driveFolder, tuning.drive, "flickGain", ranges.drive.flickGain).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(driveFolder, tuning.drive, "flickSwingSec", TUNING_RANGES.drive.flickSwingSec).onChange(
+  addNumber(driveFolder, tuning.drive, "flickSwingSec", ranges.drive.flickSwingSec).onChange(
     handlers.onApplyVehicle,
   );
   addNumber(
     driveFolder,
     tuning.drive,
     "rearGripRecoverySec",
-    TUNING_RANGES.drive.rearGripRecoverySec,
+    ranges.drive.rearGripRecoverySec,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(driveFolder, tuning.drive, "slideSurge", TUNING_RANGES.drive.slideSurge).onChange(
+  addNumber(driveFolder, tuning.drive, "slideSurge", ranges.drive.slideSurge).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "liftOffOversteer",
-    TUNING_RANGES.drive.liftOffOversteer,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "liftOffOversteer", ranges.drive.liftOffOversteer).onChange(
+    handlers.onApplyVehicle,
+  );
   // Front tyre falloff: the steered axle lets go past a front slip angle, so all four tyres can slide.
   for (const key of [
     "frontFalloff",
@@ -522,149 +513,120 @@ export function createTuningPanel(
     "driftHoldSlipDeg",
     "looseTraction",
   ] as const) {
-    addNumber(driveFolder, tuning.drive, key, TUNING_RANGES.drive[key]).onChange(
-      handlers.onApplyVehicle,
-    );
+    addNumber(driveFolder, tuning.drive, key, ranges.drive[key]).onChange(handlers.onApplyVehicle);
   }
-  addNumber(driveFolder, tuning.drive, "tyreFalloff", TUNING_RANGES.drive.tyreFalloff).onChange(
+  addNumber(driveFolder, tuning.drive, "tyreFalloff", ranges.drive.tyreFalloff).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(driveFolder, tuning.drive, "rollGuard", TUNING_RANGES.drive.rollGuard).onChange(
+  addNumber(driveFolder, tuning.drive, "rollGuard", ranges.drive.rollGuard).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "powerFadeStartMs",
-    TUNING_RANGES.drive.powerFadeStartMs,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "powerFadeEndMs",
-    TUNING_RANGES.drive.powerFadeEndMs,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "powerSlipOpenDeg",
-    TUNING_RANGES.drive.powerSlipOpenDeg,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "powerFadeStartMs", ranges.drive.powerFadeStartMs).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "powerFadeEndMs", ranges.drive.powerFadeEndMs).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "powerSlipOpenDeg", ranges.drive.powerSlipOpenDeg).onChange(
+    handlers.onApplyVehicle,
+  );
   // Wheelspin oversteer: rear drive demand vs rear traction (0 gain = off).
-  addNumber(driveFolder, tuning.drive, "wheelspinGain", TUNING_RANGES.drive.wheelspinGain).onChange(
+  addNumber(driveFolder, tuning.drive, "wheelspinGain", ranges.drive.wheelspinGain).onChange(
     handlers.onApplyVehicle,
   );
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "wheelspinOnset",
-    TUNING_RANGES.drive.wheelspinOnset,
-  ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "yawDampingGain",
-    TUNING_RANGES.drive.yawDampingGain,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "wheelspinOnset", ranges.drive.wheelspinOnset).onChange(
+    handlers.onApplyVehicle,
+  );
+  addNumber(driveFolder, tuning.drive, "yawDampingGain", ranges.drive.yawDampingGain).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     driveFolder,
     tuning.drive,
     "yawDampingStartMs",
-    TUNING_RANGES.drive.yawDampingStartMs,
+    ranges.drive.yawDampingStartMs,
   ).onChange(handlers.onApplyVehicle);
-  addNumber(
-    driveFolder,
-    tuning.drive,
-    "yawDampingFullMs",
-    TUNING_RANGES.drive.yawDampingFullMs,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(driveFolder, tuning.drive, "yawDampingFullMs", ranges.drive.yawDampingFullMs).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     driveFolder,
     tuning.drive,
     "yawDampingSteerOff",
-    TUNING_RANGES.drive.yawDampingSteerOff,
+    ranges.drive.yawDampingSteerOff,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     driveFolder,
     tuning.drive,
     "yawDampingSlipOffDeg",
-    TUNING_RANGES.drive.yawDampingSlipOffDeg,
+    ranges.drive.yawDampingSlipOffDeg,
   ).onChange(handlers.onApplyVehicle);
 
   // ---- Assists ---------------------------------------------------------
   // `autoLevelGain`: [MEASURED] load-bearing, not decoration — without it a
   // 120 mph ramp launch with an off-axis spin lands inverted every time.
-  addNumber(
-    assistsFolder,
-    tuning.assists,
-    "autoLevelGain",
-    TUNING_RANGES.assists.autoLevelGain,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(assistsFolder, tuning.assists, "autoLevelGain", ranges.assists.autoLevelGain).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     assistsFolder,
     tuning.assists,
     "autoLevelDamping",
-    TUNING_RANGES.assists.autoLevelDamping,
+    ranges.assists.autoLevelDamping,
   ).onChange(handlers.onApplyVehicle);
   // `airPitchGain`: steers the nose toward the flight path while airborne so
   // a ramp launch doesn't nose-dive (0 = off).
-  addNumber(
-    assistsFolder,
-    tuning.assists,
-    "airPitchGain",
-    TUNING_RANGES.assists.airPitchGain,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(assistsFolder, tuning.assists, "airPitchGain", ranges.assists.airPitchGain).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     assistsFolder,
     tuning.assists,
     "airPitchDamping",
-    TUNING_RANGES.assists.airPitchDamping,
+    ranges.assists.airPitchDamping,
   ).onChange(handlers.onApplyVehicle);
   // `landingCushionG`: virtual extra suspension stroke on a hard touchdown (0 = off).
   addNumber(
     assistsFolder,
     tuning.assists,
     "landingCushionG",
-    TUNING_RANGES.assists.landingCushionG,
+    ranges.assists.landingCushionG,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "landingCushionSinkMs",
-    TUNING_RANGES.assists.landingCushionSinkMs,
+    ranges.assists.landingCushionSinkMs,
   ).onChange(handlers.onApplyVehicle);
   // `bodyRollGain`: [MEASURED] POSITIVE FEEDBACK — gain 0.10 -> ~5.5deg,
   // gain 0.20 -> the car flips onto its roof. `bodyRollMaxDeg` below is the
   // cutoff that keeps this assist from running away, not a decoration.
-  addNumber(
-    assistsFolder,
-    tuning.assists,
-    "bodyRollGain",
-    TUNING_RANGES.assists.bodyRollGain,
-  ).onChange(handlers.onApplyVehicle);
+  addNumber(assistsFolder, tuning.assists, "bodyRollGain", ranges.assists.bodyRollGain).onChange(
+    handlers.onApplyVehicle,
+  );
   addNumber(
     assistsFolder,
     tuning.assists,
     "bodyRollDamping",
-    TUNING_RANGES.assists.bodyRollDamping,
+    ranges.assists.bodyRollDamping,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "bodyRollMaxDeg",
-    TUNING_RANGES.assists.bodyRollMaxDeg,
+    ranges.assists.bodyRollMaxDeg,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "slideCatchGain",
-    TUNING_RANGES.assists.slideCatchGain,
+    ranges.assists.slideCatchGain,
   ).onChange(handlers.onApplyVehicle);
   addNumber(
     assistsFolder,
     tuning.assists,
     "slideCatchDamping",
-    TUNING_RANGES.assists.slideCatchDamping,
+    ranges.assists.slideCatchDamping,
   ).onChange(handlers.onApplyVehicle);
   // [MEASURED] default is deliberately zero — full lock at 60/110 mph on
   // flat ground produced no more than 1.5deg of tilt with no downforce at
@@ -673,7 +635,7 @@ export function createTuningPanel(
     assistsFolder,
     tuning.assists,
     "downforcePerSpeed2",
-    TUNING_RANGES.assists.downforcePerSpeed2,
+    ranges.assists.downforcePerSpeed2,
   ).onChange(handlers.onApplyVehicle);
 
   // ---- Telemetry ---------------------------------------------------------
@@ -952,7 +914,7 @@ export function createTuningPanel(
       // The security boundary: every byte read back from the file goes
       // through `parseTuningSnapshot`, never a direct `JSON.parse` — see the
       // module doc comment's Export/Import paragraph.
-      const snapshot = parseTuningSnapshot(raw);
+      const snapshot = parseTuningSnapshot(raw, ranges);
 
       if (snapshot === null) {
         // Failure is surfaced through the control's own label, exactly like
@@ -1032,7 +994,7 @@ export function createTuningPanel(
           writeLeavesOnto(
             tuning as unknown as Record<string, unknown>,
             persist.defaults() as unknown as Record<string, unknown>,
-            TUNING_RANGES as unknown as Record<string, unknown>,
+            ranges as unknown as Record<string, unknown>,
           );
           writeLeavesOnto(
             surfaces as unknown as Record<string, unknown>,

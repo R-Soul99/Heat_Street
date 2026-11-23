@@ -44,7 +44,14 @@ import {
   serializeSurfaceProfiles,
 } from "./surface-tuning";
 import { isPlainObject } from "./tuning-utils";
-import { parseSavedTuning, serializeTuning, type VehicleTuning } from "./vehicle-tuning";
+import {
+  defaultTuning,
+  parseSavedTuning,
+  serializeTuning,
+  TUNING_RANGES,
+  type TuningRanges,
+  type VehicleTuning,
+} from "./vehicle-tuning";
 
 /** Identifies this file as a Heat Street tuning snapshot, distinct from any
  * of the three single-domain `localStorage` blobs. */
@@ -97,7 +104,10 @@ export function serializeTuningSnapshot(
  * validated parser. Returns `null` only when all three domains came back
  * `null` — an envelope yielding nothing is not a usable snapshot.
  */
-export function parseTuningSnapshot(raw: string | null): TuningSnapshot | null {
+export function parseTuningSnapshot(
+  raw: string | null,
+  ranges: TuningRanges = TUNING_RANGES,
+): TuningSnapshot | null {
   if (raw === null) {
     return null;
   }
@@ -121,7 +131,10 @@ export function parseTuningSnapshot(raw: string | null): TuningSnapshot | null {
   // the module doc comment's SECURITY BOUNDARY section). Each domain is
   // handed, as a fresh JSON string, to the SAME parser that already guards
   // the `localStorage` round trip — no leaf here is ever read by hand.
-  const vehicle = "vehicle" in parsed ? parseSavedTuning(JSON.stringify(parsed.vehicle)) : null;
+  const vehicle =
+    "vehicle" in parsed
+      ? parseSavedTuning(JSON.stringify(parsed.vehicle), defaultTuning, ranges)
+      : null;
   const surfaces =
     "surfaces" in parsed ? parseSavedSurfaceProfiles(JSON.stringify(parsed.surfaces)) : null;
   const camera = "camera" in parsed ? parseSavedCameraTuning(JSON.stringify(parsed.camera)) : null;

@@ -114,14 +114,24 @@ import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
 import { sampleTerrainHeight, type TerrainGrid, upsampleTerrainGrid } from "./core/terrain-grid";
 import { DEFAULT_COLLIDER_SUBDIV } from "./core/terrain-limits";
 import { tyreSlipRatio } from "./core/tyre-slip";
-import { classDefaultTuning, resolveVehicleClassId, VEHICLE_CLASSES } from "./core/vehicle-class";
-import { defaultTuning, parseSavedTuning, TUNING_STORAGE_KEY } from "./core/vehicle-tuning";
+import {
+  classDefaultTuning,
+  classTuningRanges,
+  resolveVehicleClassId,
+  VEHICLE_CLASSES,
+} from "./core/vehicle-class";
+import {
+  defaultTuning,
+  parseSavedTuning,
+  TUNING_STORAGE_KEY,
+  wheelParams,
+} from "./core/vehicle-tuning";
 import { createAiDebugOverlay } from "./debug/ai-debug-overlay";
 import { DEBUG_ENABLED, onDebugKey, onDebugToggle } from "./debug/debug-gate";
 import { createDriveLogger } from "./debug/drive-logger";
 import { createFeelPanel, loadFeel } from "./debug/feel-panel";
 import { createFreeLookCamera } from "./debug/free-look-camera";
-import { createMapMenu } from "./debug/map-menu";
+import { createMapMenu, createVehicleMenu } from "./debug/map-menu";
 import { createNavPointer } from "./debug/nav-pointer";
 import { createHud } from "./debug/profiler-hud";
 import { createPursuitPanel } from "./debug/pursuit-panel";
@@ -196,6 +206,12 @@ const canvas: HTMLCanvasElement = canvasElement;
 // has its own default tuning and its own saved-tuning key (RWD keeps the
 // original key). AI cars always stay RWD.
 const CAR_CLASS = VEHICLE_CLASSES[resolveVehicleClassId(location.search)];
+const CAR_RANGES = classTuningRanges(CAR_CLASS.id);
+/** Extra spawn height for tall classes over SPAWN_CLEARANCE_M; exactly 0 for rwd/fwd/awd. */
+const PLAYER_SPAWN_LIFT_M = (CAR_CLASS.spawnClearanceM ?? SPAWN_CLEARANCE_M) - SPAWN_CLEARANCE_M;
+function liftPlayerPose<P extends { readonly y: number }>(pose: P): P {
+  return PLAYER_SPAWN_LIFT_M === 0 ? pose : { ...pose, y: pose.y + PLAYER_SPAWN_LIFT_M };
+}
 // `?feel` replaces the saved big-panel blob with the class base, then lets the
 // small feel panel derive the handling from its few sliders (see core/feel).
 const FEEL_ENABLED = parseFeelFlag(location.search);
@@ -207,9 +223,10 @@ const tuning = FEEL_ENABLED
   : (parseSavedTuning(
       typeof localStorage !== "undefined" ? localStorage.getItem(CAR_CLASS.storageKey) : null,
       () => shippedTuning(CAR_CLASS.id),
+      CAR_RANGES,
     ) ?? shippedTuning(CAR_CLASS.id));
 if (FEEL_ENABLED) {
-  applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings);
+  applyFeel(tuning, classDefaultTuning(CAR_CLASS.id), feelSettings, CAR_RANGES);
 }
 // AI fleet tuning: the same object as the player's when RWD (panel edits still
 // reach the fleet); otherwise an independent RWD tune so FWD/AWD edits never
@@ -422,6 +439,7 @@ try {
       tuning,
       surfaceProfiles,
       CAR_CLASS.frontDriveShare,
+      { surfaceGripScale: CAR_CLASS.surfaceGripScale },
     );
     scene = terrainScene;
     terrainSightTransparent = terrainScene.sightTransparentHandles;
@@ -479,7 +497,20 @@ try {
       gate === undefined || gatePhysicsGrid === undefined
         ? undefined
         : { grid: gatePhysicsGrid, paint: gate.paint },
+      { surfaceGripScale: CAR_CLASS.surfaceGripScale },
     );
+  }
+
+  // Tall vehicles (truck, monster) need more ground clearance than the shared
+  // SPAWN_CLEARANCE_M. Every PLAYER pose goes through scene.resetVehicle (race
+  // restarts and respawns, grid slot, test stations, gate spawns, free-drive),
+  // so lifting it there covers all sites once. AI spawns use fleet.resetCar /
+  // createAiFleet and are untouched. The lift is exactly 0 for rwd/fwd/awd and
+  // the wrapper is then not installed (bit-identical behaviour).
+  if (PLAYER_SPAWN_LIFT_M !== 0) {
+    const resetPlayerVehicle = scene.resetVehicle.bind(scene);
+    scene.resetVehicle = (pose) => resetPlayerVehicle(liftPlayerPose(pose));
+    scene.resetVehicle(scene.defaultSpawnPose);
   }
 
   // Circuit Race only (D-01/D-02/D-04): a shared racing line, a staggered
@@ -687,6 +718,7 @@ try {
       includePhase2Ground: false,
       groundExtents,
       chassisColor: CAR_CLASS.chassisColor,
+      rearWheelRadius: wheelParams(tuning, 2).radius,
       // Off on sculpted terrain maps (a flat plane at y = 0 means nothing there); `?grid=1|0` overrides.
       showGrid: shouldShowReferenceGrid(
         parseGridOverride(location.search),
@@ -722,22 +754,24 @@ try {
       ? undefined
       : createAiVehicleViews(
           view.scene,
-          tuning.wheels.radius,
-          tuning.wheels.halfTrack,
-          tuning.wheels.halfWheelbase,
-          tuning.chassis.halfExtents,
+          aiTuning.wheels.radius,
+          aiTuning.wheels.halfTrack,
+          aiTuning.wheels.halfWheelbase,
+          aiTuning.chassis.halfExtents,
           AI_PAINTS.map((paint) => paint.hex),
+          wheelParams(aiTuning, 2).radius,
         );
   const pursuitViews =
     pursuit === undefined
       ? undefined
       : createAiVehicleViews(
           view.scene,
-          tuning.wheels.radius,
-          tuning.wheels.halfTrack,
-          tuning.wheels.halfWheelbase,
-          tuning.chassis.halfExtents,
+          aiTuning.wheels.radius,
+          aiTuning.wheels.halfTrack,
+          aiTuning.wheels.halfWheelbase,
+          aiTuning.chassis.halfExtents,
           pursuit.drivers.map((_, i) => pursuerPaint(i)),
+          wheelParams(aiTuning, 2).radius,
         );
   const interpolated: readonly THREE.Object3D[] = [
     ...(aiViews === undefined ? view.meshes : [view.meshes[0], ...aiViews.chassisMeshes]),
@@ -951,6 +985,7 @@ try {
           onRaceClassified: (result) => {
             keepRaceResultOnRestart = true;
             if (
+              CAR_CLASS.savesMedals &&
               raceLaps?.practice !== true &&
               saveRaceResult(
                 medalStorage,
@@ -1002,6 +1037,11 @@ try {
               } catch (error) {
                 console.warn("[medal-reference] could not build record", error);
               }
+            }
+            // D-08: only the muscle-car family records medals; new classes show the time only.
+            if (!CAR_CLASS.savesMedals) {
+              resultsView?.showCompletion({ ...completion, medal: "none" });
+              return;
             }
             const saved = saveMedalResult(
               medalStorage,
@@ -1126,7 +1166,11 @@ try {
           },
         },
         undefined,
-        { storageKey: CAR_CLASS.storageKey, defaults: () => classDefaultTuning(CAR_CLASS.id) },
+        {
+          storageKey: CAR_CLASS.storageKey,
+          defaults: () => classDefaultTuning(CAR_CLASS.id),
+          ranges: CAR_RANGES,
+        },
       )
     : null;
   if (panel) {
@@ -1139,7 +1183,7 @@ try {
   if (FEEL_ENABLED) {
     const feelBase = classDefaultTuning(CAR_CLASS.id);
     createFeelPanel(feelSettings, () => {
-      applyFeel(tuning, feelBase, feelSettings);
+      applyFeel(tuning, feelBase, feelSettings, CAR_RANGES);
       scene.setTuning(tuning);
       fleet?.setTuning(aiTuning);
       pursuit?.fleet.setTuning(aiTuning);
@@ -1307,7 +1351,10 @@ try {
     driveLogger?.record(frame);
   };
 
-  if (FEEL_ENABLED || DEBUG_ENABLED) createMapMenu(AREA_ID);
+  if (FEEL_ENABLED || DEBUG_ENABLED) {
+    createMapMenu(AREA_ID);
+    createVehicleMenu(CAR_CLASS.id);
+  }
 
   // Proving ground (`?map=feel-test`): number keys launch the car from fixed
   // pads at a chosen speed (see src/debug/test-stations.ts). Other terrain maps

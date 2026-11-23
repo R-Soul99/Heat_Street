@@ -17,9 +17,9 @@ import * as RAPIER from "@dimforge/rapier3d";
 import { engineForceScale, REVERSE_TOP_MS, steerLockScale } from "../core/drivetrain";
 import type { InputFrame } from "../core/input-tape";
 import { DT } from "../core/sim-clock";
-import type { SurfaceType } from "../core/surface-types";
-import { frontDriveThrustN, wheelEngineForces } from "../core/vehicle-class";
-import type { VehicleTuning } from "../core/vehicle-tuning";
+import { SURFACE_TYPES, type SurfaceType } from "../core/surface-types";
+import { frontDriveThrustN, type SurfaceGripScale, wheelEngineForces } from "../core/vehicle-class";
+import { type VehicleTuning, wheelParams } from "../core/vehicle-tuning";
 import type { SurfaceContext } from "./surface";
 import { applyAssists, applyLandingCushion, boxPrincipalInertia } from "./vehicle-assists";
 import type { WheelRayPatch } from "./wheel-ray-patch";
@@ -281,12 +281,32 @@ export interface Vehicle {
  * reference to "the player" (D-09): Phase 7/8 constructs pursuers through
  * this exact same call.
  */
+export interface CreateVehicleOptions {
+  /** Per-surface grip multipliers (player car only). Omitted = raw profile grip. */
+  readonly surfaceGripScale?: SurfaceGripScale;
+}
+
 export function createVehicle(
   world: RAPIER.World,
   tuning: VehicleTuning,
   spawn: { x: number; y: number; z: number },
   frontDriveShare = 0,
+  options?: CreateVehicleOptions,
 ): Vehicle {
+  const classGripScale = options?.surfaceGripScale ?? null;
+  if (classGripScale !== null) {
+    for (const s of SURFACE_TYPES) {
+      const e = classGripScale[s];
+      if (
+        !Number.isFinite(e.forward) ||
+        !Number.isFinite(e.lateral) ||
+        e.forward <= 0 ||
+        e.lateral <= 0
+      ) {
+        throw new RangeError(`surfaceGripScale[${s}] must be finite and > 0`);
+      }
+    }
+  }
   if (!Number.isFinite(frontDriveShare) || frontDriveShare < 0 || frontDriveShare > 1) {
     throw new RangeError(`frontDriveShare must be finite and within 0..1, got ${frontDriveShare}`);
   }
@@ -347,18 +367,20 @@ export function createVehicle(
   vc.setIndexForwardAxis = 2;
 
   const w0 = tuning.wheels;
-  const conn: readonly { x: number; y: number; z: number }[] = [
-    { x: -w0.halfTrack, y: w0.connectionY, z: -w0.halfWheelbase }, // FL
-    { x: w0.halfTrack, y: w0.connectionY, z: -w0.halfWheelbase }, // FR
-    { x: -w0.halfTrack, y: w0.connectionY, z: w0.halfWheelbase }, // RL
-    { x: w0.halfTrack, y: w0.connectionY, z: w0.halfWheelbase }, // RR
-  ];
   for (let i = 0; i < 4; i++) {
-    vc.addWheel(conn[i], DIRECTION, AXLE, w0.suspensionRestLength, w0.radius);
+    const p = wheelParams(tuning, i);
+    const conn = {
+      x: i % 2 === 0 ? -w0.halfTrack : w0.halfTrack,
+      y: p.connectionY,
+      z: i < 2 ? -w0.halfWheelbase : w0.halfWheelbase,
+    };
+    vc.addWheel(conn, DIRECTION, AXLE, p.suspensionRestLength, p.radius);
   }
 
-  /** Latest applied suspension rest length, the neutral seed for `lastSuspensionLength`. */
-  let restLength = w0.suspensionRestLength;
+  /** Latest applied per-wheel suspension rest lengths, the neutral seed for `lastSuspensionLength`. */
+  const restLengths: number[] = [0, 1, 2, 3].map(
+    (i) => wheelParams(tuning, i).suspensionRestLength,
+  );
 
   /**
    * Live-retune every per-wheel property. Rapier's own `WheelTuning`
@@ -368,24 +390,25 @@ export function createVehicle(
    */
   function applyTuning(t: VehicleTuning): void {
     const w = t.wheels;
-    restLength = w.suspensionRestLength;
     // Chassis damping and wheel geometry are live too, so the sliders for them
     // do something and the assist maths (which reads `t.wheels`) agrees with
     // the real wheel positions.
     body.setLinearDamping(t.chassis.linearDamping);
     body.setAngularDamping(t.chassis.angularDamping);
     for (let i = 0; i < 4; i++) {
+      const p = wheelParams(t, i);
+      restLengths[i] = p.suspensionRestLength;
       vc.setWheelChassisConnectionPointCs(i, {
         x: i % 2 === 0 ? -w.halfTrack : w.halfTrack,
-        y: w.connectionY,
+        y: p.connectionY,
         z: i < 2 ? -w.halfWheelbase : w.halfWheelbase,
       });
-      vc.setWheelSuspensionRestLength(i, w.suspensionRestLength);
-      vc.setWheelRadius(i, w.radius);
-      vc.setWheelSuspensionStiffness(i, w.suspensionStiffness);
-      vc.setWheelSuspensionCompression(i, w.suspensionCompression);
-      vc.setWheelSuspensionRelaxation(i, w.suspensionRelaxation);
-      vc.setWheelMaxSuspensionTravel(i, w.maxSuspensionTravel);
+      vc.setWheelSuspensionRestLength(i, p.suspensionRestLength);
+      vc.setWheelRadius(i, p.radius);
+      vc.setWheelSuspensionStiffness(i, p.suspensionStiffness);
+      vc.setWheelSuspensionCompression(i, p.suspensionCompression);
+      vc.setWheelSuspensionRelaxation(i, p.suspensionRelaxation);
+      vc.setWheelMaxSuspensionTravel(i, p.maxSuspensionTravel);
       vc.setWheelMaxSuspensionForce(i, w.maxSuspensionForce);
       vc.setWheelFrictionSlip(i, w.frictionSlip);
       vc.setWheelSideFrictionStiffness(i, i < 2 ? w.frontSideFriction : w.rearSideFriction);
@@ -451,7 +474,9 @@ export function createVehicle(
     // A rolled car's stale rollDeg would otherwise make the first tick after
     // the respawn apply the roll guard's friction cut.
     rollGuardWasOn = false;
-    lastSuspensionLength.fill(restLength);
+    for (let i = 0; i < 4; i++) {
+      lastSuspensionLength[i] = restLengths[i] as number;
+    }
     wheelSurfaces.fill("tarmac");
     blendSeeded = false;
     telemetry = sampleVehicle({ body, controller: vc } as Vehicle);
@@ -479,7 +504,7 @@ export function createVehicle(
   let frontGripScale = 1;
   let rollGuardWasOn = false;
   /** Suspension length per wheel on the previous tick, for the bump stop's compressing-only rule. */
-  const lastSuspensionLength = new Array<number>(4).fill(restLength);
+  const lastSuspensionLength = restLengths.slice();
   const wheelSurfaces: SurfaceType[] = ["tarmac", "tarmac", "tarmac", "tarmac"];
   /** Per-wheel blended surface grip (lags the paint under the wheel); reseeded on the first tick after a reset. */
   const blendLateral = [1, 1, 1, 1];
@@ -540,20 +565,24 @@ export function createVehicle(
       // handed back on rebound, so it cushions without bouncing the car).
       {
         const w = t.wheels;
-        const onset = w.maxSuspensionTravel * BUMP_STOP_ONSET;
-        const span = w.maxSuspensionTravel - onset;
-        let minCompression = Number.POSITIVE_INFINITY;
+        let minExcess = Number.POSITIVE_INFINITY;
+        let minSpan = Number.POSITIVE_INFINITY;
         const lengths: number[] = [0, 0, 0, 0];
         for (let i = 0; i < 4; i++) {
-          lengths[i] = vc.wheelSuspensionLength(i) ?? w.suspensionRestLength;
-          minCompression = Math.min(minCompression, w.suspensionRestLength - lengths[i]);
+          const p = wheelParams(t, i);
+          const onset = p.maxSuspensionTravel * BUMP_STOP_ONSET;
+          minSpan = Math.min(minSpan, p.maxSuspensionTravel - onset);
+          lengths[i] = vc.wheelSuspensionLength(i) ?? p.suspensionRestLength;
+          minExcess = Math.min(minExcess, p.suspensionRestLength - lengths[i] - onset);
         }
-        const heavy =
-          w.bumpStopStiffness > 1 && span > 0 && minCompression > onset - BUMP_STOP_GATE_M;
+        const heavy = w.bumpStopStiffness > 1 && minSpan > 0 && minExcess > -BUMP_STOP_GATE_M;
         for (let i = 0; i < 4; i++) {
-          let k = w.suspensionStiffness;
+          const p = wheelParams(t, i);
+          const onset = p.maxSuspensionTravel * BUMP_STOP_ONSET;
+          const span = p.maxSuspensionTravel - onset;
+          let k = p.suspensionStiffness;
           if (heavy && lengths[i] < lastSuspensionLength[i]) {
-            const f = clamp((w.suspensionRestLength - lengths[i] - onset) / span, 0, 1);
+            const f = clamp((p.suspensionRestLength - lengths[i] - onset) / span, 0, 1);
             k *= 1 + (w.bumpStopStiffness - 1) * f * f;
           }
           vc.setWheelSuspensionStiffness(i, k);
@@ -587,15 +616,20 @@ export function createVehicle(
           }
           wheelSurfaces[i] = surface;
           const profile = surfaces.profiles[surface];
+          const scale = classGripScale === null ? null : classGripScale[surface];
+          const targetLateral =
+            scale === null ? profile.lateralGrip : profile.lateralGrip * scale.lateral;
+          const targetForward =
+            scale === null ? profile.forwardGrip : profile.forwardGrip * scale.forward;
           // Blend toward the painted surface's grip: slow to regrip (the tyre
           // sheds mud/sand), fast to degrip. Seeded to the target after a reset
           // so a spawn does not blend in from a stale surface.
           if (!blendSeeded) {
-            blendLateral[i] = profile.lateralGrip;
-            blendForward[i] = profile.forwardGrip;
+            blendLateral[i] = targetLateral;
+            blendForward[i] = targetForward;
           } else {
-            blendLateral[i] = blendToward(blendLateral[i] as number, profile.lateralGrip, t.wheels);
-            blendForward[i] = blendToward(blendForward[i] as number, profile.forwardGrip, t.wheels);
+            blendLateral[i] = blendToward(blendLateral[i] as number, targetLateral, t.wheels);
+            blendForward[i] = blendToward(blendForward[i] as number, targetForward, t.wheels);
           }
           const lateralGrip = blendLateral[i] as number;
           const forwardGrip = blendForward[i] as number;

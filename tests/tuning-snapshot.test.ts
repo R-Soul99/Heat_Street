@@ -7,7 +7,12 @@ import {
   TUNING_SNAPSHOT_KIND,
   TUNING_SNAPSHOT_VERSION,
 } from "../src/core/tuning-snapshot";
-import { defaultTuning, TUNING_RANGES } from "../src/core/vehicle-tuning";
+import {
+  defaultTuning,
+  TUNING_RANGES,
+  type TuningRange,
+  type TuningRanges,
+} from "../src/core/vehicle-tuning";
 
 /**
  * This module is the security boundary an imported tuning file crosses on
@@ -260,5 +265,27 @@ describe("parseTuningSnapshot — unknown extra keys are dropped, not copied", (
     expect(
       (vehicleResult.chassis as unknown as Record<string, unknown>).someHostileExtraField,
     ).toBeUndefined();
+  });
+});
+
+function customRanges(): TuningRanges {
+  const r = structuredClone(TUNING_RANGES) as {
+    -readonly [K in keyof TuningRanges]: TuningRanges[K];
+  };
+  (r.chassis as { mass: TuningRange }).mass = { min: 500, max: 9000, step: 1 };
+  return r;
+}
+
+describe("parseTuningSnapshot ranges argument (D-02)", () => {
+  const raw = (): string => {
+    const v = defaultTuning();
+    v.chassis.mass = 6000;
+    return JSON.stringify({ kind: "heat-street.tuning-snapshot", vehicle: v });
+  };
+  it("clamps a heavy mass by default", () => {
+    expect(parseTuningSnapshot(raw())?.vehicle?.chassis.mass).toBe(TUNING_RANGES.chassis.mass.max);
+  });
+  it("keeps it with custom ranges", () => {
+    expect(parseTuningSnapshot(raw(), customRanges())?.vehicle?.chassis.mass).toBe(6000);
   });
 });

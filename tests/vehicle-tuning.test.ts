@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { defaultTuning, TUNING_RANGES, type VehicleTuning } from "../src/core/vehicle-tuning";
+import {
+  clampTuning,
+  defaultTuning,
+  serializeTuning,
+  TUNING_RANGES,
+  type TuningRange,
+  type TuningRanges,
+  type VehicleTuning,
+  wheelParams,
+} from "../src/core/vehicle-tuning";
 
 /**
  * Only the pure data half of `vehicle-tuning.ts` is exercised here:
@@ -137,5 +146,63 @@ describe("VehicleTuning shape", () => {
   it("exposes exactly the four top-level groups", () => {
     const t: VehicleTuning = defaultTuning();
     expect(Object.keys(t).sort()).toEqual(["assists", "chassis", "drive", "wheels"]);
+  });
+});
+
+function customRanges(): TuningRanges {
+  const r = structuredClone(TUNING_RANGES) as {
+    -readonly [K in keyof TuningRanges]: TuningRanges[K];
+  };
+  (r.chassis as { mass: TuningRange }).mass = { min: 500, max: 9000, step: 1 };
+  return r;
+}
+
+describe("clampTuning ranges argument (D-02)", () => {
+  it("clamps to default TUNING_RANGES without a second argument", () => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    expect(clampTuning(t).chassis.mass).toBe(TUNING_RANGES.chassis.mass.max);
+  });
+  it("honours custom ranges", () => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    expect(clampTuning(t, customRanges()).chassis.mass).toBe(6000);
+  });
+});
+
+describe("wheels.rear override (D-03)", () => {
+  it("is absent from defaultTuning and its serialisation", () => {
+    const t = defaultTuning();
+    expect("rear" in t.wheels).toBe(false);
+    expect(serializeTuning(t)).not.toContain('rear"');
+  });
+
+  it("wheelParams without rear equals front for all four wheels", () => {
+    const t = defaultTuning();
+    const front = wheelParams(t, 0);
+    for (let i = 0; i < 4; i++) {
+      expect(wheelParams(t, i)).toEqual(front);
+    }
+    expect(front.radius).toBe(t.wheels.radius);
+  });
+
+  it("applies a rear radius override to wheels 2 and 3 only", () => {
+    const t = defaultTuning();
+    t.wheels.rear = { radius: 0.45 };
+    expect(wheelParams(t, 2).radius).toBe(0.45);
+    expect(wheelParams(t, 3).radius).toBe(0.45);
+    expect(wheelParams(t, 0).radius).toBe(t.wheels.radius);
+    expect(wheelParams(t, 2).suspensionStiffness).toBe(t.wheels.suspensionStiffness);
+  });
+
+  it("clamps rear values against the supplied ranges", () => {
+    const r = structuredClone(TUNING_RANGES) as {
+      -readonly [K in keyof TuningRanges]: TuningRanges[K];
+    };
+    (r.wheels as { radius: TuningRange }).radius = { min: 0.1, max: 0.2, step: 0.01 };
+    const t = defaultTuning();
+    t.wheels.rear = { radius: 5 };
+    clampTuning(t, r);
+    expect(t.wheels.rear?.radius).toBe(0.2);
   });
 });

@@ -14,8 +14,18 @@
  * `parseSavedFeel` like every other persisted blob.
  */
 
-import { classDefaultTuning, DEFAULT_VEHICLE_CLASS_ID, type VehicleClassId } from "./vehicle-class";
-import { clampTuning, type VehicleTuning } from "./vehicle-tuning";
+import {
+  classDefaultTuning,
+  classTuningRanges,
+  DEFAULT_VEHICLE_CLASS_ID,
+  type VehicleClassId,
+} from "./vehicle-class";
+import {
+  clampTuning,
+  TUNING_RANGES,
+  type TuningRanges,
+  type VehicleTuning,
+} from "./vehicle-tuning";
 
 export interface FeelSettings {
   /** Cornering grip. Low = sloppy/understeer, high = planted. Base 5. */
@@ -141,7 +151,12 @@ function anchored(s: number, lo: number, mid: number, hi: number): number {
  * `TUNING_RANGES` afterwards. `target` is mutated in place because the live
  * game holds one tuning object by reference.
  */
-export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: FeelSettings): void {
+export function applyFeel(
+  target: VehicleTuning,
+  base: VehicleTuning,
+  feel: FeelSettings,
+  ranges: TuningRanges = TUNING_RANGES,
+): void {
   const f: FeelSettings = {
     grip: clamp(feel.grip, FEEL_MIN, FEEL_MAX),
     steerAtSpeed: clamp(feel.steerAtSpeed, FEEL_MIN, FEEL_MAX),
@@ -195,7 +210,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
   // High-speed yaw damping assist (04.3-05): 0 = off, 5 = the class base, 10 = double.
   target.drive.yawDampingGain = base.drive.yawDampingGain * lerp(0, 2, f.stability / 10);
 
-  clampTuning(target);
+  clampTuning(target, ranges);
 }
 
 /**
@@ -205,7 +220,7 @@ export function applyFeel(target: VehicleTuning, base: VehicleTuning, feel: Feel
  */
 export function shippedTuning(classId: VehicleClassId = DEFAULT_VEHICLE_CLASS_ID): VehicleTuning {
   const t = classDefaultTuning(classId);
-  applyFeel(t, classDefaultTuning(classId), FEEL_DEFAULTS);
+  applyFeel(t, classDefaultTuning(classId), FEEL_DEFAULTS, classTuningRanges(classId));
   return t;
 }
 

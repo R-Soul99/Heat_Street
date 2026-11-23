@@ -5,6 +5,8 @@ import {
   parseSavedTuning,
   serializeTuning,
   TUNING_RANGES,
+  type TuningRange,
+  type TuningRanges,
 } from "../src/core/vehicle-tuning";
 
 /**
@@ -152,5 +154,57 @@ describe("clampTuning", () => {
     const before = JSON.parse(JSON.stringify(t));
     clampTuning(t);
     expect(t).toEqual(before);
+  });
+});
+
+function customRanges(): TuningRanges {
+  const r = structuredClone(TUNING_RANGES) as {
+    -readonly [K in keyof TuningRanges]: TuningRanges[K];
+  };
+  (r.chassis as { mass: TuningRange }).mass = { min: 500, max: 9000, step: 1 };
+  return r;
+}
+
+describe("parseSavedTuning ranges argument (D-02)", () => {
+  const blob = (): string => {
+    const t = defaultTuning();
+    t.chassis.mass = 6000;
+    return JSON.stringify(t);
+  };
+  it("clamps mass with default ranges", () => {
+    expect(parseSavedTuning(blob())?.chassis.mass).toBe(TUNING_RANGES.chassis.mass.max);
+  });
+  it("keeps mass 6000 with custom ranges", () => {
+    expect(parseSavedTuning(blob(), defaultTuning, customRanges())?.chassis.mass).toBe(6000);
+  });
+});
+
+describe("parseSavedTuning wheels.rear (D-03, T-09-08)", () => {
+  it("blob without rear yields no rear key", () => {
+    const out = parseSavedTuning(serializeTuning(defaultTuning()));
+    expect(out).not.toBeNull();
+    expect("rear" in (out as { wheels: object }).wheels).toBe(false);
+  });
+
+  it("sanitises a hostile rear subtree", () => {
+    const t = defaultTuning() as unknown as { wheels: Record<string, unknown> };
+    const raw = JSON.stringify(t).replace(
+      '"wheels":{',
+      '"wheels":{"rear":{"radius":"x","suspensionStiffness":null,"connectionY":99,"evil":1,"suspensionRestLength":0.5,"__proto__":{"polluted":1}},',
+    );
+    const out = parseSavedTuning(raw);
+    expect(out).not.toBeNull();
+    const rear = out?.wheels.rear as Record<string, number>;
+    expect(Object.keys(rear).sort()).toEqual(["connectionY", "suspensionRestLength"]);
+    expect(rear.connectionY).toBe(TUNING_RANGES.wheels.connectionY.max);
+    expect(rear.suspensionRestLength).toBe(0.5);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it("drops a non-object rear", () => {
+    const raw = JSON.stringify(defaultTuning()).replace('"wheels":{', '"wheels":{"rear":5,');
+    const out = parseSavedTuning(raw);
+    expect(out).not.toBeNull();
+    expect("rear" in (out as { wheels: object }).wheels).toBe(false);
   });
 });

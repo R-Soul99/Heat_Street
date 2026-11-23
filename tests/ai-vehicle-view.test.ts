@@ -108,3 +108,22 @@ describe("createAiVehicleViews", () => {
     expect(otherBefore).toEqual([0, 0, 0, 0]);
   });
 });
+
+describe("createAiVehicleViews rear radius", () => {
+  it("sizes rear wheels from the optional rear radius", () => {
+    const scene = new THREE.Scene();
+    const views = createAiVehicleViews(
+      scene,
+      WHEEL_RADIUS,
+      HALF_TRACK,
+      HALF_WHEELBASE,
+      CHASSIS_HALF_EXTENTS,
+      [0xff0000],
+      0.5,
+    );
+    const wheels = views.chassisMeshes[0].children as THREE.Mesh[];
+    const r = (m: THREE.Mesh) => (m.geometry as THREE.CylinderGeometry).parameters.radiusTop;
+    expect(r(wheels[0])).toBe(WHEEL_RADIUS);
+    expect(r(wheels[3])).toBe(0.5);
+  });
+});

@@ -13,6 +13,8 @@ export interface FreeDriveCoordinatorDeps {
   readonly spawnPose: VehiclePose;
   readonly heightAt: (x: number, z: number) => number;
   readonly onCarReset: () => void;
+  /** Extra respawn height for tall vehicles, added to the 0.6 m clearance when defined. */
+  readonly extraLiftM?: number;
 }
 
 const FREE_DRIVE_SNAPSHOT: RaceSnapshot = {
@@ -46,7 +48,7 @@ export function createFreeDriveCoordinator(deps: FreeDriveCoordinatorDeps): Race
         const bearing = headingFromRotation(body.rotation());
         deps.scene.resetVehicle({
           x: p.x,
-          y: deps.heightAt(p.x, p.z) + RESPAWN_CLEARANCE_M,
+          y: deps.heightAt(p.x, p.z) + RESPAWN_CLEARANCE_M + (deps.extraLiftM ?? 0),
           z: p.z,
           headingRad: yawFromTravelDirection(Math.cos(bearing), Math.sin(bearing)),
         });

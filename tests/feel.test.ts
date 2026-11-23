@@ -197,3 +197,14 @@ describe("shippedTuning", () => {
     expect(shippedTuning().drive.liftOffOversteer).toBe(5);
   });
 });
+
+describe("applyFeel ranges argument (D-02)", () => {
+  it("omitted ranges equals explicit TUNING_RANGES", () => {
+    const base = classDefaultTuning("rwd");
+    const a = classDefaultTuning("rwd");
+    const b = classDefaultTuning("rwd");
+    applyFeel(a, base, FEEL_DEFAULTS);
+    applyFeel(b, base, FEEL_DEFAULTS, TUNING_RANGES);
+    expect(a).toEqual(b);
+  });
+});
