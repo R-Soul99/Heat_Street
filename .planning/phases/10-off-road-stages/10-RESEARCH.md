@@ -408,7 +408,7 @@ export const stageBestKey = (area: string, stage: string, cls: VehicleClassId) =
 | A10 | `?route=<id>` URL param name and `?mode=p2p|circuit` fallback to first route of that mode | D-12 | Naming only |
 | A11 | Wall-angle cap 80 deg for pipes | Collider | Wheel-ray behaviour on steep walls unverified; needs a playtest spike |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Medal thresholds for stages that do have medals.**
    - Known: `stage.medals = {goldSec, silverSec, bronzeSec, vehicle}`; `createMedalTiming` takes one `referenceTimeSec` and fixed `MEDAL_BANDS` (ace 0.9, gold 1, silver 1.15, bronze 1.35).
