@@ -169,3 +169,30 @@ describe("checkpoint sectors", () => {
     expect(completed.completion?.slowestSectorOrdinal).toBe(0);
   });
 });
+
+describe("time-only mode (D-08, medals: false)", () => {
+  it("reports no thresholds, no medal and no split deltas", () => {
+    const timing = createMedalTiming({ referenceTimeSec: 100, medals: false });
+    timing.update({ simTimeSec: 0, speedMs: FIRST_MOVEMENT_SPEED_MS });
+    const split = timing.recordCheckpoint(5, {
+      checkpointId: "cp-1",
+      comparison: { source: "personal-best", cumulativeSec: 4 },
+    });
+    expect(split.thresholds).toBeNull();
+    expect(split.liveMedal).toBe("none");
+    expect(split.sectors[0]?.deltaSec).toBeNull();
+    expect(split.sectors[0]?.comparisonSource).toBeNull();
+
+    const done = timing.complete(50);
+    expect(done.completion?.effectiveTimeSec).toBe(50);
+    expect(done.completion?.medal).toBe("none");
+    expect(done.completion?.sectors[0]?.deltaSec).toBeNull();
+  });
+
+  it("medals default on", () => {
+    const timing = createMedalTiming({ referenceTimeSec: 100 });
+    timing.update({ simTimeSec: 0, speedMs: FIRST_MOVEMENT_SPEED_MS });
+    expect(timing.snapshot().thresholds).not.toBeNull();
+    expect(timing.complete(50).completion?.medal).toBe("ace");
+  });
+});

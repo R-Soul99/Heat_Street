@@ -38,6 +38,12 @@ export interface CheckpointSplitInput {
 export interface MedalTimingConfig {
   readonly referenceTimeSec: number;
   readonly speedThresholdMs?: number;
+  /**
+   * `false` = time only (D-08, classes that do not earn medals): no
+   * thresholds, every medal is `"none"`, and checkpoint comparisons are
+   * dropped so no split shows a delta. Defaults to `true`.
+   */
+  readonly medals?: boolean;
 }
 
 export interface MedalTimingInput {
@@ -137,7 +143,10 @@ export function classifyMedal(timeSec: number, referenceTimeSec: number): Medal 
 }
 
 export function createMedalTiming(config: MedalTimingConfig): MedalTiming {
-  const thresholds = medalThresholds(config.referenceTimeSec);
+  const medals = config.medals !== false;
+  const thresholds = medals ? medalThresholds(config.referenceTimeSec) : null;
+  const medalFor = (timeSec: number): Medal =>
+    medals ? classifyMedal(timeSec, config.referenceTimeSec) : "none";
   const speedThresholdMs =
     config.speedThresholdMs !== undefined && isNonNegativeFinite(config.speedThresholdMs)
       ? config.speedThresholdMs
@@ -167,7 +176,7 @@ export function createMedalTiming(config: MedalTimingConfig): MedalTiming {
       penaltySec,
       effectiveElapsedSec,
       thresholds,
-      liveMedal: classifyMedal(effectiveElapsedSec, config.referenceTimeSec),
+      liveMedal: medalFor(effectiveElapsedSec),
       sectors,
       completion,
     });
@@ -199,7 +208,7 @@ export function createMedalTiming(config: MedalTimingConfig): MedalTiming {
     const effectiveTimeSec = baseElapsedAt(simTimeSec) + penaltySec;
     completion = Object.freeze({
       effectiveTimeSec,
-      medal: classifyMedal(effectiveTimeSec, config.referenceTimeSec),
+      medal: medalFor(effectiveTimeSec),
       sectors: Object.freeze(sectors.map((sector) => Object.freeze({ ...sector }))),
       slowestSectorOrdinal: slowestSectorOrdinal(),
     });
@@ -215,7 +224,7 @@ export function createMedalTiming(config: MedalTimingConfig): MedalTiming {
     }
     const cumulativeElapsedSec = baseElapsedAt(simTimeSec) + penaltySec;
     const previous = sectors[sectors.length - 1];
-    const comparison = checkpoint.comparison;
+    const comparison = medals ? checkpoint.comparison : undefined;
     const comparisonDelta =
       comparison !== undefined && isNonNegativeFinite(comparison.cumulativeSec)
         ? cumulativeElapsedSec - comparison.cumulativeSec

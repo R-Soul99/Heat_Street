@@ -1021,9 +1021,15 @@ try {
           raceHud,
           chime: checkpointChime,
           simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
-          timing: createMedalTiming({ referenceTimeSec: rd.reference.totalTimeSec }),
+          // D-08: classes that do not save medals get time only — no
+          // thresholds, no medal and no split deltas against the muscle-car
+          // reference or personal best.
+          timing: createMedalTiming({
+            referenceTimeSec: rd.reference.totalTimeSec,
+            medals: CAR_CLASS.savesMedals,
+          }),
           reference: rd.reference,
-          personalBest: medalProgress.courses[rd.course.id],
+          personalBest: CAR_CLASS.savesMedals ? medalProgress.courses[rd.course.id] : undefined,
           onCompleted: (completion) => {
             // Plan 04.2-15 (D-07): debug-only, paste-ready medal-reference
             // course record from this run for the designer re-record. No
@@ -1039,8 +1045,9 @@ try {
               }
             }
             // D-08: only the muscle-car family records medals; new classes show the time only.
+            // The timing above already reports medal "none" and no deltas.
             if (!CAR_CLASS.savesMedals) {
-              resultsView?.showCompletion({ ...completion, medal: "none" });
+              resultsView?.showCompletion(completion);
               return;
             }
             const saved = saveMedalResult(
