@@ -30,7 +30,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 07.1.3: Editor Feature Palette** (INSERTED) - Place start points, buildings, ramps and scenery (trees, hedges, bushes, fences) from a palette (completed 2026-11-16)
 - [ ] **Phase 8: Getaway - Heat, Damage & Dispatch** - Pursuit heat system tiers 1-3, damage/destruction, radio chatter and mission briefs
 - [x] **Phase 9: Vehicle Types** - Per-vehicle tuning ranges and per-axle suspension; rally coupe, dune buggy, 4x4 pickup and monster truck alongside the unchanged muscle car (completed 2026-11-22)
-- [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor; the same tool authors road race routes; ramps become built objects
+- [ ] **Phase 10: Off-road Stages** - Timed point-to-point stages across open terrain with ordered gates, authored in the terrain editor; the same tool authors road race routes (ramps moved to Phase 10.1)
+- [ ] **Phase 10.1: Ramps and Structures** (INSERTED) - Built stunt ramps (kicker, wedge, tabletop/gap jump, quarter-pipe, half-pipe) with adjustable angle/curve, wood/metal materials and snapping, as the first kind of a general structure piece
 - [ ] **Phase 11: Art Pass** - Shaped car bodies and wheels; soft particles, dust trails, roost, landing bursts and continuous tyre tracks
 
 ## Phase Details
@@ -618,10 +619,29 @@ Plans:
   2. Gates count only in order and only when crossed forwards; respawn returns the car to the last gate passed
   3. The user can place a start, gates and a finish in the terrain editor and press Test stage
   4. The same tool authors road race routes (point-to-point and circuit); a map can hold any number of routes, including none (widened 2026-11-16)
-  5. Ramps are placed as built stunt-ramp objects with a choice of shapes and their own surface, not as grass terrain (added 2026-11-16)
+  5. (Moved to Phase 10.1 on 2026-11-23: ramps as built objects)
 
 **Plans**: TBD (run /gsd-plan-phase 10)
 **UI hint**: yes
+
+### Phase 10.1: Ramps and Structures (INSERTED)
+
+**Goal**: Ramps are built stunt-ramp objects, not grass terrain: five shapes, adjustable profiles, wood and metal with their own grip, easy alignment, stored as the first kind of a general "structure piece" that later elevated stunt tracks can reuse
+**Requirements**: MODE-04 (ramps part; split from Phase 10)
+**Decisions:** D-14 to D-20 in `.planning/phases/10.1-ramps-and-structures/10.1-CONTEXT.md`. Research in `.planning/phases/10-off-road-stages/10-RESEARCH.md` (ramp sections).
+**Success Criteria** (what must be TRUE):
+
+  1. The user can place kicker, wedge, tabletop/gap jump, quarter-pipe and half-pipe ramps from the Place menu, with adjustable angle and curve on kickers and tabletops
+  2. Ramps come in wood and metal, look distinct, and each material has its own grip
+  3. Ramps snap to the terrain, to a driving line or gate direction, and to each other (gap jumps line up), and every placement is one undo step
+  4. Ramps are stored as structure pieces in their own object list; every older map with crest-ramps loads with identical geometry and grip
+  5. The structure format leaves room for elevated stunt-track pieces without a format break (tracks themselves are not built)
+**UI hint**: yes
+**Depends on:** Phase 10
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 10.1 to break down)
 
 ### Phase 11: Art Pass
 

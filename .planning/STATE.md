@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-stopped_at: Phase 09 complete (11/11) — ready to discuss Phase 10
-last_updated: 2026-11-22T22:29:26.814Z
+stopped_at: Phase 10 UI-SPEC approved
+last_updated: "2026-11-23T01:10:41.198Z"
 last_activity: 2026-11-22
 progress:
-  total_phases: 18
+  total_phases: 19
   completed_phases: 14
   total_plans: 159
   completed_plans: 157
-  percent: 78
+  percent: 74
 ---
 
 # Project State
@@ -111,6 +111,7 @@ Progress: [██████████] 99%
 - Phase 07.1.2 inserted after Phase 07.1.1: Selection-based editor tools (select-then-act, from user mockup) (URGENT)
 - Phase 07.1.3 inserted after Phase 07.1.2: Editor feature palette (buildings, ramps, scenery)
 - Phases 9 (Vehicle Types), 10 (Off-road Stages) and 11 (Art Pass) added 2026-11-15 from the briefs in .planning/plans-ahead/; Phase 07.1.3 widened to include start points. Each phase folder has a CONTEXT.md pointing at its brief
+- Phase 10.1 inserted after Phase 10: Ramps and Structures split out of Phase 10 (D-14..D-20) per research scope recommendation; Claude's discretion per 10-CONTEXT
 
 ### Decisions
 
@@ -281,9 +282,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-11-22T22:21:38.388Z
-Stopped at: Completed 07.1.3-11-PLAN.md
-Resume file: None
+Last session: 2026-11-23T01:03:46.114Z
+Stopped at: Phase 10 UI-SPEC approved
+Resume file: .planning/phases/10-off-road-stages/10-UI-SPEC.md
 
 Before running `/gsd-plan-phase 5`, read the open items logged under Blockers/Concerns above:
 the remaining `[Phase 04-11, open]` items (art-direction-phase decision, camera altitude, ADR

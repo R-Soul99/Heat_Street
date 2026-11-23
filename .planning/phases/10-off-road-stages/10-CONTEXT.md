@@ -7,6 +7,8 @@
 <domain>
 ## Phase Boundary
 
+**Ramps (D-14 to D-20) moved to Phase 10.1 on 2026-11-23.**
+
 A stage is a timed run from a start through ordered gates to a finish across open terrain, with no road needed. Stages are authored in the terrain editor and raced with `?map=<id>&mode=stage`.
 
 The brief is the specification. Its stages of work (1 to 8) map to plans roughly one to one, in order. Stage 7 (medal recording) is done later with the user and is not a build plan. Everything in the brief's Decisions section is locked.
@@ -36,6 +38,8 @@ The brief is the specification. Its stages of work (1 to 8) map to plans roughly
 - **D-12:** Relax the two-course rule in `parseCourseData`: a map may hold any number of road routes, including none. Whether road routes and stages share one file format or stay as `routes.json` + `stages.json` behind one tool is decided during planning.
 - **D-13:** The race coordinator uses `nearestRoadNode`; hand-placed checkpoints may not sit on a road node, so that must cope. Medals for a new route are recorded after it is authored.
 
+> **Moved 2026-11-23:** D-14 to D-20 (ramps) now belong to Phase 10.1 (`.planning/phases/10.1-ramps-and-structures/10.1-CONTEXT.md`). Kept here for reference; Phase 10 does not plan them.
+
 **Ramps as built objects (folded in from todo `2026-11-16-ramps-as-built-objects.md`, 2026-11-16):**
 - **D-14:** Ramps look like built stunt ramps (timber planks or a steel wedge with visible frame and side panels, own material, not the ground) with a choice of shapes (kicker, wedge, tabletop, quarter-pipe), picked in the Place menu / ramp options. Own surface grip instead of hard-coded grass. Decide whether ramps leave the crest list as their own object kind (crests stay pure terrain) and how older files with crest-ramps load. Keep the rigid deck from quick task 261116-ryu (one base height at the foot). Short discuss pass first on shapes list, look and format split; may become its own plan(s) or a split-off phase if the phase gets too big.
 
@@ -48,7 +52,7 @@ The brief is the specification. Its stages of work (1 to 8) map to plans roughly
 - **D-20 Structure base (forward-looking):** the user is thinking about elevated, roller-coaster-style stunt tracks later (raised track sections on supports, banked curves, gaps). Design the ramp object as the first kind of a general "structure piece" base (a parametric piece with a profile, transform, material and optional supports) so elevated track pieces can be added later without a format break. **Building elevated stunt tracks is NOT in this phase** — only the base must not block it. Record it as a seed.
 
 ### Claude's Discretion
-Gate look, exact warning thresholds, wave split. Ramp file layout (D-19). Whether ramps (D-14 to D-20) stay in this phase or split into a follow-on decimal phase if the phase gets too big — prefer splitting over cramming.
+Gate look, exact warning thresholds, wave split. Ramps split to Phase 10.1 on 2026-11-23 (research recommendation).
 
 </decisions>
 
