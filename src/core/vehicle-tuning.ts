@@ -1057,6 +1057,24 @@ export interface WheelAxleOverride {
   connectionY?: number;
 }
 
+/**
+ * Makes `target.wheels.rear` mirror `source.wheels.rear`: removed when the
+ * source has no override, otherwise replaced by a shallow copy (never the
+ * source's own object). The range-table leaf walk used by the debug panel's
+ * Reset and Import paths cannot do this, because `TuningRanges` has no `rear`
+ * key. Callers that bind UI controls to the old `rear` object must rebind
+ * after calling this.
+ */
+export function copyRearOverride(target: VehicleTuning, source: VehicleTuning): void {
+  const wheels = target.wheels as { rear?: WheelAxleOverride };
+  const rear = source.wheels.rear;
+  if (rear === undefined) {
+    delete wheels.rear;
+  } else {
+    wheels.rear = { ...rear };
+  }
+}
+
 /** Resolved per-wheel values (all required). */
 export interface WheelParams {
   radius: number;

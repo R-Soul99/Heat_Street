@@ -67,6 +67,7 @@ import {
 import { SURFACE_TYPES } from "../core/surface-types";
 import { parseTuningSnapshot, serializeTuningSnapshot } from "../core/tuning-snapshot";
 import {
+  copyRearOverride,
   defaultTuning,
   REAR_OVERRIDE_KEYS,
   serializeTuning,
@@ -345,9 +346,19 @@ export function createTuningPanel(
     "maxSuspensionForce",
     ranges.wheels.maxSuspensionForce,
   ).onChange(handlers.onApplyVehicle);
-  const rearOverride = tuning.wheels.rear;
-  if (rearOverride !== undefined && typeof rearOverride === "object") {
-    const rearFolder = suspensionFolder.addFolder("Rear axle");
+  // The "Rear axle" sub-folder is bound to the `wheels.rear` object itself,
+  // which Reset and Import replace or remove (`copyRearOverride`), so it is
+  // rebuilt after each of those. It is the last child of the Suspension
+  // folder, so a rebuild puts it back in the same place.
+  let rearFolder: GUI | undefined;
+  function rebuildRearFolder(): void {
+    rearFolder?.destroy();
+    rearFolder = undefined;
+    const rearOverride = tuning.wheels.rear;
+    if (rearOverride === undefined || typeof rearOverride !== "object") {
+      return;
+    }
+    rearFolder = suspensionFolder.addFolder("Rear axle");
     for (const key of REAR_OVERRIDE_KEYS) {
       if (key in rearOverride) {
         addNumber(
@@ -359,6 +370,7 @@ export function createTuningPanel(
       }
     }
   }
+  rebuildRearFolder();
 
   // ---- Grip --------------------------------------------------------------
   // `frictionSlip`: [MEASURED] dead above ~10 (10.5 and 1000 read identical,
@@ -991,11 +1003,16 @@ export function createTuningPanel(
           resetArmed = false;
           resetController.name(RESET_LABEL);
 
+          const defaults = persist.defaults();
           writeLeavesOnto(
             tuning as unknown as Record<string, unknown>,
-            persist.defaults() as unknown as Record<string, unknown>,
+            defaults as unknown as Record<string, unknown>,
             ranges as unknown as Record<string, unknown>,
           );
+          // The leaf walk skips `wheels.rear` (no range-table key), so a stale
+          // override would survive the reset and be re-saved on the next change.
+          copyRearOverride(tuning, defaults);
+          rebuildRearFolder();
           writeLeavesOnto(
             surfaces as unknown as Record<string, unknown>,
             defaultSurfaceProfiles() as unknown as Record<string, unknown>,
