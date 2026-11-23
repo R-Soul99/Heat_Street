@@ -9,6 +9,7 @@ import {
 } from "../src/core/tuning-snapshot";
 import { classDefaultTuning, classTuningRanges } from "../src/core/vehicle-class";
 import {
+  copyRearOverride,
   defaultTuning,
   TUNING_RANGES,
   type TuningRange,
@@ -310,5 +311,32 @@ describe("parseTuningSnapshot base argument (WR-03)", () => {
 
   it("still defaults to the RWD car", () => {
     expect(parseTuningSnapshot(raw)?.vehicle?.chassis.mass).toBe(defaultTuning().chassis.mass);
+  });
+});
+
+describe("snapshot import carries wheels.rear (WR-02)", () => {
+  it("an exported rear override replaces the importing session's own", () => {
+    const exported = defaultTuning();
+    exported.wheels.rear = { radius: 0.4 };
+    const raw = serializeTuningSnapshot(exported, defaultSurfaceProfiles(), defaultCameraTuning());
+    const vehicle = parseTuningSnapshot(raw)?.vehicle;
+    expect(vehicle?.wheels.rear).toEqual({ radius: 0.4 });
+
+    const live = defaultTuning();
+    live.wheels.rear = { suspensionStiffness: 50 };
+    copyRearOverride(live, vehicle ?? defaultTuning());
+    expect(live.wheels.rear).toEqual({ radius: 0.4 });
+  });
+
+  it("a snapshot without one clears the importing session's override", () => {
+    const raw = serializeTuningSnapshot(
+      defaultTuning(),
+      defaultSurfaceProfiles(),
+      defaultCameraTuning(),
+    );
+    const live = defaultTuning();
+    live.wheels.rear = { radius: 0.4 };
+    copyRearOverride(live, parseTuningSnapshot(raw)?.vehicle ?? live);
+    expect(live.wheels.rear).toBeUndefined();
   });
 });

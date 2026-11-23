@@ -948,8 +948,12 @@ export function createTuningPanel(
         writeLeavesOnto(
           tuning as unknown as Record<string, unknown>,
           snapshot.vehicle as unknown as Record<string, unknown>,
-          TUNING_RANGES as unknown as Record<string, unknown>,
+          ranges as unknown as Record<string, unknown>,
         );
+        // The leaf walk skips `wheels.rear`, so mirror it explicitly or the
+        // imported override is lost and this session's own one is kept.
+        copyRearOverride(tuning, snapshot.vehicle);
+        rebuildRearFolder();
         handlers.onApplyVehicle();
       }
       if (snapshot.surfaces !== null) {
