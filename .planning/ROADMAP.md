@@ -626,7 +626,7 @@ Plans:
   4. The same tool authors road race routes (point-to-point and circuit); a map can hold any number of routes, including none (widened 2026-11-16)
   5. (Moved to Phase 10.1 on 2026-11-23: ramps as built objects)
 
-**Plans:** 6/13 plans executed
+**Plans:** 7/13 plans executed
 **UI hint**: yes
 
 Plans:
@@ -642,7 +642,7 @@ Plans:
 - [x] 10-04-PLAN.md — Stage coordinator (timing sectors, PB split deltas, completion, restart/respawn)
 - [x] 10-05-PLAN.md — Stage HUD status/PB/split, stage results panel (no medal row), gate visuals in 3 draw calls
 - [x] 10-06-PLAN.md — Dev-server GET/PUT /__terrain/stages|routes/<id> validated by the shared parsers
-- [ ] 10-07-PLAN.md — Editor pure stage/route ops with caps and warnings; stages/routes undo parts
+- [x] 10-07-PLAN.md — Editor pure stage/route ops with caps and warnings; stages/routes undo parts
 
 **Wave 3**
 
@@ -722,7 +722,7 @@ Phases 9 to 11 do not depend on Phase 8 and may be run before it. Recommended or
 | 7.1.3. Editor Feature Palette (INSERTED) | 11/11 | Complete | 2026-11-16 |
 | 8. Getaway - Heat, Damage & Dispatch | 0/TBD | Not started | - |
 | 9. Vehicle Types | 11/11 | Complete   | 2026-11-22 |
-| 10. Off-road Stages | 6/13 | In Progress|  |
+| 10. Off-road Stages | 7/13 | In Progress|  |
 | 11. Art Pass | 0/TBD | Not started | - |
 
 ## Notes
