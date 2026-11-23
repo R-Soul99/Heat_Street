@@ -19,3 +19,11 @@ export function buildDriveUrl(mapId: string, target: DriveTarget): string {
   }
   return `${url}&debug`;
 }
+
+export function buildStageTestUrl(mapId: string, stageId: string): string {
+  return `/?map=${encodeURIComponent(mapId)}&mode=stage&stage=${encodeURIComponent(stageId)}&debug`;
+}
+
+export function buildRouteTestUrl(mapId: string, mode: "p2p" | "circuit", routeId: string): string {
+  return `/?map=${encodeURIComponent(mapId)}&mode=${mode}&route=${encodeURIComponent(routeId)}&debug`;
+}

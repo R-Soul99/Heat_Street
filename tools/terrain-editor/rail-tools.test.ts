@@ -4,6 +4,7 @@ import {
   BRUSH_TOOL_FOR,
   PLACE_KINDS,
   PLACE_MENU,
+  PLACE_TOOL_KIND,
   PLACE_TOOLS,
   ROAD_MENU,
   TERRAIN_BAR,
@@ -43,6 +44,7 @@ describe("toolbar data", () => {
         "Digit5",
         "Digit6",
         "Digit7",
+        "Digit8",
       ]),
     );
   });
@@ -120,13 +122,26 @@ describe("toolbar data", () => {
       "placeHedge",
       "placeFence",
       "placeRamp",
+      "divider",
+      "placeRoute",
     ]);
   });
 
-  it("PLACE_TOOLS follow the kinds and digit keys 1 to 7", () => {
-    expect(PLACE_KINDS).toEqual(["start", "building", "tree", "bush", "hedge", "fence", "ramp"]);
-    expect(PLACE_TOOLS.map((t) => t.code)).toEqual([1, 2, 3, 4, 5, 6, 7].map((n) => `Digit${n}`));
-    expect(PLACE_TOOLS.map((t) => t.keyLabel)).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+  it("PLACE_TOOLS follow the kinds and digit keys 1 to 8", () => {
+    expect(PLACE_KINDS).toEqual([
+      "start",
+      "building",
+      "tree",
+      "bush",
+      "hedge",
+      "fence",
+      "ramp",
+      "route",
+    ]);
+    expect(PLACE_TOOLS.map((t) => t.code)).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Digit${n}`),
+    );
+    expect(PLACE_TOOLS.map((t) => t.keyLabel)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
     for (const t of PLACE_TOOLS) expect(TERRAIN_HOTKEYS[t.code]).toBe(t.id);
   });
 
@@ -151,5 +166,13 @@ describe("toolbar data", () => {
     expect(ROAD_MENU.tip.endsWith(".")).toBe(false);
     expect((ROAD_MENU as { code?: string }).code).toBeUndefined();
     expect(TOOLBAR_TOOLS.map((t) => t.icon)).not.toContain(ROAD_MENU.icon);
+  });
+});
+
+describe("route place tool", () => {
+  it("maps Digit8 to placeRoute and Keys 1 to 8", () => {
+    expect(TERRAIN_HOTKEYS.Digit8).toBe("placeRoute");
+    expect(PLACE_TOOL_KIND.find((p) => p.id === "placeRoute")?.kind).toBe("route");
+    expect(PLACE_MENU.tipLong).toContain("Keys 1 to 8");
   });
 });

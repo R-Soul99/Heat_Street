@@ -5217,6 +5217,7 @@ const PLACE_HINT: Record<PlaceKind, string> = {
   hedge: "Click points. Enter or double-click finishes, Esc cancels.",
   fence: "Click points. Enter or double-click finishes, Esc cancels.",
   ramp: "Press, then drag toward the way it should face.",
+  route: "Click and drag to set the start, then add gates. Enter finishes.",
 };
 
 let startListBox: HTMLElement | null = null;

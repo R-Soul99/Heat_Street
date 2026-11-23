@@ -70,6 +70,7 @@ const PLACE_LABEL: Record<PlaceKind, string> = {
   hedge: "Hedge",
   fence: "Fence",
   ramp: "Ramp",
+  route: "Route",
 };
 
 const OP_LABEL: Record<Operation | RoadBrush, string> = {

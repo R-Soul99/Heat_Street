@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parseDriveHeading } from "../../src/core/map-select.ts";
-import { buildDriveUrl, yawToHeadingDeg } from "./drive-url.ts";
+import {
+  buildDriveUrl,
+  buildRouteTestUrl,
+  buildStageTestUrl,
+  yawToHeadingDeg,
+} from "./drive-url.ts";
 
 describe("buildDriveUrl", () => {
   it("builds the start form", () => {
@@ -30,5 +35,19 @@ describe("yawToHeadingDeg", () => {
       expect(yawToHeadingDeg(yaw)).toBeCloseTo(deg, 6);
     }
     expect(yawToHeadingDeg(-Math.PI / 2)).toBeCloseTo(270, 6);
+  });
+});
+
+describe("test-drive urls", () => {
+  it("builds stage and route urls", () => {
+    expect(buildStageTestUrl("demo-hills", "dust-run")).toBe(
+      "/?map=demo-hills&mode=stage&stage=dust-run&debug",
+    );
+    expect(buildRouteTestUrl("demo-hills", "p2p", "demo-hills-route-1")).toBe(
+      "/?map=demo-hills&mode=p2p&route=demo-hills-route-1&debug",
+    );
+    expect(buildRouteTestUrl("a b", "circuit", "r/1")).toBe(
+      "/?map=a%20b&mode=circuit&route=r%2F1&debug",
+    );
   });
 });

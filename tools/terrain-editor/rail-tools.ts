@@ -13,7 +13,16 @@ export type RoadBrush = "roadPaint" | "roadErase";
 export type RoadAction = "lock" | "unlock" | "deleteRoad";
 export type ViewToggle = "grid" | "contours";
 export type RoadMenu = "road";
-export const PLACE_KINDS = ["start", "building", "tree", "bush", "hedge", "fence", "ramp"] as const;
+export const PLACE_KINDS = [
+  "start",
+  "building",
+  "tree",
+  "bush",
+  "hedge",
+  "fence",
+  "ramp",
+  "route",
+] as const;
 export type PlaceKind = (typeof PLACE_KINDS)[number];
 export type PlaceToolId =
   | "placeStart"
@@ -22,7 +31,8 @@ export type PlaceToolId =
   | "placeBush"
   | "placeHedge"
   | "placeFence"
-  | "placeRamp";
+  | "placeRamp"
+  | "placeRoute";
 export type PlaceMenu = "place";
 export type ToolbarId =
   | Mode
@@ -186,6 +196,7 @@ export const PLACE_TOOL_KIND: readonly { id: PlaceToolId; kind: PlaceKind }[] = 
   { id: "placeHedge", kind: "hedge" },
   { id: "placeFence", kind: "fence" },
   { id: "placeRamp", kind: "ramp" },
+  { id: "placeRoute", kind: "route" },
 ];
 
 export const PLACE_TOOLS: ToolbarTool[] = [
@@ -245,16 +256,24 @@ export const PLACE_TOOLS: ToolbarTool[] = [
     code: "Digit7",
     tip: "Ramp: click and drag to set direction",
   },
+  {
+    id: "placeRoute",
+    label: "Route",
+    icon: "➤",
+    keyLabel: "8",
+    code: "Digit8",
+    tip: "Route: place a stage or a race route (8)",
+  },
 ];
 
-/** The Place drop-down trigger. No hotkey of its own: keys 1 to 7 pick its tools directly. */
+/** The Place drop-down trigger. No hotkey of its own: keys 1 to 8 pick its tools directly. */
 export const PLACE_MENU: ShellTool & { id: "place" } = {
   id: "place",
   label: "Place",
   icon: "✚",
   tip: "Place: drop start points, buildings, trees and more",
   tipLong:
-    "Keys 1 to 7 pick a kind directly. Placing is one undo step; sculpting under an item re-seats it.",
+    "Keys 1 to 8 pick a kind directly. Placing is one undo step; sculpting under an item re-seats it.",
 };
 
 export const TOOLBAR_TOOLS: ToolbarTool[] = [
@@ -332,6 +351,8 @@ export const TERRAIN_BAR: BarGroup[] = [
           tool("placeHedge"),
           tool("placeFence"),
           tool("placeRamp"),
+          { kind: "divider" },
+          tool("placeRoute"),
         ],
       },
     ],
