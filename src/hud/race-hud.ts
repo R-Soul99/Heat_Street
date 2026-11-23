@@ -1,5 +1,7 @@
 import type { MedalTimingSnapshot } from "../core/medal-timing";
 import type { RaceSnapshot } from "../core/race-state";
+import type { StageHudModel, StageMedals } from "../core/stage";
+import { formatStageTime, type StageSplitTone } from "../core/stage-run";
 
 /** D-16 race-status model for the player in a Circuit Race: live position, lap and time gap to the car ahead (or the lead over P2 when in front), plus the race clock. */
 export interface RaceStatusModel {
@@ -27,7 +29,28 @@ export function formatRaceStatus(model: RaceStatusModel): string {
   return `${position} · ${lap} · ${gap}`;
 }
 
+/** `"STAGE Dust Run   GATE 2/4"`; never NaN when `totalGates` is missing. */
+export function formatStageStatus(snapshot: RaceSnapshot): string {
+  const total = Math.max(0, snapshot.totalGates ?? 0);
+  const n = snapshot.complete ? total : Math.min(snapshot.visitedIds.length + 1, total);
+  return `STAGE ${snapshot.label ?? ""}   GATE ${n}/${total}`;
+}
+
+/** `"PB 01:09.10"` or `"PB --:--.--"`. */
+export function formatStageBest(bestSec: number | null): string {
+  return `PB ${bestSec === null ? "--:--.--" : formatStageTime(bestSec)}`;
+}
+
+export function formatStageThresholds(medals: StageMedals | null): string {
+  if (medals === null) return "";
+  return `GOLD   ${formatStageTime(medals.goldSec)}\nSILVER ${formatStageTime(medals.silverSec)}\nBRONZE ${formatStageTime(medals.bronzeSec)}`;
+}
+
 export interface RaceHud {
+  /** Stage mode: stores the stage model (PB line + medal thresholds). `null` hides the PB line. */
+  showStageInfo(model: StageHudModel | null): void;
+  /** Stage mode: gate split line, cleared after 2.5 s. */
+  flashStageSplit(text: string, tone: StageSplitTone): void;
   update(snapshot: RaceSnapshot, timing?: MedalTimingSnapshot): void;
   flashRestart(): void;
   /** Circuit Race's 3-2-1-GO countdown text (plan 07-02, D-04). `null` hides it. */
@@ -71,10 +94,12 @@ export function createRaceHud(): RaceHud {
   thresholds.style.cssText = "margin-top:6px;font-size:11px;line-height:1.45;white-space:pre";
   const split = document.createElement("div");
   split.style.cssText = "margin-top:10px;color:#7ee8ff;font-size:12px;min-height:15px";
+  const best = document.createElement("div");
+  best.style.cssText = "font-size:12px;letter-spacing:.06em;visibility:hidden";
   const note = document.createElement("div");
   note.style.cssText =
     "margin-top:4px;font-size:11px;color:#ff9f43;letter-spacing:.08em;visibility:hidden";
-  timingPanel.append(raceStatus, timer, note, thresholds, split);
+  timingPanel.append(raceStatus, timer, best, note, thresholds, split);
   // Circuit Race's 3-2-1-GO countdown (plan 07-02, D-04): centred, large,
   // hidden (not empty text) when there is nothing to show. Written with
   // `textContent` only, matching every other DOM write in this file --
@@ -89,18 +114,42 @@ export function createRaceHud(): RaceHud {
     return `${Math.floor(safe / 60)}:${(safe % 60).toFixed(2).padStart(5, "0")}`;
   }
 
+  let stageInfo: StageHudModel | null = null;
+  let splitTimer: ReturnType<typeof setTimeout> | undefined;
+
   document.body.appendChild(root);
   return {
+    showStageInfo(model: StageHudModel | null): void {
+      stageInfo = model;
+      best.textContent = model === null ? "" : formatStageBest(model.bestSec);
+      best.style.visibility = model === null ? "hidden" : "visible";
+    },
+    flashStageSplit(text: string, tone: StageSplitTone): void {
+      if (splitTimer !== undefined) clearTimeout(splitTimer);
+      split.textContent = text;
+      split.style.color = tone === "faster" ? "#66cc99" : tone === "slower" ? "#ff6b6b" : "#7ee8ff";
+      splitTimer = setTimeout(() => {
+        split.textContent = "";
+        splitTimer = undefined;
+      }, 2500);
+    },
     update(snapshot, timing): void {
+      const isStage = snapshot.mode === "stage";
       status.textContent =
-        snapshot.mode === "circuit"
+        isStage
+          ? formatStageStatus(snapshot)
+          : snapshot.mode === "circuit"
           ? `LAP ${Math.min(snapshot.lap, snapshot.totalLaps)} / ${snapshot.totalLaps}   ${snapshot.currentTargetId ?? "FINISH"}`
           : `CHECKPOINT ${snapshot.visitedIds.length}   ${snapshot.currentTargetId ?? "FINISH"}`;
-      const visible = snapshot.wrongWay;
+      const visible = isStage ? false : snapshot.wrongWay;
       wrongWay.style.visibility = visible ? "visible" : "hidden";
       tint.style.visibility = visible ? "visible" : "hidden";
       if (timing === undefined) return;
       timer.textContent = formatTime(timing.effectiveElapsedSec);
+      if (isStage) {
+        thresholds.textContent = formatStageThresholds(stageInfo?.medals ?? null);
+        return;
+      }
       thresholds.textContent =
         timing.thresholds === null
           ? "THRESHOLDS UNAVAILABLE"
@@ -135,6 +184,7 @@ export function createRaceHud(): RaceHud {
       note.style.visibility = text === null ? "hidden" : "visible";
     },
     dispose(): void {
+      if (splitTimer !== undefined) clearTimeout(splitTimer);
       root.remove();
     },
   };
