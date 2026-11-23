@@ -98,6 +98,10 @@ import { buildGridPoses, buildRacingLine } from "./core/racing-line";
 // extensionless way every other `src/` consumer does.
 import { parseRoadGraph, type RoadGraph } from "./core/road-graph";
 import { DT } from "./core/sim-clock";
+import { parseStageData, type Stage } from "./core/stage";
+import { parseStageRequest, selectStage } from "./core/stage-mode";
+import { loadStageBests, saveStageBest, stageBestKey } from "./core/stage-persistence";
+import { createStageRun } from "./core/stage-run";
 import {
   defaultSurfaceProfiles,
   parseSavedSurfaceProfiles,
@@ -108,6 +112,7 @@ import {
   crestsFromObjects,
   physicsGridForArea,
   resolveStartPose,
+  terrainGridExtent,
 } from "./core/terrain-drive-setup";
 import { loadTerrainArea, type TerrainArea } from "./core/terrain-format";
 import { buildGateCourse, GATE_SPAWNS } from "./core/terrain-gate-course";
@@ -147,6 +152,7 @@ import { createTuningPanel } from "./debug/tuning-panel";
 import { createCircuitRaceCoordinator } from "./gameplay/circuit-race-coordinator";
 import { createFreeDriveCoordinator } from "./gameplay/free-drive-coordinator";
 import { createRaceCoordinator } from "./gameplay/race-coordinator";
+import { createStageCoordinator } from "./gameplay/stage-coordinator";
 import { createBustHud, RIGHT_CAR_DELAY_SEC, rightCarHint } from "./hud/bust-hud";
 import { createMapCredit } from "./hud/map-credit";
 import { createMinimap } from "./hud/minimap";
@@ -183,6 +189,7 @@ import { loadMapView, type MapWorldView } from "./render/map-view";
 import { createObjectiveView } from "./render/objective-view";
 import { createRenderer } from "./render/renderer";
 import { createSceneryView } from "./render/scenery-view";
+import { createStageView } from "./render/stage-view";
 import { createStationMarkers } from "./render/station-markers";
 import { createSurfaceFx } from "./render/surface-fx";
 import { buildTerrainView, type TerrainView } from "./render/terrain-view";
@@ -259,6 +266,7 @@ const MAP_COLLISION_URL = `/maps/${AREA_ID}.collision.json`;
 const MAP_GLB_URL = `/maps/${AREA_ID}.glb`;
 const MAP_ROUTES_URL = `/maps/${AREA_ID}.routes.json`;
 const MAP_MEDALS_URL = `/maps/${AREA_ID}.medals.json`;
+const MAP_STAGES_URL = `/maps/${AREA_ID}.stages.json`;
 
 /**
  * Fetches `url` as text, throwing a named error (naming `url` and the HTTP
@@ -325,10 +333,31 @@ try {
   } else {
     graph = parseRoadGraph(await fetchArtifactText(MAP_GRAPH_URL), MAP_GRAPH_URL);
   }
+  // Stage mode (Phase 10): the stages file is optional; a malformed one throws
+  // (D-P27), a missing one falls back to free drive with a warning (D-08).
+  const stageRequest = parseStageRequest(location.search);
+  let selectedStage: Stage | undefined;
+  if (stageRequest !== null) {
+    const stagesText =
+      isTerrain && terrainArea !== undefined
+        ? await fetchOptionalArtifactText(MAP_STAGES_URL)
+        : undefined;
+    const stagesData =
+      stagesText !== undefined && terrainArea !== undefined
+        ? parseStageData(stagesText, MAP_STAGES_URL, terrainGridExtent(terrainArea.grid))
+        : undefined;
+    const selection = selectStage(stagesData, stageRequest, { isTerrain, areaId: AREA_ID });
+    if (selection.warning !== undefined) console.warn(selection.warning);
+    selectedStage = selection.kind === "stage" ? selection.stage : undefined;
+  }
   // A terrain area with no routes file opens in free-drive mode (HTTP 404 only).
-  const routesText = isTerrain
-    ? await fetchOptionalArtifactText(MAP_ROUTES_URL)
-    : await fetchArtifactText(MAP_ROUTES_URL);
+  // Stage mode never fetches, parses or validates routes/medals (Pitfall 2).
+  const routesText =
+    stageRequest !== null
+      ? undefined
+      : isTerrain
+        ? await fetchOptionalArtifactText(MAP_ROUTES_URL)
+        : await fetchArtifactText(MAP_ROUTES_URL);
   const modeParam = new URLSearchParams(location.search).get("mode");
   let raceData:
     | {
@@ -413,12 +442,15 @@ try {
     const crests = crestsFromObjects(terrainArea.objects);
     // ?at=x,z (+ ?heading=) > ?start=<id> > sidecar default start point (07.1.3 D-04, no mode
     // gate, D-18): validated against the GRID extent, so it works on a fresh area with no roads.
-    const spawnOverride = resolveStartPose(
-      location.search,
-      physicsGrid,
-      graph,
-      terrainArea.startPoints,
-    );
+    // A selected stage's start beats ?at= and ?start=.
+    const spawnOverride =
+      selectedStage !== undefined
+        ? {
+            x: selectedStage.start.x,
+            z: selectedStage.start.z,
+            headingRad: selectedStage.start.headingRad,
+          }
+        : resolveStartPose(location.search, physicsGrid, graph, terrainArea.startPoints);
     const terrainScene = createTerrainScene(
       world,
       {
@@ -940,6 +972,77 @@ try {
   });
   const raceHud = createRaceHud();
 
+  // Stage mode (Phase 10, D-05..D-08): gate view, HUD info, coordinator, PB save for
+  // EVERY vehicle class (D-07). The PB handed to the coordinator for split deltas is the
+  // one loaded at start; a restart in the same session keeps comparing against it.
+  let stageCoordinator: ReturnType<typeof createStageCoordinator> | undefined;
+  if (selectedStage !== undefined && terrainPhysicsGrid !== undefined) {
+    const stage = selectedStage;
+    const stageGrid = terrainPhysicsGrid;
+    const stageHeightAt = (x: number, z: number): number => sampleTerrainHeight(stageGrid, x, z);
+    const stageView = createStageView(view.scene, stageHeightAt);
+    stageView.setStage(stage);
+    const medalsActive = stage.medals !== undefined && stage.medals.vehicle === CAR_CLASS.id;
+    const bestKey = stageBestKey(AREA_ID, stage.id, CAR_CLASS.id);
+    let stageBest = loadStageBests(medalStorage).bests[bestKey];
+    const showInfo = (): void =>
+      raceHud.showStageInfo({
+        name: stage.name,
+        bestSec: stageBest?.bestTimeSec ?? null,
+        medals: medalsActive && stage.medals !== undefined ? stage.medals : null,
+      });
+    showInfo();
+    const stageResults = createResultsView([], [], "", {});
+    stageCoordinator = createStageCoordinator({
+      stage,
+      run: createStageRun(stage, stageHeightAt),
+      scene,
+      heightAt: stageHeightAt,
+      stageView,
+      minimap,
+      navigationArrow,
+      raceHud,
+      chime: checkpointChime,
+      simTimeSec: () => loopClock?.clock.simTimeSec ?? 0,
+      timing: createMedalTiming({ referenceTimeSec: 0, medals: false }),
+      personalBest: stageBest,
+      medalsActive,
+      onCompleted: (completion) => {
+        const medal = completion.medal === "ace" ? "gold" : completion.medal;
+        const newBest = saveStageBest(medalStorage, bestKey, {
+          bestTimeSec: completion.completion.effectiveTimeSec,
+          medal,
+          splitsSec: completion.splitsSec,
+        });
+        if (newBest) {
+          stageBest = loadStageBests(medalStorage).bests[bestKey];
+          showInfo();
+        }
+        stageResults.showStageCompletion({
+          name: stage.name,
+          effectiveTimeSec: completion.completion.effectiveTimeSec,
+          penaltySec: completion.penaltySec,
+          medal: completion.medal,
+          medalsShown: medalsActive,
+          newBest,
+          bestSec: stageBest?.bestTimeSec ?? null,
+          sectors: completion.completion.sectors,
+          gateCount: stage.gates.length,
+        });
+      },
+      onRestart: () => stageResults.clearCompletion(),
+      onCarReset: () => {
+        transforms.snapBody(0);
+        if (pursuit !== undefined) {
+          for (let i = 0; i < pursuit.drivers.length; i++) {
+            pursuit.fleet.resetCar(i, pursuerPose(i));
+            transforms.snapBody(1 + i);
+          }
+        }
+      },
+    });
+  }
+
   // Circuit Race builds a `CircuitRaceCoordinator` INSTEAD of the solo
   // coordinator and its medal-timing machinery below — it saves only a
   // best finish/time under the `.race` variant id (07-07, D-05/D-06/SC5:
@@ -1073,11 +1176,15 @@ try {
   // A terrain area with no routes file gets the course-less free-drive coordinator.
   const freeDriveGrid = terrainPhysicsGrid;
   const freeDriveCoordinator =
-    rd === undefined && freeDriveGrid !== undefined
+    rd === undefined && stageCoordinator === undefined
       ? createFreeDriveCoordinator({
           scene,
           spawnPose: scene.defaultSpawnPose,
-          heightAt: (x, z) => sampleTerrainHeight(freeDriveGrid, x, z),
+          // Legacy maps have no height grid: respawn stands the car up in place (D-08).
+          heightAt:
+            freeDriveGrid !== undefined
+              ? (x, z) => sampleTerrainHeight(freeDriveGrid, x, z)
+              : () => scene.vehicle.body.translation().y,
           onCarReset: () => {
             transforms.snapBody(0);
             if (pursuit !== undefined) {
@@ -1089,7 +1196,8 @@ try {
           },
         })
       : undefined;
-  const activeCoordinator = circuitRace ?? raceCoordinator ?? freeDriveCoordinator;
+  const activeCoordinator =
+    circuitRace ?? raceCoordinator ?? stageCoordinator ?? freeDriveCoordinator;
   if (activeCoordinator === undefined) {
     throw new Error("composition root: no race coordinator was constructed for this mode");
   }
