@@ -351,4 +351,4 @@ Accessibility: shape and material groups are `role="radiogroup"` with `aria-chec
 - [x] Dimension 5 Spacing: PASS
 - [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-11-23 (gsd-ui-checker; 2 non-blocking FLAGs)
