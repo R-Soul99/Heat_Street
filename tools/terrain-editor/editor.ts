@@ -64,6 +64,7 @@ import {
   staleUnlockedEdges,
 } from "../../src/core/terrain-road-lock.ts";
 import type { CellWindow } from "../../src/core/terrain-slope.ts";
+import type { UndoTarget } from "../../src/core/terrain-undo.ts";
 import { buildCrestMeshes } from "../../src/render/crest-view.ts";
 import {
   buildFeaturePreview,
@@ -170,6 +171,7 @@ import {
   centreLineEnds,
 } from "./ramp-align.ts";
 import { buildRoadProblems, type RoadFix, type RoadProblemRow } from "./road-problems.ts";
+import { createRouteTool } from "./route-tool.ts";
 import { renameAreaForSave, suggestCopyName, validateAreaName } from "./save-as.ts";
 import { blockingRoadFailures, saveBlockMessage, staleRoadBlockMessage } from "./save-guard.ts";
 import { putTerrainPair } from "./save-pair.ts";
@@ -806,6 +808,67 @@ function startPointAt(x: number, z: number): TerrainStartPoint | undefined {
     }
   }
   return best;
+}
+
+// ---------------------------------------------------------------- route tool host (Phase 10)
+
+const routeTagLayer = el("div");
+routeTagLayer.style.cssText =
+  "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5";
+wrap.appendChild(routeTagLayer);
+/** True while a Route press (place, move or turn) holds the pointer. */
+let routeDragging = false;
+
+const routeTool = createRouteTool({
+  scene,
+  tagLayer: routeTagLayer,
+  getArea: () => area as unknown as (UndoTarget & { areaId?: string }) | null,
+  commitStages: (next) => dispatcher.commitStages(next),
+  commitRoutes: (next) => dispatcher.commitRoutes(next),
+  applyResult: (res) => {
+    applyResult(res, 0);
+    updateHistoryButtons();
+  },
+  setStatus: (text, kind) => setStatus(text, kind),
+  setInfo: (text, warnings) => {
+    shell.info.set("change", warnings.length > 0 ? `${text} (${warnings.join("; ")})` : text);
+  },
+  heightAt: (x, z) => (area ? sampleTerrainHeight(area.grid, x, z) : 0),
+  slopeDegAt: (x, z) => {
+    if (!area) return 0;
+    const g = area.grid;
+    const d = Math.max(0.5, g.cellSizeM);
+    const hx = sampleTerrainHeight(g, x + d, z) - sampleTerrainHeight(g, x - d, z);
+    const hz = sampleTerrainHeight(g, x, z + d) - sampleTerrainHeight(g, x, z - d);
+    return (Math.atan(Math.hypot(hx, hz) / (2 * d)) * 180) / Math.PI;
+  },
+  slopeLimitDeg: () => dispatcher.getOptions().slopeLimitDeg,
+  api: (url, init) => api(url, init),
+  save: () => save(),
+  openDriveUrl: (url) => openDriveUrl(url),
+  refreshSidebar: () => buildSidebar(),
+});
+
+function routeArmed(): boolean {
+  return dispatcher.placing() === "route";
+}
+
+function routePointerEvent(e: PointerEvent, phase: "down" | "move"): void {
+  const hit = pickTerrain(e.clientX, e.clientY);
+  if (!hit) {
+    if (phase === "down") setStatus("Route items must be inside the map area", "error");
+    return;
+  }
+  lastHit = { x: hit.x, z: hit.z };
+  if (phase === "down") {
+    if (routeTool.pointerDown(hit.x, hit.z, e.button)) {
+      routeDragging = true;
+      canvas.setPointerCapture(e.pointerId);
+      activePointerId = e.pointerId;
+    }
+  } else {
+    routeTool.pointerMove(hit.x, hit.z);
+  }
 }
 
 // ---------------------------------------------------------------- scenery view and palette (07.1.3 plan 09)
@@ -4787,6 +4850,10 @@ canvas.addEventListener("pointerdown", (e) => {
     if (!stroking && !pushPull && !opHold && !sceneryGestureActive()) rampPointerDown(e);
     return;
   }
+  if (placing === "route") {
+    if (!stroking && !pushPull && !opHold) routePointerEvent(e, "down");
+    return;
+  }
   if (
     placing === null &&
     dispatcher.getMode() === "select" &&
@@ -4825,6 +4892,10 @@ canvas.addEventListener("pointermove", (e) => {
     startPointerMove(e);
     return;
   }
+  if (routeArmed() && !stroking) {
+    routePointerEvent(e, "move");
+    return;
+  }
   if (sceneryGestureActive()) {
     sceneryPointerMove(e);
     return;
@@ -4832,6 +4903,13 @@ canvas.addEventListener("pointermove", (e) => {
   if (stroking) strokeEvent(e, "move");
 });
 canvas.addEventListener("pointerup", (e) => {
+  if (e.button === 0 && routeDragging) {
+    routeDragging = false;
+    routeTool.pointerUp();
+    activePointerId = null;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    return;
+  }
   if (e.button === 0 && (startGesture.active() || startDrag)) {
     startPointerUp(e);
     return;
@@ -4862,6 +4940,10 @@ canvas.addEventListener("pointerup", (e) => {
   if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointercancel", (e) => {
+  if (routeDragging) {
+    routeDragging = false;
+    routeTool.cancel();
+  }
   cancelStartGesture();
   cancelSceneryGesture();
   if (pushPull) cancelPushPullDrag("Push/pull cancelled.");
@@ -5456,6 +5538,10 @@ function buildSidebar(): void {
   if (lineKindActive !== null && lineKindActive !== placingKind) cancelLine();
   if (placingKind === "hedge" || placingKind === "fence") {
     buildLineSidebar(placingKind, f);
+    return;
+  }
+  if (placingKind === "route") {
+    routeTool.buildSidebar(f);
     return;
   }
   if (placingKind === "ramp") {
@@ -6367,6 +6453,10 @@ window.addEventListener("keydown", (e) => {
         cancelPushPullDrag("Push/pull cancelled.");
         return;
       }
+      if (routeArmed() && routeTool.cancel()) {
+        routeDragging = false;
+        return;
+      }
       if (startGesture.active() || startDrag) {
         cancelStartGesture();
         setStatus("Placement cancelled.");
@@ -6424,6 +6514,18 @@ window.addEventListener("keydown", (e) => {
       break;
   }
   if (textFocused || dialogOpen || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (routeArmed()) {
+    if ((e.code === "Enter" || e.code === "NumpadEnter") && !e.repeat) {
+      if (routeTool.finish()) {
+        e.preventDefault();
+        return;
+      }
+    }
+    if (e.code === "Backspace" && routeTool.removeLast()) {
+      e.preventDefault();
+      return;
+    }
+  }
   if (lineBuilder.active() && lineKindActive !== null && dispatcher.placing() === lineKindActive) {
     // Line in progress: Enter finishes, Backspace drops the last point (never in TERRAIN_HOTKEYS).
     if ((e.code === "Enter" || e.code === "NumpadEnter") && !e.repeat) {
@@ -6526,6 +6628,7 @@ function frame(): void {
   terrainView?.updateTextures(controls.target.x, controls.target.z);
   renderer.render(scene, camera);
   positionStartTags();
+  routeTool.updateTags(camera, Math.max(1, wrap.clientWidth), Math.max(1, wrap.clientHeight));
   requestAnimationFrame(frame);
 }
 
