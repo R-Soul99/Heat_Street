@@ -6,8 +6,10 @@ export const RESPAWN_PENALTY_SEC = 5;
 export const WRONG_WAY_ENTER_RAD = (5 * Math.PI) / 6;
 export const WRONG_WAY_EXIT_RAD = (2 * Math.PI) / 3;
 
+export type RaceMode = Course["mode"] | "stage";
+
 export interface RaceSnapshot {
-  readonly mode: Course["mode"];
+  readonly mode: RaceMode;
   readonly currentTargetId: string | null;
   readonly visitedIds: readonly string[];
   readonly lap: number;
@@ -16,6 +18,10 @@ export interface RaceSnapshot {
   readonly wrongWay: boolean;
   readonly respawnAnchorId: string | null;
   readonly penaltySec: number;
+  /** Stage mode: gates + finish, for the "GATE n/total" HUD counter. */
+  readonly totalGates?: number;
+  /** Optional HUD label (e.g. the stage name). */
+  readonly label?: string;
 }
 
 export interface RaceState {
