@@ -1,6 +1,13 @@
 import type { RoadGraph } from "./road-graph";
 
 export const COURSE_SCHEMA_VERSION = 1;
+export const MAX_COURSES = 20;
+export const P2P_CHECKPOINTS_MIN = 2;
+export const CIRCUIT_CHECKPOINTS_MIN = 3;
+export const COURSE_CHECKPOINTS_MAX = 40;
+export const LAPS_MIN = 1;
+export const LAPS_MAX = 20;
+const START_COORD_LIMIT = 100000;
 export type CourseMode = "p2p" | "circuit";
 export type LocalPoint = readonly [number, number, number];
 
@@ -21,6 +28,8 @@ export interface CourseCheckpoint {
 export interface CourseStart {
   readonly nodeId: number;
   readonly headingRad: number;
+  readonly x?: number;
+  readonly z?: number;
 }
 
 export interface Course {
@@ -180,30 +189,33 @@ function parseCourse(
     fail(sourceLabel, `${context}.mode must be "p2p" or "circuit"`);
   const rawCheckpoints = required(sourceLabel, raw, "checkpoints", context);
   if (!Array.isArray(rawCheckpoints)) fail(sourceLabel, `${context}.checkpoints must be an array`);
-  const minimum = mode === "p2p" ? 5 : 4;
-  const maximum = mode === "p2p" ? 8 : 6;
+  const minimum = mode === "p2p" ? P2P_CHECKPOINTS_MIN : CIRCUIT_CHECKPOINTS_MIN;
+  const maximum = COURSE_CHECKPOINTS_MAX;
   if (rawCheckpoints.length < minimum || rawCheckpoints.length > maximum)
     fail(sourceLabel, `${context}.checkpoint count must be ${minimum}-${maximum}`);
   const checkpoints = rawCheckpoints.map((checkpoint, checkpointIndex) =>
     parseCheckpoint(sourceLabel, checkpoint, checkpointIndex, graph, checkpointIds),
   );
   const laps = mode === "circuit" ? integer(sourceLabel, raw, "laps", context) : 1;
-  if (mode === "circuit" && laps !== 3) fail(sourceLabel, `${context}.laps must be exactly 3`);
+  if (mode === "circuit" && (laps < LAPS_MIN || laps > LAPS_MAX))
+    fail(sourceLabel, `${context}.laps must be ${LAPS_MIN}-${LAPS_MAX}`);
   const startRaw = objectField(sourceLabel, raw, "start", context);
   const startNodeId = integer(sourceLabel, startRaw, "nodeId", `${context}.start`);
   if (!graph.nodes.some((node) => node.id === startNodeId))
     fail(sourceLabel, `${context}.start.nodeId ${startNodeId} is not a graph node`);
-  return {
-    id,
-    name,
-    mode,
-    laps,
-    checkpoints,
-    start: {
-      nodeId: startNodeId,
-      headingRad: finiteNumber(sourceLabel, startRaw, "headingRad", `${context}.start`),
-    },
-  };
+  const headingRad = finiteNumber(sourceLabel, startRaw, "headingRad", `${context}.start`);
+  const hasX = Object.hasOwn(startRaw, "x");
+  const hasZ = Object.hasOwn(startRaw, "z");
+  if (hasX !== hasZ) fail(sourceLabel, `${context}.start.x and start.z must be given together`);
+  let start: CourseStart = { nodeId: startNodeId, headingRad };
+  if (hasX) {
+    const x = finiteNumber(sourceLabel, startRaw, "x", `${context}.start`);
+    const z = finiteNumber(sourceLabel, startRaw, "z", `${context}.start`);
+    if (Math.abs(x) > START_COORD_LIMIT || Math.abs(z) > START_COORD_LIMIT)
+      fail(sourceLabel, `${context}.start.x/start.z must be within ${START_COORD_LIMIT}`);
+    start = { nodeId: startNodeId, headingRad, x, z };
+  }
+  return { id, name, mode, laps, checkpoints, start };
 }
 
 export function parseCourseData(raw: string, sourceLabel: string, graph: RoadGraph): CourseData {
@@ -219,17 +231,45 @@ export function parseCourseData(raw: string, sourceLabel: string, graph: RoadGra
     fail(sourceLabel, `schemaVersion must be exactly ${COURSE_SCHEMA_VERSION}`);
   const areaId = stringField(sourceLabel, parsed, "areaId", "root");
   const rawCourses = required(sourceLabel, parsed, "courses", "root");
-  if (!Array.isArray(rawCourses) || rawCourses.length !== 2)
-    fail(sourceLabel, "root.courses must contain exactly two courses");
+  if (!Array.isArray(rawCourses)) fail(sourceLabel, "root.courses must be an array");
+  if (rawCourses.length > MAX_COURSES)
+    fail(sourceLabel, `root.courses must contain at most ${MAX_COURSES} courses`);
   const courseIds = new Set<string>();
   const checkpointIds = new Set<string>();
   const courses = rawCourses.map((course, index) =>
     parseCourse(sourceLabel, course, index, graph, courseIds, checkpointIds),
   );
-  if (
-    courses.filter((course) => course.mode === "p2p").length !== 1 ||
-    courses.filter((course) => course.mode === "circuit").length !== 1
-  )
-    fail(sourceLabel, "courses must contain exactly one p2p and one circuit course");
   return { schemaVersion, areaId, courses };
+}
+
+export function serializeCourseData(data: CourseData): string {
+  const out = {
+    schemaVersion: data.schemaVersion,
+    areaId: data.areaId,
+    courses: data.courses.map((course) => ({
+      id: course.id,
+      name: course.name,
+      mode: course.mode,
+      ...(course.mode === "circuit" ? { laps: course.laps } : {}),
+      checkpoints: course.checkpoints.map((cp) => ({
+        id: cp.id,
+        nodeId: cp.nodeId,
+        edgeId: cp.edgeId,
+        position: [cp.position[0], cp.position[1], cp.position[2]],
+        sensor: {
+          widthM: cp.sensor.widthM,
+          depthM: cp.sensor.depthM,
+          heightM: cp.sensor.heightM,
+        },
+      })),
+      start: {
+        nodeId: course.start.nodeId,
+        headingRad: course.start.headingRad,
+        ...(course.start.x !== undefined && course.start.z !== undefined
+          ? { x: course.start.x, z: course.start.z }
+          : {}),
+      },
+    })),
+  };
+  return `${JSON.stringify(out, null, 2)}\n`;
 }
