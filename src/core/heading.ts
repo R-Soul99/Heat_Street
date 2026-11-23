@@ -99,3 +99,21 @@ export function yawFromTravelDirection(dx: number, dz: number): number {
 export function forwardFromYaw(yawRad: number): { x: number; z: number } {
   return { x: -Math.sin(yawRad), z: -Math.cos(yawRad) };
 }
+
+/**
+ * Converts a YAW heading (`forwardFromYaw` convention) into the BEARING
+ * convention (`atan2(forwardZ, forwardX)`).
+ *
+ * Convention by module: stage gates/start points/finish, terrain start points
+ * and `resetVehicle` use YAW; race-state, minimap, `headingFromRotation` and
+ * crest ramps use BEARING.
+ */
+export function bearingFromYaw(yawRad: number): number {
+  const f = forwardFromYaw(yawRad);
+  return Math.atan2(f.z, f.x);
+}
+
+/** Inverse of `bearingFromYaw`: BEARING heading to YAW heading. */
+export function yawFromBearing(bearingRad: number): number {
+  return yawFromTravelDirection(Math.cos(bearingRad), Math.sin(bearingRad));
+}

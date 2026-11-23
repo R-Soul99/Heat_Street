@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { forwardFromYaw, headingFromRotation, yawFromTravelDirection } from "../src/core/heading";
+import {
+  bearingFromYaw,
+  forwardFromYaw,
+  headingFromRotation,
+  yawFromBearing,
+  yawFromTravelDirection,
+} from "../src/core/heading";
 
 /** Builds the exact rotation `src/physics/vehicle.ts`'s `resetPose` builds for `headingRad`. */
 function rotationFromYaw(headingRad: number): { x: number; y: number; z: number; w: number } {
@@ -61,6 +67,37 @@ describe("yawFromTravelDirection / forwardFromYaw", () => {
       const forward = forwardFromYaw(h);
       expect(Math.abs(Math.cos(bearing) - forward.x)).toBeLessThanOrEqual(1e-9);
       expect(Math.abs(Math.sin(bearing) - forward.z)).toBeLessThanOrEqual(1e-9);
+    }
+  });
+});
+
+describe("bearingFromYaw / yawFromBearing", () => {
+  const angles = [-3, -1.2, 0, 0.7, 2.5, 3.1];
+
+  it("bearingFromYaw(0) is -pi/2", () => {
+    expect(bearingFromYaw(0)).toBeCloseTo(-Math.PI / 2, 9);
+  });
+
+  it("yawFromBearing inverts bearingFromYaw", () => {
+    for (const h of angles) {
+      expect(wrapAngle(yawFromBearing(bearingFromYaw(h)))).toBeCloseTo(wrapAngle(h), 9);
+    }
+  });
+
+  it("bearingFromYaw inverts yawFromBearing", () => {
+    for (const b of angles) {
+      expect(wrapAngle(bearingFromYaw(yawFromBearing(b)))).toBeCloseTo(wrapAngle(b), 9);
+    }
+  });
+
+  it("matches atan2(dz, dx) of the travel direction", () => {
+    for (const [dx, dz] of [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0.6, 0.8],
+    ] as const) {
+      expect(bearingFromYaw(yawFromTravelDirection(dx, dz))).toBeCloseTo(Math.atan2(dz, dx), 9);
     }
   });
 });
