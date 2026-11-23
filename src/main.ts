@@ -97,6 +97,7 @@ import { buildGridPoses, buildRacingLine } from "./core/racing-line";
 // type-stripping resolver) — this file imports it the same, ordinary,
 // extensionless way every other `src/` consumer does.
 import { parseRoadGraph, type RoadGraph } from "./core/road-graph";
+import { parseRouteRequest, selectCourse } from "./core/route-select";
 import { DT } from "./core/sim-clock";
 import { parseStageData, type Stage } from "./core/stage";
 import { parseStageRequest, selectStage } from "./core/stage-mode";
@@ -358,14 +359,13 @@ try {
       : isTerrain
         ? await fetchOptionalArtifactText(MAP_ROUTES_URL)
         : await fetchArtifactText(MAP_ROUTES_URL);
-  const modeParam = new URLSearchParams(location.search).get("mode");
   let raceData:
     | {
         readonly routes: ReturnType<typeof parseCourseData>;
         readonly navigation: NavigationGraph;
-        readonly medalReference: ReturnType<typeof parseMedalReference>;
+        readonly medalCourses: readonly MedalReferenceCourse[];
         readonly course: Course;
-        readonly reference: MedalReferenceCourse;
+        readonly reference: MedalReferenceCourse | undefined;
       }
     | undefined;
   let isCircuitRace = false;
@@ -374,45 +374,55 @@ try {
     if (routes.areaId !== graph.areaId) {
       throw new Error(`route area mismatch: expected "${graph.areaId}", got "${routes.areaId}"`);
     }
-    const navigation = buildNavigationGraph(graph);
-    const routeFailures = validateCourseRoutes(routes, graph);
-    if (routeFailures.length > 0)
-      throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
-    const medalsText = await fetchArtifactText(MAP_MEDALS_URL);
-    const medalReference = parseMedalReference(
-      medalsText,
-      MAP_MEDALS_URL,
-      routes.areaId,
-      routes.courses.map((candidate) => ({
-        courseId: candidate.id,
-        mode: candidate.mode,
-        laps: candidate.laps,
-        checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
-      })),
-    );
-    // Mode/course selection, moved ABOVE `createMapScene` (plan 07-02) so the
-    // choice is known before `transforms` is built below — Circuit Race needs
-    // the AI fleet's bodies folded into the SAME `TransformCache` the player's
-    // body uses, which in turn needs `course`/`navigation` known first.
-    //
-    // COURSE-DATA DECISION (07-02-PLAN.md): Circuit Race is a RUNTIME VARIANT
-    // selected by `?mode=circuit-race` over the EXISTING `mode: "circuit"`
-    // course object — `parseCourseData` hardcodes exactly one p2p + one
-    // circuit course per area file, so a third course entry would fail that
-    // parser. No new course-data entry, no new medal reference; solo Time
-    // Attack's own course id, reference and saved bests are untouched (D-05).
-    const selectedMode: "p2p" | "circuit" | "circuit-race" =
-      modeParam === "circuit-race" ? "circuit-race" : modeParam === "circuit" ? "circuit" : "p2p";
-    const wantsCircuitRace = selectedMode === "circuit-race";
-    // Terrain areas race too: the AI fleet drives terrain like the pursuers do,
-    // and grid poses are re-seated on the heightfield below.
-    isCircuitRace = wantsCircuitRace;
-    const courseMode = wantsCircuitRace ? "circuit" : selectedMode;
-    const course = routes.courses.find((candidate) => candidate.mode === courseMode);
-    if (course === undefined) throw new Error(`no ${courseMode} course in ${MAP_ROUTES_URL}`);
-    const reference = medalReference.courses.find((candidate) => candidate.courseId === course.id);
-    if (reference === undefined) throw new Error(`no medal reference for course ${course.id}`);
-    raceData = { routes, navigation, medalReference, course, reference };
+    // A terrain map with an empty routes file behaves like no routes file (free drive).
+    if (routes.courses.length > 0 || !isTerrain) {
+      const navigation = buildNavigationGraph(graph);
+      const routeFailures = validateCourseRoutes(routes, graph, { authored: isTerrain });
+      if (routeFailures.length > 0) {
+        if (isTerrain) console.warn(`route validation: ${routeFailures.join("; ")}`);
+        else throw new Error(`route validation failed: ${routeFailures.join("; ")}`);
+      }
+      // Terrain maps: medals are optional per route; a missing or stale file means
+      // time-only racing. Legacy maps keep the strict fetch/parse/throw.
+      const medalsText = isTerrain
+        ? await fetchOptionalArtifactText(MAP_MEDALS_URL)
+        : await fetchArtifactText(MAP_MEDALS_URL);
+      let medalCourses: readonly MedalReferenceCourse[] = [];
+      if (medalsText !== undefined) {
+        const expectations = routes.courses.map((candidate) => ({
+          courseId: candidate.id,
+          mode: candidate.mode,
+          laps: candidate.laps,
+          checkpointIds: candidate.checkpoints.map((checkpoint) => checkpoint.id),
+        }));
+        try {
+          medalCourses = parseMedalReference(
+            medalsText,
+            MAP_MEDALS_URL,
+            routes.areaId,
+            expectations,
+            { allowMissing: isTerrain },
+          ).courses;
+        } catch (error) {
+          if (!isTerrain) throw error;
+          console.warn(`medals ignored (routes run time-only): ${(error as Error).message}`);
+        }
+      }
+      // Mode/course selection, moved ABOVE `createMapScene` (plan 07-02) so the
+      // choice is known before `transforms` is built below: Circuit Race needs
+      // the AI fleet's bodies folded into the SAME `TransformCache` the player's
+      // body uses, which in turn needs `course`/`navigation` known first.
+      // Circuit Race is a RUNTIME VARIANT (`?mode=circuit-race`) over a circuit
+      // course: no new course-data entry, no new medal reference (D-05).
+      // `?route=<courseId>` picks any of N routes (plan 10-11).
+      const selection = selectCourse(routes.courses, parseRouteRequest(location.search));
+      if (selection.kind === "none") throw new Error(`no course in ${MAP_ROUTES_URL}`);
+      if (selection.warning !== undefined) console.warn(`route selection: ${selection.warning}`);
+      isCircuitRace = selection.mode === "circuit-race";
+      const course = selection.course;
+      const reference = medalCourses.find((candidate) => candidate.courseId === course.id);
+      raceData = { routes, navigation, medalCourses, course, reference };
+    }
   }
   // Const alias so closures below keep the narrowed (non-undefined) type.
   const rd = raceData;
@@ -450,7 +460,9 @@ try {
             z: selectedStage.start.z,
             headingRad: selectedStage.start.headingRad,
           }
-        : resolveStartPose(location.search, physicsGrid, graph, terrainArea.startPoints);
+        : rd?.course.start.x !== undefined && rd.course.start.z !== undefined
+          ? { x: rd.course.start.x, z: rd.course.start.z, headingRad: rd.course.start.headingRad }
+          : resolveStartPose(location.search, physicsGrid, graph, terrainArea.startPoints);
     const terrainScene = createTerrainScene(
       world,
       {
@@ -940,7 +952,7 @@ try {
       ? undefined
       : createResultsView(
           rd.routes.courses,
-          rd.medalReference.courses,
+          rd.medalCourses,
           isCircuitRace ? raceVariantCourseId(rd.course.id) : rd.course.id,
           medalProgress.courses,
           raceCardCourse === undefined
@@ -1128,8 +1140,8 @@ try {
           // thresholds, no medal and no split deltas against the muscle-car
           // reference or personal best.
           timing: createMedalTiming({
-            referenceTimeSec: rd.reference.totalTimeSec,
-            medals: CAR_CLASS.savesMedals,
+            referenceTimeSec: rd.reference?.totalTimeSec ?? 0,
+            medals: CAR_CLASS.savesMedals && rd.reference !== undefined,
           }),
           reference: rd.reference,
           personalBest: CAR_CLASS.savesMedals ? medalProgress.courses[rd.course.id] : undefined,
