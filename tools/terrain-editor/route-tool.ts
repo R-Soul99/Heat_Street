@@ -64,10 +64,11 @@ import {
 } from "./route-ops.ts";
 import {
   addGate,
+  autoAimStageItem,
+  clearStageFinish,
   deleteGate,
   deleteLastStageItem,
   deleteStage,
-  fallbackGateHeading,
   gateIdSeed,
   moveGateOrder,
   moveStageItem,
@@ -134,8 +135,8 @@ export interface RouteTool {
 const ACCENT = 0x4aa3ff;
 const START_COLOR = 0x66cc99;
 const PICK_RADIUS_M = 2.5;
-const TURN_PICK_RADIUS_M = 1.6;
-const ARROW_LEN_M = 3;
+const TURN_PICK_RADIUS_M = 2.5;
+const ARROW_LEN_M = 10;
 const RING_RADIUS_M = 1.6;
 const TAG_LIFT_M = 4;
 
@@ -302,6 +303,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
   let lapsStepper: ReturnType<typeof createStepper> | null = null;
   let itemWidthRow: HTMLElement | null = null;
   let itemTurnRow: HTMLElement | null = null;
+  let autoBtn: HTMLButtonElement | null = null;
   let newBtn: HTMLButtonElement | null = null;
   let promptEl: HTMLElement | null = null;
   let finishBtn: HTMLButtonElement | null = null;
@@ -398,9 +400,37 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
   }
 
   function arrow(x: number, z: number, y: number, heading: number, color: number): THREE.Mesh {
+    // Tail at the item, tip ARROW_LEN_M ahead (where pickItem looks for the turn handle).
+    const tip = -ARROW_LEN_M;
+    const neck = tip + 3.5;
     const v = [
-      0, 0, -1.5, -0.6, 0, -0.3, 0.6, 0, -0.3, -0.2, 0, -0.3, -0.2, 0, 1.5, 0.2, 0, 1.5, -0.2, 0,
-      -0.3, 0.2, 0, 1.5, 0.2, 0, -0.3,
+      0,
+      0,
+      tip,
+      -2,
+      0,
+      neck,
+      2,
+      0,
+      neck,
+      -0.6,
+      0,
+      neck,
+      -0.6,
+      0,
+      0,
+      0.6,
+      0,
+      0,
+      -0.6,
+      0,
+      neck,
+      0.6,
+      0,
+      0,
+      0.6,
+      0,
+      neck,
     ];
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(v), 3));
@@ -600,7 +630,8 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       (gestureLine.material as THREE.Material).dispose();
       gestureLine = null;
     }
-    const p = gesture.preview();
+    // Only a start takes its direction from the drag.
+    const p = building() ? undefined : gesture.preview();
     if (!p) return;
     const geo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(p.from.x, deps.heightAt(p.from.x, p.from.z) + 0.5, p.from.z),
@@ -664,10 +695,6 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
 
   function rowsOf(e: Entry): { ref: string; label: string; number: number }[] {
     return e.route ? routeItemRows(e.route) : stageItemRows(e.d);
-  }
-
-  function lastItem(s: StageDraft): { x: number; z: number; headingRad: number } {
-    return s.gates.length > 0 ? s.gates[s.gates.length - 1] : s.start;
   }
 
   // -------------------------------------------------------------- gestures
@@ -761,7 +788,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     const base = a.stages ?? [];
     const target = building();
     if (target && finishPending) {
-      placeFinish(target, x, z, headingRad);
+      placeFinish(target, x, z);
       return;
     }
     finishPending = false;
@@ -815,10 +842,8 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     }
     if (!curStage) return;
     const cur = curStage;
-    const prev = lastItem(cur);
-    const heading = headingRad ?? fallbackGateHeading({ ...prev }, x, z);
     const seed = gateSeeds.get(cur.id) ?? gateIdSeed(cur);
-    const res = addGate(base, cur.id, seed, { x, z, headingRad: heading, widthM: gateWidth });
+    const res = addGate(base, cur.id, seed, { x, z, widthM: gateWidth });
     if (res.error !== undefined) {
       deps.setStatus(res.error, "error");
       return;
@@ -873,7 +898,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     return did;
   }
 
-  function placeFinish(e: Entry, x: number, z: number, headingRad?: number): void {
+  function placeFinish(e: Entry, x: number, z: number): void {
     const a = area();
     if (!a || !canFinish(e)) return;
     finishPending = false;
@@ -882,12 +907,10 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       commitRouteList(setRouteFinish(a.routes ?? [], e.id, x, z));
       return;
     }
-    const prev = lastItem(e.d);
     commit(
       setStageFinish(a.stages ?? [], e.id, {
         x,
         z,
-        headingRad: headingRad ?? fallbackGateHeading({ ...prev }, x, z),
         widthM: e.d.gates.length > 0 ? e.d.gates[e.d.gates.length - 1].widthM : gateWidth,
       }),
     );
@@ -1016,7 +1039,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
                 commitRouteList(deleteRouteCheckpoint(a.routes ?? [], s.id, r.ref));
               return;
             }
-            if (r.ref === "finish") commit(setFinishNull(a.stages ?? [], s.id));
+            if (r.ref === "finish") commit(clearStageFinish(a.stages ?? [], s.id));
             else if (isGate) commit(deleteGate(a.stages ?? [], s.id, r.ref));
           },
           !isGate && r.ref !== "finish",
@@ -1024,10 +1047,6 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       );
       listBox.appendChild(row);
     }
-  }
-
-  function setFinishNull(l: readonly StageDraft[], id: string): StageDraft[] {
-    return l.map((s) => (s.id === id ? { ...s, finish: null } : s));
   }
 
   function refreshPanel(): void {
@@ -1116,6 +1135,14 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
         }
         if (itemTurnRow) {
           itemTurnRow.style.display = sel?.isRoute && selectedRef !== "start" ? "none" : "";
+        }
+        if (autoBtn) {
+          const manual = "headingManual" in it && it.headingManual === true;
+          autoBtn.style.display = sel?.isRoute || selectedRef === "start" ? "none" : "";
+          autoBtn.disabled = !manual;
+          autoBtn.dataset.tip = manual
+            ? "Auto: turn this to follow the route again"
+            : "Auto: already following the route";
         }
       }
     }
@@ -1391,7 +1418,17 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     const wr = el("div", "row");
     wr.append(el("span", undefined, "Width"), widthStepper.el);
     const tr = el("div", "row");
-    tr.append(el("span", undefined, "Turn"), turnStepper.el);
+    const auto = el("button", undefined, "Auto");
+    autoBtn = auto;
+    auto.type = "button";
+    auto.setAttribute("aria-label", "Auto: turn this to follow the route");
+    auto.addEventListener("click", () => {
+      const sel = selected();
+      const a = area();
+      if (!sel || sel.isRoute || !a || !selectedRef) return;
+      commit(autoAimStageItem(a.stages ?? [], sel.id, selectedRef));
+    });
+    tr.append(el("span", undefined, "Turn"), turnStepper.el, auto);
     itemWidthRow = wr;
     itemTurnRow = tr;
     itemControls.append(wr, tr);

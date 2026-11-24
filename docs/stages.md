@@ -57,10 +57,17 @@ Open the editor, then **Place > Route** (key `8`).
 1. Pick a **Kind**: Stage, Point to point or Circuit. The two road kinds are disabled with the
    hint "This map has no roads; use Stage" when the map has no road nodes.
 2. Drag on the map to set the start; the drag direction is the facing.
-3. Click (or drag) to add gates, or checkpoints for road routes, in driving order.
+3. Click to add gates, or checkpoints for road routes, in driving order. Gates and the finish
+   turn to follow the route by themselves (see "Gate direction").
 4. Press **Place finish** and click on the map, or press **Enter** to place the finish at the
    pointer (the **Lap line** for a circuit).
 5. **Backspace** removes the last item; **Esc** cancels a gesture or a pending New.
+
+**Gate direction.** A gate faces half way between the line you arrive on and the line you leave
+on, at most 45 degrees from the arriving line, and re-aims when anything on the route changes. Turn
+one by hand with **Turn** or its arrow tip; it then keeps that direction until you press **Auto**.
+The info bar warns when a gate faces against the route. In the game, yellow ground chevrons before
+the next gate point the way to drive through it.
 
 Other controls:
 
@@ -68,7 +75,7 @@ Other controls:
 - The Routes panel lists everything on the map as "Stage: ...", "Point to point: ..." or
   "Circuit: ...". Use New, Rename and Delete, reorder items with the arrows, and set Width or
   Turn on the selected stage item. Circuits have a **Laps** box (1 to 20, default 3).
-- Warnings appear in the info bar: gates more than 600 m apart, steep slope at a gate, and for
+- Warnings appear in the info bar: gates more than 600 m apart, steep slope at a gate, a gate facing against the route, and for
   road routes "Checkpoint N is off road" (a checkpoint farther than 30 m from any road node, also
   shown as an "off road" tag on the map). Checkpoints may sit anywhere; this is advice only.
 - **Ctrl+S** saves the map and writes the stages and routes files. A route needs a start and a

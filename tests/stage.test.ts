@@ -85,6 +85,20 @@ describe("parseStageData accepts", () => {
     });
     expect(parse(s).stages).toHaveLength(2);
   });
+  it("keeps a hand-set heading flag, drops false, rejects other types", () => {
+    const withFlag = (v: unknown) =>
+      mutate((s) => {
+        s.stages[0].gates[0].headingManual = v;
+        s.stages[0].finish.headingManual = v;
+      });
+    const on = parse(withFlag(true));
+    expect(on.stages[0]!.gates[0]!.headingManual).toBe(true);
+    expect(on.stages[0]!.finish.headingManual).toBe(true);
+    expect(parse(JSON.parse(serializeStageData(on)))).toEqual(on);
+    expect(Object.hasOwn(parse(withFlag(false)).stages[0]!.gates[0]!, "headingManual")).toBe(false);
+    expect(() => parse(withFlag("yes"))).toThrow("headingManual must be a boolean");
+  });
+
   it("ignores unknown keys and __proto__", () => {
     const text = JSON.stringify(source()).replace(
       '"id":"g1"',

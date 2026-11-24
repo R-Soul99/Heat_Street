@@ -38,6 +38,8 @@ export interface StageGate {
   readonly z: number;
   readonly headingRad: number;
   readonly widthM: number;
+  /** Set by hand in the editor; absent = the editor aims it along the route. */
+  readonly headingManual?: true;
 }
 
 export interface StageFinish {
@@ -45,6 +47,7 @@ export interface StageFinish {
   readonly z: number;
   readonly headingRad: number;
   readonly widthM: number;
+  readonly headingManual?: true;
 }
 
 export interface StageMedals {
@@ -175,6 +178,17 @@ function width(label: string, object: Record<string, unknown>, context: string):
   return value;
 }
 
+function manualHeading(
+  label: string,
+  object: Record<string, unknown>,
+  context: string,
+): { headingManual?: true } {
+  if (!Object.hasOwn(object, "headingManual")) return {};
+  const value = object.headingManual;
+  if (typeof value !== "boolean") fail(label, `${context}.headingManual must be a boolean`);
+  return value ? { headingManual: true } : {};
+}
+
 function parseStart(
   label: string,
   raw: Record<string, unknown>,
@@ -206,6 +220,7 @@ function parseGate(
     z: coordinate(label, raw, "z", context, extent.minZ, extent.maxZ),
     headingRad: finiteNumber(label, raw, "headingRad", context),
     widthM: width(label, raw, context),
+    ...manualHeading(label, raw, context),
   };
 }
 
@@ -261,6 +276,7 @@ function parseStage(
     z: coordinate(label, finishRaw, "z", finishContext, extent.minZ, extent.maxZ),
     headingRad: finiteNumber(label, finishRaw, "headingRad", finishContext),
     widthM: width(label, finishRaw, finishContext),
+    ...manualHeading(label, finishRaw, finishContext),
   };
   if (Object.hasOwn(raw, "medals") && raw.medals !== undefined) {
     return {
@@ -310,12 +326,14 @@ export function serializeStageData(data: StageData): string {
         z: g.z,
         headingRad: g.headingRad,
         widthM: g.widthM,
+        ...(g.headingManual ? { headingManual: true } : {}),
       })),
       finish: {
         x: s.finish.x,
         z: s.finish.z,
         headingRad: s.finish.headingRad,
         widthM: s.finish.widthM,
+        ...(s.finish.headingManual ? { headingManual: true } : {}),
       },
       ...(s.medals === undefined
         ? {}

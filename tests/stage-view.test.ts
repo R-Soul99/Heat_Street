@@ -139,10 +139,29 @@ describe("createStageView", () => {
     const { view, banners } = setup();
     view.update(3);
     const colors = quadColors(banners);
-    const finishQuads = colors.slice(3);
+    const finishQuads = colors.slice(0, 16);
     expect(finishQuads.length).toBeGreaterThanOrEqual(8);
     const distinct = new Set(finishQuads.map((c) => `${c[0]!.toFixed(3)}`));
     expect(distinct.size).toBe(2);
+  });
+
+  it("lays ground chevrons before the next gate only, pointing the way to drive", () => {
+    const { view, banners } = setup();
+    view.update(null);
+    const editorQuads = quadColors(banners).length;
+    view.update(1);
+    // Gate 1 is passed (one banner fewer), plus 3 chevrons of 2 quads.
+    expect(quadColors(banners)).toHaveLength(editorQuads - 1 + 6);
+    const pos = banners.geometry.getAttribute("position");
+    const first = banners.geometry.drawRange.count - 6 * 6;
+    for (let c = 0; c < 3; c++) {
+      // Heading 0 drives toward -z: the approach side is +z and the tip is nearer the gate.
+      const tip = first + c * 12;
+      expect(pos.getX(tip)).toBeCloseTo(30, 5);
+      expect(pos.getZ(tip)).toBeGreaterThan(0);
+      expect(pos.getZ(tip)).toBeLessThan(pos.getZ(tip + 1));
+      expect(pos.getY(tip)).toBeCloseTo(heightAt(30) + 0.35, 4);
+    }
   });
 
   it("setStage(null) empties posts and banners; dispose removes the group", () => {

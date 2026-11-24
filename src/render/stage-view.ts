@@ -15,7 +15,13 @@ const MAX_GATES = 41;
 const POST_CAPACITY = 2 * MAX_GATES;
 const CHEQUER_COLS = 8;
 const CHEQUER_ROWS = 2;
-const QUAD_CAPACITY = MAX_GATES + CHEQUER_COLS * CHEQUER_ROWS;
+/** Direction chevrons on the ground before the next gate: distance of each from the gate line. */
+const CHEVRON_OFFSETS_M = [-14, -9, -4] as const;
+const CHEVRON_HALF_WIDTH_M = 3;
+const CHEVRON_DEPTH_M = 3;
+const CHEVRON_THICK_M = 1.5;
+const CHEVRON_LIFT_M = 0.35;
+const QUAD_CAPACITY = MAX_GATES + CHEQUER_COLS * CHEQUER_ROWS + CHEVRON_OFFSETS_M.length * 2;
 const POST_HEIGHT = 6;
 const BANNER_BOTTOM = 4.8;
 const BANNER_TOP = 6;
@@ -39,6 +45,9 @@ interface Placement {
   readonly left: Post;
   readonly right: Post;
   readonly finish: boolean;
+  readonly x: number;
+  readonly z: number;
+  readonly headingRad: number;
 }
 
 export function createStageView(
@@ -143,6 +152,38 @@ export function createStageView(
       quad += 1;
     }
 
+    function writeChevrons(p: Placement): void {
+      const fx = -Math.sin(p.headingRad);
+      const fz = -Math.cos(p.headingRad);
+      const rx = Math.cos(p.headingRad);
+      const rz = -Math.sin(p.headingRad);
+      for (const offset of CHEVRON_OFFSETS_M) {
+        const tip = offset + CHEVRON_DEPTH_M / 2;
+        const tail = offset - CHEVRON_DEPTH_M / 2;
+        for (const side of [-CHEVRON_HALF_WIDTH_M, CHEVRON_HALF_WIDTH_M]) {
+          const a: [number, number] = [0, tip];
+          const b: [number, number] = [side, tail];
+          const c: [number, number] = [side, tail - CHEVRON_THICK_M];
+          const d: [number, number] = [0, tip - CHEVRON_THICK_M];
+          const verts = [a, b, c, a, c, d];
+          for (let v = 0; v < 6; v++) {
+            const [across, along] = verts[v] as [number, number];
+            const x = p.x + rx * across + fx * along;
+            const z = p.z + rz * across + fz * along;
+            const i = quad * 6 + v;
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = heightAt(x, z) + CHEVRON_LIFT_M;
+            positions[i * 3 + 2] = z;
+            colors[i * 4] = NEXT_COLOR.r;
+            colors[i * 4 + 1] = NEXT_COLOR.g;
+            colors[i * 4 + 2] = NEXT_COLOR.b;
+            colors[i * 4 + 3] = dim ? DIM_FACTOR : 1;
+          }
+          quad += 1;
+        }
+      }
+    }
+
     for (let g = 0; g < placements.length; g++) {
       const p = placements[g] as Placement;
       const passed = nextIndex !== null && g < nextIndex;
@@ -187,6 +228,8 @@ export function createStageView(
         writeQuad(p.left, p.right, 0, 1, BANNER_BOTTOM, BANNER_TOP, colorOut, alpha * dimMul);
       }
     }
+    const next = nextIndex === null ? undefined : placements[nextIndex];
+    if (next !== undefined) writeChevrons(next);
     posts.instanceMatrix.needsUpdate = true;
     bannerGeometry.setDrawRange(0, quad * 6);
     (bannerGeometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
@@ -222,6 +265,9 @@ export function createStageView(
             left: makePost(point.x - rx * half, point.z - rz * half),
             right: makePost(point.x + rx * half, point.z + rz * half),
             finish,
+            x: point.x,
+            z: point.z,
+            headingRad: point.headingRad,
           };
         };
         placements = [
@@ -232,6 +278,7 @@ export function createStageView(
       rebuild();
     },
     update(next): void {
+      if (next === nextIndex) return;
       nextIndex = next;
       rebuild();
     },

@@ -95,7 +95,10 @@ export function routePrompt(p: PromptState): string {
   }
   if (p.finishPending) return `Next: click on the map where the ${fin} goes. Esc cancels.`;
   const need = itemsStillNeeded(p.kind, c.items);
-  if (c.items === 0) return `Start set. Next: click or drag on the map to add the first ${item}.`;
+  if (c.items === 0) {
+    const aim = p.kind === "stage" ? " Gates turn to follow the route." : "";
+    return `Start set. Next: click on the map to add the first ${item}.${aim}`;
+  }
   if (need > 0) return `Next: add ${need} more ${item}${need === 1 ? "" : "s"}.`;
   return `Next: add more ${item}s, or press Place ${fin} (or Enter at the pointer).`;
 }

@@ -37,6 +37,8 @@ the single validation gate used by the game load, the dev-server PUT and the sta
 - All numbers must be finite. `x` and `z` of every start, gate and finish must lie inside the
   terrain extent (inclusive) and satisfy `|x|, |z| <= 100000`.
 - `widthM` of gates and finish is within 8 to 60 (editor default 20).
+- Gates and the finish may carry `"headingManual": true` (heading set by hand). Without it the
+  editor re-aims the item along the route on the next edit of that stage; the game ignores the flag.
 - `medals` is optional. When present: `0 < goldSec < silverSec < bronzeSec`, and `vehicle` is one
   of the known vehicle class ids (allowlist). Medal classification compares the run time against
   these thresholds directly (`classifyStageMedal`); it never yields "ace".
