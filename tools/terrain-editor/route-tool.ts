@@ -36,6 +36,17 @@ import { openDialog } from "../editor-shell/dialog.ts";
 import { buildRouteTestUrl, buildStageTestUrl } from "./drive-url.ts";
 import { createDragGesture } from "./place-tool.ts";
 import {
+  finishWord,
+  itemsStillNeeded,
+  itemWord,
+  planPartialSave,
+  type RouteKind,
+  routeMissing,
+  routePrompt,
+  stackTags,
+  stageMissing,
+} from "./route-guide.ts";
+import {
   addRouteCheckpoint,
   checkpointIdSeed,
   deleteLastRouteItem,
@@ -73,7 +84,15 @@ import {
 } from "./stages.ts";
 import type { ToolResult } from "./tool-dispatch.ts";
 
-export type RouteSavePlan = { stagesText?: string; routesText?: string };
+export type RouteSavePlan = {
+  stagesText?: string;
+  routesText?: string;
+  /** Exactly what the texts hold, remembered as the saved version once written. */
+  stages?: readonly StageDraft[];
+  routes?: readonly RouteDraft[];
+  /** Unfinished items left out of this save (or kept at their last saved version). */
+  unfinished: string[];
+};
 
 export interface RouteToolDeps {
   scene: THREE.Scene;
@@ -102,7 +121,8 @@ export interface RouteTool {
   finish(): boolean;
   removeLast(): boolean;
   load(areaId: string): Promise<void>;
-  prepareSave(areaId: string): RouteSavePlan | { error: string };
+  /** allowUnfinished false: an unfinished item refuses the save (Save as reloads the area). */
+  prepareSave(areaId: string, allowUnfinished: boolean): RouteSavePlan | { error: string };
   commitSave(areaId: string, prepared: RouteSavePlan): Promise<string | null>;
   onUndoApplied(): void;
   onTerrainEdited(): void;
@@ -124,6 +144,8 @@ type ItemRef = string; // "start" | "finish" | gate id
 interface Tag {
   el: HTMLElement;
   pos: THREE.Vector3;
+  /** Pixel size, measured once on the first visible frame. */
+  size: { w: number; h: number } | null;
 }
 
 type Drag = {
@@ -133,8 +155,6 @@ type Drag = {
   moved: boolean;
   isRoute: boolean;
 };
-
-type RouteKind = "stage" | "p2p" | "circuit";
 
 /** One selectable thing in the panel: a stage, or a road route shown through a stage-shaped display draft. */
 interface Entry {
@@ -233,6 +253,9 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
   let stageSeed = 1;
   let gateSeeds = new Map<string, number>();
   let newPending = false;
+  let finishPending = false;
+  let savedStages: readonly StageDraft[] = [];
+  let savedRoutes: readonly RouteDraft[] = [];
   let stagesFileExisted = false;
   let loadFailed: string | null = null;
   let terrainEdited = false;
@@ -280,6 +303,8 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
   let itemWidthRow: HTMLElement | null = null;
   let itemTurnRow: HTMLElement | null = null;
   let newBtn: HTMLButtonElement | null = null;
+  let promptEl: HTMLElement | null = null;
+  let finishBtn: HTMLButtonElement | null = null;
   const kindButtons = new Map<RouteKind, HTMLButtonElement>();
 
   const area = () => deps.getArea();
@@ -298,6 +323,33 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     return out;
   }
   const selected = (): Entry | undefined => entries().find((e) => e.id === selectedId);
+  const kindOf = (e: Entry): RouteKind => e.route?.mode ?? "stage";
+
+  /** The route new items go on: the selected one, while it matches Kind and has no finish. */
+  function building(): Entry | undefined {
+    const e = selected();
+    if (!e || newPending || kindOf(e) !== kind || e.d.finish !== null) return undefined;
+    return e;
+  }
+
+  /** Selecting an existing route makes Kind follow it. */
+  function selectRoute(id: string | null, ref: ItemRef | null): void {
+    selectedId = id;
+    selectedRef = ref;
+    newPending = false;
+    finishPending = false;
+    const e = selected();
+    if (e) kind = kindOf(e);
+  }
+
+  /** False, with a status, when the route still needs gates or checkpoints before its finish. */
+  function canFinish(e: Entry): boolean {
+    const need = itemsStillNeeded(kind, e.d.gates.length);
+    if (need === 0) return true;
+    const word = `${itemWord(kind)}${need === 1 ? "" : "s"}`;
+    deps.setStatus(`Add ${need} more ${word} before the ${finishWord(kind)}`, "error");
+    return false;
+  }
 
   function reseed(): void {
     const l = area()?.stages ?? [];
@@ -469,11 +521,11 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
           const it = itemOf(s, r.ref);
           if (!it) continue;
           const y = deps.heightAt(it.x, it.z);
-          const tag = el("div", undefined, String(r.number));
+          const tag = el("div", undefined, r.label);
           tag.style.cssText =
             "position:absolute;font-size:11px;padding:4px;background:var(--panel,#222);color:#fff;border:1px solid #000;white-space:nowrap;transform:translate(-50%,-100%)";
           deps.tagLayer.appendChild(tag);
-          tags.push({ el: tag, pos: new THREE.Vector3(it.x, y + TAG_LIFT_M, it.z) });
+          tags.push({ el: tag, pos: new THREE.Vector3(it.x, y + TAG_LIFT_M, it.z), size: null });
         }
         if (isRoute) {
           for (const r of rows) {
@@ -486,6 +538,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
             tags.push({
               el: tag,
               pos: new THREE.Vector3(it.x, deps.heightAt(it.x, it.z) + TAG_LIFT_M + 3, it.z),
+              size: null,
             });
           }
         }
@@ -518,13 +571,26 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
 
   const probe = new THREE.Vector3();
   function updateTags(camera: THREE.Camera, width: number, height: number): void {
+    const shown: Tag[] = [];
+    const boxes: { x: number; y: number; w: number; h: number }[] = [];
     for (const t of tags) {
       probe.copy(t.pos).project(camera);
       const visible = probe.z > -1 && probe.z < 1;
       t.el.style.display = visible ? "block" : "none";
-      t.el.style.left = `${((probe.x + 1) / 2) * Math.max(1, width)}px`;
-      t.el.style.top = `${((1 - probe.y) / 2) * Math.max(1, height)}px`;
+      if (!visible) continue;
+      if (t.size === null) t.size = { w: t.el.offsetWidth, h: t.el.offsetHeight };
+      shown.push(t);
+      boxes.push({
+        x: ((probe.x + 1) / 2) * Math.max(1, width),
+        y: ((1 - probe.y) / 2) * Math.max(1, height),
+        ...t.size,
+      });
     }
+    const ys = stackTags(boxes);
+    shown.forEach((t, i) => {
+      t.el.style.left = `${boxes[i].x}px`;
+      t.el.style.top = `${ys[i]}px`;
+    });
   }
 
   function setGesturePreview(): void {
@@ -608,10 +674,10 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
 
   function pointerDown(x: number, z: number, button: number): boolean {
     if (button !== 0 || !area()) return false;
-    const hit = pickItem(x, z);
+    // Placing the finish ignores markers, so it can go right beside the start.
+    const hit = finishPending && building() ? null : pickItem(x, z);
     if (hit) {
-      selectedId = hit.stageId;
-      selectedRef = hit.ref;
+      selectRoute(hit.stageId, hit.ref);
       drag = {
         stageId: hit.stageId,
         ref: hit.ref,
@@ -693,10 +759,15 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     const a = area();
     if (!a) return;
     const base = a.stages ?? [];
-    const curRoute = (a.routes ?? []).find((r) => r.id === selectedId);
-    const curStage = base.find((s) => s.id === selectedId);
-    const curDone = curRoute ? curRoute.finish !== null : (curStage?.finish ?? null) !== null;
-    if (newPending || !(curRoute || curStage) || curDone) {
+    const target = building();
+    if (target && finishPending) {
+      placeFinish(target, x, z, headingRad);
+      return;
+    }
+    finishPending = false;
+    const curRoute = target?.route;
+    const curStage = target && !target.isRoute ? target.d : undefined;
+    if (!target) {
       const heading = headingRad ?? 0;
       if (kind !== "stage") {
         if (!hasRoads()) {
@@ -793,41 +864,44 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       setGesturePreview();
       did = true;
     }
-    if (newPending) {
+    if (newPending || finishPending) {
       newPending = false;
+      finishPending = false;
+      refreshPanel();
       did = true;
     }
     return did;
   }
 
-  function finish(): boolean {
+  function placeFinish(e: Entry, x: number, z: number, headingRad?: number): void {
     const a = area();
-    const curR = route();
-    if (a && curR && curR.finish === null) {
-      if (!hover || !inside(hover.x, hover.z)) {
-        deps.setStatus("Move the pointer inside the map, then press Enter to finish", "error");
-        return true;
-      }
-      selectedRef = "finish";
-      commitRouteList(setRouteFinish(a.routes ?? [], curR.id, hover.x, hover.z));
-      return true;
+    if (!a || !canFinish(e)) return;
+    finishPending = false;
+    selectedRef = "finish";
+    if (e.route) {
+      commitRouteList(setRouteFinish(a.routes ?? [], e.id, x, z));
+      return;
     }
-    const cur = stage();
-    if (!a || !cur || cur.finish !== null) return false;
+    const prev = lastItem(e.d);
+    commit(
+      setStageFinish(a.stages ?? [], e.id, {
+        x,
+        z,
+        headingRad: headingRad ?? fallbackGateHeading({ ...prev }, x, z),
+        widthM: e.d.gates.length > 0 ? e.d.gates[e.d.gates.length - 1].widthM : gateWidth,
+      }),
+    );
+  }
+
+  function finish(): boolean {
+    const e = building();
+    if (!e) return false;
+    if (!canFinish(e)) return true;
     if (!hover || !inside(hover.x, hover.z)) {
       deps.setStatus("Move the pointer inside the map, then press Enter to finish", "error");
       return true;
     }
-    const prev = lastItem(cur);
-    const w = cur.gates.length > 0 ? cur.gates[cur.gates.length - 1].widthM : gateWidth;
-    const next = setStageFinish(a.stages ?? [], cur.id, {
-      x: hover.x,
-      z: hover.z,
-      headingRad: fallbackGateHeading({ ...prev }, hover.x, hover.z),
-      widthM: w,
-    });
-    selectedRef = "finish";
-    commit(next);
+    placeFinish(e, hover.x, hover.z);
     return true;
   }
 
@@ -987,6 +1061,34 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       }
       if (s) routesSelect.value = s.id;
     }
+    const b = building();
+    const matching = sel && kindOf(sel) === kind ? sel : undefined;
+    if (finishPending && !b) finishPending = false;
+    if (promptEl) {
+      promptEl.textContent = routePrompt({
+        kind,
+        current: matching
+          ? {
+              name: matching.d.name,
+              items: matching.d.gates.length,
+              hasFinish: matching.d.finish !== null,
+            }
+          : null,
+        newPending,
+        finishPending,
+      });
+    }
+    if (finishBtn) {
+      const fin = finishWord(kind);
+      const ready = b !== undefined && itemsStillNeeded(kind, b.d.gates.length) === 0;
+      finishBtn.textContent = `Place ${fin}`;
+      finishBtn.setAttribute("aria-label", `Place ${fin}`);
+      finishBtn.setAttribute("aria-pressed", String(finishPending));
+      finishBtn.disabled = !ready;
+      finishBtn.dataset.tip = ready
+        ? `Place ${fin}: then click on the map (or press Enter at the pointer)`
+        : `Place ${fin}: needs an unfinished route with enough ${itemWord(kind)}s`;
+    }
     if (countLabel) countLabel.textContent = `Routes (${all.length})`;
     if (emptyBox) emptyBox.style.display = all.length === 0 ? "block" : "none";
     if (listBox) listBox.style.display = s ? "block" : "none";
@@ -1074,12 +1176,10 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     f.appendChild(root);
     const title = el("div", "section-title", "Place");
     const sub = el("div", "section-sub", "Route");
-    const hint = el(
-      "p",
-      "hint",
-      "Click and drag to set the start, then add gates. Enter finishes.",
-    );
-    root.append(title, sub, hint);
+    promptEl = el("p", "hint", "");
+    promptEl.setAttribute("aria-live", "polite");
+    promptEl.style.cssText = "color:#e8e8e8;border-left:2px solid #4aa3ff;padding-left:8px";
+    root.append(title, sub, promptEl);
 
     const seg = el("div", "segmented");
     seg.setAttribute("role", "radiogroup");
@@ -1102,6 +1202,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
         }
         kind = k.id;
         newPending = false;
+        finishPending = false;
         refreshPanel();
       });
       kindButtons.set(k.id, b);
@@ -1123,6 +1224,18 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     widthRow = wRow;
     root.appendChild(wRow);
 
+    const placeBtn = el("button", undefined, "Place finish");
+    finishBtn = placeBtn;
+    placeBtn.type = "button";
+    placeBtn.style.width = "100%";
+    placeBtn.addEventListener("click", () => {
+      const e = building();
+      if (!e || !canFinish(e)) return;
+      finishPending = !finishPending;
+      refreshPanel();
+    });
+    root.appendChild(placeBtn);
+
     const section = document.createElement("details");
     section.className = "section";
     section.open = true;
@@ -1135,8 +1248,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     routesSelect.dataset.tip = "Choose a route";
     routesSelect.setAttribute("aria-label", "Choose a route");
     routesSelect.addEventListener("change", () => {
-      selectedId = routesSelect?.value ?? null;
-      selectedRef = null;
+      selectRoute(routesSelect?.value ?? null, null);
       refreshAll();
     });
     section.appendChild(routesSelect);
@@ -1149,6 +1261,8 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     nb.setAttribute("aria-label", "New route");
     nb.addEventListener("click", () => {
       newPending = true;
+      finishPending = false;
+      refreshPanel();
       deps.setStatus(
         kind === "stage"
           ? "Drag on the map to place the new stage start"
@@ -1358,8 +1472,10 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     terrainEdited = false;
     preview = null;
     routePreview = null;
-    selectedId = a.stages[0]?.id ?? a.routes?.[0]?.id ?? null;
-    selectedRef = null;
+    kind = "stage";
+    selectRoute(a.stages[0]?.id ?? a.routes?.[0]?.id ?? null, null);
+    savedStages = a.stages;
+    savedRoutes = a.routes ?? [];
     reseed();
     refreshAll();
   }
@@ -1411,17 +1527,23 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
     }
   }
 
-  function prepareSave(areaId: string): RouteSavePlan | { error: string } {
+  function prepareSave(
+    areaId: string,
+    allowUnfinished: boolean,
+  ): RouteSavePlan | { error: string } {
     const a = area();
-    if (!a) return {};
-    const stages = a.stages ?? [];
+    if (!a) return { unfinished: [] };
+    const stagePlan = planPartialSave(a.stages ?? [], savedStages, stageMissing);
+    const routePlan = planPartialSave(a.routes ?? [], savedRoutes, routeMissing);
+    const unfinished = [...stagePlan.unfinished, ...routePlan.unfinished];
+    if (unfinished.length > 0 && !allowUnfinished) {
+      return { error: `${unfinished.join("; ")}. Finish or delete it before using Save as.` };
+    }
+    const stages = stagePlan.write;
     if (loadFailed !== null && stages.length === 0) {
       return { error: `The stages file could not be read (${loadFailed}). Fix it before saving.` };
     }
-    if (stages.some((s) => s.finish === null || s.gates.length === 0)) {
-      return { error: "A route needs a start and a finish" };
-    }
-    const plan: RouteSavePlan = {};
+    const plan: RouteSavePlan = { unfinished };
     if (stages.length > 0 || stagesFileExisted) {
       const complete = stages.map((s) => ({
         id: s.id,
@@ -1431,10 +1553,11 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
         finish: s.finish as NonNullable<StageDraft["finish"]>,
         ...(s.medals === undefined ? {} : { medals: s.medals }),
       }));
+      plan.stages = stages;
       plan.stagesText = serializeStageData({ schemaVersion: 1, areaId, stages: complete });
     }
 
-    const routes = a.routes ?? [];
+    const routes = routePlan.write;
     if (routeLoadFailed !== null && routes.length === 0) {
       return {
         error: `The routes file could not be read (${routeLoadFailed}). Fix it before saving.`,
@@ -1444,9 +1567,10 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       const courses: Course[] = [];
       for (const draft of routes) {
         const res = courseFromRouteDraft(draft, a.graph, deps.heightAt);
-        if ("error" in res) return { error: res.error };
+        if ("error" in res) return { error: `${draft.name}: ${res.error}` };
         courses.push(res.course);
       }
+      plan.routes = routes;
       plan.routesText = serializeCourseData({
         schemaVersion: COURSE_SCHEMA_VERSION,
         areaId,
@@ -1483,6 +1607,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       if (err !== null) return err;
       stagesFileExisted = true;
       loadFailed = null;
+      savedStages = prepared.stages ?? [];
     }
     if (prepared.routesText !== undefined) {
       const err = await putFile(
@@ -1492,6 +1617,7 @@ export function createRouteTool(deps: RouteToolDeps): RouteTool {
       if (err !== null) return err;
       routesFileExisted = true;
       routeLoadFailed = null;
+      savedRoutes = prepared.routes ?? [];
       // Medals notice: the area has a medals file and a route differs from what was loaded.
       if (JSON.stringify(area()?.routes ?? []) !== routesSnapshot) routesChangedSinceLoad = true;
     }

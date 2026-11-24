@@ -58,7 +58,8 @@ Open the editor, then **Place > Route** (key `8`).
    hint "This map has no roads; use Stage" when the map has no road nodes.
 2. Drag on the map to set the start; the drag direction is the facing.
 3. Click (or drag) to add gates, or checkpoints for road routes, in driving order.
-4. Press **Enter** to place the finish at the pointer (the **Lap line** for a circuit).
+4. Press **Place finish** and click on the map, or press **Enter** to place the finish at the
+   pointer (the **Lap line** for a circuit).
 5. **Backspace** removes the last item; **Esc** cancels a gesture or a pending New.
 
 Other controls:
@@ -72,6 +73,9 @@ Other controls:
   shown as an "off road" tag on the map). Checkpoints may sit anywhere; this is advice only.
 - **Ctrl+S** saves the map and writes the stages and routes files. A route needs a start and a
   finish, and at least 2 checkpoints including the finish (3 for a circuit).
+- An unfinished stage or route does not block saving the map. It is left out of the file (or keeps
+  its last saved version), the editor says what is missing, and the map stays marked unsaved.
+  **Save as** refuses until it is finished or deleted.
 - **Test stage** / **Test route** saves, then opens the game on that stage or route.
 - Every edit is an undo step.
 

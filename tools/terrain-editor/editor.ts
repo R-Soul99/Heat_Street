@@ -3765,8 +3765,9 @@ async function save(asId?: string): Promise<boolean> {
       setRoadProblemsOpen(true);
       return false;
     }
-    // Phase 10: an incomplete stage refuses the whole save before anything is written.
-    const routePrep = routeTool.prepareSave(target.areaId);
+    // Phase 10: unfinished routes stay in memory and the map still saves. Save as reloads the
+    // area, which would lose them, so it refuses before anything is written.
+    const routePrep = routeTool.prepareSave(target.areaId, asId === undefined);
     if ("error" in routePrep) {
       fail(routePrep.error);
       return false;
@@ -3824,7 +3825,8 @@ async function save(asId?: string): Promise<boolean> {
       }
       return true;
     }
-    if (!editedDuringSave) setDirty(false);
+    // Unfinished routes are not on disk, so the map stays marked unsaved.
+    if (!editedDuringSave && routePrep.unfinished.length === 0) setDirty(false);
     const kb = Math.round(bin.length / 1024);
     setStatus(
       editedDuringSave
@@ -3836,6 +3838,12 @@ async function save(asId?: string): Promise<boolean> {
     if (routeTool.hasMedalsAtRisk()) {
       setStatus(
         "Medals recorded for this stage may no longer be fair after terrain edits",
+        "error",
+      );
+    }
+    if (routePrep.unfinished.length > 0) {
+      setStatus(
+        `Saved the map, but not everything: ${routePrep.unfinished.join("; ")}. Finish it and save again before closing.`,
         "error",
       );
     }
@@ -5323,7 +5331,7 @@ const PLACE_HINT: Record<PlaceKind, string> = {
   hedge: "Click points. Enter or double-click finishes, Esc cancels.",
   fence: "Click points. Enter or double-click finishes, Esc cancels.",
   ramp: "Press, then drag toward the way it should face.",
-  route: "Click and drag to set the start, then add gates. Enter finishes.",
+  route: "Drag to set the start, then click or drag to add gates. Place finish (or Enter) ends it.",
 };
 
 let startListBox: HTMLElement | null = null;
